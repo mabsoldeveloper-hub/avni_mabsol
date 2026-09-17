@@ -12,11 +12,7 @@
     "electron:build": "npm --prefix desktop-agent run build"
   },
   "dependencies": {
-    "@img/sharp-win32-x64": "^0.35.4",
-    "@next/swc-win32-x64-msvc": "^16.2.9",
-    "@tailwindcss/oxide-win32-x64-msvc": "^4.3.2",
     "@tanstack/react-table": "^8.21.3",
-    "@unrs/resolver-binding-win32-x64-msvc": "^1.12.2",
     "axios": "^1.18.1",
     "bcryptjs": "^3.0.3",
     "bootstrap": "^5.3.8",
@@ -25,7 +21,6 @@
     "immer": "^11.1.11",
     "jsonwebtoken": "^9.0.3",
     "jszip": "^3.10.1",
-    "lightningcss-win32-x64-msvc": "^1.32.0",
     "lucide-react": "^1.24.0",
     "mongodb": "^7.3.0",
     "mongoose": "^9.7.0",

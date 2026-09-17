@@ -88,8 +88,27 @@ export async function GET(req: NextRequest) {
                 data.totalPages = Math.ceil(filteredRows.length / limit) || 1;
                 data.rows = filteredRows.slice((page - 1) * limit, page * limit);
 
-                // recalculate total outstanding for filtered rows
-                data.totalOutstanding = filteredRows.reduce((sum: number, r: any) => sum + (r.FINAL || 0), 0);
+                // Recalculate ALL summary values after hierarchy filtering so
+                // restricted users never receive aggregate values containing
+                // another user's parties.
+                data.totalOutstanding = filteredRows.reduce(
+                    (sum: number, r: any) => sum + Number(r.FINAL || 0),
+                    0
+                );
+
+                data.criticalOverdueAmount = filteredRows.reduce((sum: number, r: any) => {
+                    const overdueDays = Number(r.DUEDAYS || 0);
+                    return overdueDays > 90 ? sum + Number(r.FINAL || 0) : sum;
+                }, 0);
+                data.criticalOverdueCount = filteredRows.reduce((count: number, r: any) => {
+                    return Number(r.DUEDAYS || 0) > 90 ? count + 1 : count;
+                }, 0);
+                data.customerCount = new Set(
+                    filteredRows.map((r: any) => String(r.ORD || r.CODEP || "").trim()).filter(Boolean)
+                ).size;
+                data.avgOutstandingAmount = filteredRows.length
+                    ? Math.round(Number(data.totalOutstanding || 0) / filteredRows.length)
+                    : 0;
             }
         }
 

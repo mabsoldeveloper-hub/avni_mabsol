@@ -446,7 +446,7 @@ export default function IndiaMapPage() {
                                     <h1 className="text-2xl font-black tracking-tight text-slate-900">
                                         India Business Intelligence
                                     </h1>
-                                    <p className="text-xs font-semibold text-slate-500 mt-0.5">Real-time VFP Sync · MDIS · DIS · SUBDIS · PEND · GLEDGER · PRO · PROBAT · ORDER</p>
+                                    <p className="text-xs font-semibold text-slate-500 mt-0.5">Real-time MabsolCRM Sync · MDIS · DIS · SUBDIS · PEND · GLEDGER · PRO · PROBAT · ORDER</p>
                                 </div>
                             </div>
                         </div>

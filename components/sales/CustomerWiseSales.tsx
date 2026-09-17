@@ -59,17 +59,10 @@ export default function CustomerWiseSales() {
             console.error(err);
             setCustomers([]);
         }
-    }, [selectedFY, selectedCompany?._id]);
+    }, [selectedFY?._id, selectedCompany?._id]);
 
     useEffect(() => {
         loadCustomers();
-        const onFyChange = () => loadCustomers();
-        window.addEventListener("financial-year-changed", onFyChange);
-        window.addEventListener("company-changed", onFyChange);
-        return () => {
-            window.removeEventListener("financial-year-changed", onFyChange);
-            window.removeEventListener("company-changed", onFyChange);
-        };
     }, [loadCustomers]);
 
     // search filter (customer + city)

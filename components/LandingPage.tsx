@@ -451,12 +451,12 @@ const ALL_FEATURES = [
     color: "#22c55e",
     gradient: "linear-gradient(135deg,#22c55e,#16a34a)",
     features: [
-      { name: "Visual FoxPro (VFP) Sync", desc: "Direct background sync with Visual FoxPro DBF files without changing ERP workflow." },
+      { name: "MabsolCRM Sync", desc: "Direct background sync with MabsolCRM DBF files without changing ERP workflow." },
       { name: "Busy ERP Sync", desc: "Automated synchronization connector for Busy Accounting Software." },
       { name: "Tally ERP Sync", desc: "Direct data integration and live ledger bridge for Tally ERP / TallyPrime." },
       { name: "EasySol Sync", desc: "Seamless migration and real-time data sync for EasySol Pharma Software." },
       { name: "Logic ERP Sync", desc: "Native connector for Logic ERP wholesale and retail installations." },
-      { name: "Marg ERP Sync", desc: "Dedicated sync connector for Marg ERP9+ pharmaceutical databases." },
+      { name: "MabsolCRM Direct Sync", desc: "Dedicated sync connector for MabsolCRM pharmaceutical databases." },
       { name: "Sync Settings", desc: "Configure sync interval (default 60s), folder paths and automated background tasks." },
       { name: "Cloud Backup", desc: "Encrypted automated data backup stored safely in MongoDB Atlas." },
     ],
@@ -890,7 +890,7 @@ export default function LandingPage() {
               <div className="step-hover-badge">
                 <span>
                   {i === 0
-                    ? "⚡ VFP DBF Records Generated"
+                    ? "⚡ MabsolCRM DBF Records Generated"
                     : i === 1
                     ? "🔄 Auto Cloud Sync Active"
                     : "📊 Live Team Dashboard Updated"}

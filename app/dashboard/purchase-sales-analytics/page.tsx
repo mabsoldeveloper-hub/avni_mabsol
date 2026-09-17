@@ -6,6 +6,9 @@ export const metadata = {
   description: "Exclusive visual graphs and pie charts for Purchase vs Sale condition analytics.",
 };
 
+
+
+
 export default function PurchaseSalesAnalyticsPage() {
   return <PurchaseSalesDashboard />;
 }

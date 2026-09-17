@@ -98,16 +98,31 @@ export async function getVfpTableRows(
   const typedTable = table as VfpTableMapDocument;
   const targetCollection = typedTable.targetCollection || "";
   const exactTableName = toTableName(typedTable.fileName || "");
+  const baseTableName = exactTableName.replace(/[\._][a-z]?\d+$/i, "");
+
+  // Resilient table filter: handles exact table name, stripped base table name, or casing variations
+  const tableQuery = {
+    $or: [
+      { _vfpTable: exactTableName },
+      { _vfpTable: baseTableName },
+      { _vfpTable: new RegExp(`^${escapeRegExp(exactTableName)}$`, "i") },
+      { _vfpTable: new RegExp(`^${escapeRegExp(baseTableName)}$`, "i") },
+    ],
+  };
+
+  const matchingCount = await db.collection(targetCollection).countDocuments(tableQuery);
+  const activeQuery = matchingCount > 0 ? tableQuery : {};
+
   const cursor = db
     .collection(targetCollection)
-    .find({ _vfpTable: exactTableName })
+    .find(activeQuery)
     .sort({ _vfpRowNumber: 1 })
     .skip((page - 1) * limit)
     .limit(limit);
 
   const [rows, total] = await Promise.all([
     cursor.toArray(),
-    db.collection(targetCollection).countDocuments({ _vfpTable: exactTableName }),
+    matchingCount > 0 ? matchingCount : db.collection(targetCollection).countDocuments({}),
   ]);
 
   return {

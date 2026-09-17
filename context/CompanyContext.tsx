@@ -1,6 +1,6 @@
 "use client";
 
-import React, { createContext, useContext, useEffect, useState, useCallback, useRef } from "react";
+import React, { createContext, useContext, useEffect, useState, useCallback } from "react";
 import { useUser } from "./UserContext";
 
 export interface CompanyType {
@@ -42,27 +42,36 @@ const CompanyContext = createContext<CompanyContextType>({
 export function CompanyProvider({ children }: { children: React.ReactNode }) {
   const { user } = useUser();
   const [companies, setCompanies] = useState<CompanyType[]>([]);
-  const [selectedCompany, setSelectedCompanyState] = useState<CompanyType | null>(null);
-  const [loading, setLoading] = useState(true);
-  const initialLoadedRef = useRef(false);
+  const [selectedCompany, setSelectedCompanyState] = useState<CompanyType | null>(() => {
+    if (typeof window !== "undefined") {
+      try {
+        const saved = localStorage.getItem("mabsol_selected_company");
+        if (saved) return JSON.parse(saved);
+      } catch {}
+    }
+    return null;
+  });
+  const [loading, setLoading] = useState<boolean>(() => {
+    if (typeof window !== "undefined") {
+      try {
+        return !localStorage.getItem("mabsol_selected_company");
+      } catch {}
+    }
+    return true;
+  });
+
   const userCompId = user?.companyId?._id || (typeof user?.companyId === "string" ? user?.companyId : null);
 
-  const fetchCompanies = useCallback(async (isBackground = false) => {
+  const fetchCompanies = useCallback(async () => {
     try {
-      if (!isBackground || !initialLoadedRef.current) {
-        setLoading(true);
-      }
       const res = await fetch("/api/company-master");
       if (!res.ok) return;
       const data: CompanyType[] = await res.json();
-      
-      setCompanies((prev) => {
-        if (JSON.stringify(prev) === JSON.stringify(data)) return prev;
-        return data || [];
-      });
+      setCompanies(data || []);
 
       if (!data || data.length === 0) {
         setSelectedCompanyState(null);
+        setLoading(false);
         return;
       }
 
@@ -72,44 +81,41 @@ export function CompanyProvider({ children }: { children: React.ReactNode }) {
         savedStr = localStorage.getItem("mabsol_selected_company");
       }
 
-      let matchedComp: CompanyType | null = null;
+      let chosen: CompanyType | null = null;
 
       if (savedStr) {
         try {
           const parsed = JSON.parse(savedStr);
           const match = data.find((c) => c._id === parsed._id || c.companyCode === parsed.companyCode);
           if (match) {
-            matchedComp = match;
+            chosen = match;
           }
-        } catch {
-          // Fall through
-        }
+        } catch {}
       }
 
-      if (!matchedComp && userCompId) {
+      // Fallback 1: User's assigned company from UserContext
+      if (!chosen && userCompId) {
         const userMatch = data.find((c) => c._id === userCompId);
-        if (userMatch) {
-          matchedComp = userMatch;
-        }
+        if (userMatch) chosen = userMatch;
       }
 
-      if (!matchedComp) {
-        matchedComp =
+      // Fallback 2: Default company
+      if (!chosen) {
+        chosen =
           data.find((c) => c.isDefault) ||
           data.find((c) => c.companyName?.toLowerCase().includes("skylark")) ||
-          data[0] ||
-          null;
+          data[0];
       }
 
-      if (matchedComp) {
-        setSelectedCompanyState((prev) => {
-          if (prev?._id === matchedComp?._id && prev?.companyName === matchedComp?.companyName) {
-            return prev;
+      if (chosen) {
+        setSelectedCompanyState((prev: any) => {
+          if (prev && prev._id === chosen?._id) return prev;
+          if (typeof window !== "undefined") {
+            try { localStorage.setItem("mabsol_selected_company", JSON.stringify(chosen)); } catch {}
           }
-          return matchedComp;
+          return chosen;
         });
       }
-      initialLoadedRef.current = true;
     } catch (err) {
       console.error("Failed to load companies", err);
     } finally {
@@ -118,14 +124,11 @@ export function CompanyProvider({ children }: { children: React.ReactNode }) {
   }, [userCompId]);
 
   useEffect(() => {
-    fetchCompanies(initialLoadedRef.current);
+    fetchCompanies();
   }, [fetchCompanies]);
 
   const changeSelectedCompany = useCallback((company: CompanyType) => {
-    setSelectedCompanyState((prev) => {
-      if (prev?._id === company._id) return prev;
-      return company;
-    });
+    setSelectedCompanyState(company);
     if (typeof window !== "undefined") {
       localStorage.setItem("mabsol_selected_company", JSON.stringify(company));
       window.dispatchEvent(new CustomEvent("company-changed", { detail: company }));
@@ -139,7 +142,7 @@ export function CompanyProvider({ children }: { children: React.ReactNode }) {
         selectedCompany,
         setSelectedCompany: changeSelectedCompany,
         loading,
-        refreshCompanies: () => fetchCompanies(false),
+        refreshCompanies: fetchCompanies,
       }}
     >
       {children}

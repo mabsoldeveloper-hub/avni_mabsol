@@ -83,10 +83,24 @@ export default function SalesHierarchyMasterPage() {
     status: "Active" as "Active" | "Inactive",
   });
 
+  const [dynamicRoles, setDynamicRoles] = useState<{ _id: string; roleName: string }[]>([]);
+
   useEffect(() => {
     fetchUsers();
+    fetchRoles();
     fetchHierarchy();
   }, []);
+
+  async function fetchRoles() {
+    try {
+      const res = await fetch("/api/roles");
+      const json = await res.json();
+      if (Array.isArray(json)) setDynamicRoles(json);
+      else if (json.data && Array.isArray(json.data)) setDynamicRoles(json.data);
+    } catch (e) {
+      console.error("Failed to load roles", e);
+    }
+  }
 
   async function fetchUsers() {
     try {
@@ -285,10 +299,12 @@ export default function SalesHierarchyMasterPage() {
                 onChange={(e) => setRoleFilter(e.target.value)}
                 className="px-3 py-2 rounded-xl text-xs bg-slate-50 border border-slate-200 font-semibold focus:outline-none"
               >
-                <option value="">All Roles (ZSM / RSM / MR)</option>
-                <option value="ZSM">ZSM (Zonal Sales Manager)</option>
-                <option value="RSM">RSM (Regional Sales Manager)</option>
-                <option value="MR">M.R. / S.R.</option>
+                <option value="">All Roles (from Role Master)</option>
+                {dynamicRoles.map((r) => (
+                  <option key={r._id} value={r.roleName}>
+                    {r.roleName}
+                  </option>
+                ))}
               </select>
             </div>
           </div>
@@ -420,9 +436,14 @@ export default function SalesHierarchyMasterPage() {
                   className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
                   required
                 >
-                  <option value="ZSM">ZSM (Zonal Sales Manager)</option>
-                  <option value="RSM">RSM (Regional Sales Manager)</option>
-                  <option value="MR">M.R. / S.R. (Sales Rep)</option>
+                  {dynamicRoles.map((r) => (
+                    <option key={r._id} value={r.roleName}>
+                      {r.roleName}
+                    </option>
+                  ))}
+                  {formData.roleLevel && !dynamicRoles.some((r) => r.roleName === formData.roleLevel) && (
+                    <option value={formData.roleLevel}>{formData.roleLevel}</option>
+                  )}
                 </select>
               </div>
 

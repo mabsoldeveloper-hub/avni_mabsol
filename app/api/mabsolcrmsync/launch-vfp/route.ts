@@ -52,14 +52,14 @@ export async function POST() {
     // Validate executable and startup command or prgPath exist
     if (!vfpExePath || (!startupCommand.trim() && !configPrgPath.trim())) {
       return NextResponse.json(
-        { success: false, error: "Visual FoxPro executable path and either Startup Console Command or PRG File Path are required to open the VFP Console." },
+        { success: false, error: "MabsolCRM executable path and either Startup Console Command or PRG File Path are required to open the MabsolCRM Engine." },
         { status: 400 }
       );
     }
 
     if (!fs.existsSync(vfpExePath)) {
       return NextResponse.json(
-        { success: false, error: `Visual FoxPro executable not found at: ${vfpExePath}. Please ensure MabsolCRM.EXE is uploaded to the server.` },
+        { success: false, error: `MabsolCRM executable not found at: ${vfpExePath}. Please ensure MabsolCRM.EXE is uploaded to the server.` },
         { status: 400 }
       );
     }
@@ -235,9 +235,9 @@ export async function POST() {
         companyName: (config as any)?.companyName || "Unknown",
         license: (config as any)?.license || "N/A",
         vfpExePath,
-        action: "vfp_launched",
+        action: "mabsolcrm_launched",
         status: "success",
-        message: `Visual FoxPro (${path.basename(vfpExePath)}) console opened to extract DBF data.`,
+        message: `MabsolCRM (${path.basename(vfpExePath)}) engine executed data extraction.`,
       });
     } catch {
       // Ignore logging error
@@ -245,7 +245,7 @@ export async function POST() {
 
     return NextResponse.json({
       success: true,
-      message: `Visual FoxPro (${path.basename(vfpExePath)}) opened successfully on the machine with pre-loaded command!`,
+      message: `MabsolCRM (${path.basename(vfpExePath)}) executed successfully with pre-loaded command!`,
     });
   } catch (error: any) {
     return NextResponse.json(

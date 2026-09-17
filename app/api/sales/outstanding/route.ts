@@ -39,10 +39,38 @@ export async function GET(req: Request) {
       .sort({ DDATE: -1, _id: -1 })
       .lean();
 
-    // Fetch Order & Customer masters to enrich with party details if NAME is missing
+    // Fetch only the party masters referenced by the already-authorized bills.
+    // This avoids loading unrelated customers/orders into the response path.
+    const partyKeys = Array.from(
+      new Set(
+        pendingBills
+          .flatMap((b: any) => [b.ORD, b.CODEP, b.CODE])
+          .filter(Boolean)
+          .map((value: any) => String(value).trim())
+          .filter(Boolean)
+      )
+    );
+
+    const partyMasterFilter: any = partyKeys.length
+      ? {
+          $or: [
+            { ORDNO: { $in: partyKeys } },
+            { CODEP: { $in: partyKeys } },
+            { SCODE: { $in: partyKeys } },
+            { CODE: { $in: partyKeys } },
+          ],
+        }
+      : { _id: null };
+
     const [orders, customers] = await Promise.all([
-      Order.find({}, { ORDNO: 1, CODEP: 1, PARNAM: 1, NAME: 1, CITY: 1, GSTNO: 1, PHONE: 1 }).lean(),
-      Customer.find({}, { ORDNO: 1, CODEP: 1, PARNAM: 1, NAME: 1, CITY: 1, GSTNO: 1, PHONE: 1 }).lean(),
+      Order.find(
+        partyMasterFilter,
+        { ORDNO: 1, CODEP: 1, SCODE: 1, CODE: 1, PARNAM: 1, NAME: 1, CITY: 1, GSTNO: 1, PHONE: 1 }
+      ).lean(),
+      Customer.find(
+        partyMasterFilter,
+        { ORDNO: 1, CODEP: 1, SCODE: 1, CODE: 1, PARNAM: 1, NAME: 1, CITY: 1, GSTNO: 1, PHONE: 1 }
+      ).lean(),
     ]);
 
     const partyMap = new Map<string, any>();

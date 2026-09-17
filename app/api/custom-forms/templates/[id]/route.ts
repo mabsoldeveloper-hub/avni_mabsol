@@ -60,9 +60,11 @@ export async function PUT(
 
     if (body.isMultiStep !== undefined) template.isMultiStep = !!body.isMultiStep;
     if (Array.isArray(body.steps)) template.steps = body.steps;
-    if (Array.isArray(body.conditions)) template.conditions = body.conditions;
-    if (body.accessMode) template.accessMode = body.accessMode;
-    if (body.accessPin !== undefined) template.accessPin = body.accessPin;
+    if (body.accessMode) {
+      template.accessMode = ["Internal", "Public", "PasswordProtected"].includes(body.accessMode)
+        ? body.accessMode
+        : (String(body.accessMode).toLowerCase().includes("public") ? "Public" : (String(body.accessMode).toLowerCase().includes("password") ? "PasswordProtected" : "Internal"));
+    }
     if (body.approvalWorkflow) template.approvalWorkflow = body.approvalWorkflow;
     if (body.autoMasterSync) template.autoMasterSync = body.autoMasterSync;
     if (body.theme) template.theme = body.theme;

@@ -13,7 +13,8 @@ export async function POST(req: Request) {
     try {
         await connectDB();
 
-        const { email, otp } = await req.json();
+        const body = await req.json();
+        const { email, otp } = body;
 
         if (!email || !otp) {
             return NextResponse.json({
@@ -64,6 +65,7 @@ export async function POST(req: Request) {
             });
         }
 
+        const isAgent = Boolean(body.isAgent || body.isDesktopAgent);
         const token = jwt.sign(
             {
                 id: user._id,
@@ -72,7 +74,7 @@ export async function POST(req: Request) {
                 companyId: user.companyId,
             },
             process.env.JWT_SECRET!,
-            { expiresIn: SESSION_DURATION_JWT }
+            { expiresIn: isAgent ? "30d" : SESSION_DURATION_JWT }
         );
 
         const userResponse = {
@@ -88,6 +90,7 @@ export async function POST(req: Request) {
         const response = NextResponse.json({
             success: true,
             user: userResponse,
+            token,
         });
 
         response.cookies.set("token", token, {

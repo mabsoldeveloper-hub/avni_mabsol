@@ -31,7 +31,7 @@ export default function VfpConfigWizard({
   const [enabledFiles, setEnabledFiles] = useState<string[]>([]);
   const [availableFiles, setAvailableFiles] = useState<string[]>([]);
   const [useVfpEngine, setUseVfpEngine] = useState(false);
-  const [vfpExePath, setVfpExePath] = useState("C:\\Program Files (x86)\\Microsoft Visual FoxPro 9\\vfp9.exe");
+  const [vfpExePath, setVfpExePath] = useState("C:\\MabsolCRM\\Engine\\MabsolCRM.exe");
   
   // Folder browsing state
   const [browsingField, setBrowsingField] = useState<"source" | "dest" | null>(null);
@@ -59,10 +59,10 @@ export default function VfpConfigWizard({
             setCompanyName(data.companyName || "");
             setEnabledFiles(data.enabledFiles || []);
             setUseVfpEngine(data.useVfpEngine || false);
-            setVfpExePath(data.vfpExePath || "C:\\Program Files (x86)\\Microsoft Visual FoxPro 9\\vfp9.exe");
+            setVfpExePath(data.vfpExePath || "C:\\MabsolCRM\\Engine\\MabsolCRM.exe");
           }
         })
-        .catch(() => setError("Failed to fetch current VFP configuration."))
+        .catch(() => setError("Failed to fetch current MabsolCRM configuration."))
         .finally(() => setLoading(false));
     }
   }, [isOpen, currentDataDir]);
@@ -203,7 +203,7 @@ export default function VfpConfigWizard({
           <div className="modal-header border-bottom px-4 py-3 bg-light d-flex align-items-center justify-content-between">
             <h5 className="modal-title fw-bold text-dark d-flex align-items-center gap-2">
               <FaSyncAlt className="text-primary spin-animation" />
-              Configure & Sync VFP Database Wizard
+              Configure & Sync MabsolCRM Database Wizard
             </h5>
             <button
               type="button"
@@ -244,7 +244,7 @@ export default function VfpConfigWizard({
             {step === 1 && (
               <div>
                 <p className="text-secondary small mb-4">
-                  Select the source VFP data folder (where to select data) and destination folder (where to copy data).
+                  Select the source MabsolCRM data folder (where to select data) and destination folder (where to copy data).
                 </p>
 
                 {/* Company Name / Code */}
@@ -272,7 +272,7 @@ export default function VfpConfigWizard({
                     <input
                       type="text"
                       className="form-control font-monospace text-secondary bg-light"
-                      placeholder="e.g. C:\MargWin\DATA"
+                      placeholder="e.g. C:\MabsolCRM\DATA"
                       value={sourceDir}
                       onChange={(e) => setSourceDir(e.target.value)}
                       disabled={loading}
@@ -287,7 +287,7 @@ export default function VfpConfigWizard({
                     </button>
                   </div>
                   <div className="form-text text-muted" style={{ fontSize: "0.75rem" }}>
-                    Select the directory containing original VFP database (.dbf) files.
+                    Select the directory containing original MabsolCRM database (.dbf) files.
                   </div>
                 </div>
 
@@ -372,7 +372,7 @@ export default function VfpConfigWizard({
                   <div className="overflow-auto bg-white border rounded-2" style={{ maxHeight: "200px" }}>
                     {filteredFiles.length === 0 ? (
                       <div className="p-4 text-center text-muted small">
-                        {availableFiles.length === 0 ? "No VFP database (.dbf) files found." : "No matching files."}
+                        {availableFiles.length === 0 ? "No MabsolCRM database (.dbf) files found." : "No matching files."}
                       </div>
                     ) : (
                       <div className="list-group list-group-flush">
@@ -411,7 +411,7 @@ export default function VfpConfigWizard({
                 <FaCheckCircle className="text-success display-4 mb-3" />
                 <h4 className="fw-bold text-dark">Configuration Saved!</h4>
                 <p className="text-secondary small mb-4">
-                  The VFP database directory path is configured and sync table selection is saved.
+                  The MabsolCRM database directory path is configured and sync table selection is saved.
                 </p>
                 <div className="p-3 border rounded-3 bg-light text-start font-monospace small mb-4 mx-auto" style={{ maxWidth: "500px" }}>
                   <div className="d-flex justify-content-between mb-1 text-break">
@@ -445,7 +445,7 @@ export default function VfpConfigWizard({
                   onClick={handleTransferData}
                   disabled={loading || !dataDir.trim()}
                 >
-                  {loading ? "Scanning VFP directory..." : "Scan & Next"}
+                  {loading ? "Scanning MabsolCRM directory..." : "Scan & Next"}
                   {!loading && <FaArrowRight />}
                 </button>
               </>

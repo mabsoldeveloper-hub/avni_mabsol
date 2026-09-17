@@ -385,7 +385,7 @@ export default function PartyDirectoryPage() {
             )}
 
             <p className="mt-4 text-xs text-gray-400">
-                District & Pincode aren't separate columns in your VFP export — they're parsed from the party's
+                District & Pincode aren't separate columns in your MabsolCRM export — they're parsed from the party's
                 address lines (PARADD/PARADD1/PARADD2). A "~" next to District means no explicit district text was
                 found in the address, so City was used as the best available guess.
             </p>

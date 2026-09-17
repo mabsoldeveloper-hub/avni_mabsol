@@ -151,7 +151,7 @@ function ProductBatchModal({ batch, onClose }: { batch: BatchItem; onClose: () =
     // Dynamic offer circular text generator
     const schemeText = useMemo(() => {
         if (batch.category === "expired") {
-            return `ALERT: Batch ${batch.batchNo} of ${batch.productName} (Code: ${batch.productCode}) has EXPIRED on ${batch.expiryDateStr}. Under Drug & Cosmetics Act rules, expired products CANNOT be sold or distributed. Please immediately isolate stock in Rack ${batch.rackNo} and issue VFP Credit Return Voucher to supplier.`;
+            return `ALERT: Batch ${batch.batchNo} of ${batch.productName} (Code: ${batch.productCode}) has EXPIRED on ${batch.expiryDateStr}. Under Drug & Cosmetics Act rules, expired products CANNOT be sold or distributed. Please immediately isolate stock in Rack ${batch.rackNo} and issue MabsolCRM Credit Return Voucher to supplier.`;
         }
         if (batch.category === "critical_30") {
             return `⚡ URGENT EXPIRY CLEARANCE SCHEME: ${batch.productName} (Batch: ${batch.batchNo}, Packing: ${batch.packing}) — Buy 5 Packs & Get 2 FREE (40% Extra Scheme Margin) + 15% Cash Discount! Valid for immediate clearance stock in Rack ${batch.rackNo}.`;
@@ -582,7 +582,7 @@ export default function BatchExpiryLiquidatorPage() {
                         <FaSkullCrossbones size={11} className="text-rose-500 shrink-0" />
                     </div>
                     <p className="text-sm sm:text-xl font-black text-rose-700 m-0 mt-0.5 truncate">{formatCr(summary?.expiredLossCostValue || 0)}</p>
-                    <p className="text-[9px] text-rose-500 font-semibold m-0 mt-0.5 truncate">Initiate VFP Credit Return</p>
+                    <p className="text-[9px] text-rose-500 font-semibold m-0 mt-0.5 truncate">Initiate MabsolCRM Credit Return</p>
                 </div>
 
                 <div className="rounded-[16px] sm:rounded-[18px] p-3 sm:p-3.5 bg-gradient-to-br from-orange-50/90 to-amber-100/70 border border-orange-200/70 shadow-sm">

@@ -254,7 +254,7 @@ export default function AiPurchaseBillEntry() {
     if (e.target.files && e.target.files[0]) {
       const file = e.target.files[0];
       setSelectedFile(file);
-      if (file.type.startsWith("image/")) {
+      if (file.type.startsWith("image/") || file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf")) {
         setPreviewUrl(URL.createObjectURL(file));
       } else {
         setPreviewUrl(null);
@@ -268,7 +268,7 @@ export default function AiPurchaseBillEntry() {
     if (e.dataTransfer.files && e.dataTransfer.files[0]) {
       const file = e.dataTransfer.files[0];
       setSelectedFile(file);
-      if (file.type.startsWith("image/")) {
+      if (file.type.startsWith("image/") || file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf")) {
         setPreviewUrl(URL.createObjectURL(file));
       } else {
         setPreviewUrl(null);
@@ -530,8 +530,8 @@ export default function AiPurchaseBillEntry() {
       if (res.ok && json) {
         if (json.noApiKey) {
           setNoApiKey(true);
-          setParseError("GEMINI_API_KEY is not configured in .env file.");
-          alert("GEMINI_API_KEY not configured. Please add it to your .env file.");
+          setParseError("AI Vision Scanner license key is not configured in server environment.");
+          alert("AI Vision Scanner license key is not configured. Please configure your key in .env file.");
           return;
         }
 
@@ -887,7 +887,7 @@ export default function AiPurchaseBillEntry() {
                 Smart AI Purchase Bill Scan & Auto-Fill
               </h1>
               <p className="text-xs sm:text-sm text-white/80 dark:text-slate-300 mt-1 max-w-2xl">
-                Scan Marg ERP, Tally, Busy, Goods Receipt Notes or PDF bills. Extracts line items, matches suppliers, and posts purchase records automatically.
+                Scan MabsolCRM ERP, Tally, Busy, Goods Receipt Notes or PDF bills. Extracts line items, matches suppliers, and posts purchase records automatically.
               </p>
             </div>
           </div>
@@ -976,23 +976,21 @@ export default function AiPurchaseBillEntry() {
 
       {/* NO API KEY BANNER */}
       {noApiKey && (
-        <div className="mb-6 bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-800 rounded-2xl p-5 flex gap-4">
-          <div className="text-red-500 text-2xl mt-1">⚠️</div>
+        <div className="mb-6 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 rounded-2xl p-5 flex gap-4">
+          <div className="text-amber-500 text-2xl mt-1">⚠️</div>
           <div className="flex-1">
-            <h3 className="font-bold text-red-700 dark:text-red-400 text-sm mb-1">
-              Gemini AI Key Not Configured — Automatic Bill Extraction Unavailable
+            <h3 className="font-bold text-amber-800 dark:text-amber-300 text-sm mb-1">
+              AI Vision Scanner Key Not Configured — Automatic Bill Extraction Unavailable
             </h3>
-            <p className="text-xs text-red-600 dark:text-red-300 mb-3">
-              To automatically extract invoice data from images and PDFs, please configure <strong>GEMINI_API_KEY</strong> in your environment.
+            <p className="text-xs text-amber-700 dark:text-amber-400 mb-3">
+              To automatically extract invoice data from images and PDFs, please configure your AI Scanner API key in your server environment.
             </p>
-            <div className="bg-white dark:bg-red-950/60 rounded-xl p-3 text-xs text-slate-700 dark:text-slate-300 space-y-1 border border-red-100 dark:border-red-800">
-              <p className="font-bold text-red-700 dark:text-red-300 mb-2">📋 Configuration Steps:</p>
-              <p>1️⃣ Visit: <a href="https://aistudio.google.com/apikey" target="_blank" rel="noreferrer" className="text-blue-600 underline font-semibold">https://aistudio.google.com/apikey</a></p>
-              <p>2️⃣ Sign in with your Google account and click &quot;Create API Key&quot;</p>
-              <p>3️⃣ Copy the generated key (e.g. AIzaSy...)</p>
-              <p>4️⃣ Add it to your project root <code className="bg-red-100 dark:bg-red-900 px-1 rounded">.env</code> file:</p>
-              <pre className="bg-slate-100 dark:bg-slate-900 rounded-lg p-2 mt-1 text-green-700 dark:text-green-400 font-mono text-[11px]">GEMINI_API_KEY=your_gemini_api_key_here</pre>
-              <p>5️⃣ Restart your dev server: <code className="bg-red-100 dark:bg-red-900 px-1 rounded">npm run dev</code></p>
+            <div className="bg-white dark:bg-amber-950/60 rounded-xl p-3 text-xs text-slate-700 dark:text-slate-300 space-y-1 border border-amber-100 dark:border-amber-800">
+              <p className="font-bold text-amber-800 dark:text-amber-300 mb-2">📋 Configuration Steps:</p>
+              <p>1️⃣ Obtain an AI Vision API license key.</p>
+              <p>2️⃣ Add it to your project root <code className="bg-amber-100 dark:bg-amber-900 px-1 rounded">.env</code> file:</p>
+              <pre className="bg-slate-100 dark:bg-slate-900 rounded-lg p-2 mt-1 text-green-700 dark:text-green-400 font-mono text-[11px]">AI_API_KEY=your_api_key_here</pre>
+              <p>3️⃣ Restart your development server: <code className="bg-amber-100 dark:bg-amber-900 px-1 rounded">npm run dev</code></p>
             </div>
           </div>
         </div>
@@ -1047,14 +1045,46 @@ export default function AiPurchaseBillEntry() {
 
               {previewUrl ? (
                 <div className="relative group/prev">
-                  <img
-                    src={previewUrl}
-                    alt="Purchase Bill Preview"
-                    className="max-h-56 mx-auto rounded-2xl object-contain shadow-lg border border-slate-200 dark:border-slate-700"
-                  />
-                  <div className="mt-3 text-xs font-semibold text-slate-700 dark:text-slate-200 truncate">
-                    {selectedFile?.name}
-                  </div>
+                  {selectedFile?.type === "application/pdf" || selectedFile?.name.toLowerCase().endsWith(".pdf") ? (
+                    <div className="space-y-2">
+                      <div className="w-full h-64 rounded-2xl overflow-hidden border border-slate-200 dark:border-slate-700 bg-white shadow-inner flex flex-col">
+                        <div className="bg-slate-100 dark:bg-slate-800 px-3 py-1.5 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between text-xs">
+                          <span className="font-bold flex items-center gap-1.5 text-red-600 dark:text-red-400 truncate max-w-[200px]">
+                            <FaFilePdf className="text-sm shrink-0" /> {selectedFile.name}
+                          </span>
+                          <a
+                            href={previewUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-[11px] font-bold text-amber-600 hover:text-amber-700 dark:text-amber-400 underline"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            Open PDF ↗
+                          </a>
+                        </div>
+                        <iframe
+                          src={previewUrl}
+                          title="PDF Invoice Preview"
+                          className="w-full flex-1 border-0"
+                        />
+                      </div>
+                      <div className="flex items-center justify-between text-xs px-1 text-slate-500">
+                        <span>{(selectedFile.size / 1024).toFixed(1)} KB</span>
+                        <span className="text-emerald-600 font-bold">✓ PDF Ready for Smart AI Extraction</span>
+                      </div>
+                    </div>
+                  ) : (
+                    <div>
+                      <img
+                        src={previewUrl}
+                        alt="Purchase Bill Preview"
+                        className="max-h-56 mx-auto rounded-2xl object-contain shadow-lg border border-slate-200 dark:border-slate-700"
+                      />
+                      <div className="mt-3 text-xs font-semibold text-slate-700 dark:text-slate-200 truncate">
+                        {selectedFile?.name} ({(selectedFile ? (selectedFile.size / 1024).toFixed(1) : 0)} KB)
+                      </div>
+                    </div>
+                  )}
                 </div>
               ) : selectedFile ? (
                 <div className="py-8 flex flex-col items-center">
@@ -1063,7 +1093,7 @@ export default function AiPurchaseBillEntry() {
                     {selectedFile.name}
                   </span>
                   <span className="text-xs text-emerald-600 dark:text-emerald-400 font-semibold mt-1">
-                    ✓ PDF Invoice Ready
+                    ✓ Document Ready ({(selectedFile.size / 1024).toFixed(1)} KB)
                   </span>
                 </div>
               ) : (
@@ -1075,7 +1105,7 @@ export default function AiPurchaseBillEntry() {
                     Drag & Drop Purchase Bill / PDF
                   </p>
                   <p className="text-xs text-slate-400 mt-1">
-                    Supports Marg ERP, Busy, Tally, PDF & Photos
+                    Supports MabsolCRM ERP, Busy, Tally, PDF Invoices & Camera Photos
                   </p>
                 </div>
               )}

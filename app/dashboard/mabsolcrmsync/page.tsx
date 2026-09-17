@@ -149,7 +149,7 @@ export default async function VfpDashboardPage({
           className="bg-white border border-slate-200/90 shadow-2xs p-4 sm:p-5 flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4 md:gap-6 w-full box-border relative overflow-hidden"
           style={{ borderRadius: "20px" }}
         >
-          {/* Node 1: FoxPro Folder */}
+          {/* Node 1: MabsolCRM Folder */}
           <div className="flex items-center gap-3 flex-1 min-w-0 p-1">
             <div
               className="w-10 h-10 flex items-center justify-center bg-slate-100 text-slate-700 shrink-0 shadow-2xs"
@@ -158,7 +158,7 @@ export default async function VfpDashboardPage({
               <FolderOpen size={17} />
             </div>
             <div className="min-w-0 flex-1">
-              <div className="text-xs sm:text-sm font-bold text-slate-900 leading-snug">FoxPro Folder</div>
+              <div className="text-xs sm:text-sm font-bold text-slate-900 leading-snug">MabsolCRM Folder</div>
               <div className="text-[11px] text-slate-400 font-mono truncate mt-0.5" title={status.dataDir}>
                 {status.dataDir || "Not configured"}
               </div>

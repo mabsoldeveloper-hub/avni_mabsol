@@ -45,20 +45,14 @@ const UserSchema = new mongoose.Schema(
       default: "MR",
     },
 
-    dashboardType: {
-      type: String,
-      enum: ["salesman", "manager", "admin", "customer", "custom"],
-      default: "salesman",
-    },
-
-    assignedAreaIds: [{
+    // Original Customer record for MR / Field Staff mapping
+    mrCustomerId: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: "AreaMaster",
-    }],
-
-    assignedAreaNames: [{
-      type: String,
-    }],
+      ref: "Customer",
+      default: null,
+      unique: true,
+      sparse: true,
+    },
 
     reportsTo: {
       type: mongoose.Schema.Types.ObjectId,

@@ -2,10 +2,13 @@ import { NextResponse } from "next/server";
 import dbConnect from "@/lib/mongodb";
 import { combineFilters, getCompanyVfpFilter } from "@/lib/companyVfpHelper";
 import { getFYDateRange, buildFYDateQuery } from "@/lib/financialYearHelper";
+import { getHierarchyAccess } from "@/lib/hierarchyAccess";
 import SalesMdis from "@/models/SalesMdis";
 import SalesDis from "@/models/SalesDis";
 import PurchaseBill from "@/models/PurchaseBill";
 import PurchaseReturn from "@/models/PurchaseReturn";
+import PurchaseOrder from "@/models/PurchaseOrder";
+import GLedger from "@/models/GLedger";
 import Category from "@/models/Category";
 import Company from "@/models/Company";
 import FinancialYear from "@/models/FinancialYear";
@@ -15,34 +18,154 @@ import mongoose from "mongoose";
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
-/**
- * Standardized sumField helper identical to main Dashboard API (app/api/dashboard/route.ts).
- * Converts string/number values safely and handles VFP AMOUNTT + TAXAMO fallback.
- */
-async function sumField(model: any, match: Record<string, any>, field: string = "FINAL") {
+const toNumber = (value: any): number => {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : 0;
+};
+
+const clean = (value: any) => String(value ?? "").trim();
+
+const unique = (values: any[]) =>
+  Array.from(new Set(values.map((v) => clean(v)).filter(Boolean)));
+
+function sumFinalExpression(field = "FINAL") {
+  return {
+    $cond: [
+      {
+        $gt: [
+          { $convert: { input: `$${field}`, to: "double", onError: 0, onNull: 0 } },
+          0,
+        ],
+      },
+      { $convert: { input: `$${field}`, to: "double", onError: 0, onNull: 0 } },
+      {
+        $add: [
+          { $convert: { input: "$AMOUNTT", to: "double", onError: 0, onNull: 0 } },
+          { $convert: { input: "$TAXAMO", to: "double", onError: 0, onNull: 0 } },
+        ],
+      },
+    ],
+  };
+}
+
+async function sumField(model: any, match: Record<string, any>, field = "FINAL") {
   const [row] = await model.aggregate([
     { $match: match },
-    {
-      $group: {
-        _id: null,
-        total: {
-          $sum: {
-            $cond: [
-              { $gt: [{ $convert: { input: `$${field}`, to: "double", onError: 0, onNull: 0 } }, 0] },
-              { $convert: { input: `$${field}`, to: "double", onError: 0, onNull: 0 } },
-              {
-                $add: [
-                  { $convert: { input: "$AMOUNTT", to: "double", onError: 0, onNull: 0 } },
-                  { $convert: { input: "$TAXAMO", to: "double", onError: 0, onNull: 0 } },
-                ],
-              },
-            ],
-          },
-        },
-      },
-    },
+    { $group: { _id: null, total: { $sum: sumFinalExpression(field) } } },
   ]);
-  return row?.total ?? 0;
+  return toNumber(row?.total);
+}
+
+function buildHierarchyVfpFilter(access: Awaited<ReturnType<typeof getHierarchyAccess>>) {
+  if (access.isAdmin) return {};
+  if (!access.isAuthenticated) return { _id: null };
+
+  const names = unique(access.accessibleUserNames);
+  const employeeCodes = unique(access.accessibleUsers.map((u: any) => u.employeeCode));
+  const customerCodes = unique(access.assignedCustomerCodes);
+
+  const conditions: any[] = [];
+
+  // Legacy VFP transaction rows carry hierarchy names/codes directly.
+  if (names.length) {
+    conditions.push(
+      { MR: { $in: names } },
+      { ASM: { $in: names } },
+      { RSM: { $in: names } },
+      { ZSM: { $in: names } },
+      { DSM: { $in: names } },
+      { SALESMAN: { $in: names } },
+    );
+  }
+
+  if (employeeCodes.length) {
+    conditions.push(
+      { MR: { $in: employeeCodes } },
+      { DSM: { $in: employeeCodes } },
+      { employeeCode: { $in: employeeCodes } },
+    );
+  }
+
+  // MR party assignments are stored as customer/party codes.
+  if (customerCodes.length) {
+    conditions.push(
+      { CODEP: { $in: customerCodes } },
+      { CODE: { $in: customerCodes } },
+      { ORDNO: { $in: customerCodes } },
+    );
+  }
+
+  return conditions.length ? { $or: conditions } : { _id: null };
+}
+
+function buildWebPartyFilter(access: Awaited<ReturnType<typeof getHierarchyAccess>>, prefix = "") {
+  if (access.isAdmin) return {};
+  if (!access.isAuthenticated) return { _id: null };
+
+  const names = unique(access.accessibleUserNames);
+  const codes = unique(access.assignedCustomerCodes);
+  const fields = [
+    `${prefix}vendorCode`,
+    `${prefix}vendorId`,
+    `${prefix}vendorName`,
+    `${prefix}createdBy`,
+  ];
+  const conditions: any[] = [];
+
+  if (codes.length) {
+    conditions.push(
+      { [fields[0]]: { $in: codes } },
+      { [fields[1]]: { $in: codes } },
+    );
+  }
+  if (names.length) conditions.push({ [fields[2]]: { $in: names } });
+
+  // If no party assignment exists, do not expose all supplier transactions.
+  return conditions.length ? { $or: conditions } : { _id: null };
+}
+
+function buildPurchasePaymentFilter(paymentStatus: string) {
+  if (!paymentStatus || paymentStatus === "ALL") return {};
+  const normalized = paymentStatus.trim().toLowerCase();
+  if (normalized === "paid") return { paymentStatus: "Paid" };
+  if (normalized === "partial" || normalized === "partially paid") return { paymentStatus: "Partial" };
+  if (normalized === "pending" || normalized === "unpaid") return { paymentStatus: "Pending" };
+  return {};
+}
+
+function rangeDates(range: string, now = new Date()) {
+  let startDateStr = "";
+  let endDateStr = "";
+
+  if (range === "today") {
+    startDateStr = now.toISOString().slice(0, 10);
+    endDateStr = startDateStr;
+  } else if (range === "7days") {
+    const d = new Date(now);
+    d.setDate(d.getDate() - 6);
+    startDateStr = d.toISOString().slice(0, 10);
+    endDateStr = now.toISOString().slice(0, 10);
+  } else if (range === "this_month") {
+    startDateStr = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0, 10);
+    endDateStr = new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().slice(0, 10);
+  } else if (range === "this_quarter") {
+    const qMonth = Math.floor(now.getMonth() / 3) * 3;
+    startDateStr = new Date(now.getFullYear(), qMonth, 1).toISOString().slice(0, 10);
+    endDateStr = new Date(now.getFullYear(), qMonth + 3, 0).toISOString().slice(0, 10);
+  } else if (range === "12months") {
+    const start = new Date(now.getFullYear(), now.getMonth() - 11, 1);
+    const end = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+    startDateStr = start.toISOString().slice(0, 10);
+    endDateStr = end.toISOString().slice(0, 10);
+  }
+
+  return { startDateStr, endDateStr };
+}
+
+function actualMovingAverage(values: number[], index: number, window = 3) {
+  const start = Math.max(0, index - window + 1);
+  const slice = values.slice(start, index + 1);
+  return slice.length ? Math.round(slice.reduce((a, b) => a + b, 0) / slice.length) : 0;
 }
 
 export async function GET(request: Request) {
@@ -50,394 +173,479 @@ export async function GET(request: Request) {
     await dbConnect();
     const { searchParams } = new URL(request.url);
 
+    const access = await getHierarchyAccess();
+    if (!access.isAuthenticated) {
+      return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
+    }
+
     const range = searchParams.get("range") || "this_fy";
     const companyIdParam = searchParams.get("companyId") || "ALL";
     const fyIdParam = searchParams.get("fyId") || "ALL";
     const paymentStatus = searchParams.get("paymentStatus") || "ALL";
     const categoryFilter = searchParams.get("category") || "ALL";
 
-    // 1. Resolve Financial Year & Date Ranges (Same precedence as Main Dashboard)
     const fyRange = await getFYDateRange(searchParams);
-    let startDateStr = fyRange.startDate;
-    let endDateStr = fyRange.endDate;
+    let startDateStr = fyRange.startDate || "";
+    let endDateStr = fyRange.endDate || "";
 
-    const now = new Date();
-
-    // Override date range ONLY if explicit short range is chosen and fyId is not explicitly controlling dates
-    if (range === "today") {
-      startDateStr = now.toISOString().slice(0, 10);
-      endDateStr = now.toISOString().slice(0, 10);
-    } else if (range === "7days") {
-      const d = new Date();
-      d.setDate(now.getDate() - 7);
-      startDateStr = d.toISOString().slice(0, 10);
-      endDateStr = now.toISOString().slice(0, 10);
-    } else if (range === "this_month") {
-      const start = new Date(now.getFullYear(), now.getMonth(), 1);
-      const end = new Date(now.getFullYear(), now.getMonth() + 1, 0);
-      startDateStr = start.toISOString().slice(0, 10);
-      endDateStr = end.toISOString().slice(0, 10);
-    } else if (range === "this_quarter") {
-      const qMonth = Math.floor(now.getMonth() / 3) * 3;
-      const start = new Date(now.getFullYear(), qMonth, 1);
-      const end = new Date(now.getFullYear(), qMonth + 3, 0);
-      startDateStr = start.toISOString().slice(0, 10);
-      endDateStr = end.toISOString().slice(0, 10);
-    } else if (range === "custom") {
+    if (range === "custom") {
       const s = searchParams.get("startDate");
       const e = searchParams.get("endDate");
       if (s && e) {
         startDateStr = s.slice(0, 10);
         endDateStr = e.slice(0, 10);
       }
-    } else if (!startDateStr || !endDateStr) {
+    } else if (range !== "this_fy") {
+      const short = rangeDates(range);
+      if (short.startDateStr && short.endDateStr) {
+        startDateStr = short.startDateStr;
+        endDateStr = short.endDateStr;
+      }
+    }
+
+    if (!startDateStr || !endDateStr) {
+      const now = new Date();
       const fyStartYear = now.getMonth() >= 3 ? now.getFullYear() : now.getFullYear() - 1;
       startDateStr = `${fyStartYear}-04-01`;
       endDateStr = `${fyStartYear + 1}-03-31`;
     }
 
-    // 2. Build Standard Filters matching Main Dashboard API
     const companyVfpFilter = await getCompanyVfpFilter(searchParams);
-
+    const hierarchyVfpFilter = buildHierarchyVfpFilter(access);
     const mdisDateMatch = buildFYDateQuery("DATE", startDateStr, endDateStr);
     const purchaseBillDateMatch = buildFYDateQuery("billDate", startDateStr, endDateStr);
     const purchaseReturnDateMatch = buildFYDateQuery("returnDate", startDateStr, endDateStr);
+    const purchaseOrderDateMatch = buildFYDateQuery("poDate", startDateStr, endDateStr);
+    const gledgerDateMatch = buildFYDateQuery("DATE", startDateStr, endDateStr);
 
     const companyFilter: any = {};
-    if (companyIdParam && companyIdParam !== "ALL" && mongoose.Types.ObjectId.isValid(companyIdParam)) {
+    if (companyIdParam !== "ALL" && mongoose.Types.ObjectId.isValid(companyIdParam)) {
       companyFilter.companyId = companyIdParam;
     }
 
-    let vfpCategoryFilter: any = {};
-    if (categoryFilter && categoryFilter !== "ALL") {
-      vfpCategoryFilter = {
+    let categoryMatch: any = {};
+    if (categoryFilter !== "ALL") {
+      const safe = String(categoryFilter).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      categoryMatch = {
         $or: [
           { GCODE: categoryFilter },
-          { GNAME: new RegExp(categoryFilter, "i") },
-          { category: new RegExp(categoryFilter, "i") }
-        ]
+          { GNAME: new RegExp(safe, "i") },
+          { CATNAME: new RegExp(safe, "i") },
+          { category: new RegExp(safe, "i") },
+        ],
       };
     }
 
-    // Standard MDIS Sale Filter matching main dashboard: TYPE: "S"
     const mdisSaleFilter = combineFilters(
       { TYPE: "S" },
       companyVfpFilter,
+      hierarchyVfpFilter,
       mdisDateMatch,
-      vfpCategoryFilter
+      categoryMatch,
     );
-
-    // Standard MDIS Purchase Filter matching main dashboard: TYPE: { $in: ["P", "PURCHASE"] }
-    const mdisVfpPurchaseFilter = combineFilters(
+    const mdisPurchaseFilter = combineFilters(
       { TYPE: { $in: ["P", "PURCHASE"] } },
       companyVfpFilter,
-      mdisDateMatch
+      hierarchyVfpFilter,
+      mdisDateMatch,
+      categoryMatch,
     );
-
-    // MDIS Sale Returns Filter: TYPE: { $in: ["SR", "R", "RETURN"] }
     const mdisSaleReturnFilter = combineFilters(
       { TYPE: { $in: ["SR", "R", "RETURN"] } },
       companyVfpFilter,
-      mdisDateMatch
+      hierarchyVfpFilter,
+      mdisDateMatch,
     );
-
-    // MDIS Purchase Returns Filter: TYPE: { $in: ["D", "PR", "DEBIT"] }
-    const mdisVfpPurchaseReturnFilter = combineFilters(
+    const mdisPurchaseReturnFilter = combineFilters(
       { TYPE: { $in: ["D", "PR", "DEBIT"] } },
       companyVfpFilter,
-      mdisDateMatch
+      hierarchyVfpFilter,
+      mdisDateMatch,
     );
 
     const webPurchaseFilter = combineFilters(
       companyFilter,
-      purchaseBillDateMatch
+      purchaseBillDateMatch,
+      buildWebPartyFilter(access),
+      buildPurchasePaymentFilter(paymentStatus),
     );
-
     const webPurchaseReturnFilter = combineFilters(
       companyFilter,
-      purchaseReturnDateMatch
+      purchaseReturnDateMatch,
+      buildWebPartyFilter(access),
     );
+    const purchaseOrderFilter = combineFilters(
+      companyFilter,
+      purchaseOrderDateMatch,
+      buildWebPartyFilter(access),
+      { status: { $ne: "Cancelled" } },
+    );
+    const gledgerPartyFilter = (() => {
+      if (access.isAdmin) return {};
+      if (!access.isAuthenticated) return { _id: null };
+      const codes = unique(access.assignedCustomerCodes);
+      if (!codes.length) return { _id: null };
+      return { $or: [{ CODE: { $in: codes } }, { CODE1: { $in: codes } }] };
+    })();
 
-    // 3. Execute Parallel DB Queries for Standard Cards Data
-    let dbSalesTotal = 0;
-    let dbSaleReturnsTotal = 0;
-    let dbVfpPurchasesTotal = 0;
-    let dbWebPurchasesTotal = 0;
-    let dbVfpPurchaseReturnsTotal = 0;
-    let dbWebPurchaseReturnsTotal = 0;
+    // ───────────────────────────────────────────────────────────────────────
+    // 1. Core totals — all values come from stored transactions.
+    // ───────────────────────────────────────────────────────────────────────
+    const [
+      salesVal,
+      saleReturnsVal,
+      vfpPurchasesVal,
+      webPurchasesAgg,
+      vfpPurchaseReturnsVal,
+      webPurchaseReturnsAgg,
+    ] = await Promise.all([
+      sumField(SalesMdis, mdisSaleFilter),
+      sumField(SalesMdis, mdisSaleReturnFilter),
+      sumField(SalesMdis, mdisPurchaseFilter),
+      PurchaseBill.aggregate([
+        { $match: webPurchaseFilter },
+        { $group: { _id: null, total: { $sum: { $convert: { input: "$netAmount", to: "double", onError: 0, onNull: 0 } } } } },
+      ]),
+      sumField(SalesMdis, mdisPurchaseReturnFilter),
+      PurchaseReturn.aggregate([
+        { $match: webPurchaseReturnFilter },
+        { $group: { _id: null, total: { $sum: { $convert: { input: "$netAmount", to: "double", onError: 0, onNull: 0 } } } } },
+      ]),
+    ]);
 
-    try {
-      const [
-        salesVal,
-        saleReturnsVal,
-        vfpPurchasesVal,
-        webPurchasesAgg,
-        vfpPurchaseReturnsVal,
-        webPurchaseReturnsAgg
-      ] = await Promise.all([
-        sumField(SalesMdis, mdisSaleFilter, "FINAL"),
-        sumField(SalesMdis, mdisSaleReturnFilter, "FINAL"),
-        sumField(SalesMdis, mdisVfpPurchaseFilter, "FINAL"),
-        PurchaseBill.aggregate([{ $match: webPurchaseFilter }, { $group: { _id: null, total: { $sum: "$netAmount" } } }]),
-        sumField(SalesMdis, mdisVfpPurchaseReturnFilter, "FINAL"),
-        PurchaseReturn.aggregate([{ $match: webPurchaseReturnFilter }, { $group: { _id: null, total: { $sum: "$netAmount" } } }]),
-      ]);
+    const totalSales = Math.round(salesVal);
+    const totalSaleReturns = Math.round(saleReturnsVal);
+    const totalPurchases = Math.round(vfpPurchasesVal + toNumber(webPurchasesAgg[0]?.total));
+    const totalPurchaseReturns = Math.round(vfpPurchaseReturnsVal + toNumber(webPurchaseReturnsAgg[0]?.total));
 
-      dbSalesTotal = salesVal || 0;
-      dbSaleReturnsTotal = saleReturnsVal || 0;
-      dbVfpPurchasesTotal = vfpPurchasesVal || 0;
-      if (webPurchasesAgg.length > 0) dbWebPurchasesTotal = webPurchasesAgg[0].total || 0;
-      dbVfpPurchaseReturnsTotal = vfpPurchaseReturnsVal || 0;
-      if (webPurchaseReturnsAgg.length > 0) dbWebPurchaseReturnsTotal = webPurchaseReturnsAgg[0].total || 0;
-    } catch (e) {
-      console.error("Error aggregating purchase & sales metrics:", e);
-    }
-
-    const totalSales = Math.round(dbSalesTotal);
-    const totalPurchases = Math.round(dbVfpPurchasesTotal + dbWebPurchasesTotal);
-    const totalSaleReturns = Math.round(dbSaleReturnsTotal);
-    const totalPurchaseReturns = Math.round(dbVfpPurchaseReturnsTotal + dbWebPurchaseReturnsTotal);
-
-    const netSales = Math.max(0, totalSales - totalSaleReturns);
-    const netPurchases = Math.max(0, totalPurchases - totalPurchaseReturns);
+    const netSales = totalSales - totalSaleReturns;
+    const netPurchases = totalPurchases - totalPurchaseReturns;
     const grossProfit = netSales - netPurchases;
-    const grossMarginPercent = netSales > 0 ? Math.round((grossProfit / netSales) * 1000) / 10 : 0;
-    const purchaseUtilizationRate = totalPurchases > 0 ? Math.min(100, Math.round((totalSales / totalPurchases) * 100)) : 0;
+    const grossMarginPercent = netSales !== 0 ? Math.round((grossProfit / netSales) * 1000) / 10 : 0;
+    const purchaseUtilizationRate = totalPurchases > 0 ? Math.round((totalSales / totalPurchases) * 1000) / 10 : 0;
 
-    // 4. Monthly Dual Trend Data Aggregation using $substr to prevent coercible to date runtime error
+    // ───────────────────────────────────────────────────────────────────────
+    // 2. Monthly trend — actual monthly values, plus a real 3-month average.
+    // ───────────────────────────────────────────────────────────────────────
     const monthNames = ["Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec", "Jan", "Feb", "Mar"];
-    const monthSalesMap = new Map<string, number>();
-    const monthPurchaseMap = new Map<string, number>();
-
-    try {
-      const salesMonthly = await SalesMdis.aggregate([
-        { $match: mdisSaleFilter },
-        {
-          $group: {
-            _id: { $substr: ["$DATE", 0, 7] },
-            total: {
-              $sum: {
-                $cond: [
-                  { $gt: [{ $convert: { input: "$FINAL", to: "double", onError: 0, onNull: 0 } }, 0] },
-                  { $convert: { input: "$FINAL", to: "double", onError: 0, onNull: 0 } },
-                  {
-                    $add: [
-                      { $convert: { input: "$AMOUNTT", to: "double", onError: 0, onNull: 0 } },
-                      { $convert: { input: "$TAXAMO", to: "double", onError: 0, onNull: 0 } },
-                    ],
-                  },
-                ],
-              },
-            }
-          }
-        }
-      ]);
-
-      salesMonthly.forEach((m: any) => {
-        if (m._id && typeof m._id === "string") {
-          const parts = m._id.split("-");
-          if (parts.length >= 2) {
-            const mNum = parseInt(parts[1], 10);
-            if (!isNaN(mNum)) monthSalesMap.set(String(mNum), m.total || 0);
-          }
-        }
-      });
-
-      const vfpPurchaseMonthly = await SalesMdis.aggregate([
-        { $match: mdisVfpPurchaseFilter },
-        {
-          $group: {
-            _id: { $substr: ["$DATE", 0, 7] },
-            total: {
-              $sum: {
-                $cond: [
-                  { $gt: [{ $convert: { input: "$FINAL", to: "double", onError: 0, onNull: 0 } }, 0] },
-                  { $convert: { input: "$FINAL", to: "double", onError: 0, onNull: 0 } },
-                  {
-                    $add: [
-                      { $convert: { input: "$AMOUNTT", to: "double", onError: 0, onNull: 0 } },
-                      { $convert: { input: "$TAXAMO", to: "double", onError: 0, onNull: 0 } },
-                    ],
-                  },
-                ],
-              },
-            }
-          }
-        }
-      ]);
-
-      vfpPurchaseMonthly.forEach((m: any) => {
-        if (m._id && typeof m._id === "string") {
-          const parts = m._id.split("-");
-          if (parts.length >= 2) {
-            const mNum = parseInt(parts[1], 10);
-            if (!isNaN(mNum)) {
-              const current = monthPurchaseMap.get(String(mNum)) || 0;
-              monthPurchaseMap.set(String(mNum), current + (m.total || 0));
-            }
-          }
-        }
-      });
-    } catch (e) {
-      console.warn("Monthly aggregation fallback notice:", e);
-    }
-
-    // FY Month index order: Apr (4), May (5) ... Dec (12), Jan (1), Feb (2), Mar (3)
     const fyMonthNumbers = [4, 5, 6, 7, 8, 9, 10, 11, 12, 1, 2, 3];
+    const salesMonthMap = new Map<number, number>();
+    const purchaseMonthMap = new Map<number, number>();
+
+    const [salesMonthly, purchaseMonthly] = await Promise.all([
+      SalesMdis.aggregate([
+        { $match: mdisSaleFilter },
+        { $group: { _id: { $substr: ["$DATE", 5, 2] }, total: { $sum: sumFinalExpression() } } },
+      ]),
+      SalesMdis.aggregate([
+        { $match: mdisPurchaseFilter },
+        { $group: { _id: { $substr: ["$DATE", 5, 2] }, total: { $sum: sumFinalExpression() } } },
+      ]),
+    ]);
+
+    salesMonthly.forEach((row: any) => {
+      const month = Number(row._id);
+      if (month >= 1 && month <= 12) salesMonthMap.set(month, toNumber(row.total));
+    });
+    purchaseMonthly.forEach((row: any) => {
+      const month = Number(row._id);
+      if (month >= 1 && month <= 12) purchaseMonthMap.set(month, toNumber(row.total));
+    });
+
+    const rawSales = fyMonthNumbers.map((m) => Math.round(salesMonthMap.get(m) || 0));
+    const rawPurchases = fyMonthNumbers.map((m) => Math.round(purchaseMonthMap.get(m) || 0));
+
     const dualTrendData = monthNames.map((month, idx) => {
-      const monthNumStr = String(fyMonthNumbers[idx]);
-      const dbSales = monthSalesMap.get(monthNumStr) || 0;
-      const dbPurchases = monthPurchaseMap.get(monthNumStr) || 0;
-
-      const salesVal = dbSales > 0 ? Math.round(dbSales) : (totalSales > 0 ? Math.round((totalSales / 12) * (0.8 + Math.sin(idx * 0.5) * 0.2)) : 0);
-      const purchaseVal = dbPurchases > 0 ? Math.round(dbPurchases) : (totalPurchases > 0 ? Math.round((totalPurchases / 12) * (0.85 + Math.cos(idx * 0.5) * 0.2)) : 0);
-      const netSpread = salesVal - purchaseVal;
-
+      const sales = rawSales[idx];
+      const purchases = rawPurchases[idx];
+      const netSpread = sales - purchases;
       return {
         month,
-        sales: salesVal,
-        purchases: purchaseVal,
+        sales,
+        purchases,
         netSpread,
-        salesMovingAvg: Math.round(salesVal * 0.95),
-        purchaseMovingAvg: Math.round(purchaseVal * 0.96),
-        profitMargin: salesVal > 0 ? Math.round(((salesVal - purchaseVal) / salesVal) * 100) : 0
+        salesMovingAvg: actualMovingAverage(rawSales, idx),
+        purchaseMovingAvg: actualMovingAverage(rawPurchases, idx),
+        profitMargin: sales !== 0 ? Math.round(((sales - purchases) / Math.abs(sales)) * 1000) / 10 : 0,
       };
     });
 
-    // 5. Category Profit Share & Trade Matrix
-    let categoriesData: any[] = [];
-    try {
-      const categoryAgg = await SalesDis.aggregate([
-        { $match: combineFilters(companyVfpFilter, mdisDateMatch) },
+    // ───────────────────────────────────────────────────────────────────────
+    // 3. Category data — no estimated/fabricated purchase percentage.
+    //    Sales categories come from DIS + Product master. Web purchase lines
+    //    are included only when a category is explicitly stored on the line.
+    // ───────────────────────────────────────────────────────────────────────
+    const [categoryAgg, purchaseCategoryAgg] = await Promise.all([
+      SalesDis.aggregate([
+        { $match: combineFilters(companyVfpFilter, hierarchyVfpFilter, mdisDateMatch, categoryMatch) },
         {
           $group: {
-            _id: { $ifNull: ["$GNAME", { $ifNull: ["$CATNAME", "$GROUP"] }] },
-            saleAmount: { $sum: { $ifNull: ["$AMOUNT", { $ifNull: ["$NETAMT", 0] }] } },
-            qty: { $sum: { $ifNull: ["$QTY", 0] } }
-          }
+            _id: { $ifNull: ["$GCODE", { $ifNull: ["$GNAME", "$GROUP"] }] },
+            saleAmount: { $sum: { $convert: { input: "$AMMMOUNT", to: "double", onError: 0, onNull: 0 } } },
+            qty: { $sum: { $convert: { input: "$QTY", to: "double", onError: 0, onNull: 0 } } },
+          },
         },
         { $sort: { saleAmount: -1 } },
-        { $limit: 6 }
-      ]);
-
-      const validCats = categoryAgg.filter((cat: any) => cat._id && cat.saleAmount > 0);
-      if (validCats.length > 0) {
-        categoriesData = validCats.map((cat: any) => {
-          const cName = String(cat._id).trim();
-          const sAmt = Math.round(cat.saleAmount || 0);
-          const pAmt = Math.round(sAmt * 0.68);
-          return {
-            categoryName: cName,
-            purchaseAmount: pAmt,
-            saleAmount: sAmt,
-            grossMargin: sAmt > 0 ? Math.round(((sAmt - pAmt) / sAmt) * 100) : 32
-          };
-        });
-      }
-    } catch (e) {
-      console.warn("Category aggregation fallback notice:", e);
-    }
-
-    if (categoriesData.length === 0) {
-      const baseSalesVal = totalSales > 0 ? totalSales : 18450000;
-      const basePurchasesVal = totalPurchases > 0 ? totalPurchases : 12800000;
-      categoriesData = [
-        { categoryName: "Antibiotics & Anti-infectives", purchaseAmount: Math.round(basePurchasesVal * 0.30), saleAmount: Math.round(baseSalesVal * 0.32), grossMargin: 34 },
-        { categoryName: "Cardiovascular & Cardiac", purchaseAmount: Math.round(basePurchasesVal * 0.22), saleAmount: Math.round(baseSalesVal * 0.24), grossMargin: 38 },
-        { categoryName: "Pain Management & Analgesics", purchaseAmount: Math.round(basePurchasesVal * 0.18), saleAmount: Math.round(baseSalesVal * 0.19), grossMargin: 32 },
-        { categoryName: "Nutraceuticals & Vitamins", purchaseAmount: Math.round(basePurchasesVal * 0.15), saleAmount: Math.round(baseSalesVal * 0.15), grossMargin: 42 },
-        { categoryName: "Dermatological & Skin Care", purchaseAmount: Math.round(basePurchasesVal * 0.15), saleAmount: Math.round(baseSalesVal * 0.10), grossMargin: 29 },
-      ];
-    }
-
-    // 6. Trade Flow & Funnel Steps
-    const tradeFunnelData = [
-      { stage: "Purchase Orders Raised", amount: Math.round(totalPurchases * 1.1), count: Math.max(1, Math.round(totalPurchases / 50000)), percentage: 100 },
-      { stage: "Stock Inward Receipts", amount: totalPurchases, count: Math.max(1, Math.round(totalPurchases / 55000)), percentage: 90 },
-      { stage: "Quotation & Invoices", amount: Math.round(totalSales * 1.04), count: Math.max(1, Math.round(totalSales / 12000)), percentage: 82 },
-      { stage: "Dispatched Sales Volume", amount: totalSales, count: Math.max(1, Math.round(totalSales / 13000)), percentage: 76 },
-      { stage: "Realized Net Collections", amount: Math.round(totalSales * 0.94), count: Math.max(1, Math.round(totalSales / 14000)), percentage: 71 },
-      { stage: "Retained Profit Value", amount: Math.max(0, grossProfit), count: Math.max(1, Math.round(totalSales / 15000)), percentage: 55 },
-    ];
-
-    // 7. Category Performance Radar Data
-    const categoryRadarData = [
-      { metric: "Sales Volume", Antibiotics: 92, Cardiac: 85, Analgesics: 78, Vitamins: 65, Derma: 58 },
-      { metric: "Purchase Spend", Antibiotics: 88, Cardiac: 80, Analgesics: 72, Vitamins: 60, Derma: 54 },
-      { metric: "Gross Margin %", Antibiotics: 74, Cardiac: 88, Analgesics: 70, Vitamins: 94, Derma: 62 },
-      { metric: "Low Return %", Antibiotics: 95, Cardiac: 91, Analgesics: 88, Vitamins: 96, Derma: 82 },
-      { metric: "Turnover Velocity", Antibiotics: 90, Cardiac: 86, Analgesics: 80, Vitamins: 72, Derma: 64 },
-    ];
-
-    // 8. Top Item Treemap Grid
-    let treemapItemsData: any[] = [];
-    try {
-      const topProductsAgg = await SalesDis.aggregate([
-        { $match: combineFilters(companyVfpFilter, mdisDateMatch) },
+        { $limit: 12 },
+      ]),
+      SalesMdis.aggregate([
+        { $match: mdisPurchaseFilter },
         {
           $group: {
-            _id: { $ifNull: ["$PNAME", { $ifNull: ["$NAME", "$ITEM"] }] },
-            salesVolume: { $sum: { $ifNull: ["$AMOUNT", { $ifNull: ["$NETAMT", 0] }] } },
-            code: { $first: { $ifNull: ["$PCODE", "$CODE"] } },
-            category: { $first: { $ifNull: ["$GNAME", "Pharma"] } }
-          }
+            _id: { $ifNull: ["$GCODE", { $ifNull: ["$GNAME", "$CATNAME"] }] },
+            purchaseAmount: { $sum: sumFinalExpression() },
+          },
         },
-        { $sort: { salesVolume: -1 } },
-        { $limit: 10 }
-      ]);
+        { $sort: { purchaseAmount: -1 } },
+        { $limit: 12 },
+      ]),
+    ]);
 
-      const validItems = topProductsAgg.filter((item: any) => item._id && item.salesVolume > 0);
-      if (validItems.length > 0) {
-        treemapItemsData = validItems.map((item: any) => ({
-          name: String(item._id || "Pharma Product"),
-          salesVolume: Math.round(item.salesVolume || 0),
-          profitMargin: Math.round(25 + Math.random() * 20),
-          category: String(item.category || "Pharma"),
-          code: String(item.code || "ITEM")
-        }));
+    const categoryDocs = await Category.find({}, { categoryCode: 1, categoryName: 1 }).lean().catch(() => []);
+    const categoryNameByCode = new Map(
+      categoryDocs.map((c: any) => [clean(c.categoryCode).toUpperCase(), clean(c.categoryName)])
+    );
+
+    const salesCategoryRows = categoryAgg
+      .filter((r: any) => r._id && toNumber(r.saleAmount) !== 0)
+      .map((r: any) => {
+        const code = clean(r._id);
+        const name = categoryNameByCode.get(code.toUpperCase()) || code || "Uncategorized";
+        return { categoryName: name, categoryCode: code, saleAmount: Math.round(toNumber(r.saleAmount)), qty: toNumber(r.qty) };
+      });
+
+    const purchaseCategoryRows = purchaseCategoryAgg
+      .filter((r: any) => r._id && toNumber(r.purchaseAmount) !== 0)
+      .map((r: any) => {
+        const code = clean(r._id);
+        const name = categoryNameByCode.get(code.toUpperCase()) || code || "Uncategorized";
+        return { categoryName: name, purchaseAmount: Math.round(toNumber(r.purchaseAmount)) };
+      });
+
+    const webPurchaseCategoryRows: any[] = [];
+    const webPurchaseDocs = await PurchaseBill.find(webPurchaseFilter, { items: 1 }).lean().catch(() => []);
+    for (const bill of webPurchaseDocs as any[]) {
+      const items = Array.isArray(bill.items) ? bill.items : Object.values(bill.items || {});
+      for (const item of items as any[]) {
+        const category = clean(item?.categoryName || item?.category || item?.categoryCode);
+        if (!category) continue;
+        webPurchaseCategoryRows.push({
+          categoryName: category,
+          purchaseAmount: toNumber(item?.total || item?.taxableAmount),
+        });
       }
-    } catch (e) {
-      console.warn("Treemap aggregation fallback notice:", e);
     }
 
-    if (treemapItemsData.length === 0) {
-      const baseSalesVal = totalSales > 0 ? totalSales : 18450000;
-      treemapItemsData = [
-        { name: "Amoxicillin 500mg", salesVolume: Math.round(baseSalesVal * 0.14), profitMargin: 36, category: "Antibiotics", code: "ITEM-101" },
-        { name: "Atorvastatin 10mg", salesVolume: Math.round(baseSalesVal * 0.12), profitMargin: 42, category: "Cardiac", code: "ITEM-102" },
-        { name: "Paracetamol 650mg", salesVolume: Math.round(baseSalesVal * 0.10), profitMargin: 28, category: "Analgesics", code: "ITEM-103" },
-        { name: "Azithromycin 250mg", salesVolume: Math.round(baseSalesVal * 0.09), profitMargin: 35, category: "Antibiotics", code: "ITEM-104" },
-        { name: "Metformin 500mg", salesVolume: Math.round(baseSalesVal * 0.08), profitMargin: 31, category: "Cardiac", code: "ITEM-105" },
-        { name: "Multivitamin Syrup", salesVolume: Math.round(baseSalesVal * 0.07), profitMargin: 48, category: "Vitamins", code: "ITEM-106" },
-        { name: "Pantoprazole 40mg", salesVolume: Math.round(baseSalesVal * 0.06), profitMargin: 39, category: "Analgesics", code: "ITEM-107" },
-        { name: "Ciprofloxacin 500mg", salesVolume: Math.round(baseSalesVal * 0.05), profitMargin: 33, category: "Antibiotics", code: "ITEM-108" },
-        { name: "Vitamin C 500mg", salesVolume: Math.round(baseSalesVal * 0.05), profitMargin: 44, category: "Vitamins", code: "ITEM-109" },
-        { name: "Clobetasol Ointment", salesVolume: Math.round(baseSalesVal * 0.04), profitMargin: 26, category: "Derma", code: "ITEM-110" },
-      ];
+    const catMap = new Map<string, any>();
+    for (const row of salesCategoryRows) {
+      const key = row.categoryName.toUpperCase();
+      catMap.set(key, {
+        categoryName: row.categoryName,
+        purchaseAmount: 0,
+        saleAmount: row.saleAmount,
+        grossMargin: row.saleAmount ? 0 : 0,
+      });
+    }
+    for (const row of purchaseCategoryRows) {
+      const key = row.categoryName.toUpperCase();
+      const existing = catMap.get(key) || { categoryName: row.categoryName, purchaseAmount: 0, saleAmount: 0, grossMargin: 0 };
+      existing.purchaseAmount += toNumber(row.purchaseAmount);
+      catMap.set(key, existing);
+    }
+    for (const row of webPurchaseCategoryRows) {
+      const key = row.categoryName.toUpperCase();
+      const existing = catMap.get(key) || { categoryName: row.categoryName, purchaseAmount: 0, saleAmount: 0, grossMargin: 0 };
+      existing.purchaseAmount += toNumber(row.purchaseAmount);
+      catMap.set(key, existing);
     }
 
-    // 9. Payment & Returns Breakdown
+    const categoriesData = Array.from(catMap.values())
+      .map((row: any) => ({
+        ...row,
+        purchaseAmount: Math.round(row.purchaseAmount),
+        saleAmount: Math.round(row.saleAmount),
+        grossMargin: row.saleAmount ? Math.round(((row.saleAmount - row.purchaseAmount) / Math.abs(row.saleAmount)) * 1000) / 10 : 0,
+      }))
+      .sort((a, b) => (b.saleAmount + b.purchaseAmount) - (a.saleAmount + a.purchaseAmount))
+      .slice(0, 6);
+
+    // ───────────────────────────────────────────────────────────────────────
+    // 4. Product treemap — real sales volume and cost-based margin where the
+    //    Product master contains PRATE. No Math.random and no sample products.
+    // ───────────────────────────────────────────────────────────────────────
+    const topProductAgg = await SalesDis.aggregate([
+      { $match: combineFilters(companyVfpFilter, hierarchyVfpFilter, mdisDateMatch, categoryMatch) },
+      {
+        $group: {
+          _id: "$CODE",
+          salesVolume: { $sum: { $convert: { input: "$AMMMOUNT", to: "double", onError: 0, onNull: 0 } } },
+          qty: { $sum: { $convert: { input: "$QTY", to: "double", onError: 0, onNull: 0 } } },
+          categoryCode: { $first: { $ifNull: ["$GCODE", ""] } },
+        },
+      },
+      { $sort: { salesVolume: -1 } },
+      { $limit: 10 },
+    ]);
+
+    const numericCodes = topProductAgg.map((r: any) => Number(r._id)).filter((n) => Number.isFinite(n));
+    const stringCodes = topProductAgg.map((r: any) => clean(r._id)).filter(Boolean);
+    const productDocs = await Product.find({
+      $or: [
+        ...(numericCodes.length ? [{ CODE: { $in: numericCodes } }] : []),
+        ...(stringCodes.length ? [{ CODE: { $in: stringCodes } }] : []),
+      ],
+    }, { CODE: 1, PRODUCT: 1, BILLNAME: 1, PRATE: 1, GCODE: 1 }).lean().catch(() => []);
+
+    const productByCode = new Map<string, any>();
+    for (const p of productDocs as any[]) productByCode.set(clean(p.CODE), p);
+
+    const treemapItemsData = topProductAgg
+      .filter((r: any) => toNumber(r.salesVolume) !== 0)
+      .map((r: any) => {
+        const code = clean(r._id);
+        const p = productByCode.get(code);
+        const salesVolume = toNumber(r.salesVolume);
+        const qty = toNumber(r.qty);
+        const cost = p ? qty * toNumber(p.PRATE) : 0;
+        const profitMargin = salesVolume !== 0 && p ? Math.round(((salesVolume - cost) / Math.abs(salesVolume)) * 1000) / 10 : 0;
+        const categoryCode = clean(p?.GCODE || r.categoryCode);
+        return {
+          name: clean(p?.PRODUCT || p?.BILLNAME) || `Item ${code}`,
+          salesVolume: Math.round(salesVolume),
+          profitMargin,
+          category: categoryNameByCode.get(categoryCode.toUpperCase()) || categoryCode || "Uncategorized",
+          code,
+        };
+      });
+
+    // ───────────────────────────────────────────────────────────────────────
+    // 5. Payments/collections — based on stored CASH / GLEDGER / PurchaseBill
+    //    values. We do not invent payment-mode percentages.
+    // ───────────────────────────────────────────────────────────────────────
+    const [salesPaymentRows, purchasePaymentRows, collectionAgg, poAgg, salesVoucherAgg, dispatchedAgg] = await Promise.all([
+      SalesMdis.aggregate([
+        { $match: mdisSaleFilter },
+        {
+          $group: {
+            _id: null,
+            total: { $sum: sumFinalExpression() },
+            cash: { $sum: { $convert: { input: "$CASH", to: "double", onError: 0, onNull: 0 } } },
+          },
+        },
+      ]),
+      PurchaseBill.aggregate([
+        { $match: webPurchaseFilter },
+        {
+          $group: {
+            _id: null,
+            paid: { $sum: { $convert: { input: "$paidAmount", to: "double", onError: 0, onNull: 0 } } },
+            balance: { $sum: { $convert: { input: "$balanceAmount", to: "double", onError: 0, onNull: 0 } } },
+          },
+        },
+      ]),
+      GLedger.aggregate([
+        { $match: combineFilters(gledgerDateMatch, companyVfpFilter, gledgerPartyFilter, { BOOK: "R", CD: "C" }) },
+        { $group: { _id: null, total: { $sum: { $convert: { input: "$CREDIT", to: "double", onError: 0, onNull: 0 } } } } },
+      ]),
+      PurchaseOrder.aggregate([
+        { $match: purchaseOrderFilter },
+        {
+          $group: {
+            _id: null,
+            count: { $sum: 1 },
+            amount: { $sum: { $convert: { input: "$netTotal", to: "double", onError: 0, onNull: 0 } } },
+          },
+        },
+      ]),
+      SalesMdis.aggregate([
+        { $match: mdisSaleFilter },
+        { $group: { _id: "$VCN", amount: { $sum: sumFinalExpression() } } },
+        { $group: { _id: null, count: { $sum: 1 }, amount: { $sum: "$amount" } } },
+      ]),
+      SalesDis.aggregate([
+        { $match: combineFilters(companyVfpFilter, hierarchyVfpFilter, mdisDateMatch, categoryMatch) },
+        { $group: { _id: "$VCN", amount: { $sum: { $convert: { input: "$AMMMOUNT", to: "double", onError: 0, onNull: 0 } } } } },
+        { $group: { _id: null, count: { $sum: 1 }, amount: { $sum: "$amount" } } },
+      ]),
+    ]);
+
+    const salesTotalStored = toNumber(salesPaymentRows[0]?.total);
+    const salesCash = Math.max(0, Math.min(salesTotalStored, toNumber(salesPaymentRows[0]?.cash)));
+    const salesNonCash = Math.max(0, salesTotalStored - salesCash);
+    const purchasePaid = Math.max(0, toNumber(purchasePaymentRows[0]?.paid));
+    const purchaseBalance = Math.max(0, toNumber(purchasePaymentRows[0]?.balance));
+    const collections = toNumber(collectionAgg[0]?.total);
+
     const salesPaymentBreakdown = [
-      { mode: "Credit / Account", value: Math.round(totalSales * 0.62), color: "#3b82f6" },
-      { mode: "Cash Payment", value: Math.round(totalSales * 0.23), color: "#10b981" },
-      { mode: "Bank Transfer / UPI", value: Math.round(totalSales * 0.15), color: "#8b5cf6" },
-    ];
+      { mode: "Cash", value: Math.round(salesCash), color: "#10b981" },
+      { mode: "Credit / Other", value: Math.round(salesNonCash), color: "#3b82f6" },
+    ].filter((x) => x.value > 0);
 
     const purchasePaymentBreakdown = [
-      { mode: "Credit / Supplier Terms", value: Math.round(totalPurchases * 0.70), color: "#6366f1" },
-      { mode: "Cash Advance", value: Math.round(totalPurchases * 0.18), color: "#f59e0b" },
-      { mode: "Direct Bank Draft", value: Math.round(totalPurchases * 0.12), color: "#06b6d4" },
+      { mode: "Paid", value: Math.round(purchasePaid), color: "#10b981" },
+      { mode: "Outstanding", value: Math.round(purchaseBalance), color: "#f59e0b" },
+    ].filter((x) => x.value > 0);
+
+    // ───────────────────────────────────────────────────────────────────────
+    // 6. Trade funnel — actual counts/amounts available in the database.
+    // ───────────────────────────────────────────────────────────────────────
+    const poCount = toNumber(poAgg[0]?.count);
+    const poAmount = Math.round(toNumber(poAgg[0]?.amount));
+    const purchaseBillCount = await PurchaseBill.countDocuments(webPurchaseFilter).catch(() => 0);
+    const purchaseInwardAmount = Math.round(toNumber(webPurchasesAgg[0]?.total));
+    const invoiceCount = toNumber(salesVoucherAgg[0]?.count);
+    const invoiceAmount = Math.round(toNumber(salesVoucherAgg[0]?.amount));
+    const dispatchedCount = toNumber(dispatchedAgg[0]?.count);
+    const dispatchedAmount = Math.round(toNumber(dispatchedAgg[0]?.amount));
+
+    const funnelBase = Math.max(poAmount, purchaseInwardAmount, invoiceAmount, dispatchedAmount, collections, Math.abs(grossProfit), 0);
+    const funnelPct = (amount: number) => funnelBase > 0 ? Math.round((Math.abs(amount) / funnelBase) * 100) : 0;
+
+    const tradeFunnelData = [
+      { stage: "Purchase Orders Raised", amount: poAmount, count: poCount, percentage: funnelPct(poAmount) },
+      { stage: "Stock Inward Receipts", amount: purchaseInwardAmount, count: purchaseBillCount, percentage: funnelPct(purchaseInwardAmount) },
+      { stage: "Quotation & Invoices", amount: invoiceAmount, count: invoiceCount, percentage: funnelPct(invoiceAmount) },
+      { stage: "Dispatched Sales Volume", amount: dispatchedAmount, count: dispatchedCount, percentage: funnelPct(dispatchedAmount) },
+      { stage: "Realized Net Collections", amount: Math.round(collections), count: collections > 0 ? 1 : 0, percentage: funnelPct(collections) },
+      { stage: "Retained Profit Value", amount: Math.round(grossProfit), count: grossProfit !== 0 ? 1 : 0, percentage: funnelPct(grossProfit) },
+    ];
+
+    // Radar is generated from the same actual category rows. Values are
+    // normalized only for chart scale; no hard-coded business scores.
+    const radarSource = categoriesData.slice(0, 5);
+    const maxSales = Math.max(...radarSource.map((x: any) => Math.abs(x.saleAmount)), 1);
+    const maxPurchase = Math.max(...radarSource.map((x: any) => Math.abs(x.purchaseAmount)), 1);
+    const categoryRadarData = [
+      {
+        metric: "Sales Volume",
+        ...Object.fromEntries(radarSource.map((x: any) => [x.categoryName, Math.round((Math.abs(x.saleAmount) / maxSales) * 100)])),
+      },
+      {
+        metric: "Purchase Spend",
+        ...Object.fromEntries(radarSource.map((x: any) => [x.categoryName, Math.round((Math.abs(x.purchaseAmount) / maxPurchase) * 100)])),
+      },
+      {
+        metric: "Gross Margin %",
+        ...Object.fromEntries(radarSource.map((x: any) => [x.categoryName, Math.max(0, Math.min(100, Number(x.grossMargin) || 0))])),
+      },
+      {
+        metric: "Low Return %",
+        ...Object.fromEntries(radarSource.map((x: any) => [x.categoryName, 0])),
+      },
+      {
+        metric: "Turnover Velocity",
+        ...Object.fromEntries(radarSource.map((x: any) => [x.categoryName, 0])),
+      },
     ];
 
     const returnsComparison = [
-      { type: "Sale Returns", amount: totalSaleReturns, ratio: totalSales > 0 ? Math.round((totalSaleReturns / totalSales) * 1000) / 10 : 0 },
-      { type: "Purchase Returns", amount: totalPurchaseReturns, ratio: totalPurchases > 0 ? Math.round((totalPurchases / totalPurchases) * 1000) / 10 : 0 },
+      { type: "Sale Returns", amount: totalSaleReturns, ratio: totalSales !== 0 ? Math.round((totalSaleReturns / Math.abs(totalSales)) * 1000) / 10 : 0 },
+      { type: "Purchase Returns", amount: totalPurchaseReturns, ratio: totalPurchases !== 0 ? Math.round((totalPurchaseReturns / Math.abs(totalPurchases)) * 1000) / 10 : 0 },
     ];
 
-    // Metadata for filter dropdowns
     const companies = await Company.find({}, { companyName: 1, companyCode: 1 }).lean();
     const financialYears = await FinancialYear.find({}, { fyName: 1, fyCode: 1, companyId: 1 }).lean();
-    const categories = await Category.find({}, { name: 1, categoryName: 1 }).lean();
+    const categories = await Category.find({}, { categoryCode: 1, categoryName: 1 }).lean();
 
     return NextResponse.json({
       success: true,
@@ -462,8 +670,15 @@ export async function GET(request: Request) {
         })),
         categories: categories.map((cat: any) => ({
           id: cat._id.toString(),
-          name: cat.name || cat.categoryName,
+          name: cat.categoryName || cat.categoryCode,
+          code: cat.categoryCode,
         })),
+        hierarchy: {
+          role: access.role,
+          isAdmin: access.isAdmin,
+          accessibleUserCount: access.accessibleUserIds.length,
+          accessibleMrCount: access.mrUserIds.length,
+        },
       },
       summary: {
         totalSales,
@@ -475,9 +690,9 @@ export async function GET(request: Request) {
         purchaseUtilizationRate,
         totalSaleReturns,
         totalPurchaseReturns,
-        saleReturnRatio: totalSales > 0 ? Math.round((totalSaleReturns / totalSales) * 1000) / 10 : 0,
-        purchaseReturnRatio: totalPurchases > 0 ? Math.round((totalPurchaseReturns / totalPurchases) * 1000) / 10 : 0,
-        inventoryTurnoverVelocity: 6.4,
+        saleReturnRatio: totalSales !== 0 ? Math.round((totalSaleReturns / Math.abs(totalSales)) * 1000) / 10 : 0,
+        purchaseReturnRatio: totalPurchases !== 0 ? Math.round((totalPurchaseReturns / Math.abs(totalPurchases)) * 1000) / 10 : 0,
+        inventoryTurnoverVelocity: 0,
       },
       dualTrendData,
       categoriesData,
@@ -490,6 +705,9 @@ export async function GET(request: Request) {
     });
   } catch (error: any) {
     console.error("Error in /api/analytics/purchase-sales:", error);
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+    return NextResponse.json(
+      { success: false, error: error?.message || "Failed to load purchase & sales analytics" },
+      { status: 500 }
+    );
   }
 }

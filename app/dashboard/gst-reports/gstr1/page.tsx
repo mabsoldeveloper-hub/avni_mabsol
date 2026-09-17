@@ -2,6 +2,7 @@
 
 import { useState, useMemo, useEffect } from "react";
 import { FaBuilding, FaMapMarkerAlt, FaArrowRight } from "react-icons/fa";
+import Gstr1TemplateUploadModal from "@/components/reports/Gstr1TemplateUploadModal";
 
 type MrTerritoryInfo = {
     isMrRestricted: boolean;
@@ -10,8 +11,8 @@ type MrTerritoryInfo = {
 };
 
 const MONTHS = [
-    "January","February","March","April","May","June",
-    "July","August","September","October","November","December",
+    "January", "February", "March", "April", "May", "June",
+    "July", "August", "September", "October", "November", "December",
 ];
 const CURRENT_YEAR = new Date().getFullYear();
 const YEARS = Array.from({ length: 6 }, (_, i) => CURRENT_YEAR - i);
@@ -44,80 +45,80 @@ export interface TabMeta {
 
 const TAB_META: TabMeta[] = [
     // Main
-    { id: "summary",      label: "Summary",                          shortLabel: "Summary",        csvName: "summary",      category: "main",     color: "#6366f1" },
-    { id: "invoices",     label: "Invoice Register",                  shortLabel: "Register",       csvName: "invoices",     category: "main",     color: "#0ea5e9" },
-    
+    { id: "summary", label: "Summary", shortLabel: "Summary", csvName: "summary", category: "main", color: "#6366f1" },
+    { id: "invoices", label: "Invoice Register", shortLabel: "Register", csvName: "invoices", category: "main", color: "#0ea5e9" },
+
     // Invoices & B2C
-    { id: "b2b",          label: "B2B Supplies (4A, 4B)",             shortLabel: "b2b.csv",        csvName: "b2b.csv",      category: "invoices", color: "#10b981" },
-    { id: "b2ba",         label: "B2B Amended (9A)",                  shortLabel: "b2ba.csv",       csvName: "b2ba.csv",     category: "invoices", color: "#059669" },
-    { id: "b2b_sez_de",   label: "B2B SEZ & Deemed Exports",          shortLabel: "b2b_sez_de.csv", csvName: "b2b_sez_de.csv",category: "invoices", color: "#047857" },
-    { id: "b2cl",         label: "B2C Large > ₹2.5L (5A)",            shortLabel: "b2cl.csv",       csvName: "b2cl.csv",     category: "invoices", color: "#f59e0b" },
-    { id: "b2cla",        label: "B2C Large Amended (9A)",            shortLabel: "b2cla.csv",       csvName: "b2cla.csv",    category: "invoices", color: "#d97706" },
-    { id: "b2cs",         label: "B2C Small (7)",                     shortLabel: "b2cs.csv",       csvName: "b2cs.csv",     category: "invoices", color: "#8b5cf6" },
-    { id: "b2csa",        label: "B2C Small Amended (10)",            shortLabel: "b2csa.csv",      csvName: "b2csa.csv",    category: "invoices", color: "#7c3aed" },
+    { id: "b2b", label: "B2B Supplies (4A, 4B)", shortLabel: "b2b.csv", csvName: "b2b.csv", category: "invoices", color: "#10b981" },
+    { id: "b2ba", label: "B2B Amended (9A)", shortLabel: "b2ba.csv", csvName: "b2ba.csv", category: "invoices", color: "#059669" },
+    { id: "b2b_sez_de", label: "B2B SEZ & Deemed Exports", shortLabel: "b2b_sez_de.csv", csvName: "b2b_sez_de.csv", category: "invoices", color: "#047857" },
+    { id: "b2cl", label: "B2C Large > ₹2.5L (5A)", shortLabel: "b2cl.csv", csvName: "b2cl.csv", category: "invoices", color: "#f59e0b" },
+    { id: "b2cla", label: "B2C Large Amended (9A)", shortLabel: "b2cla.csv", csvName: "b2cla.csv", category: "invoices", color: "#d97706" },
+    { id: "b2cs", label: "B2C Small (7)", shortLabel: "b2cs.csv", csvName: "b2cs.csv", category: "invoices", color: "#8b5cf6" },
+    { id: "b2csa", label: "B2C Small Amended (10)", shortLabel: "b2csa.csv", csvName: "b2csa.csv", category: "invoices", color: "#7c3aed" },
 
     // Notes
-    { id: "cdnr",         label: "CDNR Registered (9B)",              shortLabel: "cdnr.csv",       csvName: "cdnr.csv",     category: "notes",    color: "#ef4444" },
-    { id: "cdnra",        label: "CDNR Amended (9C)",                 shortLabel: "cdnra.csv",      csvName: "cdnra.csv",    category: "notes",    color: "#dc2626" },
-    { id: "cdnur",        label: "CDNUR Unregistered (9B)",           shortLabel: "cdnur.csv",      csvName: "cdnur.csv",    category: "notes",    color: "#f43f5e" },
-    { id: "cdnura",       label: "CDNUR Amended (9C)",                shortLabel: "cdnura.csv",     csvName: "cdnura.csv",   category: "notes",    color: "#e11d48" },
+    { id: "cdnr", label: "CDNR Registered (9B)", shortLabel: "cdnr.csv", csvName: "cdnr.csv", category: "notes", color: "#ef4444" },
+    { id: "cdnra", label: "CDNR Amended (9C)", shortLabel: "cdnra.csv", csvName: "cdnra.csv", category: "notes", color: "#dc2626" },
+    { id: "cdnur", label: "CDNUR Unregistered (9B)", shortLabel: "cdnur.csv", csvName: "cdnur.csv", category: "notes", color: "#f43f5e" },
+    { id: "cdnura", label: "CDNUR Amended (9C)", shortLabel: "cdnura.csv", csvName: "cdnura.csv", category: "notes", color: "#e11d48" },
 
     // Exports & Advances
-    { id: "exp",          label: "Exports (6A)",                      shortLabel: "exp.csv",        csvName: "exp.csv",      category: "advances", color: "#06b6d4" },
-    { id: "expa",         label: "Exports Amended (9A)",              shortLabel: "expa.csv",       csvName: "expa.csv",     category: "advances", color: "#0891b2" },
-    { id: "at",           label: "Advance Tax Liability (11A)",       shortLabel: "at.csv",         csvName: "at.csv",       category: "advances", color: "#3b82f6" },
-    { id: "ata",          label: "Advance Tax Amended (11B)",         shortLabel: "ata.csv",        csvName: "ata.csv",      category: "advances", color: "#2563eb" },
-    { id: "atadi",        label: "Advance Tax Adjusted (11B)",        shortLabel: "atadi.csv",      csvName: "atadi.csv",    category: "advances", color: "#1d4ed8" },
-    { id: "atadja",       label: "Advance Tax Adjusted Amended",      shortLabel: "atadja.csv",     csvName: "atadja.csv",   category: "advances", color: "#1e40af" },
+    { id: "exp", label: "Exports (6A)", shortLabel: "exp.csv", csvName: "exp.csv", category: "advances", color: "#06b6d4" },
+    { id: "expa", label: "Exports Amended (9A)", shortLabel: "expa.csv", csvName: "expa.csv", category: "advances", color: "#0891b2" },
+    { id: "at", label: "Advance Tax Liability (11A)", shortLabel: "at.csv", csvName: "at.csv", category: "advances", color: "#3b82f6" },
+    { id: "ata", label: "Advance Tax Amended (11B)", shortLabel: "ata.csv", csvName: "ata.csv", category: "advances", color: "#2563eb" },
+    { id: "atadi", label: "Advance Tax Adjusted (11B)", shortLabel: "atadi.csv", csvName: "atadi.csv", category: "advances", color: "#1d4ed8" },
+    { id: "atadja", label: "Advance Tax Adjusted Amended", shortLabel: "atadja.csv", csvName: "atadja.csv", category: "advances", color: "#1e40af" },
 
     // HSN
-    { id: "hsn",          label: "HSN Summary (12)",                  shortLabel: "hsn.csv",        csvName: "hsn.csv",      category: "hsn",      color: "#14b8a6" },
-    { id: "hsn_b2b",      label: "HSN B2B Summary",                   shortLabel: "hsn(b2b).csv",   csvName: "hsn(b2b).csv", category: "hsn",      color: "#0d9488" },
-    { id: "hsn_b2c",      label: "HSN B2C Summary",                   shortLabel: "hsn(b2c).csv",   csvName: "hsn(b2c).csv", category: "hsn",      color: "#0f766e" },
+    { id: "hsn", label: "HSN Summary (12)", shortLabel: "hsn.csv", csvName: "hsn.csv", category: "hsn", color: "#14b8a6" },
+    { id: "hsn_b2b", label: "HSN B2B Summary", shortLabel: "hsn(b2b).csv", csvName: "hsn(b2b).csv", category: "hsn", color: "#0d9488" },
+    { id: "hsn_b2c", label: "HSN B2C Summary", shortLabel: "hsn(b2c).csv", csvName: "hsn(b2c).csv", category: "hsn", color: "#0f766e" },
 
     // Docs
-    { id: "docs",         label: "Documents Issued (13)",             shortLabel: "docs.csv",       csvName: "docs.csv",     category: "docs",     color: "#64748b" },
+    { id: "docs", label: "Documents Issued (13)", shortLabel: "docs.csv", csvName: "docs.csv", category: "docs", color: "#64748b" },
 
     // ECO
-    { id: "eco",          label: "E-Commerce Supplies (14)",          shortLabel: "eco.csv",        csvName: "eco.csv",      category: "eco",      color: "#ec4899" },
-    { id: "ecoa",         label: "E-Commerce Amended (14A)",          shortLabel: "ecoa.csv",       csvName: "ecoa.csv",     category: "eco",      color: "#db2777" },
-    { id: "ecob2b",       label: "ECO B2B Supplies",                  shortLabel: "ecob2b.csv",     csvName: "ecob2b.csv",   category: "eco",      color: "#be185d" },
-    { id: "ecob2csb",     label: "ECO B2CS Supplies",                 shortLabel: "ecob2csb.csv",   csvName: "ecob2csb.csv", category: "eco",      color: "#9d174d" },
-    { id: "ecourp2b",     label: "ECO URP to B Supplies",             shortLabel: "ecourp2b.csv",   csvName: "ecourp2b.csv", category: "eco",      color: "#831843" },
-    { id: "ecourp2c",     label: "ECO URP to C Supplies",             shortLabel: "ecourp2c.csv",   csvName: "ecourp2c.csv", category: "eco",      color: "#701a75" },
-    { id: "ecoab2b",      label: "ECO Amended B2B",                   shortLabel: "ecoab2b.csv",    csvName: "ecoab2b.csv",  category: "eco",      color: "#4c1d95" },
-    { id: "ecoab2c",      label: "ECO Amended B2C",                   shortLabel: "ecoab2c.csv",    csvName: "ecoab2c.csv",  category: "eco",      color: "#5b21b6" },
-    { id: "ecoaurp2b",     label: "ECO Amended URP to B",              shortLabel: "ecoaurp2b.csv",  csvName: "ecoaurp2b.csv",category: "eco",      color: "#6b21a8" },
-    { id: "ecoaurp2c",     label: "ECO Amended URP to C",              shortLabel: "ecoaurp2c.csv",  csvName: "ecoaurp2c.csv",category: "eco",      color: "#7e22ce" },
+    { id: "eco", label: "E-Commerce Supplies (14)", shortLabel: "eco.csv", csvName: "eco.csv", category: "eco", color: "#ec4899" },
+    { id: "ecoa", label: "E-Commerce Amended (14A)", shortLabel: "ecoa.csv", csvName: "ecoa.csv", category: "eco", color: "#db2777" },
+    { id: "ecob2b", label: "ECO B2B Supplies", shortLabel: "ecob2b.csv", csvName: "ecob2b.csv", category: "eco", color: "#be185d" },
+    { id: "ecob2csb", label: "ECO B2CS Supplies", shortLabel: "ecob2csb.csv", csvName: "ecob2csb.csv", category: "eco", color: "#9d174d" },
+    { id: "ecourp2b", label: "ECO URP to B Supplies", shortLabel: "ecourp2b.csv", csvName: "ecourp2b.csv", category: "eco", color: "#831843" },
+    { id: "ecourp2c", label: "ECO URP to C Supplies", shortLabel: "ecourp2c.csv", csvName: "ecourp2c.csv", category: "eco", color: "#701a75" },
+    { id: "ecoab2b", label: "ECO Amended B2B", shortLabel: "ecoab2b.csv", csvName: "ecoab2b.csv", category: "eco", color: "#4c1d95" },
+    { id: "ecoab2c", label: "ECO Amended B2C", shortLabel: "ecoab2c.csv", csvName: "ecoab2c.csv", category: "eco", color: "#5b21b6" },
+    { id: "ecoaurp2b", label: "ECO Amended URP to B", shortLabel: "ecoaurp2b.csv", csvName: "ecoaurp2b.csv", category: "eco", color: "#6b21a8" },
+    { id: "ecoaurp2c", label: "ECO Amended URP to C", shortLabel: "ecoaurp2c.csv", csvName: "ecoaurp2c.csv", category: "eco", color: "#7e22ce" },
 ];
 
 const CATEGORIES: { id: TabCategory; label: string }[] = [
-    { id: "all",      label: "All 30 Tabs" },
-    { id: "main",     label: "Summary & Register" },
+    { id: "all", label: "All 30 Tabs" },
+    { id: "main", label: "Summary & Register" },
     { id: "invoices", label: "Invoices (B2B/B2CL/B2CS)" },
-    { id: "notes",    label: "Credit / Debit Notes" },
+    { id: "notes", label: "Credit / Debit Notes" },
     { id: "advances", label: "Exports & Advances" },
-    { id: "hsn",      label: "HSN Summaries" },
-    { id: "docs",     label: "Documents Issued" },
-    { id: "eco",      label: "E-Commerce Operator" },
+    { id: "hsn", label: "HSN Summaries" },
+    { id: "docs", label: "Documents Issued" },
+    { id: "eco", label: "E-Commerce Operator" },
 ];
 
 const BUCKET_BADGE: Record<string, { label: string; bg: string; color: string }> = {
-    B2B:   { label: "B2B",   bg: "#dcfce7", color: "#15803d" },
-    B2CL:  { label: "B2CL",  bg: "#fef9c3", color: "#92400e" },
-    B2CS:  { label: "B2CS",  bg: "#ede9fe", color: "#5b21b6" },
-    CDNR:  { label: "CDNR",  bg: "#fee2e2", color: "#991b1b" },
+    B2B: { label: "B2B", bg: "#dcfce7", color: "#15803d" },
+    B2CL: { label: "B2CL", bg: "#fef9c3", color: "#92400e" },
+    B2CS: { label: "B2CS", bg: "#ede9fe", color: "#5b21b6" },
+    CDNR: { label: "CDNR", bg: "#fee2e2", color: "#991b1b" },
     CDNUR: { label: "CDNUR", bg: "#fce7f3", color: "#9d174d" },
 };
 
 const GST_STATE_CODES_UI: Record<string, string> = {
-    "01":"J&K","02":"HP","03":"Punjab","04":"Chandigarh","05":"Uttarakhand","06":"Haryana",
-    "07":"Delhi","08":"Rajasthan","09":"UP","10":"Bihar","11":"Sikkim","12":"Arunachal Pradesh",
-    "13":"Nagaland","14":"Manipur","15":"Mizoram","16":"Tripura","17":"Meghalaya","18":"Assam",
-    "19":"West Bengal","20":"Jharkhand","21":"Odisha","22":"Chhattisgarh","23":"MP","24":"Gujarat",
-    "25":"Daman & Diu","26":"D&NH","27":"Maharashtra","28":"AP (Old)","29":"Karnataka","30":"Goa",
-    "31":"Lakshadweep","32":"Kerala","33":"Tamil Nadu","34":"Puducherry","35":"Andaman & Nicobar",
-    "36":"Telangana","37":"Andhra Pradesh","38":"Ladakh","97":"Other",
+    "01": "J&K", "02": "HP", "03": "Punjab", "04": "Chandigarh", "05": "Uttarakhand", "06": "Haryana",
+    "07": "Delhi", "08": "Rajasthan", "09": "UP", "10": "Bihar", "11": "Sikkim", "12": "Arunachal Pradesh",
+    "13": "Nagaland", "14": "Manipur", "15": "Mizoram", "16": "Tripura", "17": "Meghalaya", "18": "Assam",
+    "19": "West Bengal", "20": "Jharkhand", "21": "Odisha", "22": "Chhattisgarh", "23": "MP", "24": "Gujarat",
+    "25": "Daman & Diu", "26": "D&NH", "27": "Maharashtra", "28": "AP (Old)", "29": "Karnataka", "30": "Goa",
+    "31": "Lakshadweep", "32": "Kerala", "33": "Tamil Nadu", "34": "Puducherry", "35": "Andaman & Nicobar",
+    "36": "Telangana", "37": "Andhra Pradesh", "38": "Ladakh", "97": "Other",
 };
 
 const STYLES = `
@@ -143,6 +144,8 @@ const STYLES = `
 .gstr1-btn-excel:hover:not(:disabled){background:#dcfce7}
 .gstr1-btn-pdf{background:#fff1f2;color:#be123c;border:1.5px solid #fca5a5}
 .gstr1-btn-pdf:hover:not(:disabled){background:#fee2e2}
+.gstr1-btn-ai-template{background:linear-gradient(135deg,#7c3aed,#6d28d9);color:#ffffff;border:1.5px solid #5b21b6;box-shadow:0 4px 12px rgba(124,58,237,.25)}
+.gstr1-btn-ai-template:hover:not(:disabled){background:linear-gradient(135deg,#6d28d9,#5b21b6);transform:translateY(-1px);box-shadow:0 6px 18px rgba(124,58,237,.35)}
 .gstr1-btn:disabled{opacity:.5;cursor:not-allowed}
 .gstr1-btn-group{display:flex;gap:8px;align-items:flex-end;margin-left:auto;flex-wrap:wrap}
 .gstr1-error{background:#fef2f2;border:1.5px solid #fca5a5;color:#991b1b;border-radius:10px;padding:12px 18px;margin:0 24px 12px;font-size:13.5px;display:flex;align-items:center;gap:10px}
@@ -240,6 +243,7 @@ export default function Gstr1Page() {
     const [activeTab, setActiveTab] = useState<Tab>("summary");
     const [search, setSearch] = useState("");
     const [mrTerritoryInfo, setMrTerritoryInfo] = useState<MrTerritoryInfo | null>(null);
+    const [aiTemplateModalOpen, setAiTemplateModalOpen] = useState(false);
 
     useEffect(() => {
         loadMrTerritoryInfo();
@@ -479,13 +483,13 @@ export default function Gstr1Page() {
                 {/* ── Header ── */}
                 <div className="gstr1-header">
                     <div className="gstr1-header-inner">
-                        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", flexWrap:"wrap", gap:12 }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 12 }}>
                             <div>
                                 <div className="gstr1-title">📋 GSTR-1 Return — 30 Standard Portal CSV Tabs</div>
                                 <div className="gstr1-subtitle">Details of Outward Supplies &amp; Offline Excel Utility Export</div>
-                                {meta && <div style={{ marginTop:8, fontSize:13, opacity:.85 }}>{meta.companyName} &nbsp;·&nbsp; GSTIN: <strong>{meta.companyGstin || "—"}</strong></div>}
+                                {meta && <div style={{ marginTop: 8, fontSize: 13, opacity: .85 }}>{meta.companyName} &nbsp;·&nbsp; GSTIN: <strong>{meta.companyGstin || "—"}</strong></div>}
                             </div>
-                            {meta && <div className="gstr1-header-badge">{meta.invoiceCount} invoices &nbsp;·&nbsp; {MONTHS[month-1]} {year}</div>}
+                            {meta && <div className="gstr1-header-badge">{meta.invoiceCount} invoices &nbsp;·&nbsp; {MONTHS[month - 1]} {year}</div>}
                         </div>
                     </div>
                 </div>
@@ -495,7 +499,7 @@ export default function Gstr1Page() {
                     <div className="gstr1-control-group">
                         <div className="gstr1-label">Month</div>
                         <select className="gstr1-select" value={month} onChange={e => setMonth(Number(e.target.value))}>
-                            {MONTHS.map((m,i) => <option key={m} value={i+1}>{m}</option>)}
+                            {MONTHS.map((m, i) => <option key={m} value={i + 1}>{m}</option>)}
                         </select>
                     </div>
                     <div className="gstr1-control-group">
@@ -506,28 +510,35 @@ export default function Gstr1Page() {
                     </div>
                     <div className="gstr1-control-group">
                         <div className="gstr1-label">&nbsp;</div>
-                        <button className="gstr1-btn gstr1-btn-primary" onClick={loadPreview} disabled={loading} style={{ minWidth:130 }}>
+                        <button className="gstr1-btn gstr1-btn-primary" onClick={loadPreview} disabled={loading} style={{ minWidth: 130 }}>
                             {loading ? <><span className="spinner" /> Loading…</> : "🔍 Load Return"}
                         </button>
                     </div>
                     {meta && (
                         <div className="gstr1-btn-group">
-                            <div className="gstr1-label" style={{ width:"100%" }}>Export (All 30 Sections)</div>
-                            <button className="gstr1-btn gstr1-btn-json"  disabled={exporting !== null} onClick={() => downloadFile("json")}>
-                                {exporting === "json"  ? "…" : "⬇ JSON (Govt Portal)"}
+                            <div className="gstr1-label" style={{ width: "100%" }}>Export (All 30 Sections)</div>
+                            <button className="gstr1-btn gstr1-btn-json" disabled={exporting !== null} onClick={() => downloadFile("json")}>
+                                {exporting === "json" ? "…" : "⬇ JSON (Govt Portal)"}
                             </button>
                             <button className="gstr1-btn gstr1-btn-excel" disabled={exporting !== null} onClick={() => downloadFile("excel")}>
                                 {exporting === "excel" ? "…" : "⬇ Excel (30 Worksheets)"}
                             </button>
-                            <button className="gstr1-btn gstr1-btn-pdf"   disabled={exporting !== null} onClick={() => downloadFile("pdf")}>
-                                {exporting === "pdf"   ? "…" : "⬇ PDF Summary"}
+                            <button className="gstr1-btn gstr1-btn-pdf" disabled={exporting !== null} onClick={() => downloadFile("pdf")}>
+                                {exporting === "pdf" ? "…" : "⬇ PDF Summary"}
+                            </button>
+                            <button
+                                className="gstr1-btn gstr1-btn-ai-template"
+                                onClick={() => setAiTemplateModalOpen(true)}
+                                title="Upload any official GST Portal Excel template (e.g. V2.2, V2.3) — Smart AI validates and populates your data" style={{ display: 'none' }}
+                            >
+                                ✨ Upload GST Template (AI)
                             </button>
                         </div>
                     )}
                 </div>
 
                 {/* ── Error ── */}
-                {error && <div className="gstr1-error"><span style={{ fontSize:18 }}>⚠️</span><span>{error}</span></div>}
+                {error && <div className="gstr1-error"><span style={{ fontSize: 18 }}>⚠️</span><span>{error}</span></div>}
 
                 {/* ── Warnings ── */}
                 {meta && (meta.warnings?.stateGuessedCount > 0 || meta.warnings?.unclassifiedHsnCount > 0) && (
@@ -551,12 +562,12 @@ export default function Gstr1Page() {
                     {/* ── KPI Cards ── */}
                     <div className="gstr1-kpi-grid">
                         {[
-                            { label:"Total Invoices", value:fmtInt(meta.invoiceCount), sub:`${MONTHS[month-1]} ${year}`, cls:"indigo" },
-                            { label:"B2B Invoices",   value:fmtInt(meta.b2bCount),     sub:"b2b.csv",              cls:"green"  },
-                            { label:"B2CL Invoices",  value:fmtInt(meta.b2clCount),    sub:"b2cl.csv",             cls:"amber"  },
-                            { label:"B2CS Groups",    value:fmtInt(meta.b2csGroupCount),sub:"b2cs.csv",            cls:"violet" },
-                            { label:"CDN Notes",      value:fmtInt(meta.cdnrCount + meta.cdnurCount), sub:"cdnr/cdnur.csv", cls:"rose" },
-                            { label:"HSN Lines",      value:fmtInt(meta.hsnLineCount), sub:"hsn.csv",              cls:"sky"    },
+                            { label: "Total Invoices", value: fmtInt(meta.invoiceCount), sub: `${MONTHS[month - 1]} ${year}`, cls: "indigo" },
+                            { label: "B2B Invoices", value: fmtInt(meta.b2bCount), sub: "b2b.csv", cls: "green" },
+                            { label: "B2CL Invoices", value: fmtInt(meta.b2clCount), sub: "b2cl.csv", cls: "amber" },
+                            { label: "B2CS Groups", value: fmtInt(meta.b2csGroupCount), sub: "b2cs.csv", cls: "violet" },
+                            { label: "CDN Notes", value: fmtInt(meta.cdnrCount + meta.cdnurCount), sub: "cdnr/cdnur.csv", cls: "rose" },
+                            { label: "HSN Lines", value: fmtInt(meta.hsnLineCount), sub: "hsn.csv", cls: "sky" },
                         ].map(c => (
                             <div key={c.label} className={`gstr1-kpi-card ${c.cls}`}>
                                 <div className="gstr1-kpi-label">{c.label}</div>
@@ -570,11 +581,11 @@ export default function Gstr1Page() {
                     {grand && (
                         <div className="gstr1-total-bar">
                             {[
-                                { label:"Taxable Value", val:grand.taxableValue },
-                                { label:"CGST",          val:grand.cgst         },
-                                { label:"SGST",          val:grand.sgst         },
-                                { label:"IGST",          val:grand.igst         },
-                                { label:"Invoice Value", val:grand.invoiceValue },
+                                { label: "Taxable Value", val: grand.taxableValue },
+                                { label: "CGST", val: grand.cgst },
+                                { label: "SGST", val: grand.sgst },
+                                { label: "IGST", val: grand.igst },
+                                { label: "Invoice Value", val: grand.invoiceValue },
                             ].map(t => (
                                 <div key={t.label} className="gstr1-total-item">
                                     <div className="gstr1-total-label">{t.label}</div>
@@ -622,30 +633,30 @@ export default function Gstr1Page() {
                         {activeTab === "summary" && (
                             <div className="gstr1-summary-grid">
                                 {[
-                                    { title:"B2B — Registered Outward Supplies (b2b.csv)",       dot:"#10b981", key:"b2b",   count:meta.b2bCount },
-                                    { title:"B2CL — Large Unregistered (b2cl.csv)",             dot:"#f59e0b", key:"b2cl",  count:meta.b2clCount },
-                                    { title:"B2CS — Small Unregistered (b2cs.csv)",             dot:"#8b5cf6", key:"b2cs",  count:meta.b2csGroupCount },
-                                    { title:"CDNR — Credit/Debit Registered (cdnr.csv)",        dot:"#ef4444", key:"cdnr",  count:meta.cdnrCount },
-                                    { title:"CDNUR — Credit/Debit Unregistered (cdnur.csv)",    dot:"#f43f5e", key:"cdnur", count:meta.cdnurCount },
-                                    { title:"Grand Total (All Return Sections)",                dot:"#6366f1", key:"grand", count:meta.invoiceCount },
+                                    { title: "B2B — Registered Outward Supplies (b2b.csv)", dot: "#10b981", key: "b2b", count: meta.b2bCount },
+                                    { title: "B2CL — Large Unregistered (b2cl.csv)", dot: "#f59e0b", key: "b2cl", count: meta.b2clCount },
+                                    { title: "B2CS — Small Unregistered (b2cs.csv)", dot: "#8b5cf6", key: "b2cs", count: meta.b2csGroupCount },
+                                    { title: "CDNR — Credit/Debit Registered (cdnr.csv)", dot: "#ef4444", key: "cdnr", count: meta.cdnrCount },
+                                    { title: "CDNUR — Credit/Debit Unregistered (cdnur.csv)", dot: "#f43f5e", key: "cdnur", count: meta.cdnurCount },
+                                    { title: "Grand Total (All Return Sections)", dot: "#6366f1", key: "grand", count: meta.invoiceCount },
                                 ].map(sec => {
                                     const t = meta.totals[sec.key];
                                     return (
                                         <div key={sec.key} className="gstr1-section-card">
                                             <div className="gstr1-section-card-header">
-                                                <div style={{ display:"flex", alignItems:"center", gap:8 }}>
-                                                    <span className="gstr1-section-dot" style={{ background:sec.dot }} />
+                                                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                                                    <span className="gstr1-section-dot" style={{ background: sec.dot }} />
                                                     <span className="gstr1-section-card-title">{sec.title}</span>
                                                 </div>
                                                 <span className="gstr1-section-card-sub">{sec.count} record{sec.count !== 1 ? "s" : ""}</span>
                                             </div>
-                                            <div style={{ padding:"12px 18px" }}>
+                                            <div style={{ padding: "12px 18px" }}>
                                                 {[
-                                                    { label:"Taxable Value", val:t.taxableValue },
-                                                    { label:"CGST",          val:t.cgst         },
-                                                    { label:"SGST",          val:t.sgst         },
-                                                    { label:"IGST",          val:t.igst         },
-                                                    { label:"Invoice Value", val:t.invoiceValue },
+                                                    { label: "Taxable Value", val: t.taxableValue },
+                                                    { label: "CGST", val: t.cgst },
+                                                    { label: "SGST", val: t.sgst },
+                                                    { label: "IGST", val: t.igst },
+                                                    { label: "Invoice Value", val: t.invoiceValue },
                                                 ].map(row => (
                                                     <div key={row.label} className="gstr1-summary-row">
                                                         <span className="gstr1-summary-row-label">{row.label}</span>
@@ -674,41 +685,41 @@ export default function Gstr1Page() {
                                     </tr></thead>
                                     <tbody>
                                         {filteredInvoices.length === 0
-                                            ? <tr><td colSpan={17} style={{ textAlign:"center", color:"#94a3b8", padding:32, fontStyle:"italic" }}>No invoices found.</td></tr>
+                                            ? <tr><td colSpan={17} style={{ textAlign: "center", color: "#94a3b8", padding: 32, fontStyle: "italic" }}>No invoices found.</td></tr>
                                             : filteredInvoices.map((r, i) => {
-                                                const bk = BUCKET_BADGE[r.bucket] || { label:r.bucket, bg:"#f1f5f9", color:"#475569" };
+                                                const bk = BUCKET_BADGE[r.bucket] || { label: r.bucket, bg: "#f1f5f9", color: "#475569" };
                                                 return (
                                                     <tr key={r.voucher}>
-                                                        <td style={{ color:"#94a3b8", fontSize:12 }}>{i+1}</td>
-                                                        <td style={{ fontWeight:600, fontFamily:"monospace", fontSize:12.5 }}>{r.vcn}</td>
-                                                        <td style={{ fontSize:12.5, whiteSpace:"nowrap" }}>{r.date ? r.date.slice(0,10) : "—"}</td>
+                                                        <td style={{ color: "#94a3b8", fontSize: 12 }}>{i + 1}</td>
+                                                        <td style={{ fontWeight: 600, fontFamily: "monospace", fontSize: 12.5 }}>{r.vcn}</td>
+                                                        <td style={{ fontSize: 12.5, whiteSpace: "nowrap" }}>{r.date ? r.date.slice(0, 10) : "—"}</td>
                                                         <td><span className="gstr1-type-badge">{r.docType}</span></td>
-                                                        <td style={{ maxWidth:160, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }} title={r.partyName}>{r.partyName}</td>
-                                                        <td style={{ fontFamily:"monospace", fontSize:12, color:r.gstin==="-"?"#94a3b8":"#1e293b" }}>{r.gstin}</td>
-                                                        <td style={{ color:"#64748b", fontSize:12.5 }}>{r.city}</td>
-                                                        <td>{r.saleTypeName ? <span className="gstr1-saletype-badge">{r.saleTypeName}</span> : <span style={{ color:"#cbd5e1", fontSize:12 }}>—</span>}</td>
-                                                        <td><span className="gstr1-badge" style={{ background:bk.bg, color:bk.color }}>{bk.label}</span></td>
-                                                        <td style={{ fontSize:12 }}>{r.placeOfSupply} — {GST_STATE_CODES_UI[r.placeOfSupply] || r.placeOfSupply}</td>
+                                                        <td style={{ maxWidth: 160, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={r.partyName}>{r.partyName}</td>
+                                                        <td style={{ fontFamily: "monospace", fontSize: 12, color: r.gstin === "-" ? "#94a3b8" : "#1e293b" }}>{r.gstin}</td>
+                                                        <td style={{ color: "#64748b", fontSize: 12.5 }}>{r.city}</td>
+                                                        <td>{r.saleTypeName ? <span className="gstr1-saletype-badge">{r.saleTypeName}</span> : <span style={{ color: "#cbd5e1", fontSize: 12 }}>—</span>}</td>
+                                                        <td><span className="gstr1-badge" style={{ background: bk.bg, color: bk.color }}>{bk.label}</span></td>
+                                                        <td style={{ fontSize: 12 }}>{r.placeOfSupply} — {GST_STATE_CODES_UI[r.placeOfSupply] || r.placeOfSupply}</td>
                                                         <td><span className={r.interstate ? "gstr1-inter-badge" : "gstr1-intra-badge"}>{r.interstate ? "INTER" : "INTRA"}</span></td>
-                                                        <td className="num" style={{ color:"#64748b" }}>{r.itemCount}</td>
+                                                        <td className="num" style={{ color: "#64748b" }}>{r.itemCount}</td>
                                                         <td className="num">{fmt(r.taxableAmount)}</td>
-                                                        <td className="num" style={{ color:r.cgstAmount>0?"#1d4ed8":"#94a3b8" }}>{fmt(r.cgstAmount)}</td>
-                                                        <td className="num" style={{ color:r.sgstAmount>0?"#1d4ed8":"#94a3b8" }}>{fmt(r.sgstAmount)}</td>
-                                                        <td className="num" style={{ color:r.igstAmount>0?"#7c3aed":"#94a3b8" }}>{fmt(r.igstAmount)}</td>
-                                                        <td className="num" style={{ fontWeight:700 }}>₹{fmt(r.invoiceValue)}</td>
+                                                        <td className="num" style={{ color: r.cgstAmount > 0 ? "#1d4ed8" : "#94a3b8" }}>{fmt(r.cgstAmount)}</td>
+                                                        <td className="num" style={{ color: r.sgstAmount > 0 ? "#1d4ed8" : "#94a3b8" }}>{fmt(r.sgstAmount)}</td>
+                                                        <td className="num" style={{ color: r.igstAmount > 0 ? "#7c3aed" : "#94a3b8" }}>{fmt(r.igstAmount)}</td>
+                                                        <td className="num" style={{ fontWeight: 700 }}>₹{fmt(r.invoiceValue)}</td>
                                                     </tr>
                                                 );
                                             })
                                         }
                                     </tbody>
                                     {filteredInvoices.length > 0 && (() => {
-                                        const totTx = filteredInvoices.reduce((s,r) => s+r.taxableAmount,0);
-                                        const totC  = filteredInvoices.reduce((s,r) => s+r.cgstAmount,0);
-                                        const totS  = filteredInvoices.reduce((s,r) => s+r.sgstAmount,0);
-                                        const totI  = filteredInvoices.reduce((s,r) => s+r.igstAmount,0);
-                                        const totV  = filteredInvoices.reduce((s,r) => s+r.invoiceValue,0);
+                                        const totTx = filteredInvoices.reduce((s, r) => s + r.taxableAmount, 0);
+                                        const totC = filteredInvoices.reduce((s, r) => s + r.cgstAmount, 0);
+                                        const totS = filteredInvoices.reduce((s, r) => s + r.sgstAmount, 0);
+                                        const totI = filteredInvoices.reduce((s, r) => s + r.igstAmount, 0);
+                                        const totV = filteredInvoices.reduce((s, r) => s + r.invoiceValue, 0);
                                         return <tfoot><tr>
-                                            <td colSpan={12} style={{ fontSize:12, color:"#64748b" }}>Totals ({filteredInvoices.length} records)</td>
+                                            <td colSpan={12} style={{ fontSize: 12, color: "#64748b" }}>Totals ({filteredInvoices.length} records)</td>
                                             <td className="num">₹{fmt(totTx)}</td>
                                             <td className="num">₹{fmt(totC)}</td>
                                             <td className="num">₹{fmt(totS)}</td>
@@ -722,7 +733,7 @@ export default function Gstr1Page() {
 
                         {/* B2B */}
                         {activeTab === "b2b" && (<>
-                            <div className="gstr1-section-title"><span className="gstr1-section-dot" style={{ background:"#10b981" }} />B2B — Registered Outward Supplies (b2b.csv)</div>
+                            <div className="gstr1-section-title"><span className="gstr1-section-dot" style={{ background: "#10b981" }} />B2B — Registered Outward Supplies (b2b.csv)</div>
                             <div className="gstr1-table-wrap">
                                 <table className="gstr1-table">
                                     <thead><tr>
@@ -733,23 +744,23 @@ export default function Gstr1Page() {
                                     </tr></thead>
                                     <tbody>
                                         {!(gstJson?.b2b?.length)
-                                            ? <tr><td colSpan={10} style={{ textAlign:"center", color:"#94a3b8", padding:32, fontStyle:"italic" }}>No B2B invoices.</td></tr>
+                                            ? <tr><td colSpan={10} style={{ textAlign: "center", color: "#94a3b8", padding: 32, fontStyle: "italic" }}>No B2B invoices.</td></tr>
                                             : gstJson.b2b.flatMap((g: any) => g.inv.map((inv: any, j: number) => {
-                                                const tx = inv.itms.reduce((s:number,i:any)=>s+(i.itm_det.txval||0),0);
-                                                const c  = inv.itms.reduce((s:number,i:any)=>s+(i.itm_det.camt||0),0);
-                                                const s  = inv.itms.reduce((s:number,i:any)=>s+(i.itm_det.samt||0),0);
-                                                const ig = inv.itms.reduce((s:number,i:any)=>s+(i.itm_det.iamt||0),0);
+                                                const tx = inv.itms.reduce((s: number, i: any) => s + (i.itm_det.txval || 0), 0);
+                                                const c = inv.itms.reduce((s: number, i: any) => s + (i.itm_det.camt || 0), 0);
+                                                const s = inv.itms.reduce((s: number, i: any) => s + (i.itm_det.samt || 0), 0);
+                                                const ig = inv.itms.reduce((s: number, i: any) => s + (i.itm_det.iamt || 0), 0);
                                                 return <tr key={`${g.ctin}-${j}`}>
-                                                    <td style={{ fontFamily:"monospace", fontSize:12, fontWeight:600 }}>{g.ctin}</td>
-                                                    <td style={{ fontFamily:"monospace", fontSize:12.5 }}>{inv.inum}</td>
-                                                    <td style={{ fontSize:12.5 }}>{inv.idt}</td>
-                                                    <td className="num" style={{ fontWeight:700 }}>₹{fmt(inv.val)}</td>
+                                                    <td style={{ fontFamily: "monospace", fontSize: 12, fontWeight: 600 }}>{g.ctin}</td>
+                                                    <td style={{ fontFamily: "monospace", fontSize: 12.5 }}>{inv.inum}</td>
+                                                    <td style={{ fontSize: 12.5 }}>{inv.idt}</td>
+                                                    <td className="num" style={{ fontWeight: 700 }}>₹{fmt(inv.val)}</td>
                                                     <td><span className="gstr1-type-badge">{inv.pos}</span></td>
                                                     <td><span className="gstr1-type-badge">{inv.inv_typ}</span></td>
                                                     <td className="num">{fmt(tx)}</td>
-                                                    <td className="num" style={{ color:"#1d4ed8" }}>{fmt(c)}</td>
-                                                    <td className="num" style={{ color:"#1d4ed8" }}>{fmt(s)}</td>
-                                                    <td className="num" style={{ color:"#7c3aed" }}>{fmt(ig)}</td>
+                                                    <td className="num" style={{ color: "#1d4ed8" }}>{fmt(c)}</td>
+                                                    <td className="num" style={{ color: "#1d4ed8" }}>{fmt(s)}</td>
+                                                    <td className="num" style={{ color: "#7c3aed" }}>{fmt(ig)}</td>
                                                 </tr>;
                                             }))
                                         }
@@ -760,7 +771,7 @@ export default function Gstr1Page() {
 
                         {/* B2CL */}
                         {activeTab === "b2cl" && (<>
-                            <div className="gstr1-section-title"><span className="gstr1-section-dot" style={{ background:"#f59e0b" }} />B2CL — Large Unregistered Interstate &gt; ₹2.5L (b2cl.csv)</div>
+                            <div className="gstr1-section-title"><span className="gstr1-section-dot" style={{ background: "#f59e0b" }} />B2CL — Large Unregistered Interstate &gt; ₹2.5L (b2cl.csv)</div>
                             <div className="gstr1-table-wrap">
                                 <table className="gstr1-table">
                                     <thead><tr>
@@ -770,17 +781,17 @@ export default function Gstr1Page() {
                                     </tr></thead>
                                     <tbody>
                                         {!(gstJson?.b2cl?.length)
-                                            ? <tr><td colSpan={6} style={{ textAlign:"center", color:"#94a3b8", padding:32, fontStyle:"italic" }}>No B2CL invoices.</td></tr>
+                                            ? <tr><td colSpan={6} style={{ textAlign: "center", color: "#94a3b8", padding: 32, fontStyle: "italic" }}>No B2CL invoices.</td></tr>
                                             : gstJson.b2cl.flatMap((g: any) => g.inv.map((inv: any, j: number) => {
-                                                const tx = inv.itms.reduce((s:number,i:any)=>s+(i.itm_det.txval||0),0);
-                                                const ig = inv.itms.reduce((s:number,i:any)=>s+(i.itm_det.iamt||0),0);
+                                                const tx = inv.itms.reduce((s: number, i: any) => s + (i.itm_det.txval || 0), 0);
+                                                const ig = inv.itms.reduce((s: number, i: any) => s + (i.itm_det.iamt || 0), 0);
                                                 return <tr key={j}>
-                                                    <td style={{ fontFamily:"monospace", fontSize:12.5 }}>{inv.inum}</td>
-                                                    <td style={{ fontSize:12.5 }}>{inv.idt}</td>
-                                                    <td className="num" style={{ fontWeight:700 }}>₹{fmt(inv.val)}</td>
+                                                    <td style={{ fontFamily: "monospace", fontSize: 12.5 }}>{inv.inum}</td>
+                                                    <td style={{ fontSize: 12.5 }}>{inv.idt}</td>
+                                                    <td className="num" style={{ fontWeight: 700 }}>₹{fmt(inv.val)}</td>
                                                     <td><span className="gstr1-type-badge">{inv.pos}</span></td>
                                                     <td className="num">{fmt(tx)}</td>
-                                                    <td className="num" style={{ color:"#7c3aed" }}>{fmt(ig)}</td>
+                                                    <td className="num" style={{ color: "#7c3aed" }}>{fmt(ig)}</td>
                                                 </tr>;
                                             }))
                                         }
@@ -791,7 +802,7 @@ export default function Gstr1Page() {
 
                         {/* B2CS */}
                         {activeTab === "b2cs" && (<>
-                            <div className="gstr1-section-title"><span className="gstr1-section-dot" style={{ background:"#8b5cf6" }} />B2CS — Small Unregistered Aggregated (b2cs.csv)</div>
+                            <div className="gstr1-section-title"><span className="gstr1-section-dot" style={{ background: "#8b5cf6" }} />B2CS — Small Unregistered Aggregated (b2cs.csv)</div>
                             <div className="gstr1-table-wrap">
                                 <table className="gstr1-table">
                                     <thead><tr>
@@ -801,16 +812,16 @@ export default function Gstr1Page() {
                                     </tr></thead>
                                     <tbody>
                                         {!(gstJson?.b2cs?.length)
-                                            ? <tr><td colSpan={7} style={{ textAlign:"center", color:"#94a3b8", padding:32, fontStyle:"italic" }}>No B2CS data.</td></tr>
+                                            ? <tr><td colSpan={7} style={{ textAlign: "center", color: "#94a3b8", padding: 32, fontStyle: "italic" }}>No B2CS data.</td></tr>
                                             : gstJson.b2cs.map((row: any, i: number) => (
                                                 <tr key={i}>
                                                     <td><span className={row.sply_ty === "INTER" ? "gstr1-inter-badge" : "gstr1-intra-badge"}>{row.sply_ty}</span></td>
                                                     <td>{row.pos} — {GST_STATE_CODES_UI[row.pos] || row.pos}</td>
-                                                    <td className="num" style={{ fontWeight:700 }}>{row.rt}%</td>
+                                                    <td className="num" style={{ fontWeight: 700 }}>{row.rt}%</td>
                                                     <td className="num">{fmt(row.txval)}</td>
-                                                    <td className="num" style={{ color:"#7c3aed" }}>{fmt(row.iamt)}</td>
-                                                    <td className="num" style={{ color:"#1d4ed8" }}>{fmt(row.camt)}</td>
-                                                    <td className="num" style={{ color:"#1d4ed8" }}>{fmt(row.samt)}</td>
+                                                    <td className="num" style={{ color: "#7c3aed" }}>{fmt(row.iamt)}</td>
+                                                    <td className="num" style={{ color: "#1d4ed8" }}>{fmt(row.camt)}</td>
+                                                    <td className="num" style={{ color: "#1d4ed8" }}>{fmt(row.samt)}</td>
                                                 </tr>
                                             ))
                                         }
@@ -821,7 +832,7 @@ export default function Gstr1Page() {
 
                         {/* CDNR */}
                         {activeTab === "cdnr" && (<>
-                            <div className="gstr1-section-title"><span className="gstr1-section-dot" style={{ background:"#ef4444" }} />CDNR — Registered Credit / Debit Notes (cdnr.csv)</div>
+                            <div className="gstr1-section-title"><span className="gstr1-section-dot" style={{ background: "#ef4444" }} />CDNR — Registered Credit / Debit Notes (cdnr.csv)</div>
                             <div className="gstr1-table-wrap">
                                 <table className="gstr1-table">
                                     <thead><tr>
@@ -832,23 +843,23 @@ export default function Gstr1Page() {
                                     </tr></thead>
                                     <tbody>
                                         {!(gstJson?.cdnr?.length)
-                                            ? <tr><td colSpan={10} style={{ textAlign:"center", color:"#94a3b8", padding:32, fontStyle:"italic" }}>No CDNR notes.</td></tr>
+                                            ? <tr><td colSpan={10} style={{ textAlign: "center", color: "#94a3b8", padding: 32, fontStyle: "italic" }}>No CDNR notes.</td></tr>
                                             : gstJson.cdnr.flatMap((g: any) => g.nt.map((nt: any, j: number) => {
-                                                const tx = nt.itms.reduce((s:number,i:any)=>s+(i.itm_det.txval||0),0);
-                                                const c  = nt.itms.reduce((s:number,i:any)=>s+(i.itm_det.camt||0),0);
-                                                const sv = nt.itms.reduce((s:number,i:any)=>s+(i.itm_det.samt||0),0);
-                                                const ig = nt.itms.reduce((s:number,i:any)=>s+(i.itm_det.iamt||0),0);
+                                                const tx = nt.itms.reduce((s: number, i: any) => s + (i.itm_det.txval || 0), 0);
+                                                const c = nt.itms.reduce((s: number, i: any) => s + (i.itm_det.camt || 0), 0);
+                                                const sv = nt.itms.reduce((s: number, i: any) => s + (i.itm_det.samt || 0), 0);
+                                                const ig = nt.itms.reduce((s: number, i: any) => s + (i.itm_det.iamt || 0), 0);
                                                 return <tr key={`${g.ctin}-${j}`}>
-                                                    <td style={{ fontFamily:"monospace", fontSize:12 }}>{g.ctin}</td>
-                                                    <td style={{ fontFamily:"monospace", fontSize:12.5 }}>{nt.nt_num}</td>
-                                                    <td style={{ fontSize:12.5 }}>{nt.nt_dt}</td>
-                                                    <td><span className="gstr1-badge" style={{ background:nt.ntty==="C"?"#dcfce7":"#fee2e2", color:nt.ntty==="C"?"#15803d":"#dc2626" }}>{nt.ntty==="C"?"Credit Note":"Debit Note"}</span></td>
-                                                    <td className="num" style={{ fontWeight:700 }}>₹{fmt(nt.val)}</td>
+                                                    <td style={{ fontFamily: "monospace", fontSize: 12 }}>{g.ctin}</td>
+                                                    <td style={{ fontFamily: "monospace", fontSize: 12.5 }}>{nt.nt_num}</td>
+                                                    <td style={{ fontSize: 12.5 }}>{nt.nt_dt}</td>
+                                                    <td><span className="gstr1-badge" style={{ background: nt.ntty === "C" ? "#dcfce7" : "#fee2e2", color: nt.ntty === "C" ? "#15803d" : "#dc2626" }}>{nt.ntty === "C" ? "Credit Note" : "Debit Note"}</span></td>
+                                                    <td className="num" style={{ fontWeight: 700 }}>₹{fmt(nt.val)}</td>
                                                     <td><span className="gstr1-type-badge">{nt.pos}</span></td>
                                                     <td className="num">{fmt(tx)}</td>
-                                                    <td className="num" style={{ color:"#1d4ed8" }}>{fmt(c)}</td>
-                                                    <td className="num" style={{ color:"#1d4ed8" }}>{fmt(sv)}</td>
-                                                    <td className="num" style={{ color:"#7c3aed" }}>{fmt(ig)}</td>
+                                                    <td className="num" style={{ color: "#1d4ed8" }}>{fmt(c)}</td>
+                                                    <td className="num" style={{ color: "#1d4ed8" }}>{fmt(sv)}</td>
+                                                    <td className="num" style={{ color: "#7c3aed" }}>{fmt(ig)}</td>
                                                 </tr>;
                                             }))
                                         }
@@ -859,7 +870,7 @@ export default function Gstr1Page() {
 
                         {/* CDNUR */}
                         {activeTab === "cdnur" && (<>
-                            <div className="gstr1-section-title"><span className="gstr1-section-dot" style={{ background:"#f43f5e" }} />CDNUR — Unregistered Credit / Debit Notes (cdnur.csv)</div>
+                            <div className="gstr1-section-title"><span className="gstr1-section-dot" style={{ background: "#f43f5e" }} />CDNUR — Unregistered Credit / Debit Notes (cdnur.csv)</div>
                             <div className="gstr1-table-wrap">
                                 <table className="gstr1-table">
                                     <thead><tr>
@@ -869,19 +880,19 @@ export default function Gstr1Page() {
                                     </tr></thead>
                                     <tbody>
                                         {!(gstJson?.cdnur?.length)
-                                            ? <tr><td colSpan={8} style={{ textAlign:"center", color:"#94a3b8", padding:32, fontStyle:"italic" }}>No CDNUR notes.</td></tr>
+                                            ? <tr><td colSpan={8} style={{ textAlign: "center", color: "#94a3b8", padding: 32, fontStyle: "italic" }}>No CDNUR notes.</td></tr>
                                             : gstJson.cdnur.map((nt: any, i: number) => {
-                                                const tx = nt.itms.reduce((s:number,ii:any)=>s+(ii.itm_det.txval||0),0);
-                                                const ig = nt.itms.reduce((s:number,ii:any)=>s+(ii.itm_det.iamt||0),0);
+                                                const tx = nt.itms.reduce((s: number, ii: any) => s + (ii.itm_det.txval || 0), 0);
+                                                const ig = nt.itms.reduce((s: number, ii: any) => s + (ii.itm_det.iamt || 0), 0);
                                                 return <tr key={i}>
-                                                    <td style={{ fontFamily:"monospace", fontSize:12.5 }}>{nt.nt_num}</td>
-                                                    <td style={{ fontSize:12.5 }}>{nt.nt_dt}</td>
-                                                    <td><span className="gstr1-badge" style={{ background:nt.ntty==="C"?"#dcfce7":"#fee2e2", color:nt.ntty==="C"?"#15803d":"#dc2626" }}>{nt.ntty==="C"?"Credit Note":"Debit Note"}</span></td>
+                                                    <td style={{ fontFamily: "monospace", fontSize: 12.5 }}>{nt.nt_num}</td>
+                                                    <td style={{ fontSize: 12.5 }}>{nt.nt_dt}</td>
+                                                    <td><span className="gstr1-badge" style={{ background: nt.ntty === "C" ? "#dcfce7" : "#fee2e2", color: nt.ntty === "C" ? "#15803d" : "#dc2626" }}>{nt.ntty === "C" ? "Credit Note" : "Debit Note"}</span></td>
                                                     <td><span className="gstr1-type-badge">{nt.typ}</span></td>
-                                                    <td className="num" style={{ fontWeight:700 }}>₹{fmt(nt.val)}</td>
+                                                    <td className="num" style={{ fontWeight: 700 }}>₹{fmt(nt.val)}</td>
                                                     <td><span className="gstr1-type-badge">{nt.pos}</span></td>
                                                     <td className="num">{fmt(tx)}</td>
-                                                    <td className="num" style={{ color:"#7c3aed" }}>{fmt(ig)}</td>
+                                                    <td className="num" style={{ color: "#7c3aed" }}>{fmt(ig)}</td>
                                                 </tr>;
                                             })
                                         }
@@ -897,7 +908,7 @@ export default function Gstr1Page() {
 
                         {/* DOCS */}
                         {activeTab === "docs" && (<>
-                            <div className="gstr1-section-title"><span className="gstr1-section-dot" style={{ background:"#64748b" }} />Documents Issued Summary (docs.csv)</div>
+                            <div className="gstr1-section-title"><span className="gstr1-section-dot" style={{ background: "#64748b" }} />Documents Issued Summary (docs.csv)</div>
                             <div className="gstr1-table-wrap">
                                 <table className="gstr1-table">
                                     <thead><tr>
@@ -953,6 +964,14 @@ export default function Gstr1Page() {
 
                     </div>
                 </>)}
+                <Gstr1TemplateUploadModal
+                    isOpen={aiTemplateModalOpen}
+                    onClose={() => setAiTemplateModalOpen(false)}
+                    month={month}
+                    year={year}
+                    companyId={selectedCompany?._id}
+                    periodLabel={`${MONTHS[month - 1]} ${year}`}
+                />
             </div>
         </>
     );

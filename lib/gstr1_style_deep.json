@@ -1,0 +1,1285 @@
+{
+  "b2b,sez,de": {
+    "r1_blue_cols": [
+      1,
+      2
+    ],
+    "r2_alignments": {
+      "1": "center",
+      "3": "center",
+      "5": "right",
+      "12": "right",
+      "13": "right"
+    },
+    "r3_formulas": {
+      "1": "=SUMPRODUCT((A5:A20004<>\"\")/COUNTIF(A5:A20004,A5:A20004&\"\"))",
+      "3": "=SUMPRODUCT((C5:C20004<>\"\")/COUNTIF(C5:C20004,C5:C20004&\"\"))",
+      "5": "=SUM(E5:E1048576)",
+      "12": "=SUM(L5:L1048576)",
+      "13": "=SUM(M5:M1048576)"
+    },
+    "r3_numfmt": {
+      "1": "General",
+      "3": "General",
+      "5": "0.00",
+      "12": "0.00",
+      "13": "0.00"
+    },
+    "r3_alignments": {
+      "1": "center",
+      "3": "center",
+      "5": null,
+      "12": "right",
+      "13": "right"
+    },
+    "data_row_border": null,
+    "data_font_size": 11.0,
+    "data_numfmt": {
+      "1": "General",
+      "2": "General",
+      "3": "General",
+      "4": "d-mmm-yy",
+      "5": "0.00",
+      "6": "0",
+      "7": "mm-dd-yy",
+      "8": "@",
+      "9": "mm-dd-yy",
+      "10": "General",
+      "11": "0.00",
+      "12": "0.00",
+      "13": "0.00",
+      "14": "General"
+    }
+  },
+  "b2ba": {
+    "r1_blue_cols": [
+      1
+    ],
+    "r2_alignments": {
+      "1": "center",
+      "3": "center",
+      "7": "right",
+      "14": "right",
+      "15": "right"
+    },
+    "r3_formulas": {
+      "1": "=SUMPRODUCT((A5:A20004<>\"\")/COUNTIF(A5:A20004,A5:A20004&\"\"))",
+      "3": "=SUMPRODUCT((C5:C20004<>\"\")/COUNTIF(C5:C20004,C5:C20004&\"\"))",
+      "7": "=SUMPRODUCT(1/COUNTIF(C5:C20004,C5:C20004&\"\"),G5:G20004)",
+      "13": "=SUMIF($I$5:$I$20004,\"N\",O5:O20004)+SUMIF($I$5:$I$20004,\"\",O5:O20004)",
+      "14": "=SUM(N5:N1048576)",
+      "15": "=SUM(O5:O1048576)"
+    },
+    "r3_numfmt": {
+      "1": "General",
+      "3": "General",
+      "7": "0.00",
+      "13": "0.00",
+      "14": "0.00",
+      "15": "0.00"
+    },
+    "r3_alignments": {
+      "1": "center",
+      "3": "center",
+      "7": null,
+      "13": "right",
+      "14": "right",
+      "15": "right"
+    },
+    "data_row_border": null,
+    "data_font_size": 11.0,
+    "data_numfmt": {
+      "1": "General",
+      "2": "General",
+      "3": "@",
+      "4": "d-mmm-yy",
+      "5": "d-mmm-yy",
+      "6": "d-mmm-yy",
+      "7": "0.00",
+      "8": "0",
+      "9": "mm-dd-yy",
+      "10": "@",
+      "11": "mm-dd-yy",
+      "12": "@",
+      "13": "0.00",
+      "14": "0.00",
+      "15": "0.00"
+    }
+  },
+  "b2cl": {
+    "r1_blue_cols": [
+      1
+    ],
+    "r2_alignments": {
+      "1": "center"
+    },
+    "r3_formulas": {
+      "1": "=SUMPRODUCT((A5:A20004<>\"\")/COUNTIF(A5:A20004,A5:A20004&\"\"))",
+      "3": "=SUMPRODUCT(1/COUNTIF(A5:A20004,A5:A20004&\"\"),C5:C20004)",
+      "7": "=SUM(G5:G1048576)",
+      "8": "=SUM(H5:H1048576)"
+    },
+    "r3_numfmt": {
+      "1": "General",
+      "3": "0.00",
+      "7": "0.00",
+      "8": "0.00"
+    },
+    "r3_alignments": {
+      "1": "center",
+      "3": null,
+      "7": "right",
+      "8": "right"
+    },
+    "data_row_border": null,
+    "data_font_size": 11.0,
+    "data_numfmt": {
+      "1": "@",
+      "2": "d-mmm-yy",
+      "3": "0.00",
+      "4": "0",
+      "5": "@",
+      "6": "0.00",
+      "7": "0.00",
+      "8": "0.00",
+      "9": "General"
+    }
+  },
+  "b2cla": {
+    "r1_blue_cols": [
+      1
+    ],
+    "r2_alignments": {
+      "1": "center",
+      "6": "center",
+      "9": "center",
+      "10": "right"
+    },
+    "r3_formulas": {
+      "1": "=SUMPRODUCT((A5:A2004<>\"\")/COUNTIF(A5:A2004,A5:A2004&\"\"))",
+      "6": "=SUM(F5:F1048576)",
+      "9": "=SUM(I5:I1048576)",
+      "10": "=SUM(J5:J1048576)"
+    },
+    "r3_numfmt": {
+      "1": "General",
+      "6": "0.00",
+      "9": "0.00",
+      "10": "0.00"
+    },
+    "r3_alignments": {
+      "1": "center",
+      "6": null,
+      "9": "right",
+      "10": "right"
+    },
+    "data_row_border": null,
+    "data_font_size": 11.0,
+    "data_numfmt": {
+      "1": "General",
+      "2": "General",
+      "3": "General",
+      "4": "General",
+      "5": "General",
+      "6": "General",
+      "7": "General",
+      "8": "General",
+      "9": "General",
+      "10": "General",
+      "11": "General"
+    }
+  },
+  "b2cs": {
+    "r1_blue_cols": [
+      1
+    ],
+    "r2_alignments": {
+      "5": "right",
+      "6": "right"
+    },
+    "r3_formulas": {
+      "5": "=SUM(E5:E1048576)",
+      "6": "=SUM(F5:F1048576)"
+    },
+    "r3_numfmt": {
+      "5": "0.00",
+      "6": "0.00"
+    },
+    "r3_alignments": {
+      "5": "right",
+      "6": "right"
+    },
+    "data_row_border": null,
+    "data_font_size": 11.0,
+    "data_numfmt": {
+      "1": "mm-dd-yy",
+      "2": "0",
+      "3": "@",
+      "4": "0.00",
+      "5": "0.00",
+      "6": "0.00",
+      "7": "General",
+      "8": "General"
+    }
+  },
+  "b2csa": {
+    "r1_blue_cols": [
+      1
+    ],
+    "r2_alignments": {
+      "7": "right",
+      "8": "right"
+    },
+    "r3_formulas": {
+      "7": "=SUM(G5:G1048576)",
+      "8": "=SUM(H5:H1048576)"
+    },
+    "r3_numfmt": {
+      "7": "0.00",
+      "8": "0.00"
+    },
+    "r3_alignments": {
+      "7": "right",
+      "8": "right"
+    },
+    "data_row_border": null,
+    "data_font_size": 11.0,
+    "data_numfmt": {
+      "1": "General",
+      "2": "General",
+      "3": "0",
+      "4": "mm-dd-yy",
+      "5": "@",
+      "6": "0.00",
+      "7": "0.00",
+      "8": "0.00",
+      "9": "General"
+    }
+  },
+  "cdnr": {
+    "r1_blue_cols": [
+      1,
+      2
+    ],
+    "r2_alignments": {
+      "1": "center",
+      "3": "center",
+      "9": "right",
+      "12": "right",
+      "13": "right"
+    },
+    "r3_formulas": {
+      "1": "<openpyxl.worksheet.formula.ArrayFormula object at 0x00000211A8008D70>",
+      "3": "<openpyxl.worksheet.formula.ArrayFormula object at 0x00000211A7C67B10>",
+      "9": "=SUM(I5:I1048576)",
+      "12": "=SUM(L5:L1048576)",
+      "13": "=SUM(M5:M1048576)"
+    },
+    "r3_numfmt": {
+      "1": "General",
+      "3": "General",
+      "9": "0.00",
+      "12": "0.00",
+      "13": "0.00"
+    },
+    "r3_alignments": {
+      "1": "center",
+      "3": "center",
+      "9": "right",
+      "12": "right",
+      "13": "right"
+    },
+    "data_row_border": null,
+    "data_font_size": 11.0,
+    "data_numfmt": {
+      "1": "General",
+      "2": "General",
+      "3": "General",
+      "4": "d-mmm-yy",
+      "5": "General",
+      "6": "0",
+      "7": "mm-dd-yy",
+      "8": "mm-dd-yy",
+      "9": "0.00",
+      "10": "General",
+      "11": "General",
+      "12": "0.00",
+      "13": "0.00"
+    }
+  },
+  "cdnra": {
+    "r1_blue_cols": [
+      1
+    ],
+    "r2_alignments": {
+      "1": "center",
+      "3": "center",
+      "11": "right",
+      "14": "right",
+      "15": "right"
+    },
+    "r3_formulas": {
+      "1": "=SUMPRODUCT((A5:A1001<>\"\")/COUNTIF(A5:A1001,A5:A1001&\"\"))",
+      "3": "=SUMPRODUCT((C5:C1001<>\"\")/COUNTIF(C5:C1001,C5:C1001&\"\"))",
+      "11": "=SUM(K5:K1048576)",
+      "14": "=SUM(N5:N1048576)",
+      "15": "=SUM(O5:O1048576)"
+    },
+    "r3_numfmt": {
+      "1": "General",
+      "3": "General",
+      "11": "0.00",
+      "14": "0.00",
+      "15": "0.00"
+    },
+    "r3_alignments": {
+      "1": "center",
+      "3": "left",
+      "11": "right",
+      "14": "right",
+      "15": "right"
+    },
+    "data_row_border": null,
+    "data_font_size": 11.0,
+    "data_numfmt": {
+      "1": "General",
+      "2": "General",
+      "3": "General",
+      "4": "d-mmm-yy",
+      "5": "General",
+      "6": "d-mmm-yy",
+      "7": "mm-dd-yy",
+      "8": "General",
+      "9": "mm-dd-yy",
+      "10": "mm-dd-yy",
+      "11": "0.00",
+      "12": "@",
+      "13": "0.00",
+      "14": "0.00",
+      "15": "0.00"
+    }
+  },
+  "cdnur": {
+    "r1_blue_cols": [
+      1
+    ],
+    "r2_alignments": {
+      "2": "center",
+      "6": "right",
+      "9": "right",
+      "10": "right"
+    },
+    "r3_formulas": {
+      "2": "=SUMPRODUCT((B5:B1001<>\"\")/COUNTIF(B5:B1001,B5:B1001&\"\"))",
+      "6": "=SUM(F5:F1048576)",
+      "9": "=SUM(I5:I1048576)",
+      "10": "=SUM(J5:J1048576)"
+    },
+    "r3_numfmt": {
+      "2": "General",
+      "6": "0.00",
+      "9": "0.00",
+      "10": "0.00"
+    },
+    "r3_alignments": {
+      "2": "center",
+      "6": "right",
+      "9": "right",
+      "10": "right"
+    },
+    "data_row_border": null,
+    "data_font_size": 11.0,
+    "data_numfmt": {
+      "1": "mm-dd-yy",
+      "2": "General",
+      "3": "d-mmm-yy",
+      "4": "mm-dd-yy",
+      "5": "0",
+      "6": "0.00",
+      "7": "@",
+      "8": "0.00",
+      "9": "0.00",
+      "10": "0.00"
+    }
+  },
+  "cdnura": {
+    "r1_blue_cols": [
+      1
+    ],
+    "r2_alignments": {
+      "2": "center",
+      "8": "right",
+      "11": "right",
+      "12": "right"
+    },
+    "r3_formulas": {
+      "2": "=SUMPRODUCT((B5:B1001<>\"\")/COUNTIF(B5:B1001,B5:B1001&\"\"))",
+      "8": "=SUM(H5:H1048576)",
+      "11": "=SUM(K5:K1048576)",
+      "12": "=SUM(L5:L1048576)"
+    },
+    "r3_numfmt": {
+      "2": "General",
+      "8": "0.00",
+      "11": "0.00",
+      "12": "0.00"
+    },
+    "r3_alignments": {
+      "2": "center",
+      "8": "right",
+      "11": "right",
+      "12": "right"
+    },
+    "data_row_border": null,
+    "data_font_size": 11.0,
+    "data_numfmt": {
+      "1": "mm-dd-yy",
+      "2": "General",
+      "3": "d-mmm-yy",
+      "4": "General",
+      "5": "d-mmm-yy",
+      "6": "mm-dd-yy",
+      "7": "0",
+      "8": "General",
+      "9": "@",
+      "10": "0.00",
+      "11": "General",
+      "12": "General"
+    }
+  },
+  "exp": {
+    "r1_blue_cols": [
+      1
+    ],
+    "r2_alignments": {
+      "2": "center",
+      "4": "right",
+      "6": "center",
+      "10": "right"
+    },
+    "r3_formulas": {
+      "2": "=SUMPRODUCT((B5:B20004<>\"\")/COUNTIF(B5:B20004,B5:B20004&\"\"))",
+      "4": "=SUMPRODUCT(1/COUNTIF(B5:B20004,B5:B20004&\"\"),D5:D20004)",
+      "6": "=SUMPRODUCT((F5:F20004<>\"\")/COUNTIF(F5:F20004,F5:F20004&\"\"))",
+      "10": "=SUM(I5:I20004)"
+    },
+    "r3_numfmt": {
+      "2": "General",
+      "4": "0.00",
+      "6": "General",
+      "10": "0.00"
+    },
+    "r3_alignments": {
+      "2": "center",
+      "4": "right",
+      "6": "center",
+      "10": "right"
+    },
+    "data_row_border": null,
+    "data_font_size": 11.0,
+    "data_numfmt": {
+      "1": "General",
+      "2": "@",
+      "3": "d-mmm-yy",
+      "4": "0.00",
+      "5": "@",
+      "6": "0;[Red]0",
+      "7": "d-mmm-yy",
+      "8": "0.00",
+      "9": "0.00",
+      "10": "0.00"
+    }
+  },
+  "expa": {
+    "r1_blue_cols": [
+      1
+    ],
+    "r2_alignments": {
+      "2": "center",
+      "6": "right",
+      "8": "center",
+      "11": "right",
+      "12": "right"
+    },
+    "r3_formulas": {
+      "2": "=SUMPRODUCT((B5:B2004<>\"\")/COUNTIF(B5:B2004,B5:B2004&\"\"))",
+      "6": "=SUM(F5:F1048576)",
+      "8": "=SUMPRODUCT((H5:H2004<>\"\")/COUNTIF(H5:H2004,H5:H2004&\"\"))",
+      "11": "=SUM(K5:K1048576)",
+      "12": "=SUM(K5:K1048576)"
+    },
+    "r3_numfmt": {
+      "2": "General",
+      "6": "0.00",
+      "8": "General",
+      "11": "0.00",
+      "12": "0.00"
+    },
+    "r3_alignments": {
+      "2": "center",
+      "6": "right",
+      "8": "center",
+      "11": "right",
+      "12": "right"
+    },
+    "data_row_border": null,
+    "data_font_size": 11.0,
+    "data_numfmt": {
+      "1": "General",
+      "2": "General",
+      "3": "d-mmm-yy",
+      "4": "General",
+      "5": "d-mmm-yy",
+      "6": "0.00",
+      "7": "General",
+      "8": "General",
+      "9": "d-mmm-yy",
+      "10": "0.00",
+      "11": "General",
+      "12": "General"
+    }
+  },
+  "at": {
+    "r1_blue_cols": [
+      1
+    ],
+    "r2_alignments": {
+      "4": "right",
+      "5": "right"
+    },
+    "r3_formulas": {
+      "4": "=SUM(D5:D1048576)",
+      "5": "=SUM(E5:E1048576)"
+    },
+    "r3_numfmt": {
+      "4": "0.00",
+      "5": "0.00"
+    },
+    "r3_alignments": {
+      "4": "right",
+      "5": "right"
+    },
+    "data_row_border": null,
+    "data_font_size": 11.0,
+    "data_numfmt": {
+      "1": "0",
+      "2": "@",
+      "3": "0.00",
+      "4": "0.00",
+      "5": "0.00"
+    }
+  },
+  "ata": {
+    "r1_blue_cols": [
+      1
+    ],
+    "r2_alignments": {
+      "6": "right",
+      "7": "right"
+    },
+    "r3_formulas": {
+      "6": "=SUM(F5:F1048576)",
+      "7": "=SUM(G5:G1048576)"
+    },
+    "r3_numfmt": {
+      "6": "0.00",
+      "7": "0.00"
+    },
+    "r3_alignments": {
+      "6": "right",
+      "7": "right"
+    },
+    "data_row_border": null,
+    "data_font_size": 11.0,
+    "data_numfmt": {
+      "1": "General",
+      "2": "General",
+      "3": "0",
+      "4": "@",
+      "5": "0.00",
+      "6": "General",
+      "7": "General"
+    }
+  },
+  "atadj": {
+    "r1_blue_cols": [
+      1
+    ],
+    "r2_alignments": {
+      "4": "right",
+      "5": "right"
+    },
+    "r3_formulas": {
+      "4": "=SUM(D5:D1048576)",
+      "5": "=SUM(E5:E148576)"
+    },
+    "r3_numfmt": {
+      "4": "0.00",
+      "5": "0.00"
+    },
+    "r3_alignments": {
+      "4": "right",
+      "5": "right"
+    },
+    "data_row_border": null,
+    "data_font_size": 11.0,
+    "data_numfmt": {
+      "1": "0",
+      "2": "@",
+      "3": "0.00",
+      "4": "0.00",
+      "5": "0.00"
+    }
+  },
+  "atadja": {
+    "r1_blue_cols": [
+      1
+    ],
+    "r2_alignments": {
+      "6": "right",
+      "7": "right"
+    },
+    "r3_formulas": {
+      "6": "=SUM(F5:F1048576)",
+      "7": "=SUM(G5:G1048576)"
+    },
+    "r3_numfmt": {
+      "6": "0.00",
+      "7": "0.00"
+    },
+    "r3_alignments": {
+      "6": "right",
+      "7": "right"
+    },
+    "data_row_border": null,
+    "data_font_size": 11.0,
+    "data_numfmt": {
+      "1": "General",
+      "2": "General",
+      "3": "0",
+      "4": "@",
+      "5": "0.00",
+      "6": "0.00",
+      "7": "0.00"
+    }
+  },
+  "exemp": {
+    "r1_blue_cols": [
+      1
+    ],
+    "r2_alignments": {
+      "2": "right",
+      "3": "right",
+      "4": "right"
+    },
+    "r3_formulas": {
+      "2": "=SUM(B5:B1048576)",
+      "3": "=SUM(C5:C1048576)",
+      "4": "=SUM(D5:D1048576)"
+    },
+    "r3_numfmt": {
+      "2": "0.00",
+      "3": "0.00",
+      "4": "0.00"
+    },
+    "r3_alignments": {
+      "2": "right",
+      "3": "right",
+      "4": "right"
+    },
+    "data_row_border": null,
+    "data_font_size": 11.0,
+    "data_numfmt": {
+      "1": "General",
+      "2": "0.00",
+      "3": "0.00",
+      "4": "0.00"
+    }
+  },
+  "hsn(b2b)": {
+    "r1_blue_cols": [
+      1
+    ],
+    "r2_alignments": {
+      "1": "center",
+      "5": "center",
+      "7": "center",
+      "8": "right",
+      "9": "right",
+      "10": "right",
+      "11": "right"
+    },
+    "r3_formulas": {
+      "1": "=SUMPRODUCT((A5:A2000<>\"\")/COUNTIF(A5:A2000,A5:A2000&\"\"))",
+      "5": "=SUM(E5:E2000)",
+      "7": "=SUM(G5:G2000)",
+      "8": "=SUM(H5:H2000)",
+      "9": "=SUM(I5:I2000)",
+      "10": "=SUM(J5:J2000)",
+      "11": "=SUM(K5:K2000)"
+    },
+    "r3_numfmt": {
+      "1": "@",
+      "5": "0.00",
+      "7": "0.00",
+      "8": "0.00",
+      "9": "0.00",
+      "10": "0.00",
+      "11": "0.00"
+    },
+    "r3_alignments": {
+      "1": "center",
+      "5": "right",
+      "7": "right",
+      "8": "right",
+      "9": "right",
+      "10": "right",
+      "11": "right"
+    },
+    "data_row_border": null,
+    "data_font_size": 11.0,
+    "data_numfmt": {
+      "1": "@",
+      "2": "General",
+      "3": "General",
+      "4": "0.00",
+      "5": "0.00",
+      "6": "0.00",
+      "7": "0.00",
+      "8": "0.00",
+      "9": "0.00",
+      "10": "0.00",
+      "11": "0.00"
+    }
+  },
+  "hsn(b2c)": {
+    "r1_blue_cols": [
+      1
+    ],
+    "r2_alignments": {
+      "1": "center",
+      "5": "center",
+      "7": "center",
+      "8": "right",
+      "9": "right",
+      "10": "right",
+      "11": "right"
+    },
+    "r3_formulas": {
+      "1": "=SUMPRODUCT((A5:A2000<>\"\")/COUNTIF(A5:A2000,A5:A2000&\"\"))",
+      "5": "=SUM(E5:E2000)",
+      "7": "=SUM(G5:G2000)",
+      "8": "=SUM(H5:H2000)",
+      "9": "=SUM(I5:I2000)",
+      "10": "=SUM(J5:J2000)",
+      "11": "=SUM(K5:K2000)"
+    },
+    "r3_numfmt": {
+      "1": "@",
+      "5": "0.00",
+      "7": "0.00",
+      "8": "0.00",
+      "9": "0.00",
+      "10": "0.00",
+      "11": "0.00"
+    },
+    "r3_alignments": {
+      "1": "center",
+      "5": "right",
+      "7": "right",
+      "8": "right",
+      "9": "right",
+      "10": "right",
+      "11": "right"
+    },
+    "data_row_border": null,
+    "data_font_size": 11.0,
+    "data_numfmt": {
+      "1": "@",
+      "2": "General",
+      "3": "General",
+      "4": "0.00",
+      "5": "0.00",
+      "6": "0.00",
+      "7": "0.00",
+      "8": "0.00",
+      "9": "0.00",
+      "10": "0.00",
+      "11": "0.00"
+    }
+  },
+  "docs": {
+    "r1_blue_cols": [
+      1
+    ],
+    "r2_alignments": {
+      "4": "right",
+      "5": "right"
+    },
+    "r3_formulas": {
+      "4": "=SUM(D5:D1048576)",
+      "5": "=SUM(E5:E1048576)"
+    },
+    "r3_numfmt": {
+      "4": "0;[Red]0",
+      "5": "0;[Red]0"
+    },
+    "r3_alignments": {
+      "4": "right",
+      "5": "right"
+    },
+    "data_row_border": null,
+    "data_font_size": 11.0,
+    "data_numfmt": {
+      "1": "General",
+      "2": "General",
+      "3": "General",
+      "4": "0;[Red]0",
+      "5": "0;[Red]0"
+    }
+  },
+  "eco": {
+    "r1_blue_cols": [
+      1,
+      2,
+      3
+    ],
+    "r2_alignments": {
+      "2": null,
+      "4": null,
+      "5": null,
+      "6": null,
+      "7": null,
+      "8": null
+    },
+    "r3_formulas": {
+      "2": "<openpyxl.worksheet.formula.ArrayFormula object at 0x00000211B0E407D0>",
+      "4": "=SUM(D5:D1048576)",
+      "5": "=SUM(E5:E1048576)",
+      "6": "=SUM(F5:F1048576)",
+      "7": "=SUM(G5:G1048576)",
+      "8": "=SUM(H5:H1048576)"
+    },
+    "r3_numfmt": {
+      "2": "General",
+      "4": "0.00",
+      "5": "0.00",
+      "6": "0.00",
+      "7": "0.00",
+      "8": "0.00"
+    },
+    "r3_alignments": {
+      "2": "center",
+      "4": null,
+      "5": null,
+      "6": null,
+      "7": null,
+      "8": null
+    },
+    "data_row_border": null,
+    "data_font_size": 11.0,
+    "data_numfmt": {
+      "1": "General",
+      "2": "General",
+      "3": "General",
+      "4": "General",
+      "5": "General",
+      "6": "General",
+      "7": "General",
+      "8": "General"
+    }
+  },
+  "ecoa": {
+    "r1_blue_cols": [
+      1
+    ],
+    "r2_alignments": {
+      "4": "center",
+      "7": "center",
+      "8": "center",
+      "9": "center",
+      "10": "center",
+      "11": "center"
+    },
+    "r3_formulas": {
+      "4": "<openpyxl.worksheet.formula.ArrayFormula object at 0x00000211B7164B00>",
+      "7": "=SUM(G5:G1048576)",
+      "8": "=SUM(H5:H1048576)",
+      "9": "=SUM(I5:I1048576)",
+      "10": "=SUM(J5:J1048576)",
+      "11": "=SUM(K5:K1048576)"
+    },
+    "r3_numfmt": {
+      "4": "General",
+      "7": "0.00",
+      "8": "0.00",
+      "9": "0.00",
+      "10": "0.00",
+      "11": "0.00"
+    },
+    "r3_alignments": {
+      "4": "center",
+      "7": null,
+      "8": null,
+      "9": null,
+      "10": null,
+      "11": null
+    },
+    "data_row_border": null,
+    "data_font_size": 11.0,
+    "data_numfmt": {
+      "1": "General",
+      "2": "General",
+      "3": "General",
+      "4": "General",
+      "5": "General",
+      "6": "General",
+      "7": "General",
+      "8": "General",
+      "9": "General",
+      "10": "General",
+      "11": "General"
+    }
+  },
+  "ecob2b": {
+    "r1_blue_cols": [
+      1
+    ],
+    "r2_alignments": {
+      "1": "center",
+      "3": "center",
+      "5": "center",
+      "7": "center",
+      "11": "center",
+      "12": "center"
+    },
+    "r3_formulas": {
+      "1": "=SUMPRODUCT((A5:A20003<>\"\")/COUNTIF(A5:A20003,A5:A20003&\"\"))",
+      "3": "<openpyxl.worksheet.formula.ArrayFormula object at 0x00000211B7164C30>",
+      "5": "<openpyxl.worksheet.formula.ArrayFormula object at 0x00000211A7FD2F90>",
+      "7": "=SUM(G5:G1048576)",
+      "11": "=SUM(K5:K1048576)",
+      "12": "=SUM(L5:L1048576)"
+    },
+    "r3_numfmt": {
+      "1": "General",
+      "3": "General",
+      "5": "General",
+      "7": "0.00",
+      "11": "0.00",
+      "12": "0.00"
+    },
+    "r3_alignments": {
+      "1": "center",
+      "3": "center",
+      "5": "center",
+      "7": "right",
+      "11": "right",
+      "12": "right"
+    },
+    "data_row_border": null,
+    "data_font_size": 11.0,
+    "data_numfmt": {
+      "1": "General",
+      "2": "General",
+      "3": "General",
+      "4": "General",
+      "5": "General",
+      "6": "d-mmm-yy",
+      "7": "General",
+      "8": "General",
+      "9": "General",
+      "10": "General",
+      "11": "General",
+      "12": "General"
+    }
+  },
+  "ecourp2b": {
+    "r1_blue_cols": [
+      1
+    ],
+    "r2_alignments": {
+      "1": "center",
+      "3": "center",
+      "5": "center",
+      "9": "center",
+      "10": "center"
+    },
+    "r3_formulas": {
+      "1": "<openpyxl.worksheet.formula.ArrayFormula object at 0x00000211C58E9BF0>",
+      "3": "<openpyxl.worksheet.formula.ArrayFormula object at 0x00000211C58E9D00>",
+      "5": "=SUM(E5:E1048576)",
+      "9": "=SUM(I5:I1048576)",
+      "10": "=SUM(J5:J1048576)"
+    },
+    "r3_numfmt": {
+      "1": "General",
+      "3": "General",
+      "5": "0.00",
+      "9": "0.00",
+      "10": "0.00"
+    },
+    "r3_alignments": {
+      "1": "center",
+      "3": "center",
+      "5": "right",
+      "9": "right",
+      "10": "right"
+    },
+    "data_row_border": null,
+    "data_font_size": 11.0,
+    "data_numfmt": {
+      "1": "General",
+      "2": "General",
+      "3": "General",
+      "4": "General",
+      "5": "General",
+      "6": "General",
+      "7": "General",
+      "8": "General",
+      "9": "General",
+      "10": "General"
+    }
+  },
+  "ecob2c": {
+    "r1_blue_cols": [
+      1
+    ],
+    "r2_alignments": {
+      "1": "center",
+      "4": "center",
+      "6": "center"
+    },
+    "r3_formulas": {
+      "1": "<openpyxl.worksheet.formula.ArrayFormula object at 0x00000211C1717E50>",
+      "4": "=SUM(D5:D1048576)",
+      "6": "=SUM(F5:F1048576)"
+    },
+    "r3_numfmt": {
+      "1": "General",
+      "4": "0.00",
+      "6": "0.00"
+    },
+    "r3_alignments": {
+      "1": "center",
+      "4": "right",
+      "6": "right"
+    },
+    "data_row_border": null,
+    "data_font_size": 11.0,
+    "data_numfmt": {
+      "1": "General",
+      "2": "General",
+      "3": "General",
+      "4": "General",
+      "5": "General",
+      "6": "General"
+    }
+  },
+  "ecourp2c": {
+    "r1_blue_cols": [
+      1
+    ],
+    "r2_alignments": {
+      "2": "center",
+      "4": "center"
+    },
+    "r3_formulas": {
+      "2": "=SUM(B5:B1048576)",
+      "4": "=SUM(D5:D1048576)"
+    },
+    "r3_numfmt": {
+      "2": "0.00",
+      "4": "0.00"
+    },
+    "r3_alignments": {
+      "2": "right",
+      "4": "right"
+    },
+    "data_row_border": null,
+    "data_font_size": 11.0,
+    "data_numfmt": {
+      "1": "General",
+      "2": "General",
+      "3": "General",
+      "4": "General"
+    }
+  },
+  "ecoab2b": {
+    "r1_blue_cols": [
+      1
+    ],
+    "r2_alignments": {
+      "1": "center",
+      "3": "center",
+      "5": "center",
+      "9": "center",
+      "13": "center",
+      "14": "center"
+    },
+    "r3_formulas": {
+      "1": "<openpyxl.worksheet.formula.ArrayFormula object at 0x00000211D8B34D50>",
+      "3": "<openpyxl.worksheet.formula.ArrayFormula object at 0x00000211D01688C0>",
+      "5": "<openpyxl.worksheet.formula.ArrayFormula object at 0x00000211D01689B0>",
+      "9": "=SUM(I5:I1048576)",
+      "13": "=SUM(M5:M1048576)",
+      "14": "=SUM(N5:N1048576)"
+    },
+    "r3_numfmt": {
+      "1": "General",
+      "3": "General",
+      "5": "General",
+      "9": "0.00",
+      "13": "0.00",
+      "14": "0.00"
+    },
+    "r3_alignments": {
+      "1": "center",
+      "3": "center",
+      "5": "center",
+      "9": "right",
+      "13": "right",
+      "14": "right"
+    },
+    "data_row_border": null,
+    "data_font_size": 11.0,
+    "data_numfmt": {
+      "1": "General",
+      "2": "General",
+      "3": "General",
+      "4": "General",
+      "5": "General",
+      "6": "d-mmm-yy",
+      "7": "General",
+      "8": "d-mmm-yy",
+      "9": "General",
+      "10": "General",
+      "11": "General",
+      "12": "General",
+      "13": "General",
+      "14": "General"
+    }
+  },
+  "ecoab2c": {
+    "r1_blue_cols": [
+      1
+    ],
+    "r2_alignments": {
+      "3": "center",
+      "7": "center",
+      "8": "center"
+    },
+    "r3_formulas": {
+      "3": "<openpyxl.worksheet.formula.ArrayFormula object at 0x00000211D8B58910>",
+      "7": "=SUM(G5:G1048576)",
+      "8": "=SUM(H5:H1048576)"
+    },
+    "r3_numfmt": {
+      "3": "General",
+      "7": "0.00",
+      "8": "0.00"
+    },
+    "r3_alignments": {
+      "3": "center",
+      "7": "right",
+      "8": "right"
+    },
+    "data_row_border": null,
+    "data_font_size": 11.0,
+    "data_numfmt": {
+      "1": "General",
+      "2": "General",
+      "3": "General",
+      "4": "General",
+      "5": "General",
+      "6": "General",
+      "7": "General",
+      "8": "General"
+    }
+  },
+  "ecoaurp2b": {
+    "r1_blue_cols": [
+      1
+    ],
+    "r2_alignments": {
+      "1": "center",
+      "3": "center",
+      "7": "center",
+      "11": "center",
+      "12": "center"
+    },
+    "r3_formulas": {
+      "1": "<openpyxl.worksheet.formula.ArrayFormula object at 0x00000211D8B590F0>",
+      "3": "<openpyxl.worksheet.formula.ArrayFormula object at 0x00000211D7C7AB60>",
+      "7": "=SUM(G5:G1048576)",
+      "11": "=SUM(K5:K1048576)",
+      "12": "=SUM(L5:L1048576)"
+    },
+    "r3_numfmt": {
+      "1": "General",
+      "3": "General",
+      "7": "0.00",
+      "11": "0.00",
+      "12": "0.00"
+    },
+    "r3_alignments": {
+      "1": "center",
+      "3": "center",
+      "7": "right",
+      "11": "right",
+      "12": "right"
+    },
+    "data_row_border": null,
+    "data_font_size": 11.0,
+    "data_numfmt": {
+      "1": "General",
+      "2": "General",
+      "3": "General",
+      "4": "d-mmm-yy",
+      "5": "General",
+      "6": "d-mmm-yy",
+      "7": "General",
+      "8": "General",
+      "9": "General",
+      "10": "General",
+      "11": "General",
+      "12": "General"
+    }
+  },
+  "ecoaurp2c": {
+    "r1_blue_cols": [
+      1
+    ],
+    "r2_alignments": {
+      "5": "center",
+      "6": "center"
+    },
+    "r3_formulas": {
+      "5": "=SUM(E5:E1048576)",
+      "6": "=SUM(F5:F1048576)"
+    },
+    "r3_numfmt": {
+      "5": "0.00",
+      "6": "0.00"
+    },
+    "r3_alignments": {
+      "5": "right",
+      "6": "right"
+    },
+    "data_row_border": null,
+    "data_font_size": 11.0,
+    "data_numfmt": {
+      "1": "General",
+      "2": "General",
+      "3": "General",
+      "4": "General",
+      "5": "General",
+      "6": "General",
+      "7": "General",
+      "8": "General",
+      "9": "General",
+      "10": "General",
+      "11": "General"
+    }
+  }
+}

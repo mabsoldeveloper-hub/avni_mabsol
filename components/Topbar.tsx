@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Bell, List, PersonCircle, Trash, CalendarEvent, Search, Building, Command, ArrowsFullscreen, FullscreenExit, X, Mic } from "react-bootstrap-icons";
+import { Bell, List, PersonCircle, Trash, CalendarEvent, Search, Building, Command, ArrowsFullscreen, FullscreenExit, X } from "react-bootstrap-icons";
 
 import { useUser } from "@/context/UserContext";
 import { useCompany } from "@/context/CompanyContext";
@@ -25,8 +25,6 @@ export default function Topbar({
   const [notifOpen, setNotifOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
-  const [searchQuery, setSearchQuery] = useState("");
-  const searchInputRef = useRef<HTMLInputElement>(null);
   const [companyName, setCompanyName] = useState<string>("");
   const [profileImgError, setProfileImgError] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
@@ -100,143 +98,19 @@ export default function Topbar({
     return parts[0].substring(0, 1).toUpperCase() || "U";
   };
 
-  // Dynamic Voice Assistant ("Hey [Name]") State & Listener
-  const [assistantName, setAssistantName] = useState("AI Assistant");
-  const [autoVoiceStart, setAutoVoiceStart] = useState(false);
-  const [initialVoiceQuery, setInitialVoiceQuery] = useState("");
-  const [wakewordEnabled, setWakewordEnabled] = useState(false);
-  const [assistantToast, setAssistantToast] = useState(false);
   const notifRef = useRef<HTMLDivElement>(null);
   const profileRef = useRef<HTMLDivElement>(null);
-  const bgRecognitionRef = useRef<any>(null);
-
-  // Load voice settings from localStorage & subscribe to real-time setting updates
-  const loadVoiceSettings = () => {
-    try {
-      const saved = localStorage.getItem("mabsol_voice_settings");
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (parsed.assistantName) setAssistantName(parsed.assistantName);
-        if (typeof parsed.wakewordEnabled === "boolean") {
-          setWakewordEnabled(parsed.wakewordEnabled);
-        } else {
-          setWakewordEnabled(false);
-        }
-      } else {
-        setWakewordEnabled(false);
-      }
-    } catch (e) {
-      console.error("Error loading voice settings:", e);
-      setWakewordEnabled(false);
-    }
-  };
-
-  useEffect(() => {
-    loadVoiceSettings();
-    window.addEventListener("mabsol_voice_settings_updated", loadVoiceSettings);
-    return () => window.removeEventListener("mabsol_voice_settings_updated", loadVoiceSettings);
-  }, []);
-
-  useEffect(() => {
-    if (typeof window === "undefined" || !wakewordEnabled || searchOpen) {
-      if (bgRecognitionRef.current) {
-        try { bgRecognitionRef.current.abort(); } catch (e) { }
-      }
-      return;
-    }
-
-    const SpeechRecognition =
-      (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-
-    if (!SpeechRecognition) return;
-
-    let isMounted = true;
-
-    const startBgRecognition = () => {
-      if (!isMounted || searchOpen || !wakewordEnabled) return;
-
-      try {
-        if (bgRecognitionRef.current) {
-          try { bgRecognitionRef.current.abort(); } catch (e) { }
-        }
-
-        const rec = new SpeechRecognition();
-        rec.continuous = true;
-        rec.interimResults = true;
-        rec.lang = "hi-IN";
-
-        rec.onresult = (event: any) => {
-          let transcript = "";
-          for (let i = event.resultIndex; i < event.results.length; i++) {
-            transcript += event.results[i][0].transcript;
-          }
-
-          const lower = transcript.toLowerCase();
-          const targetName = (assistantName || "AI Assistant").toLowerCase().trim();
-
-          const isTriggered =
-            lower.includes(targetName) ||
-            lower.includes(`hey ${targetName}`) ||
-            lower.includes(`hi ${targetName}`) ||
-            lower.includes(`hello ${targetName}`);
-
-          if (isTriggered) {
-            console.log(`${assistantName} Wake-Word Triggered:`, transcript);
-            try { rec.abort(); } catch (e) { }
-
-            setAssistantToast(true);
-            setTimeout(() => setAssistantToast(false), 3500);
-
-            setInitialVoiceQuery(transcript);
-            setAutoVoiceStart(true);
-            setSearchOpen(true);
-          }
-        };
-
-        rec.onerror = (event: any) => {
-          if (event.error === "not-allowed") {
-            console.warn(`Mic access denied for ${assistantName} Wake-Word background listener.`);
-          }
-        };
-
-        rec.onend = () => {
-          if (isMounted && wakewordEnabled && !searchOpen) {
-            setTimeout(() => {
-              if (isMounted && wakewordEnabled && !searchOpen) {
-                startBgRecognition();
-              }
-            }, 800);
-          }
-        };
-
-        bgRecognitionRef.current = rec;
-        rec.start();
-      } catch (e) {
-        console.warn("Background AI Assistant listener error:", e);
-      }
-    };
-
-    startBgRecognition();
-
-    return () => {
-      isMounted = false;
-      if (bgRecognitionRef.current) {
-        try { bgRecognitionRef.current.abort(); } catch (e) { }
-      }
-    };
-  }, [wakewordEnabled, searchOpen, assistantName]);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
+  const searchInputRef = useRef<HTMLInputElement>(null);
+  const searchContainerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") {
         e.preventDefault();
-        setSearchOpen((prev) => {
-          const next = !prev;
-          if (next) {
-            setTimeout(() => searchInputRef.current?.focus(), 50);
-          }
-          return next;
-        });
+        setSearchOpen(true);
+        setTimeout(() => searchInputRef.current?.focus(), 50);
       } else if (
         e.key === "/" &&
         document.activeElement?.tagName !== "INPUT" &&
@@ -245,12 +119,26 @@ export default function Topbar({
         e.preventDefault();
         setSearchOpen(true);
         setTimeout(() => searchInputRef.current?.focus(), 50);
+      } else if (e.key === "Escape" && searchOpen) {
+        setSearchOpen(false);
+        searchInputRef.current?.blur();
       }
     };
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, []);
+  }, [searchOpen]);
+
+  useEffect(() => {
+    if (!searchOpen) return;
+    const handleClickOutside = (e: MouseEvent) => {
+      if (searchContainerRef.current && !searchContainerRef.current.contains(e.target as Node)) {
+        setSearchOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [searchOpen]);
 
   useEffect(() => {
     const raw = user?.companyId as any;
@@ -360,26 +248,29 @@ export default function Topbar({
 
   return (
     <div
-      className="flex items-center justify-between gap-1.5 sm:gap-3 px-2.5 sm:px-4 py-2 sm:py-3 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border-b border-gray-200/80 dark:border-slate-800 shadow-xs sticky top-0 transition-all"
-      style={{ zIndex: 1000 }}
+      style={{ zIndex: searchOpen ? 1065 : 1020 }}
+      className="flex items-center justify-between gap-2 sm:gap-3 px-3 sm:px-5 py-2.5 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border-b border-gray-200/80 dark:border-slate-800 shadow-xs sticky top-0 transition-all"
     >
       {/* LEFT: Sidebar Toggle & Company/FY Selectors */}
       <div className="flex items-center gap-1.5 sm:gap-3 min-w-0 flex-1 sm:flex-initial">
-        <button
-          onClick={() => setCollapsed(!collapsed)}
-          aria-label="Toggle sidebar"
-          className="flex items-center justify-center w-8 h-8 sm:w-10 sm:h-10 rounded-lg sm:rounded-xl bg-indigo-600 text-white hover:bg-indigo-700 transition-colors duration-200 shrink-0 cursor-pointer shadow-xs"
-        >
-          <List size={16} className="sm:hidden" />
-          <List size={18} className="hidden sm:block" />
-        </button>
+        {/* Mobile-only toggle button (Desktop toggle is integrated on sidebar seam) */}
+        {mobile && (
+          <button
+            onClick={() => setCollapsed(!collapsed)}
+            aria-label="Toggle sidebar"
+            className="topbar-circle-btn flex items-center justify-center w-8.5 h-8.5 rounded-full bg-indigo-600 text-white hover:bg-indigo-700 transition-colors duration-200 shrink-0 cursor-pointer shadow-xs"
+            style={{ borderRadius: "9999px" }}
+          >
+            <List size={16} />
+          </button>
+        )}
 
         {/* DESKTOP COMPANY & FY SELECTORS */}
         {!mobile ? (
           <div className="flex items-center gap-2 min-w-0">
             {/* COMPANY SELECTOR DROPDOWN */}
             <div className="relative inline-flex items-center">
-              <div className="absolute left-2.5 text-blue-600 pointer-events-none">
+              <div className="absolute left-3 text-blue-600 pointer-events-none">
                 <Building size={13} />
               </div>
               <select
@@ -388,7 +279,8 @@ export default function Topbar({
                   const comp = companies.find((c) => c._id === e.target.value);
                   if (comp) setSelectedCompany(comp);
                 }}
-                className="pl-8 pr-3 py-1.5 rounded-lg bg-blue-50 dark:bg-blue-950/60 text-blue-800 dark:text-blue-200 text-[13px] font-bold border border-blue-200 dark:border-blue-800/60 focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer shadow-xs transition-all max-w-[210px] lg:max-w-[240px] truncate"
+                className="topbar-pill-btn pl-8 pr-4 py-1.5 rounded-full bg-blue-50 dark:bg-blue-950/60 text-blue-800 dark:text-blue-200 text-[12.5px] font-bold border border-blue-200 dark:border-blue-800/60 focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer shadow-xs transition-all max-w-[210px] lg:max-w-[240px] truncate"
+                style={{ borderRadius: "9999px" }}
                 title="Select Active Company"
               >
                 {companies.map((c) => (
@@ -401,7 +293,7 @@ export default function Topbar({
 
             {/* FINANCIAL YEAR SELECTOR DROPDOWN */}
             <div className="relative inline-flex items-center">
-              <div className="absolute left-2.5 text-emerald-600 pointer-events-none">
+              <div className="absolute left-3 text-emerald-600 pointer-events-none">
                 <CalendarEvent size={13} />
               </div>
               <select
@@ -410,7 +302,8 @@ export default function Topbar({
                   const fy = fyList.find((x) => x._id === e.target.value);
                   if (fy) setSelectedFY(fy);
                 }}
-                className="pl-8 pr-3 py-1.5 rounded-lg bg-emerald-50 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-200 text-[13px] font-bold border border-emerald-200 dark:border-emerald-800/60 focus:outline-none focus:ring-2 focus:ring-emerald-500 cursor-pointer shadow-xs transition-all max-w-[210px] lg:max-w-[240px] truncate"
+                className="topbar-pill-btn pl-8 pr-4 py-1.5 rounded-full bg-emerald-50 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-200 text-[12.5px] font-bold border border-emerald-200 dark:border-emerald-800/60 focus:outline-none focus:ring-2 focus:ring-emerald-500 cursor-pointer shadow-xs transition-all max-w-[210px] lg:max-w-[240px] truncate"
+                style={{ borderRadius: "9999px" }}
                 title="Select Financial Year"
               >
                 {fyList.map((fy) => (
@@ -430,7 +323,7 @@ export default function Topbar({
           <div className="flex items-center gap-1 min-w-0 flex-1">
             {/* Mobile Company Select */}
             <div className="relative inline-flex items-center flex-1 min-w-0 max-w-[130px] xs:max-w-[150px]">
-              <div className="absolute left-1.5 text-blue-600 pointer-events-none">
+              <div className="absolute left-2 text-blue-600 pointer-events-none">
                 <Building size={11} />
               </div>
               <select
@@ -439,7 +332,8 @@ export default function Topbar({
                   const comp = companies.find((c) => c._id === e.target.value);
                   if (comp) setSelectedCompany(comp);
                 }}
-                className="w-full pl-5 pr-1.5 py-1 rounded-md bg-blue-50 dark:bg-blue-950/80 text-blue-900 dark:text-blue-200 text-[10px] font-bold border border-blue-200 dark:border-blue-800/60 focus:outline-none cursor-pointer truncate"
+                className="topbar-pill-btn w-full pl-6 pr-2 py-1 rounded-full bg-blue-50 dark:bg-blue-950/80 text-blue-900 dark:text-blue-200 text-[10px] font-bold border border-blue-200 dark:border-blue-800/60 focus:outline-none cursor-pointer truncate"
+                style={{ borderRadius: "9999px" }}
               >
                 {companies.map((c) => (
                   <option key={c._id} value={c._id} className="text-slate-900">
@@ -451,7 +345,7 @@ export default function Topbar({
 
             {/* Mobile FY Select */}
             <div className="relative inline-flex items-center flex-1 min-w-0 max-w-[110px] xs:max-w-[130px]">
-              <div className="absolute left-1.5 text-emerald-600 pointer-events-none">
+              <div className="absolute left-2 text-emerald-600 pointer-events-none">
                 <CalendarEvent size={11} />
               </div>
               <select
@@ -460,7 +354,8 @@ export default function Topbar({
                   const fy = fyList.find((x) => x._id === e.target.value);
                   if (fy) setSelectedFY(fy);
                 }}
-                className="w-full pl-5 pr-1.5 py-1 rounded-md bg-emerald-50 dark:bg-emerald-950/80 text-emerald-900 dark:text-emerald-200 text-[10px] font-bold border border-emerald-200 dark:border-emerald-800/60 focus:outline-none cursor-pointer truncate"
+                className="topbar-pill-btn w-full pl-6 pr-2 py-1 rounded-full bg-emerald-50 dark:bg-emerald-950/80 text-emerald-900 dark:text-emerald-200 text-[10px] font-bold border border-emerald-200 dark:border-emerald-800/60 focus:outline-none cursor-pointer truncate"
+                style={{ borderRadius: "9999px" }}
               >
                 {fyList.map((fy) => (
                   <option key={fy._id} value={fy._id} className="text-slate-900">
@@ -478,76 +373,112 @@ export default function Topbar({
       </div>
 
       {/* CENTER GLOBAL SEARCH INPUT (Desktop / Tablet) */}
-      <div className="hidden md:flex flex-1 max-w-xl mx-4 relative">
+      <div
+        ref={searchContainerRef}
+        className={`relative hidden md:flex flex-1 transition-all duration-200 mx-3 lg:mx-6 ${
+          searchOpen ? "max-w-2xl lg:max-w-3xl z-50" : "max-w-sm lg:max-w-lg z-20"
+        }`}
+      >
         <div
-          className={`w-full flex items-center gap-2 px-3.5 py-1.5 rounded-full border transition-all duration-200 shadow-xs ${
+          className={`topbar-search-bar w-full flex items-center justify-between px-4 py-2 transition-all duration-150 group relative z-50 ${
             searchOpen
-              ? "border-indigo-500 ring-2 ring-indigo-500/20 bg-white dark:bg-slate-900"
-              : "border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 hover:border-indigo-300"
+              ? "search-open bg-white dark:bg-slate-900 border-2 border-indigo-600 dark:border-indigo-500 rounded-full shadow-lg ring-2 ring-indigo-500/20 opacity-100"
+              : "border border-slate-200/90 dark:border-slate-700 bg-white dark:bg-slate-800 rounded-full hover:bg-slate-50 dark:hover:bg-slate-800 hover:border-slate-300 dark:hover:border-slate-600 shadow-2xs opacity-100"
           }`}
         >
-          <Search size={15} className="text-indigo-600 shrink-0" />
-          <input
-            ref={searchInputRef}
-            type="text"
-            value={searchQuery}
-            onChange={(e) => {
-              setSearchQuery(e.target.value);
-              if (!searchOpen) setSearchOpen(true);
-            }}
-            onFocus={() => setSearchOpen(true)}
-            placeholder="Search products, stock, parties, invoices, vouchers, MRs, reports..."
-            className="w-full text-xs sm:text-sm font-medium text-slate-800 dark:text-slate-100 bg-transparent outline-none placeholder:text-slate-400 dark:placeholder:text-slate-500"
-          />
-
-          {searchQuery && (
-            <button
-              onClick={() => {
-                setSearchQuery("");
-                searchInputRef.current?.focus();
-              }}
-              className="w-5 h-5 flex items-center justify-center rounded-full text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-200/60 dark:hover:bg-slate-800 transition-colors shrink-0 cursor-pointer"
-              title="Clear search"
-            >
-              <X size={14} />
-            </button>
-          )}
-
-          <div className="flex items-center gap-1.5 shrink-0">
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                setAutoVoiceStart(true);
-                setSearchOpen(true);
-              }}
-              className={`flex items-center gap-1 px-2.5 py-1 text-[10px] font-bold border rounded-full shadow-2xs transition-colors cursor-pointer ${
-                wakewordEnabled
-                  ? "text-rose-700 bg-rose-50 border-rose-200 hover:bg-rose-100 dark:bg-rose-950/40 dark:border-rose-800 dark:text-rose-300"
-                  : "text-slate-600 dark:text-slate-300 bg-white dark:bg-slate-700 border-slate-200 dark:border-slate-600 hover:bg-slate-100"
+          <div className="flex items-center gap-2.5 truncate min-w-0 flex-1">
+            <Search
+              size={16}
+              className={`shrink-0 transition-colors ${
+                searchOpen
+                  ? "text-indigo-600 dark:text-indigo-400"
+                  : "text-slate-500 dark:text-slate-400 group-hover:text-slate-700 dark:group-hover:text-slate-200"
               }`}
-              title={wakewordEnabled ? `Click or say 'Hey ${assistantName}' to activate ${assistantName} AI` : `${assistantName} Voice AI`}
-            >
-              <Mic size={11} className="text-indigo-600 dark:text-indigo-400" />
-              <span>Voice AI</span>
-            </button>
-            <span className="hidden lg:inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-bold text-slate-500 dark:text-slate-300 bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-md shadow-2xs">
-              <Command size={10} />
-              <span>Ctrl K</span>
-            </span>
+            />
+            <input
+              ref={searchInputRef}
+              type="text"
+              value={searchQuery}
+              onChange={(e) => {
+                setSearchQuery(e.target.value);
+                if (!searchOpen) setSearchOpen(true);
+              }}
+              onFocus={() => setSearchOpen(true)}
+              placeholder="Search pages, products, stock, customers, vouchers..."
+              className="w-full bg-transparent border-none outline-none text-[13.5px] font-normal text-slate-900 dark:text-slate-100 placeholder:text-slate-400"
+            />
+          </div>
+
+          <div className="flex items-center gap-1.5 shrink-0 ml-2">
+            {searchQuery ? (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setSearchQuery("");
+                  searchInputRef.current?.focus();
+                }}
+                className="p-1 rounded-full text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+                title="Clear search"
+              >
+                <X size={15} />
+              </button>
+            ) : (
+              <span className="text-[11px] font-sans font-medium text-slate-500 dark:text-slate-400 select-none bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded-md border border-slate-200 dark:border-slate-700">
+                ⌘K
+              </span>
+            )}
           </div>
         </div>
+
+        {/* Global Search Results Dropdown (Attached directly below header search input) */}
+        <GlobalSearchModal
+          isOpen={searchOpen}
+          onClose={() => setSearchOpen(false)}
+          query={searchQuery}
+          setQuery={setSearchQuery}
+        />
       </div>
 
+      {/* Mobile search bar dropdown banner */}
+      {mobileSearchOpen && (
+        <div className="flex md:hidden items-center w-full px-3 py-2 bg-white dark:bg-slate-900 border-b border-gray-200 dark:border-slate-800 gap-2 absolute top-0 left-0 right-0 z-40">
+          <Search size={15} className="text-indigo-600 shrink-0" />
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            autoFocus
+            placeholder="Search products, customers, vouchers..."
+            className="w-full bg-transparent border-none outline-none text-sm text-slate-800 dark:text-slate-100"
+          />
+          <button
+            type="button"
+            onClick={() => {
+              setMobileSearchOpen(false);
+              setSearchOpen(false);
+            }}
+            className="p-1 text-slate-400 hover:text-slate-600"
+          >
+            <X size={18} />
+          </button>
+        </div>
+      )}
+
       {/* RIGHT: Search Icon, Notifications, Fullscreen & Profile */}
-      <div className="flex items-center gap-1 sm:gap-2 shrink-0">
+      <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
         {/* MOBILE GLOBAL SEARCH ICON BUTTON */}
         <button
-          onClick={() => setSearchOpen(true)}
+          onClick={() => {
+            setMobileSearchOpen((prev) => !prev);
+            setSearchOpen((prev) => !prev);
+          }}
           aria-label="Global Search"
-          className="flex md:hidden items-center justify-center w-8 h-8 sm:w-10 sm:h-10 rounded-lg sm:rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-950 transition-colors duration-200 shrink-0 cursor-pointer shadow-xs"
+          className="topbar-circle-btn flex md:hidden items-center justify-center w-8.5 h-8.5 rounded-full border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-950 transition-colors duration-200 shrink-0 cursor-pointer shadow-xs"
+          style={{ borderRadius: "9999px" }}
           title="Search Anything (Products, Customers, Invoices, MRs...)"
         >
-          <Search size={15} />
+          <Search size={14} />
         </button>
 
         {/* FULLSCREEN TOGGLE (Hidden on Mobile) */}
@@ -555,15 +486,16 @@ export default function Topbar({
           onClick={toggleFullscreen}
           aria-label={isFullscreen ? "Exit Fullscreen" : "Enter Fullscreen"}
           title={isFullscreen ? "Exit Fullscreen (Esc)" : "Enter Fullscreen (F11)"}
-          className={`hidden sm:flex items-center justify-center w-8 h-8 sm:w-10 sm:h-10 rounded-lg sm:rounded-xl border transition-all duration-200 shrink-0 cursor-pointer shadow-xs ${isFullscreen
+          className={`topbar-circle-btn hidden sm:flex items-center justify-center w-8.5 h-8.5 sm:w-9 sm:h-9 rounded-full border transition-all duration-200 shrink-0 cursor-pointer shadow-xs ${isFullscreen
               ? "border-indigo-300 dark:border-indigo-700 bg-indigo-50 dark:bg-indigo-950/80 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-100 dark:hover:bg-indigo-900"
               : "border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:text-indigo-600 hover:bg-indigo-50/60 dark:hover:bg-slate-700"
             }`}
+          style={{ borderRadius: "9999px" }}
         >
           {isFullscreen ? (
-            <FullscreenExit size={16} className="transition-transform hover:scale-110" />
+            <FullscreenExit size={15} className="transition-transform hover:scale-110" />
           ) : (
-            <ArrowsFullscreen size={15} className="transition-transform hover:scale-110" />
+            <ArrowsFullscreen size={14} className="transition-transform hover:scale-110" />
           )}
         </button>
 
@@ -575,13 +507,17 @@ export default function Topbar({
               setProfileOpen(false);
             }}
             aria-label="Notifications"
-            className="relative flex items-center justify-center w-8 h-8 sm:w-10 sm:h-10 rounded-lg sm:rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-orange-500 hover:bg-orange-50 dark:hover:bg-orange-950/50 transition-colors duration-200"
+            className="topbar-circle-btn relative flex items-center justify-center w-8.5 h-8.5 sm:w-9 sm:h-9 rounded-full border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-orange-500 hover:bg-orange-50 dark:hover:bg-orange-950/50 transition-colors duration-200 shadow-xs cursor-pointer"
+            style={{ borderRadius: "9999px" }}
           >
             <Bell size={15} className="sm:hidden" />
-            <Bell size={18} className="hidden sm:block" />
+            <Bell size={17} className="hidden sm:block" />
 
             {unreadCount > 0 && (
-              <span className="absolute -top-1 -right-1 flex items-center justify-center min-w-[16px] h-[16px] sm:min-w-[18px] sm:h-[18px] rounded-full bg-red-500 text-white text-[9px] sm:text-[10px] font-bold px-1 animate-pulse">
+              <span
+                className="absolute -top-1 -right-1 flex items-center justify-center min-w-[16px] h-[16px] sm:min-w-[17px] sm:h-[17px] rounded-full bg-red-500 text-white text-[9px] sm:text-[9.5px] font-bold px-1 animate-pulse"
+                style={{ borderRadius: "9999px" }}
+              >
                 {unreadCount}
               </span>
             )}
@@ -710,7 +646,7 @@ export default function Topbar({
               setProfileOpen((v) => !v);
               setNotifOpen(false);
             }}
-            className="flex items-center gap-1.5 sm:gap-2 rounded-lg sm:rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-1 sm:pl-2 sm:pr-3 h-8 sm:h-10 text-gray-700 dark:text-slate-200 hover:bg-gray-50 dark:hover:bg-slate-700 transition-colors duration-200"
+            className="flex items-center gap-1.5 sm:gap-2 rounded-full border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-1 sm:pl-1.5 sm:pr-3.5 h-8.5 sm:h-9.5 text-gray-700 dark:text-slate-200 hover:bg-gray-50 dark:hover:bg-slate-700 transition-colors duration-200 shadow-xs cursor-pointer"
           >
             <span className="flex items-center justify-center w-6 h-6 sm:w-8 sm:h-8 rounded-full overflow-hidden border border-gray-200/80 dark:border-slate-700 shadow-xs shrink-0 bg-indigo-50 dark:bg-slate-800">
               {user?.profilePhoto && !profileImgError ? (
@@ -786,26 +722,6 @@ export default function Topbar({
         </div>
       </div>
 
-      {/* Voice Assistant Activated Toast Banner */}
-      {assistantToast && (
-        <div className="fixed top-4 left-1/2 -translate-x-1/2 z-[100000] flex items-center gap-2.5 px-4 py-2.5 rounded-2xl bg-slate-950 text-white text-xs font-bold shadow-2xl border border-indigo-500/50 animate-bounce">
-          <span className="w-2.5 h-2.5 rounded-full bg-rose-500 animate-ping" />
-          <span>🎙️ {assistantName} Voice Assistant Activated! (&quot;Hey {assistantName}&quot; detected)</span>
-        </div>
-      )}
-
-      <GlobalSearchModal
-        isOpen={searchOpen}
-        onClose={() => {
-          setSearchOpen(false);
-          setInitialVoiceQuery("");
-        }}
-        autoVoiceStart={autoVoiceStart}
-        onVoiceStartHandled={() => setAutoVoiceStart(false)}
-        initialQuery={initialVoiceQuery}
-        query={searchQuery}
-        setQuery={setSearchQuery}
-      />
     </div>
   );
 }

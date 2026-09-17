@@ -15,11 +15,8 @@ export default function ProtectedPage({
   const can = perm?.can ? perm.can(permission) : true;
 
   if (loading) {
-    return (
-      <div className="text-center mt-8 p-8 text-slate-500 font-semibold">
-        Loading permissions...
-      </div>
-    );
+    // Keep page layout stable without flashing text
+    return <div className="w-full min-h-[400px] opacity-0 pointer-events-none">{children}</div>;
   }
 
   if (!can) {

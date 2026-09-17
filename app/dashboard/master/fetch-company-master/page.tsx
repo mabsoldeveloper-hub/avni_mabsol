@@ -152,7 +152,7 @@ export default function FetchCompanyMasterPage() {
                 Company Master
               </h1>
               <p className="text-sm text-slate-500 mt-0.5">
-                Manage all companies synced from VFP SaleType master
+                Manage all companies synced from MabsolCRM SaleType master
               </p>
             </div>
           </div>
@@ -174,6 +174,14 @@ export default function FetchCompanyMasterPage() {
               <FaDownload size={13} />
               Export CSV
             </button>
+
+            <Link
+              href="/dashboard/master/division-master"
+              className="flex items-center gap-2 px-5 py-2 rounded-xl text-sm font-semibold bg-gradient-to-r from-indigo-600 to-blue-600 text-white shadow-md shadow-indigo-500/25 hover:shadow-lg hover:shadow-indigo-500/35 hover:-translate-y-0.5 transition-all duration-200"
+            >
+              Add Party 
+              <FaArrowRight size={12} />
+            </Link>
 
             <Link
               href="/dashboard/master/division-master"

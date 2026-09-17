@@ -49,3 +49,11 @@ next-env.d.ts
 *.DBF
 *.dat
 *.DAT
+
+# Electron desktop agent build outputs & dependencies
+/dist-electron/
+/dist/
+/desktop-agent/node_modules/
+/desktop-agent/dist/
+*.blockmap
+

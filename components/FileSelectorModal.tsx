@@ -295,7 +295,7 @@ export default function FileSelectorModal({
                 {title}
               </h2>
               <p className="text-xs text-[#9297A1] m-0 leading-normal">
-                {filterType === "dbf" ? "Select one or multiple DBF files to synchronize" : "Browse local PC drives and folders to configure VFP paths"}
+                {filterType === "dbf" ? "Select one or multiple DBF files to synchronize" : "Browse local PC drives and folders to configure MabsolCRM paths"}
               </p>
             </div>
           </div>
@@ -516,7 +516,7 @@ export default function FileSelectorModal({
                 
                 if (filterType === "dbf") {
                   FileIcon = Database;
-                  metaText = "FoxPro Table";
+                  metaText = "MabsolCRM Table";
                 } else if (filterType === "exe") {
                   FileIcon = Terminal;
                   metaText = "Executable";

@@ -164,7 +164,7 @@ export async function POST(request: NextRequest) {
         let prgLines = [
           "SET SAFETY OFF",
           "SET TALK OFF",
-          'WAIT WINDOW "Mabsol Pharma CRM - Starting VFP Marg Import..." TIMEOUT 1',
+          'WAIT WINDOW "Mabsol Pharma CRM - Starting MabsolCRM Import..." TIMEOUT 1',
           ""
         ];
 
@@ -242,7 +242,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       success: true,
       message: useVfpEngine
-        ? `Successfully exported ${copiedCount} tables using the Visual FoxPro engine!`
+        ? `Successfully exported ${copiedCount} tables using the MabsolCRM engine!`
         : `Successfully transferred ${copiedCount} database files!`,
       copiedCount,
       dbfFiles,

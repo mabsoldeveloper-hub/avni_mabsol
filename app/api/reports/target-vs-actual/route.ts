@@ -8,6 +8,7 @@ import GLedger from "@/models/GLedger";
 import MrCustomerAssignment from "@/models/MrCustomerAssignment";
 import { getMrTerritoryRestriction } from "@/lib/mrTerritoryHelper";
 import { getCurrentUser } from "@/lib/auth";
+import { getHierarchyAccess } from "@/lib/hierarchyAccess";
 import { getCompanyVfpFilter, combineFilters } from "@/lib/companyVfpHelper";
 
 export const dynamic = "force-dynamic";
@@ -25,6 +26,7 @@ export async function GET(req: NextRequest) {
     await connectDB();
 
     const currentUser = await getCurrentUser();
+    const hierarchyAccess = await getHierarchyAccess(currentUser);
     const restriction = await getMrTerritoryRestriction();
 
     const { searchParams } = new URL(req.url);
@@ -59,75 +61,44 @@ export async function GET(req: NextRequest) {
       .sort({ createdAt: -1 })
       .lean();
 
-    // Territory restrictions check
+    // Territory / hierarchy access check
+    // A manager/head must see targets of the complete recursive downline,
+    // not only targets belonging to the logged-in user.
     let allowedTargets = rawTargets;
     if (restriction.isMrRestricted && currentUser) {
-      const currentUserIdStr = currentUser._id?.toString() || "";
-      const currentUserNameStr = (currentUser.name || "").trim().toLowerCase();
-      const currentEmpCodeStr = (currentUser.employeeCode || "").trim().toLowerCase();
-
-      const allowedCodesSet = new Set<string>(
-        (restriction.allowedOrdnos || []).map((c) => c.trim().toLowerCase())
+      const currentUserIdStr = String(currentUser._id || "");
+      const accessibleUserIdSet = new Set(
+        (hierarchyAccess.accessibleUserIds || []).map((id: any) => String(id))
       );
-      const allowedNamesSet = new Set<string>();
-
-      const directAssignments = await MrCustomerAssignment.find(
-        { userId: currentUser._id, status: "Active" },
-        { customerCode: 1, customerName: 1 }
-      ).lean();
-
-      directAssignments.forEach((a: any) => {
-        if (a.customerCode) allowedCodesSet.add(String(a.customerCode).trim().toLowerCase());
-        if (a.customerName) allowedNamesSet.add(String(a.customerName).trim().toLowerCase());
-      });
-
-      const mrCustomerConditions: any[] = [];
-      if (currentUserNameStr) {
-        mrCustomerConditions.push({ DSM: { $regex: escapeRegex(currentUserNameStr), $options: "i" } });
-      }
-      if (currentEmpCodeStr) {
-        mrCustomerConditions.push({ DSM: { $regex: escapeRegex(currentEmpCodeStr), $options: "i" } });
-      }
-      if (restriction.allowedCompanyCodes && restriction.allowedCompanyCodes.length > 0) {
-        mrCustomerConditions.push({ COMPANY: { $in: restriction.allowedCompanyCodes } });
-      }
-
-      if (mrCustomerConditions.length > 0) {
-        const matchingCustomers = await Customer.find(
-          { $or: mrCustomerConditions },
-          { ORDNO: 1, CODEP: 1, PARNAM: 1 }
-        ).lean();
-
-        matchingCustomers.forEach((c: any) => {
-          if (c.ORDNO) allowedCodesSet.add(String(c.ORDNO).trim().toLowerCase());
-          if (c.CODEP) allowedCodesSet.add(String(c.CODEP).trim().toLowerCase());
-          if (c.PARNAM) allowedNamesSet.add(String(c.PARNAM).trim().toLowerCase());
-        });
-      }
 
       allowedTargets = rawTargets.filter((item: any) => {
-        const itemMrId = typeof item.mrUserId === "string" ? item.mrUserId : item.mrUserId?._id?.toString() || "";
-        const itemMrNameStr = (item.mrName || "").trim().toLowerCase();
-        const hasExplicitMr = Boolean(itemMrId || itemMrNameStr);
+        const itemMrId =
+          typeof item.mrUserId === "string"
+            ? item.mrUserId
+            : item.mrUserId?._id?.toString() || "";
 
-        if (hasExplicitMr) {
-          return (
-            (itemMrId && itemMrId === currentUserIdStr) ||
-            (currentUserNameStr && itemMrNameStr.includes(currentUserNameStr)) ||
-            (currentEmpCodeStr && itemMrNameStr.includes(currentEmpCodeStr))
-          );
+        if (item.targetType === "MR") {
+          return Boolean(itemMrId && accessibleUserIdSet.has(itemMrId));
         }
-
-        if (item.targetType === "MR") return false;
 
         if (item.targetType === "Customer") {
-          const cCode = (item.customerCode || "").trim().toLowerCase();
-          const cName = (item.customerName || "").trim().toLowerCase();
-          if (cCode && allowedCodesSet.has(cCode)) return true;
-          if (cName && allowedNamesSet.has(cName)) return true;
+          const customerCode = String(item.customerCode || "").trim();
+          if (!customerCode) return false;
+
+          // Reuse the central party authorization so customer targets follow
+          // the same hierarchy rules as Customer Master / Sales / Outstanding.
+          return restriction.isPartyAllowed({
+            ORDNO: customerCode,
+            CODEP: customerCode,
+            CODE: customerCode,
+            PARNAM: item.customerName || "",
+          });
         }
 
-        return false;
+        // Generic targets are only visible when they belong to the current
+        // user or one of the users in the recursive subtree.
+        if (itemMrId) return accessibleUserIdSet.has(itemMrId);
+        return String(currentUser._id || "") === currentUserIdStr;
       });
     }
 
@@ -155,8 +126,24 @@ export async function GET(req: NextRequest) {
     ].filter((w) => w.startDay <= totalDaysInMonth);
 
     // 1. Bulk pre-fetch Customer phone numbers and MR assignments
+    const customerAccessFilter: any = {};
+    if (restriction.isMrRestricted) {
+      const allowedOrdnos = (restriction.allowedOrdnos || [])
+        .map((v: any) => String(v).trim())
+        .filter(Boolean);
+
+      customerAccessFilter.$or = allowedOrdnos.length
+        ? [
+            { ORDNO: { $in: allowedOrdnos } },
+            { CODEP: { $in: allowedOrdnos } },
+            { CODE: { $in: allowedOrdnos } },
+            { SCODE: { $in: allowedOrdnos } },
+          ]
+        : [{ _id: null }];
+    }
+
     const customerList = await Customer.find(
-      combineFilters(companyVfpMatch),
+      combineFilters(companyVfpMatch, customerAccessFilter),
       { ORDNO: 1, CODEP: 1, CODE: 1, SCODE: 1, PARNAM: 1, MOBILE: 1, PHONE1: 1, PHONE2: 1, TEL: 1, REF: 1, DSM: 1 }
     ).lean();
 
@@ -180,7 +167,11 @@ export async function GET(req: NextRequest) {
     });
 
     // 2. Bulk pre-fetch Users for MR phone numbers
-    const userList = await User.find({}, { name: 1, employeeCode: 1, mobile: 1, phone: 1 }).lean();
+    const userFilter: any = {};
+    if (restriction.isMrRestricted) {
+      userFilter._id = { $in: hierarchyAccess.accessibleUserIds || [] };
+    }
+    const userList = await User.find(userFilter, { name: 1, employeeCode: 1, mobile: 1, phone: 1 }).lean();
     const mrPhoneMap = new Map<string, string>();
     userList.forEach((u: any) => {
       const phone = u.mobile || u.phone || "";
@@ -191,7 +182,21 @@ export async function GET(req: NextRequest) {
 
     // 3. Bulk Aggregate Sales for the month
     const bulkSalesAgg = await SalesMdis.aggregate([
-      { $match: combineFilters(companyVfpMatch, { DATE: { $gte: monthStartDate, $lte: monthEndDate } }) },
+      {
+        $match: combineFilters(
+          companyVfpMatch,
+          { DATE: { $gte: monthStartDate, $lte: monthEndDate } },
+          restriction.isMrRestricted
+            ? {
+                $or: [
+                  { CODEP: { $in: restriction.allowedOrdnos || [] } },
+                  { CODE: { $in: restriction.allowedOrdnos || [] } },
+                  { PARTY: { $in: restriction.allowedOrdnos || [] } },
+                ],
+              }
+            : {}
+        ),
+      },
       {
         $group: {
           _id: {
@@ -222,7 +227,11 @@ export async function GET(req: NextRequest) {
           BOOK: "R",
           CD: "C",
           DATE: { $gte: monthStartDate, $lte: monthEndDate },
-        }),
+        },
+        restriction.isMrRestricted
+          ? { CODE: { $in: restriction.allowedOrdnos || [] } }
+          : {}
+        ),
       },
       {
         $group: {

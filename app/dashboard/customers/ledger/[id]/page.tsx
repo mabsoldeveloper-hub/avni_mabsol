@@ -114,10 +114,10 @@ fetch(`/api/customers/ledger/${id}`)
         </h5>
       </div>
 
-      <div className="col-md-2">
+      {/* <div className="col-md-2">
         <small className="text-muted">Code</small>
         <h6>{data.customer?.code}</h6>
-      </div>
+      </div> */}
 
       <div className="col-md-2">
         <small className="text-muted">City</small>
@@ -426,99 +426,99 @@ fetch(`/api/customers/ledger/${id}`)
                   >
                   
 
-{view==="ledger" ? (
+                    {view==="ledger" ? (
 
-<>
+                    <>
 
-<td>{row.date}</td>
+                    <td>{row.date}</td>
 
-<td className="fw-bold text-primary">
+                    <td className="fw-bold text-primary">
 
-{row.voucher}
+                    {row.voucher}
 
-</td>
+                    </td>
 
-<td>{row.billNo}</td>
+                    <td>{row.billNo}</td>
 
-<td>{row.particulars}</td>
+                    <td>{row.particulars}</td>
 
-<td className="text-end text-danger">
+                    <td className="text-end text-danger">
 
-{row.debit>0
-?Number(row.debit).toLocaleString()
-:"-"}
+                    {row.debit>0
+                    ?Number(row.debit).toLocaleString()
+                    :"-"}
 
-</td>
+                    </td>
 
-<td className="text-end text-success">
+                    <td className="text-end text-success">
 
-{row.credit>0
-?Number(row.credit).toLocaleString()
-:"-"}
+                    {row.credit>0
+                    ?Number(row.credit).toLocaleString()
+                    :"-"}
 
-</td>
+                    </td>
 
-<td className="text-end fw-bold">
+                    <td className="text-end fw-bold">
 
-{Number(row.balance).toLocaleString()}
+                    {Number(row.balance).toLocaleString()}
 
-</td>
+                    </td>
 
-</>
+                    </>
 
-):(
+                    ):(
 
-<>
+                    <>
 
-<td>{row.date}</td>
+                    <td>{row.date}</td>
 
-<td className="fw-bold text-primary">
+                    <td className="fw-bold text-primary">
 
-{row.voucher}
+                    {row.voucher}
 
-</td>
+                    </td>
 
-<td>{row.billNo}</td>
+                    <td>{row.billNo}</td>
 
-<td className="text-end">
+                    <td className="text-end">
 
-₹{Number(row.amount).toLocaleString()}
+                    ₹{Number(row.amount).toLocaleString()}
 
-</td>
+                    </td>
 
-<td className="text-end text-success">
+                    <td className="text-end text-success">
 
-₹{Number(row.received).toLocaleString()}
+                    ₹{Number(row.received).toLocaleString()}
 
-</td>
+                    </td>
 
-<td className="text-end text-danger">
+                    <td className="text-end text-danger">
 
-₹{Number(row.pending).toLocaleString()}
+                    ₹{Number(row.pending).toLocaleString()}
 
-</td>
+                    </td>
 
-<td>
+                    <td>
 
-<span
-className={`badge ${
-row.status==="Paid"
-?"bg-success"
-:row.status==="Partial"
-?"bg-warning text-dark"
-:"bg-danger"
-}`}
->
+                    <span
+                    className={`badge ${
+                    row.status==="Paid"
+                    ?"bg-success"
+                    :row.status==="Partial"
+                    ?"bg-warning text-dark"
+                    :"bg-danger"
+                    }`}
+                    >
 
-{row.status}
+                    {row.status}
 
-</span>
+                    </span>
 
-</td>
+                    </td>
 
-</>
+                    </>
 
-)}
+                    )}
                 </tr>
 
                 )

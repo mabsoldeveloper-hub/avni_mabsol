@@ -17,12 +17,12 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      message: `MARG Data Mapping completed! Customers: ${result.customersMapped}, Products: ${result.productsMapped}, Pendings: ${result.pendingsMapped}`,
+      message: `MabsolCRM Data Mapping completed! Customers: ${result.customersMapped}, Products: ${result.productsMapped}, Pendings: ${result.pendingsMapped}`,
       result,
     });
   } catch (error: any) {
     return NextResponse.json(
-      { success: false, error: error.message || "Failed to execute MARG data mapper" },
+      { success: false, error: error.message || "Failed to execute MabsolCRM data mapper" },
       { status: 500 }
     );
   }

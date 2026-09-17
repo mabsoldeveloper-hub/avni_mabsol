@@ -4,6 +4,7 @@ import React, { useState, useEffect, useCallback, useMemo } from "react";
 import Link from "next/link";
 import { useCompany } from "@/context/CompanyContext";
 import { useFinancialYear } from "@/context/FinancialYearContext";
+import PurchaseInvoiceModal from "./PurchaseInvoiceModal";
 import {
   FaPlus,
   FaSearch,
@@ -393,99 +394,14 @@ export default function PurchaseBillsList() {
         )}
       </div>
 
-      {/* Bill Details Modal */}
+      {/* Professional Purchase Bill Details & PDF Modal */}
       {selectedBillModal && (
-        <div className="fixed inset-0 z-50 bg-slate-900/70 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white dark:bg-slate-800 w-full max-w-3xl rounded-3xl shadow-2xl border border-slate-200 dark:border-slate-700 p-6 space-y-4 max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between border-b pb-3">
-              <div>
-                <h3 className="text-lg font-bold text-slate-900 dark:text-white">
-                  Purchase Bill #{selectedBillModal.billNumber}
-                </h3>
-                <p className="text-xs text-slate-500">
-                  Supplier Inv: {selectedBillModal.supplierInvoiceNo || "N/A"} • Date: {selectedBillModal.billDate}
-                </p>
-              </div>
-              <button onClick={() => setSelectedBillModal(null)} className="text-slate-400 hover:text-slate-600 p-1">
-                <FaTimes />
-              </button>
-            </div>
-
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 bg-slate-50 dark:bg-slate-900 p-3.5 rounded-2xl border border-slate-200 dark:border-slate-700 text-xs">
-              <div>
-                <span className="text-slate-400 block text-[10px] uppercase font-bold">Vendor Name</span>
-                <span className="font-bold text-slate-900 dark:text-white">{selectedBillModal.vendorName}</span>
-              </div>
-              <div>
-                <span className="text-slate-400 block text-[10px] uppercase font-bold">GSTIN</span>
-                <span className="font-semibold text-slate-700 dark:text-slate-300">{selectedBillModal.vendorGst || "N/A"}</span>
-              </div>
-              <div>
-                <span className="text-slate-400 block text-[10px] uppercase font-bold">Net Total</span>
-                <span className="font-black text-amber-600">₹{(selectedBillModal.netAmount || 0).toLocaleString("en-IN")}</span>
-              </div>
-              <div>
-                <span className="text-slate-400 block text-[10px] uppercase font-bold">Payment Status</span>
-                <span className="font-bold text-rose-600">{selectedBillModal.paymentStatus || "Pending"}</span>
-              </div>
-            </div>
-
-            <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500 pt-2">Purchased Items Breakdown</h4>
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs border-collapse">
-                <thead>
-                  <tr className="bg-slate-100 dark:bg-slate-900/60 font-bold text-slate-600 border-b border-slate-200 dark:border-slate-700">
-                    <th className="p-2">Product Name</th>
-                    <th className="p-2">HSN</th>
-                    <th className="p-2">Batch</th>
-                    <th className="p-2 text-right">Qty</th>
-                    <th className="p-2 text-right">Rate</th>
-                    <th className="p-2 text-right">Dis %</th>
-                    <th className="p-2 text-right">GST %</th>
-                    <th className="p-2 text-right">Total</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                  {selectedBillModal.items && selectedBillModal.items.length > 0 ? (
-                    selectedBillModal.items.map((item: any, idx: number) => (
-                      <tr key={idx}>
-                        <td className="p-2 font-medium text-slate-900 dark:text-white">{item.productName}</td>
-                        <td className="p-2 text-slate-500">{item.hsnCode || "-"}</td>
-                        <td className="p-2 text-slate-500">{item.batchNo || "-"}</td>
-                        <td className="p-2 text-right font-bold">{item.qty}</td>
-                        <td className="p-2 text-right">₹{item.rate}</td>
-                        <td className="p-2 text-right">{item.discountPercent || 0}%</td>
-                        <td className="p-2 text-right">{item.gstPercent || 12}%</td>
-                        <td className="p-2 text-right font-bold text-amber-600">₹{item.total || (item.qty * item.rate)}</td>
-                      </tr>
-                    ))
-                  ) : (
-                    <tr>
-                      <td colSpan={8} className="p-4 text-center text-slate-400">
-                        VFP summary invoice line item.
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-
-            <div className="flex justify-end gap-3 pt-4 border-t border-slate-100 dark:border-slate-700">
-              <Link
-                href="/dashboard/purchase/payment"
-                className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold flex items-center gap-2"
-              >
-                <FaHandHoldingUsd /> Settle / Pay Bill
-              </Link>
-              <button
-                onClick={() => setSelectedBillModal(null)}
-                className="px-4 py-2 bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-xl text-xs font-bold"
-              >
-                Close
-              </button>
-            </div>
-          </div>
-        </div>
+        <PurchaseInvoiceModal
+          isOpen={Boolean(selectedBillModal)}
+          bill={selectedBillModal}
+          onClose={() => setSelectedBillModal(null)}
+          company={selectedCompany}
+        />
       )}
     </div>
   );

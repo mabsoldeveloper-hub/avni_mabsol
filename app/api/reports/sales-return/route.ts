@@ -64,6 +64,25 @@ export async function GET(req: NextRequest) {
         orders.forEach(addParty);
         mainCustomers.forEach(addParty);
 
+        /* ------------------------------------------------------ */
+        /* Hierarchy access                                        */
+        /* ------------------------------------------------------ */
+        // The hierarchy helper already resolves the complete recursive
+        // subtree (MR -> ASM -> RSM -> Manager -> Director). Build the
+        // party map only from accessible party keys so filter options and
+        // response enrichment cannot expose another team's parties.
+        if (restriction.isMrRestricted) {
+            const allowed = new Set(
+                (restriction.allowedOrdnos || [])
+                    .map((v: any) => String(v).trim().toUpperCase())
+                    .filter(Boolean)
+            );
+
+            for (const [key] of partyMap) {
+                if (!allowed.has(key)) partyMap.delete(key);
+            }
+        }
+
         // Collect distinct filter options
         const areaSet = new Set<string>();
         const routeSet = new Set<string>();
@@ -104,8 +123,23 @@ export async function GET(req: NextRequest) {
 
         let filter: any = combineFilters(companyVfpMatch, returnTypeFilter);
 
-        if (restriction.isMrRestricted && restriction.allowedOrdnos && restriction.allowedOrdnos.length > 0) {
-            filter = combineFilters(filter, { CODEP: { $in: restriction.allowedOrdnos } });
+        if (restriction.isMrRestricted) {
+            const allowedOrdnos = (restriction.allowedOrdnos || [])
+                .map((v: any) => String(v).trim())
+                .filter(Boolean);
+
+            if (allowedOrdnos.length > 0) {
+                // Match both common Marg party fields. This is intentionally
+                // fail-closed when the hierarchy has no assigned parties.
+                filter = combineFilters(filter, {
+                    $or: [
+                        { CODEP: { $in: allowedOrdnos } },
+                        { CODE: { $in: allowedOrdnos } },
+                    ],
+                });
+            } else {
+                filter = combineFilters(filter, { CODEP: "__NO_HIERARCHY_ACCESS__" });
+            }
         }
 
         const effStart = startDate || fyRange.startDate;

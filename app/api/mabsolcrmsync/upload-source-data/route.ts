@@ -98,7 +98,7 @@ export async function POST(request: NextRequest) {
       userName: uploaderName,
       companyName: (user.companyId as any)?.companyName || "Unknown",
       license: uploaderId ? `ID: ${uploaderId.slice(-6)}` : "N/A",
-      vfpExePath: "Raw Marg Data Upload",
+      vfpExePath: "Raw MabsolCRM Data Upload",
       action: "source_data_uploaded",
       status: "success",
       message: `User ${uploaderName} (${uploaderEmail}, ID: ${uploaderId}) uploaded ${uploadedFileNames.length} data file(s) to ${targetSourceDir} (${allSourceFiles.length} total files ready).`,

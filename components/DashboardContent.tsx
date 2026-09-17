@@ -1,16 +1,16 @@
 "use client";
 
-import { useEffect, useState, useCallback, useRef, useMemo } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import KPICards from "@/components/KPICards";
 import DashboardCharts, { PurchaseDashboardCharts, CreditDashboardCharts } from "@/components/DashboardCharts";
 import AnalyticsCards from "@/components/AnalyticsCards";
 import LiquidMeters from "@/components/LiquidMeters";
+import DashboardLiveClock from "@/components/DashboardLiveClock";
 import {
     FaBuilding,
     FaMapMarkerAlt,
     FaArrowRight,
     FaSyncAlt,
-    FaCalendarAlt,
     FaChartPie,
     FaChartLine,
     FaBoxes,
@@ -18,8 +18,6 @@ import {
     FaTruck,
     FaCheckCircle,
     FaClock,
-    FaVolumeUp,
-    FaVolumeMute,
     FaPalette,
     FaCheck,
     FaUndoAlt,
@@ -27,8 +25,6 @@ import {
 import { useFinancialYear } from "@/context/FinancialYearContext";
 import { useCompany } from "@/context/CompanyContext";
 import { SIDEBAR_PRESET_THEMES, SidebarThemeId } from "@/components/Sidebar";
-import SalesmanDashboard from "@/components/dashboard/SalesmanDashboard";
-import ManagerDashboard from "@/components/dashboard/ManagerDashboard";
 
 type MrTerritoryInfo = {
     isMrRestricted: boolean;
@@ -308,7 +304,6 @@ export default function DashboardContent() {
     const [refreshing, setRefreshing] = useState(false);
     const [activeTab, setActiveTab] = useState<TabType>("overview");
     const [mrTerritoryInfo, setMrTerritoryInfo] = useState<MrTerritoryInfo | null>(null);
-    const [currentTime, setCurrentTime] = useState<Date | null>(null);
     const [isSpeaking, setIsSpeaking] = useState(false);
     const [voiceEnabled, setVoiceEnabled] = useState<boolean>(true);
     const hasSpokenRef = useRef(false);
@@ -484,69 +479,14 @@ export default function DashboardContent() {
     }, []);
 
     useEffect(() => {
-        // Auto-greet with Indian voice reliably on page load and first interaction
-        let spoken = false;
-        const triggerGreeting = () => {
-            if (spoken) return;
-            spoken = true;
-            speakGreeting();
-        };
-
-        const timer = setTimeout(triggerGreeting, 600);
-
-        // Fallback: If browser blocked audio before user clicked, play on first click/tap
-        const handleInteraction = () => {
-            if (!spoken) {
-                triggerGreeting();
+        if (typeof window !== "undefined" && "speechSynthesis" in window) {
+            window.speechSynthesis.cancel();
+        }
+        return () => {
+            if (typeof window !== "undefined" && "speechSynthesis" in window) {
+                window.speechSynthesis.cancel();
             }
         };
-
-        window.addEventListener("pointerdown", handleInteraction, { once: true });
-        window.addEventListener("keydown", handleInteraction, { once: true });
-
-        if (typeof window !== "undefined" && "speechSynthesis" in window) {
-            window.speechSynthesis.onvoiceschanged = () => {
-                if (!spoken) triggerGreeting();
-            };
-        }
-
-        return () => {
-            clearTimeout(timer);
-            window.removeEventListener("pointerdown", handleInteraction);
-            window.removeEventListener("keydown", handleInteraction);
-        };
-    }, [speakGreeting]);
-
-    const [currentUser, setCurrentUser] = useState<any>(null);
-    const [dashboardViewMode, setDashboardViewMode] = useState<"auto" | "executive" | "salesman" | "manager">("auto");
-
-    const effectiveView = useMemo(() => {
-        if (dashboardViewMode !== "auto") return dashboardViewMode;
-        const roleType = (currentUser?.roleType || "").toUpperCase();
-        const roleName = (currentUser?.roleName || "").toLowerCase();
-        if (roleType === "MR" || roleName.includes("sales") || roleName.includes("mr") || mrTerritoryInfo?.isMrRestricted) {
-            return "salesman";
-        }
-        if (roleType === "RSM" || roleType === "ZSM" || roleName.includes("manager") || roleName.includes("rsm") || roleName.includes("zsm")) {
-            return "manager";
-        }
-        return "executive";
-    }, [dashboardViewMode, currentUser, mrTerritoryInfo?.isMrRestricted]);
-
-    useEffect(() => {
-        setCurrentTime(new Date());
-        const timer = setInterval(() => {
-            setCurrentTime(new Date());
-        }, 1000);
-
-        fetch("/api/auth/me")
-            .then((res) => res.json())
-            .then((d) => {
-                if (d?.user) setCurrentUser(d.user);
-            })
-            .catch(() => {});
-
-        return () => clearInterval(timer);
     }, []);
 
     const loadMrTerritoryInfo = async () => {
@@ -568,7 +508,9 @@ export default function DashboardContent() {
     };
 
     const loadDashboard = useCallback(async () => {
-        setLoading(true);
+        if (!data) {
+            setLoading(true);
+        }
         try {
             const params = new URLSearchParams();
             if (selectedCompany?._id) {
@@ -604,7 +546,7 @@ export default function DashboardContent() {
             setLoading(false);
             setRefreshing(false);
         }
-    }, [selectedCompany, selectedFY]);
+    }, [selectedCompany?._id, selectedFY?._id, data]);
 
     const handleManualRefresh = () => {
         setRefreshing(true);
@@ -617,26 +559,11 @@ export default function DashboardContent() {
 
     useEffect(() => {
         loadDashboard();
-    }, [loadDashboard]);
-
-    useEffect(() => {
-        const onFyChange = () => {
-            loadDashboard();
-        };
-        const onCompanyChange = () => {
-            loadDashboard();
-        };
-        window.addEventListener("financial-year-changed", onFyChange);
-        window.addEventListener("company-changed", onCompanyChange);
-        return () => {
-            window.removeEventListener("financial-year-changed", onFyChange);
-            window.removeEventListener("company-changed", onCompanyChange);
-        };
-    }, [loadDashboard]);
+    }, [selectedCompany?._id, selectedFY?._id]);
 
     // Dynamic Celestial Time Info according to local hour
     const getCelestialTimeInfo = () => {
-        const hour = currentTime ? currentTime.getHours() : new Date().getHours();
+        const hour = new Date().getHours();
         let activePhase: "morning" | "afternoon" | "evening" | "night";
 
         if (hour >= 5 && hour < 12) activePhase = "morning";
@@ -809,24 +736,6 @@ export default function DashboardContent() {
 
     const celestial = getCelestialTimeInfo();
 
-    const formattedDate = currentTime
-        ? currentTime.toLocaleDateString("en-IN", {
-            weekday: "short",
-            day: "numeric",
-            month: "short",
-            year: "numeric",
-        })
-        : "";
-
-    const formattedTime = currentTime
-        ? currentTime.toLocaleTimeString("en-IN", {
-            hour: "2-digit",
-            minute: "2-digit",
-            second: "2-digit",
-            hour12: true,
-        })
-        : "";
-
     const tabs = [
         { id: "overview", label: "Executive Overview", icon: FaChartPie, badge: "Live" },
         { id: "sales", label: "Sales & Revenue", icon: FaChartLine, badge: "Sales" },
@@ -843,20 +752,20 @@ export default function DashboardContent() {
             : PRESET_THEMES.find((t) => t.id === bannerTheme)?.color || "#3b82f6";
 
     return (
-        <div className="flex flex-col gap-2.5 sm:gap-5 min-h-screen">
+        <div className="flex flex-col gap-5 min-h-screen">
             {/* ==================== DYNAMIC CELESTIAL EXECUTIVE BANNER WITH COLOR CUSTOMIZATION ==================== */}
             <div
                 style={celestial.customStyles?.container}
-                className={`group relative isolate rounded-xl sm:rounded-3xl ${
+                className={`group relative isolate rounded-2xl sm:rounded-3xl ${
                     celestial.gradient ? `bg-gradient-to-br ${celestial.gradient}` : ""
-                } p-2 sm:p-4 md:p-6 ${celestial.textColor} ${
+                } p-4 sm:p-5 md:p-6 ${celestial.textColor} ${
                     celestial.borderColor ? `border-[1.5px] ${celestial.borderColor}` : ""
                 } ${
                     celestial.hoverShadow ? `shadow-[0_12px_36px_-12px_rgba(249,115,22,0.08),0_4px_12px_rgba(0,0,0,0.02)] ${celestial.hoverShadow}` : ""
                 } backdrop-blur-3xl transition-all duration-500 z-30`}
             >
                 {/* Inner Overflow-Hidden Layer for Glow Orbs & Specular Highlight */}
-                <div className="pointer-events-none absolute inset-0 overflow-hidden rounded-xl sm:rounded-3xl">
+                <div className="pointer-events-none absolute inset-0 overflow-hidden rounded-2xl sm:rounded-3xl">
                     <div className="absolute inset-x-0 top-0 h-[1.5px] bg-gradient-to-r from-transparent via-white to-transparent" />
                     <div
                         style={celestial.customStyles?.orb1}
@@ -868,38 +777,38 @@ export default function DashboardContent() {
                     />
                 </div>
 
-                <div className="relative flex flex-col lg:flex-row lg:items-center justify-between gap-2.5 sm:gap-4 z-10">
+                <div className="relative flex flex-col lg:flex-row lg:items-center justify-between gap-3.5 sm:gap-4 z-10">
                     <div>
-                        <div className="flex items-center gap-1.5 sm:gap-2 mb-1 flex-wrap">
+                        <div className="flex items-center gap-1.5 sm:gap-2 mb-1.5 flex-wrap">
                             <span
                                 style={celestial.customStyles?.tag}
-                                className={`text-[9px] sm:text-[10.5px] font-extrabold uppercase tracking-widest px-2 sm:px-3 py-0.5 rounded-full border shadow-xs backdrop-blur-md transition-all duration-200 hover:scale-105 cursor-default ${celestial.tagColor}`}
+                                className={`text-[10px] sm:text-[10.5px] font-extrabold uppercase tracking-widest px-2.5 sm:px-3 py-0.5 rounded-full border shadow-xs backdrop-blur-md transition-all duration-200 hover:scale-105 cursor-default ${celestial.tagColor}`}
                             >
                                 {celestial.tag}
                             </span>
                             {selectedCompany?.companyName && (
-                                <span className={`text-[9px] sm:text-[10.5px] font-bold flex items-center gap-1 sm:gap-1.5 px-2 sm:px-3 py-0.5 rounded-full border shadow-xs transition-all duration-200 hover:scale-105 cursor-default ${celestial.isDark ? 'bg-indigo-900/60 text-sky-300 border-indigo-400/30' : 'bg-sky-500/10 text-sky-700 border-sky-400/30'}`}>
-                                    <FaBuilding size={8} className={celestial.isDark ? 'text-sky-400' : 'text-sky-600'} /> {selectedCompany.companyName}
+                                <span className={`text-[10px] sm:text-[10.5px] font-bold flex items-center gap-1 sm:gap-1.5 px-2.5 sm:px-3 py-0.5 rounded-full border shadow-xs transition-all duration-200 hover:scale-105 cursor-default ${celestial.isDark ? 'bg-indigo-900/60 text-sky-300 border-indigo-400/30' : 'bg-sky-500/10 text-sky-700 border-sky-400/30'}`}>
+                                    <FaBuilding size={9} className={celestial.isDark ? 'text-sky-400' : 'text-sky-600'} /> {selectedCompany.companyName}
                                 </span>
                             )}
                         </div>
-                        <h2 className="text-base sm:text-xl md:text-2xl font-black tracking-tight font-sans flex items-center gap-2 sm:gap-3">
+                        <h2 className="text-lg sm:text-xl md:text-2xl font-black tracking-tight font-sans flex items-center gap-2.5 sm:gap-3">
                             {celestial.icon}
                             <span>{celestial.greeting}</span>
                         </h2>
-                        <p className={`text-[10px] sm:text-xs font-medium mt-0.5 leading-snug sm:leading-normal ${celestial.subtextColor}`}>
+                        <p className={`text-[11px] sm:text-xs font-medium mt-1 leading-snug sm:leading-normal ${celestial.subtextColor}`}>
                             {celestial.subtitle}
                         </p>
                     </div>
 
-                    <div className="flex flex-wrap items-center gap-1.5 sm:gap-2.5">
+                    <div className="flex flex-wrap items-center gap-2 sm:gap-2.5">
                         {/* Banner Color & Theme Customizer Dropdown Popover */}
                         <div className="relative" ref={colorPickerRef}>
                             <button
                                 type="button"
                                 onClick={() => setShowColorPicker((prev) => !prev)}
                                 title="Customize banner color and theme"
-                                className={`flex items-center gap-1 sm:gap-1.5 px-2 sm:px-3 py-1 sm:py-1.5 rounded-lg sm:rounded-2xl backdrop-blur-xl border text-[10px] sm:text-xs shadow-xs transition-all duration-150 cursor-pointer ${
+                                className={`flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl sm:rounded-2xl backdrop-blur-xl border text-[11px] sm:text-xs shadow-xs hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 cursor-pointer ${
                                     showColorPicker
                                         ? "bg-slate-900 text-white border-slate-700 shadow-md ring-2 ring-indigo-500/40"
                                         : celestial.isDark
@@ -1234,158 +1143,105 @@ export default function DashboardContent() {
                             )}
                         </div>
 
-                        {/* Auto-Voice Greeting ON / OFF Toggle Button */}
-                        <button
-                            type="button"
-                            onClick={toggleVoice}
-                            title={voiceEnabled ? "Automatic Voice is ON (Click to turn OFF)" : "Automatic Voice is OFF (Click to turn ON)"}
-                            className={`flex items-center gap-1 sm:gap-1.5 px-2 sm:px-3 py-1 sm:py-1.5 rounded-lg sm:rounded-2xl backdrop-blur-xl border text-[10px] sm:text-xs shadow-xs transition-all duration-150 cursor-pointer ${
-                                voiceEnabled
-                                    ? celestial.isDark
-                                        ? "bg-white/15 hover:bg-white/20 border-white/25 text-white"
-                                        : "bg-white/90 hover:bg-white border-slate-200/80 text-slate-800"
-                                    : "bg-slate-100/90 dark:bg-slate-800/80 border-slate-200 dark:border-slate-700 text-slate-400 opacity-75"
-                            }`}
-                        >
-                            {voiceEnabled ? (
-                                <>
-                                    <FaVolumeUp size={10} className={`${isSpeaking ? "animate-bounce text-orange-500" : "text-emerald-600"}`} />
-                                    <span className="font-bold text-[10px] sm:text-[11px] flex items-center gap-1">
-                                        Voice: <span className="text-emerald-600 font-extrabold">ON</span>
-                                    </span>
-                                </>
-                            ) : (
-                                <>
-                                    <FaVolumeMute size={10} className="text-slate-400" />
-                                    <span className="font-bold text-[10px] sm:text-[11px] text-slate-400 flex items-center gap-1">
-                                        Voice: <span className="font-semibold">OFF</span>
-                                    </span>
-                                </>
-                            )}
-                        </button>
-
-                        {currentTime && (
-                            <div className={`flex items-center gap-1.5 sm:gap-2.5 px-2 sm:px-3.5 py-1 sm:py-1.5 rounded-lg sm:rounded-2xl backdrop-blur-xl border text-[10px] sm:text-xs shadow-xs transition-all duration-150 cursor-default max-w-full overflow-hidden ${celestial.isDark ? 'bg-white/10 hover:bg-white/15 border-white/20 text-white' : 'bg-white/90 hover:bg-white border-slate-200/80 text-slate-800'}`}>
-                                <div className={`flex items-center gap-1 sm:gap-1.5 ${celestial.isDark ? 'text-indigo-200' : 'text-slate-700'}`}>
-                                    <FaCalendarAlt size={9.5} className={celestial.isDark ? 'text-indigo-300 flex-shrink-0' : 'text-orange-500 flex-shrink-0'} />
-                                    <span className="font-bold text-[9.5px] sm:text-[11px] whitespace-nowrap">{formattedDate}</span>
-                                </div>
-                                <div className={`w-[1px] h-3 sm:h-3.5 ${celestial.isDark ? 'bg-white/20' : 'bg-slate-200'}`} />
-                                <div className="flex items-center gap-1 sm:gap-1.5 text-emerald-600 dark:text-emerald-400 font-mono font-extrabold tracking-wider">
-                                    <FaClock size={9.5} className="text-emerald-500 animate-pulse flex-shrink-0" />
-                                    <span className="text-[9.5px] sm:text-[11px] whitespace-nowrap">{formattedTime}</span>
-                                </div>
-                            </div>
-                        )}
-                        {selectedFY && (
-                            <div className={`flex items-center gap-1 sm:gap-1.5 px-2 sm:px-3.5 py-1 sm:py-1.5 rounded-lg sm:rounded-2xl backdrop-blur-xl border text-[10px] sm:text-xs shadow-xs transition-all duration-150 cursor-default max-w-full ${celestial.isDark ? 'bg-white/10 hover:bg-white/15 border-white/20 text-white' : 'bg-white/90 hover:bg-white border-slate-200/80 text-slate-800'}`}>
-                                <FaCalendarAlt size={9.5} className={celestial.isDark ? 'text-indigo-300 flex-shrink-0' : 'text-orange-500 flex-shrink-0'} />
-                                <span className="font-bold text-[9.5px] sm:text-[11px] truncate max-w-[170px] sm:max-w-none">FY: {selectedFY.fyName || "All"}</span>
-                            </div>
-                        )}
+                        <DashboardLiveClock isDark={celestial.isDark} />
                         <button
                             onClick={handleManualRefresh}
                             disabled={refreshing}
-                            className="group relative overflow-hidden flex items-center justify-center gap-1 sm:gap-2 px-2.5 sm:px-3.5 py-1 sm:py-1.5 rounded-lg sm:rounded-2xl bg-slate-900 hover:bg-slate-800 active:scale-95 transition-all duration-150 text-[10.5px] sm:text-xs font-bold text-white shadow-xs cursor-pointer disabled:opacity-70 disabled:cursor-not-allowed"
+                            className="group relative overflow-hidden flex items-center justify-center gap-1.5 sm:gap-2 px-3 sm:px-3.5 py-1.5 rounded-xl sm:rounded-2xl bg-slate-900 hover:bg-slate-800 active:scale-95 transition-all duration-200 text-[11px] sm:text-xs font-bold text-white shadow-[0_4px_12px_rgba(0,0,0,0.12),inset_0_1px_0_rgba(255,255,255,0.15)] hover:shadow-[0_6px_16px_rgba(0,0,0,0.18)] hover:-translate-y-0.5 cursor-pointer disabled:opacity-70 disabled:cursor-not-allowed"
                         >
+                            {/* Animated light-sweep reflection */}
                             <span className="absolute inset-0 -translate-x-full group-hover:translate-x-full bg-gradient-to-r from-transparent via-white/20 to-transparent transition-transform duration-700 pointer-events-none" />
-                            <FaSyncAlt size={9.5} className={`text-orange-400 ${refreshing ? "animate-spin" : "group-hover:rotate-180 transition-transform duration-500"}`} />
+                            <FaSyncAlt size={10.5} className={`text-orange-400 ${refreshing ? "animate-spin" : "group-hover:rotate-180 transition-transform duration-500"}`} />
                             <span className="whitespace-nowrap">{refreshing ? "Syncing..." : "Refresh"}</span>
                         </button>
-
-                        {/* Role View Mode Selector */}
-                        <div className="relative">
-                            <select
-                                value={dashboardViewMode}
-                                onChange={(e) => setDashboardViewMode(e.target.value as any)}
-                                title="Switch Dashboard View by Role"
-                                aria-label="Switch Dashboard View by Role"
-                                className="flex items-center gap-1 px-2 sm:px-2.5 py-1 sm:py-1.5 rounded-lg sm:rounded-2xl backdrop-blur-xl border border-slate-200/80 dark:border-slate-800 text-[10px] sm:text-[11px] font-bold bg-white/90 dark:bg-slate-900/90 text-slate-800 dark:text-slate-100 shadow-xs outline-none cursor-pointer hover:border-indigo-400"
-                            >
-                                <option value="auto">Role: {currentUser?.roleName || currentUser?.roleType || "Auto"}</option>
-                                <option value="executive">👑 Executive View</option>
-                                <option value="salesman">💼 Salesman / MR View</option>
-                                <option value="manager">📊 Manager View</option>
-                            </select>
-                        </div>
                     </div>
                 </div>
             </div>
 
-            {/* ==================== ROLE-BASED DASHBOARD SWITCHER ==================== */}
-            {effectiveView === "salesman" ? (
-                <SalesmanDashboard user={currentUser} selectedCompany={selectedCompany} />
-            ) : effectiveView === "manager" ? (
-                <ManagerDashboard user={currentUser} selectedCompany={selectedCompany} />
-            ) : (
-                <>
-            {/* Territory Restriction Banner for MRs */}
+            {/* ==================== MR TERRITORY BANNER ==================== */}
             {mrTerritoryInfo?.isMrRestricted && (
-                <div className="flex items-start gap-2.5 p-3 rounded-2xl bg-amber-500/10 dark:bg-amber-950/40 border border-amber-500/30 text-amber-900 dark:text-amber-200">
-                    <div className="p-1.5 rounded-xl bg-amber-500/20 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5">
+                <div className="flex items-start gap-2.5 sm:gap-3 rounded-2xl border border-amber-300/60 bg-amber-500/10 backdrop-blur-xl px-3.5 sm:px-4 py-2.5 sm:py-3 shadow-xs">
+                    <div className="flex-shrink-0 mt-0.5">
                         <FaMapMarkerAlt size={15} className="text-amber-500" />
                     </div>
                     <div className="flex-1 min-w-0">
                         <p className="text-xs font-semibold text-amber-800 dark:text-amber-300 mb-0.5">Territory Restricted View</p>
                         <p className="text-[11px] text-amber-700 dark:text-amber-400 leading-relaxed">
                             Aap sirf apni assigned territory ka dashboard data dekh sakte hain.
+                            {mrTerritoryInfo.territories.length > 0 && (
+                                <>
+                                    {" "}Assigned:
+                                    {" "}
+                                    {Array.from(
+                                        new Set(
+                                            mrTerritoryInfo.territories.map(
+                                                (t) => t.companyName || t.companyCode
+                                            )
+                                        )
+                                    ).join(", ")}
+                                </>
+                            )}
                         </p>
+                        {mrTerritoryInfo.territories.length > 0 && (
+                            <div className="flex flex-wrap gap-1.5 mt-1.5">
+                                {mrTerritoryInfo.territories.map((t, i) => (
+                                    <span
+                                        key={i}
+                                        className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-100 dark:bg-amber-950/80 text-amber-800 dark:text-amber-300 text-[10px] font-medium border border-amber-200 dark:border-amber-800"
+                                    >
+                                        <FaBuilding size={8} />
+                                        {t.companyName || t.companyCode}
+                                        {t.divisionName ? (
+                                            <>
+                                                {" "}<FaArrowRight size={7} className="opacity-50" />{" "}
+                                                {t.divisionName}
+                                            </>
+                                        ) : null}
+                                        {t.subDivisionName ? (
+                                            <>
+                                                {" "}<FaArrowRight size={7} className="opacity-50" />{" "}
+                                                {t.subDivisionName}
+                                            </>
+                                        ) : null}
+                                        {t.categoryName ? (
+                                            <>
+                                                {" "}<FaArrowRight size={7} className="opacity-50" />{" "}
+                                                {t.categoryName}
+                                            </>
+                                        ) : null}
+                                    </span>
+                                ))}
+                            </div>
+                        )}
                     </div>
                 </div>
             )}
 
-            {/* ==================== RESPONSIVE TAB NAVIGATION BAR ==================== */}
-            <div className="w-full">
-                <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 py-1">
+            {/* ==================== FLOATING CALM LUXURY GLASS TAB BAR (MOBILE SWIPEABLE RIBBON) ==================== */}
+            <div className="w-full overflow-x-auto no-scrollbar scroll-smooth -mx-1 px-1 sm:mx-0 sm:px-0">
+                <div className="inline-flex sm:flex sm:flex-wrap items-center gap-1.5 bg-white/80 dark:bg-slate-900/80 p-1.5 rounded-2xl border border-slate-200/80 dark:border-slate-800 backdrop-blur-2xl backdrop-saturate-180 shadow-xs min-w-max sm:min-w-0">
                     {tabs.map((tab) => {
                         const IconComponent = tab.icon;
                         const isActive = activeTab === tab.id;
                         return (
                             <button
                                 key={tab.id}
-                                type="button"
                                 onClick={() => setActiveTab(tab.id as TabType)}
-                                style={{
-                                    borderRadius: "9999px",
-                                    border: "none",
-                                    outline: "none",
-                                    backgroundColor: isActive ? "#0f172a" : "transparent",
-                                    color: isActive ? "#ffffff" : "#475569",
-                                    WebkitTapHighlightColor: "transparent",
-                                }}
                                 className={`
-                                    relative flex items-center gap-1.5 sm:gap-2 px-3 sm:px-3.5 py-1.5 sm:py-2 text-[11.5px] sm:text-xs md:text-[12.5px] font-semibold
-                                    transition-all duration-150 cursor-pointer whitespace-nowrap select-none min-h-[32px] sm:min-h-[36px]
+                                    relative flex items-center gap-1.5 sm:gap-2 px-3 sm:px-3.5 py-1.5 sm:py-2 rounded-xl text-xs font-semibold
+                                    transition-all duration-300 cursor-pointer border flex-shrink-0 whitespace-nowrap
                                     ${isActive
-                                        ? "bg-slate-900 dark:bg-white text-white dark:text-slate-900 shadow-sm sm:shadow-md scale-[1.01]"
-                                        : "bg-transparent text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800/60 active:bg-slate-200/60 dark:active:bg-slate-700/60"
+                                        ? "bg-slate-900 dark:bg-white text-white dark:text-slate-900 border-transparent shadow-md scale-[1.02]"
+                                        : "text-slate-600 dark:text-slate-400 border-transparent hover:text-slate-900 dark:hover:text-white hover:bg-slate-100/70 dark:hover:bg-slate-800/60"
                                     }
                                 `}
                             >
-                                <IconComponent
-                                    size={12}
-                                    className={`sm:w-3.5 sm:h-3.5 flex-shrink-0 ${isActive ? "text-amber-400 dark:text-amber-500" : "text-slate-400 dark:text-slate-500"}`}
-                                    style={{ color: isActive ? "#fbbf24" : undefined }}
-                                />
-                                <span
-                                    className={`font-semibold tracking-tight ${isActive ? "text-white dark:text-slate-900" : "text-slate-700 dark:text-slate-300"}`}
-                                    style={{ color: isActive ? (typeof window !== "undefined" && document.documentElement.classList.contains("dark") ? "#0f172a" : "#ffffff") : undefined }}
-                                >
-                                    {tab.label}
-                                </span>
-                                <span
-                                    style={{
-                                        borderRadius: "9999px",
-                                        border: "none",
-                                        backgroundColor: isActive ? "#f97316" : "#e2e8f0",
-                                        color: isActive ? "#ffffff" : "#475569",
-                                    }}
-                                    className={`px-1.5 sm:px-2 py-0.5 text-[8px] sm:text-[9px] font-bold transition-colors ${
-                                        isActive
-                                            ? "bg-orange-500 text-white shadow-xs"
-                                            : "bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300"
-                                    }`}
-                                >
+                                <IconComponent size={13} className={isActive ? "text-orange-400 dark:text-orange-500" : "opacity-70"} />
+                                <span>{tab.label}</span>
+                                <span className={`px-1.5 py-0.2 rounded-full text-[9px] font-bold ${isActive
+                                    ? "bg-orange-500 text-white"
+                                    : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400"
+                                    }`}>
                                     {tab.badge}
                                 </span>
                             </button>
@@ -1431,41 +1287,49 @@ export default function DashboardContent() {
             ) : (
                 <>
                     {/* TAB 1: EXECUTIVE OVERVIEW */}
-                    <div className={`flex flex-col gap-5 ${activeTab === "overview" ? "" : "hidden"}`}>
-                        <LiquidMeters kpis={data?.kpis} analytics={data?.analytics} />
-                        <KPICards kpis={data?.kpis} />
-                        <DashboardCharts charts={data?.charts} />
-                        <AnalyticsCards analytics={data?.analytics} />
-                    </div>
+                    {activeTab === "overview" && (
+                        <>
+                            <LiquidMeters kpis={data?.kpis} analytics={data?.analytics} />
+                            <KPICards kpis={data?.kpis} />
+                            <DashboardCharts charts={data?.charts} />
+                            <AnalyticsCards analytics={data?.analytics} />
+                        </>
+                    )}
 
                     {/* TAB 2: SALES & REVENUE */}
-                    <div className={`flex flex-col gap-5 ${activeTab === "sales" ? "" : "hidden"}`}>
-                        <KPICards kpis={data?.kpis} />
-                        <DashboardCharts charts={data?.charts} />
-                    </div>
+                    {activeTab === "sales" && (
+                        <>
+                            <KPICards kpis={data?.kpis} />
+                            <DashboardCharts charts={data?.charts} />
+                        </>
+                    )}
 
                     {/* TAB 3: INVENTORY & EXPIRY */}
-                    <div className={`flex flex-col gap-5 ${activeTab === "inventory" ? "" : "hidden"}`}>
-                        <LiquidMeters kpis={data?.kpis} analytics={data?.analytics} />
-                        <KPICards kpis={data?.kpis} />
-                        <DashboardCharts charts={data?.charts} />
-                    </div>
+                    {activeTab === "inventory" && (
+                        <>
+                            <LiquidMeters kpis={data?.kpis} analytics={data?.analytics} />
+                            <KPICards kpis={data?.kpis} />
+                            <DashboardCharts charts={data?.charts} />
+                        </>
+                    )}
 
                     {/* TAB 4: CREDIT & RECEIVABLES */}
-                    <div className={`flex flex-col gap-5 ${activeTab === "credit" ? "" : "hidden"}`}>
-                        <LiquidMeters kpis={data?.kpis} analytics={data?.analytics} />
-                        <KPICards kpis={data?.kpis} />
-                        <CreditDashboardCharts charts={data?.charts} />
-                    </div>
+                    {activeTab === "credit" && (
+                        <>
+                            <LiquidMeters kpis={data?.kpis} analytics={data?.analytics} />
+                            <KPICards kpis={data?.kpis} />
+                            <CreditDashboardCharts charts={data?.charts} />
+                        </>
+                    )}
 
                     {/* TAB 5: PURCHASE & VENDORS */}
-                    <div className={`flex flex-col gap-5 ${activeTab === "purchase" ? "" : "hidden"}`}>
-                        <KPICards kpis={data?.kpis} />
-                        <PurchaseDashboardCharts charts={data?.charts} />
-                        <AnalyticsCards analytics={data?.analytics} />
-                    </div>
-                </>
-            )}
+                    {activeTab === "purchase" && (
+                        <>
+                            <KPICards kpis={data?.kpis} />
+                            <PurchaseDashboardCharts charts={data?.charts} />
+                            <AnalyticsCards analytics={data?.analytics} />
+                        </>
+                    )}
                 </>
             )}
         </div>

@@ -234,6 +234,14 @@ export default function UsersTable({ users }: { users: any[] }) {
                                             </PermissionButton>
 
                                             <Link
+                                                href={`/dashboard/users/assignment`}
+                                                className="px-2.5 py-1 rounded-lg text-xs font-medium text-white bg-teal-600 hover:bg-teal-700 transition-colors whitespace-nowrap"
+                                                title="Assign Reporting Manager, Products, and Parties"
+                                            >
+                                                Assign Scope
+                                            </Link>
+
+                                            <Link
                                                 href={`/dashboard/users/permission/${user._id}`}
                                                 className="px-3 py-1 rounded-lg text-xs font-medium text-white bg-indigo-500/90 hover:bg-indigo-500 transition-colors"
                                             >

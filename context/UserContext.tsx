@@ -13,8 +13,23 @@ import { SESSION_CHECK_INTERVAL_MS } from "@/lib/constants/session.constant";
 const UserContext = createContext<any>(null);
 
 export function UserProvider({ children }: { children: React.ReactNode }) {
-  const [user, setUser] = useState<any>(null);
-  const [loading, setLoading] = useState(true);
+  const [user, setUser] = useState<any>(() => {
+    if (typeof window !== "undefined") {
+      try {
+        const saved = localStorage.getItem("mabsol_user");
+        if (saved) return JSON.parse(saved);
+      } catch {}
+    }
+    return null;
+  });
+  const [loading, setLoading] = useState<boolean>(() => {
+    if (typeof window !== "undefined") {
+      try {
+        return !localStorage.getItem("mabsol_user");
+      } catch {}
+    }
+    return true;
+  });
   const loadStarted = useRef(false);
   const userRef = useRef<any>(null);
   userRef.current = user;
@@ -26,17 +41,16 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
       console.error("Logout failed:", e);
     }
     setUser(null);
-    if (typeof window !== "undefined" && window.location.pathname.startsWith("/dashboard")) {
-      window.location.href = "/login";
+    if (typeof window !== "undefined") {
+      localStorage.removeItem("mabsol_user");
+      if (window.location.pathname.startsWith("/dashboard")) {
+        window.location.href = "/login";
+      }
     }
   }, []);
 
   const loadUser = useCallback(async (isBackground = false) => {
     try {
-      if (!isBackground) {
-        setLoading(true);
-      }
-      // Add timestamp and no-cache headers to prevent browser response caching
       const res = await fetch(`/api/auth/me?_t=${Date.now()}`, {
         cache: "no-store",
         headers: {
@@ -59,10 +73,25 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
 
       const data = await res.json();
 
-      if (data.success && data.user) {
-        setUser((prevUser: any) => {
-          if (prevUser && JSON.stringify(prevUser) === JSON.stringify(data.user)) {
-            return prevUser;
+      if (res.ok && data.success && data.user) {
+        setUser((prev: any) => {
+          // Compare essential fields to prevent unnecessary reference re-renders
+          if (
+            prev &&
+            prev._id === data.user._id &&
+            prev.email === data.user.email &&
+            prev.role === data.user.role &&
+            prev.roleType === data.user.roleType &&
+            prev.name === data.user.name &&
+            String(prev.companyId) === String(data.user.companyId) &&
+            prev.updatedAt === data.user.updatedAt
+          ) {
+            return prev; // Same reference -> NO re-render!
+          }
+          if (typeof window !== "undefined") {
+            try {
+              localStorage.setItem("mabsol_user", JSON.stringify(data.user));
+            } catch {}
           }
           return data.user;
         });

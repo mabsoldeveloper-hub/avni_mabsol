@@ -108,7 +108,9 @@ export async function POST(req: NextRequest) {
       isMultiStep: !!isMultiStep,
       steps: Array.isArray(steps) ? steps : [],
       conditions: Array.isArray(conditions) ? conditions : [],
-      accessMode: accessMode || "Internal",
+      accessMode: ["Internal", "Public", "PasswordProtected"].includes(accessMode)
+        ? accessMode
+        : (String(accessMode || "").toLowerCase().includes("public") ? "Public" : (String(accessMode || "").toLowerCase().includes("password") ? "PasswordProtected" : "Internal")),
       accessPin: accessPin || "",
       approvalWorkflow: approvalWorkflow || { enabled: false, approverRole: "Admin" },
       autoMasterSync: autoMasterSync || { enabled: false, targetModel: "" },

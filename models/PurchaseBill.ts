@@ -4,6 +4,7 @@ const PurchaseBillItemSchema = new Schema({
   productId: { type: String },
   productCode: { type: String },
   productName: { type: String, required: true },
+  companyName: { type: String, default: "" },
   hsnCode: { type: String, default: "" },
   batchNo: { type: String, default: "BATCH-01" },
   expDate: { type: String, default: "" }, // MM/YY or YYYY-MM
@@ -14,10 +15,13 @@ const PurchaseBillItemSchema = new Schema({
   unit: { type: String, default: "Box" },
   rate: { type: Number, required: true, default: 0 },
   discountPercent: { type: Number, default: 0 },
+  schemeDiscountPercent: { type: Number, default: 0 },
   gstPercent: { type: Number, default: 12 },
   taxableAmount: { type: Number, default: 0 },
   gstAmount: { type: Number, default: 0 },
   total: { type: Number, default: 0 },
+  location: { type: String, default: "" },
+  itemRemark: { type: String, default: "" },
 });
 
 const PurchaseBillSchema = new Schema(
@@ -55,5 +59,9 @@ const PurchaseBillSchema = new Schema(
   },
   { timestamps: true }
 );
+
+if (process.env.NODE_ENV === "development" && mongoose.models && mongoose.models.PurchaseBill) {
+  delete (mongoose.models as any).PurchaseBill;
+}
 
 export default mongoose.models.PurchaseBill || mongoose.model("PurchaseBill", PurchaseBillSchema);

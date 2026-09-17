@@ -139,12 +139,12 @@ export default function CustomerOverview({ customer }: Props) {
       {/* ==================== 1. BASIC & ACCOUNT GROUP INFO ==================== */}
       <Section title="Basic & Account Group Info" tone="indigo" icon={<FaInfoCircle size={14} />}>
         <Field label="Party Name" value={show(customer.PARNAM)} />
-        <Field label="Party Code" value={show(customer.CODEP || customer.ORDNO)} copyable />
+        {/* <Field label="Party Code" value={show(customer.CODEP || customer.ORDNO)} copyable />
         <Field label="Group Name" value={show(customer.GROUPNAME)} />
         <Field label="Group Code" value={show(customer.SCODE || customer.GROUPCODE)} />
         <Field label="Main Group" value={show(customer.MAINGROUP)} />
         <Field label="Parent Group" value={show(customer.PARENTGROUP)} />
-        <Field label="Order Number" value={show(customer.ORDNO)} />
+        <Field label="Order Number" value={show(customer.ORDNO)} /> */}
         <Field
           label="Applicable Rate / Price List"
           value={
@@ -153,18 +153,18 @@ export default function CustomerOverview({ customer }: Props) {
                 {String(customer.PRICE).trim().toUpperCase() === "RATEA"
                   ? "Rate A"
                   : String(customer.PRICE).trim().toUpperCase() === "RATEB"
-                  ? "Rate B"
-                  : String(customer.PRICE).trim().toUpperCase() === "RATEC"
-                  ? "Rate C"
-                  : String(customer.PRICE).trim().toUpperCase() === "RATED"
-                  ? "Rate D"
-                  : String(customer.PRICE).trim().toUpperCase() === "RATEE"
-                  ? "Rate E"
-                  : String(customer.PRICE).trim().toUpperCase() === "RATEF"
-                  ? "Rate F (Sale Rate)"
-                  : String(customer.PRICE).trim().toUpperCase() === "RATEG"
-                  ? "Rate G"
-                  : String(customer.PRICE)}
+                    ? "Rate B"
+                    : String(customer.PRICE).trim().toUpperCase() === "RATEC"
+                      ? "Rate C"
+                      : String(customer.PRICE).trim().toUpperCase() === "RATED"
+                        ? "Rate D"
+                        : String(customer.PRICE).trim().toUpperCase() === "RATEE"
+                          ? "Rate E"
+                          : String(customer.PRICE).trim().toUpperCase() === "RATEF"
+                            ? "Rate F (Sale Rate)"
+                            : String(customer.PRICE).trim().toUpperCase() === "RATEG"
+                              ? "Rate G"
+                              : String(customer.PRICE)}
               </span>
             ) : (
               "-"
@@ -229,11 +229,11 @@ export default function CustomerOverview({ customer }: Props) {
         <Field label="Area Sales Manager (ASM)" value={show(customer.ASM)} />
         <Field label="Regional Sales Manager (RSM)" value={show(customer.RSM)} />
         <Field label="Company / Division" value={show(customer.COMPANY)} />
-        <Field label="Territory Code" value={show(customer.GCODE)} />
+        {/* <Field label="Territory Code" value={show(customer.GCODE)} /> */}
       </Section>
 
       {/* ==================== 6. RAW / ADDITIONAL DATA INSPECTOR ==================== */}
-      <div className="mt-4 mb-6">
+      {/* <div className="mt-4 mb-6">
         <button
           onClick={() => setShowRawInspector(!showRawInspector)}
           className="w-full flex items-center justify-between px-4 py-3 rounded-2xl bg-white/60 backdrop-blur-xl border border-white/50 shadow-[0_4px_20px_rgba(52,56,114,0.06)] hover:bg-white/80 transition-all text-xs font-bold text-slate-700 cursor-pointer"
@@ -262,7 +262,7 @@ export default function CustomerOverview({ customer }: Props) {
             </div>
           </div>
         )}
-      </div>
+      </div> */}
     </>
   );
 }

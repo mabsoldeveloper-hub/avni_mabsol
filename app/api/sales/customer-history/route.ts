@@ -4,6 +4,7 @@ import SalesMdis from "@/models/SalesMdis";
 import SalesDis from "@/models/SalesDis";
 import Pendings from "@/models/Pendings";
 import Customer from "@/models/Customer";
+import { getMrTerritoryRestriction } from "@/lib/mrTerritoryHelper";
 
 export const dynamic = "force-dynamic";
 
@@ -32,6 +33,10 @@ export async function GET(req: Request) {
 
     const codeUpper = rawCode.toUpperCase();
 
+    // Hierarchy access check: a user may only view history for parties
+    // assigned to the user or anyone in the user's accessible downline.
+    const restriction = await getMrTerritoryRestriction();
+
     // 1. Fetch Customer Master to get matching CODEP / ORDNO variants & balance
     const customer: any = await Customer.findOne({
       $or: [
@@ -41,6 +46,20 @@ export async function GET(req: Request) {
         { ORDNO: new RegExp(`^${rawCode}$`, "i") },
       ],
     }).lean();
+
+    if (!customer) {
+      return NextResponse.json(
+        { success: false, message: "Customer not found" },
+        { status: 404 }
+      );
+    }
+
+    if (!restriction.isPartyAllowed(customer)) {
+      return NextResponse.json(
+        { success: false, message: "Customer history not found" },
+        { status: 404 }
+      );
+    }
 
     const codeVariants = Array.from(
       new Set(

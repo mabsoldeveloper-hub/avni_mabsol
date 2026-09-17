@@ -34,14 +34,39 @@ export async function GET(req: NextRequest) {
 
         const restriction = await getMrTerritoryRestriction();
 
-        // 1. Fetch party map (Customer + Order)
+        // 1. Fetch party map (Customer + Order) within the current hierarchy.
+        // Restricted users must never receive another user's party master data.
+        let hierarchyPartyFilter: any = {};
+        if (restriction.isMrRestricted) {
+            const allowedOrdnos = (restriction.allowedOrdnos || [])
+                .map((v: any) => String(v).trim())
+                .filter(Boolean);
+
+            if (allowedOrdnos.length === 0) {
+                hierarchyPartyFilter = { _id: null };
+            } else {
+                const partyKeys: any[] = [];
+                for (const value of allowedOrdnos) {
+                    partyKeys.push(value);
+                    if (!isNaN(Number(value))) partyKeys.push(Number(value));
+                }
+                hierarchyPartyFilter = {
+                    $or: [
+                        { ORDNO: { $in: partyKeys } },
+                        { CODEP: { $in: partyKeys } },
+                        { SCODE: { $in: partyKeys } },
+                    ],
+                };
+            }
+        }
+
         const [orders, mainCustomers] = await Promise.all([
-            Order.find(combineFilters(companyVfpMatch), {
+            Order.find(combineFilters(companyVfpMatch, hierarchyPartyFilter), {
                 ORDNO: 1, CODEP: 1, SCODE: 1, PARNAM: 1, NAME: 1, CITY: 1,
                 AREA: 1, ROUT: 1, ROUTE: 1, COMPANY: 1, DIVISION: 1, DSM: 1,
                 SALESMAN: 1, PHONE: 1, MOBILE: 1, GSTIN: 1, GST: 1,
             }).lean(),
-            Customer.find(combineFilters(companyVfpMatch), {
+            Customer.find(combineFilters(companyVfpMatch, hierarchyPartyFilter), {
                 ORDNO: 1, CODEP: 1, SCODE: 1, PARNAM: 1, NAME: 1, CITY: 1,
                 AREA: 1, ROUT: 1, ROUTE: 1, COMPANY: 1, DIVISION: 1, DSM: 1,
                 SALESMAN: 1, PHONE: 1, MOBILE: 1, GSTIN: 1, GST: 1, GSTNO: 1,
@@ -101,8 +126,26 @@ export async function GET(req: NextRequest) {
 
         let filter: any = combineFilters(companyVfpMatch, debitNoteTypeFilter);
 
-        if (restriction.isMrRestricted && restriction.allowedOrdnos && restriction.allowedOrdnos.length > 0) {
-            filter = combineFilters(filter, { CODEP: { $in: restriction.allowedOrdnos } });
+        if (restriction.isMrRestricted) {
+            const allowedOrdnos = (restriction.allowedOrdnos || [])
+                .map((v: any) => String(v).trim())
+                .filter(Boolean);
+
+            if (allowedOrdnos.length === 0) {
+                filter = combineFilters(filter, { _id: null });
+            } else {
+                const partyKeys: any[] = [];
+                for (const value of allowedOrdnos) {
+                    partyKeys.push(value);
+                    if (!isNaN(Number(value))) partyKeys.push(Number(value));
+                }
+                filter = combineFilters(filter, {
+                    $or: [
+                        { CODEP: { $in: partyKeys } },
+                        { CODE: { $in: partyKeys } },
+                    ],
+                });
+            }
         }
 
         const effStart = startDate || fyRange.startDate;
@@ -241,16 +284,38 @@ export async function GET(req: NextRequest) {
         });
 
         // 5. Query web-created PurchaseReturn documents from MongoDB
+        // PurchaseReturn is a vendor-side document. Restrict vendorCode to the
+        // current hierarchy for non-admin users and fail closed when no party
+        // assignment is available.
         let prQuery: any = {};
+        if (restriction.isMrRestricted) {
+            const allowedOrdnos = (restriction.allowedOrdnos || [])
+                .map((v: any) => String(v).trim())
+                .filter(Boolean);
+            if (allowedOrdnos.length === 0) {
+                prQuery = { _id: null };
+            } else {
+                const vendorKeys: any[] = [];
+                for (const value of allowedOrdnos) {
+                    vendorKeys.push(value);
+                    if (!isNaN(Number(value))) vendorKeys.push(Number(value));
+                }
+                prQuery.vendorCode = { $in: vendorKeys };
+            }
+        }
+        prQuery = combineFilters(prQuery, companyVfpMatch);
+
         if (search) {
             const searchRegex = new RegExp(search.replace(/[-[\]{}()*+?.,\\^$|#\s]/g, "\\$&"), "i");
-            prQuery.$or = [
-                { vcn: searchRegex },
-                { vendorName: searchRegex },
-                { vendorCode: searchRegex },
-                { originalBillNo: searchRegex },
-                { reason: searchRegex },
-            ];
+            prQuery = combineFilters(prQuery, {
+                $or: [
+                    { vcn: searchRegex },
+                    { vendorName: searchRegex },
+                    { vendorCode: searchRegex },
+                    { originalBillNo: searchRegex },
+                    { reason: searchRegex },
+                ],
+            });
         }
 
         const prDocs = await PurchaseReturn.find(prQuery).sort({ returnDate: -1, createdAt: -1 }).lean();

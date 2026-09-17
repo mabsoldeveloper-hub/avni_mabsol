@@ -62,6 +62,9 @@ export default function PurchaseSalesDashboard() {
       } else {
         params.set("companyId", "ALL");
       }
+
+
+      
       params.set("fyId", filters.fyId || "ALL");
       params.set("paymentStatus", filters.paymentStatus || "ALL");
       params.set("category", filters.category || "ALL");

@@ -2,18 +2,72 @@ import PermissionButton from "@/components/PermissionButton";
 import ProtectedPage from "@/components/ProtectedPage";
 import UsersTable from "@/components/UsersTable";
 import Link from "next/link";
+import { cookies } from "next/headers";
+
+type UsersApiResponse = {
+  success?: boolean;
+  users?: any[];
+  hierarchy?: {
+    currentUserId?: string;
+    currentRole?: string;
+    isAdmin?: boolean;
+    totalAccessibleUsers?: number;
+  };
+  error?: string;
+};
 
 async function getUsers() {
-  const res = await fetch("http://localhost:3000/api/users", {
-    cache: "no-store",
-  });
+  try {
+    /*
+     * IMPORTANT:
+     * This page is a Server Component.
+     * When the server calls /api/users internally, the browser's
+     * authentication cookie is NOT automatically forwarded.
+     *
+     * /api/users uses getCurrentUser(), which reads the "token" cookie.
+     * Therefore we explicitly forward the token cookie here.
+     */
+    const cookieStore = await cookies();
+    const token = cookieStore.get("token")?.value || "";
 
-  const data = await res.json();
-  return data.users;
+    const res = await fetch("http://localhost:3000/api/users", {
+      method: "GET",
+      headers: {
+        ...(token ? { Cookie: `token=${token}` } : {}),
+      },
+      cache: "no-store",
+    });
+
+    const data: UsersApiResponse = await res.json();
+
+    if (!res.ok || !data?.success) {
+      console.error(
+        "GET /api/users failed:",
+        data?.error || res.statusText
+      );
+
+      return {
+        users: [],
+        hierarchy: null,
+      };
+    }
+
+    return {
+      users: Array.isArray(data.users) ? data.users : [],
+      hierarchy: data.hierarchy || null,
+    };
+  } catch (error) {
+    console.error("Users page: failed to load users:", error);
+
+    return {
+      users: [],
+      hierarchy: null,
+    };
+  }
 }
 
 export default async function UsersPage() {
-  const users = await getUsers();
+  const { users, hierarchy } = await getUsers();
 
   return (
     <ProtectedPage permission="users.view">
@@ -24,8 +78,22 @@ export default async function UsersPage() {
         }}
       >
         <div className="card-body">
-          <div className="d-flex justify-content-between align-items-center mb-4">
-            <h3>Users Management</h3>
+          <div className="d-flex justify-content-between align-items-center mb-3">
+            <div>
+              <h3 className="mb-1">Users Management</h3>
+
+              {hierarchy && (
+                <div className="text-muted small">
+                  <span className="fw-semibold">
+                    {hierarchy.currentRole || "User"}
+                  </span>
+                  {" • "}
+                  {hierarchy.isAdmin
+                    ? "All users"
+                    : `${hierarchy.totalAccessibleUsers || 0} users in your hierarchy`}
+                </div>
+              )}
+            </div>
 
             <PermissionButton permission="users.create">
               <Link

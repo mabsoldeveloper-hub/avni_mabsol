@@ -45,11 +45,16 @@ import {
   FaCalendarTimes,
   FaSmile,
   FaTextHeight,
+  FaBookOpen,
+  FaColumns,
+  FaBolt,
+  FaInfoCircle,
 } from "react-icons/fa";
 import DynamicFormRenderer from "./DynamicFormRenderer";
 import ConditionalLogicEditor from "./ConditionalLogicEditor";
 import PharmaTemplatesModal from "./PharmaTemplatesModal";
 import AiFormStudioModal from "./AiFormStudioModal";
+import BuilderGuideModal from "./BuilderGuideModal";
 
 export interface FormFieldConfig {
   id: string;
@@ -220,6 +225,82 @@ export default function FormBuilder({ initialData, isEditMode = false }: FormBui
   const [selectedTableCategory, setSelectedTableCategory] = useState("All");
   const [showPharmaModal, setShowPharmaModal] = useState(false);
   const [showAiModal, setShowAiModal] = useState(false);
+  const [showGuideModal, setShowGuideModal] = useState(false);
+  const [isSplitPreview, setIsSplitPreview] = useState(false);
+
+  const addQuickStarterFields = () => {
+    if (!title) setTitle("Doctor Field Visit & Discussion Report");
+    if (!description) setDescription("Daily MR field reporting for doctor detailing, samples, and digital signoff.");
+    setCategory("Field Work");
+
+    const starters: FormFieldConfig[] = [
+      {
+        id: `field_${Date.now()}_1`,
+        key: "doctor_name",
+        label: "Doctor / Chemist Name",
+        type: "text",
+        required: true,
+        placeholder: "e.g. Dr. Rajesh Sharma, MD",
+        order: 0,
+        section: "Visit Details",
+        helpText: "Enter the full name of the doctor or chemist visited.",
+      },
+      {
+        id: `field_${Date.now()}_2`,
+        key: "visit_date",
+        label: "Visit Date",
+        type: "date",
+        required: true,
+        order: 1,
+        section: "Visit Details",
+      },
+      {
+        id: `field_${Date.now()}_3`,
+        key: "work_type",
+        label: "Work Type",
+        type: "select",
+        required: true,
+        options: ["Independent Field Work", "Joint Work with Manager", "RCPA Survey", "Hospital Call"],
+        order: 2,
+        section: "Visit Details",
+      },
+      {
+        id: `field_${Date.now()}_4`,
+        key: "discussion_summary",
+        label: "Discussion & Product Detailing",
+        type: "textarea",
+        required: false,
+        placeholder: "Key points discussed regarding brand efficacy, sample feedback, or competitor activities...",
+        order: 3,
+        section: "Visit Details",
+      },
+      {
+        id: `field_${Date.now()}_5`,
+        key: "gps_location",
+        label: "MR Field GPS Stamp",
+        type: "gps",
+        required: true,
+        order: 4,
+        section: "Field Audit & Verification",
+        helpText: "Captures live GPS coordinates to verify physical clinic visit.",
+      },
+      {
+        id: `field_${Date.now()}_6`,
+        key: "doctor_signature",
+        label: "Doctor Digital E-Signature",
+        type: "signature",
+        required: false,
+        order: 5,
+        section: "Field Audit & Verification",
+        helpText: "Capture doctor's touchscreen or mouse signature acknowledgment.",
+      },
+    ];
+    setFields(starters);
+    pushHistory(starters);
+    setExpandedFields(new Set([starters[0].id]));
+    setSuccessMsg("✨ Loaded 6 standard Pharma Visit fields into canvas!");
+    setTimeout(() => setSuccessMsg(""), 3000);
+  };
 
   const toggleFieldExpand = (id: string) => {
     setExpandedFields((prev) => {
@@ -230,19 +311,36 @@ export default function FormBuilder({ initialData, isEditMode = false }: FormBui
     });
   };
 
-  const handleApplyAiSchema = (schema: any) => {
+  const handleApplyAiSchema = (schema: any, meta?: any) => {
     if (schema.title) setTitle(schema.title);
     if (schema.description) setDescription(schema.description);
     if (schema.category) setCategory(schema.category);
-    if (schema.accessMode) setAccessMode(schema.accessMode);
+    if (schema.accessMode) {
+      const raw = String(schema.accessMode).trim().toLowerCase();
+      if (raw.includes("public")) {
+        setAccessMode("Public");
+      } else if (raw.includes("password") || raw.includes("pin") || raw.includes("protected")) {
+        setAccessMode("PasswordProtected");
+      } else {
+        setAccessMode("Internal");
+      }
+    }
     if (Array.isArray(schema.fields) && schema.fields.length > 0) {
       setFields(schema.fields);
     }
     if (Array.isArray(schema.conditions)) {
       setConditions(schema.conditions);
     }
-    setSuccessMsg("✨ AI Form Schema successfully loaded into Builder!");
-    setTimeout(() => setSuccessMsg(""), 3000);
+    if (meta?.warning || meta?.source === "fallback") {
+      setSuccessMsg(
+        `⚠️ Form schema loaded via Offline Engine (${meta?.warning?.title || "Gemini Free Quota Busy"}). You can edit and save normally!`
+      );
+    } else {
+      setSuccessMsg(
+        `✨ Form schema successfully designed by Google ${meta?.model || "Gemini AI"} and loaded into canvas!`
+      );
+    }
+    setTimeout(() => setSuccessMsg(""), 6000);
   };
 
   useEffect(() => {
@@ -379,6 +477,11 @@ export default function FormBuilder({ initialData, isEditMode = false }: FormBui
 
     try {
       setSaving(true);
+      const validModes = ["Internal", "Public", "PasswordProtected"];
+      const safeAccessMode = validModes.includes(accessMode)
+        ? accessMode
+        : (String(accessMode).toLowerCase().includes("public") ? "Public" : "Internal");
+
       const payload = {
         title,
         description,
@@ -386,7 +489,7 @@ export default function FormBuilder({ initialData, isEditMode = false }: FormBui
         status,
         fields,
         conditions,
-        accessMode,
+        accessMode: safeAccessMode,
         accessPin,
         approvalWorkflow: { enabled: approvalEnabled, approverRole },
         autoMasterSync: { enabled: autoMasterSyncEnabled, targetModel },
@@ -434,20 +537,20 @@ export default function FormBuilder({ initialData, isEditMode = false }: FormBui
   return (
     <div className="space-y-6">
       {/* Top Header Bar */}
-      <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-800 dark:text-slate-100 flex items-center gap-3">
-            <FaSlidersH className="text-indigo-600 dark:text-indigo-400" />
-            {isEditMode ? "Edit Enterprise Dynamic Form" : "Create Enterprise Dynamic Form"}
+      <div className="bg-white dark:bg-slate-800 p-4 sm:p-6 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700 flex flex-col xl:flex-row items-start xl:items-center justify-between gap-4">
+        <div className="w-full xl:w-auto">
+          <h1 className="text-xl sm:text-2xl font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2.5 sm:gap-3">
+            <FaSlidersH className="text-indigo-600 dark:text-indigo-400 shrink-0 text-lg sm:text-2xl" />
+            <span className="truncate">{isEditMode ? "Edit Enterprise Dynamic Form" : "Create Enterprise Dynamic Form"}</span>
           </h1>
-          <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
+          <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-1">
             Build dynamic forms, visual IF/THEN rules, public shareable links, and approval workflows.
           </p>
         </div>
 
-        <div className="flex items-center gap-2 flex-wrap">
+        <div className="flex items-center gap-2 flex-wrap w-full xl:w-auto justify-start xl:justify-end">
           {/* Navigation Tabs */}
-          <div className="bg-slate-100 dark:bg-slate-700 p-1 rounded-xl flex items-center text-xs font-semibold overflow-x-auto gap-0.5">
+          <div className="bg-slate-100 dark:bg-slate-700 p-1 rounded-xl flex items-center text-xs font-semibold overflow-x-auto max-w-full gap-0.5 scrollbar-none shrink-0">
             {([
               { key: "builder",  icon: <FaSlidersH />,    label: "Designer",          color: "text-indigo-600 dark:text-indigo-400" },
               { key: "logic",    icon: <FaExchangeAlt />, label: `Logic (${conditions.length})`, color: "text-violet-600 dark:text-violet-400" },
@@ -458,7 +561,7 @@ export default function FormBuilder({ initialData, isEditMode = false }: FormBui
               <button
                 key={tab.key}
                 onClick={() => setActiveTab(tab.key)}
-                className={`px-3 py-2 rounded-lg transition-all flex items-center gap-1.5 whitespace-nowrap ${
+                className={`px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-lg transition-all flex items-center gap-1.5 whitespace-nowrap text-xs ${
                   activeTab === tab.key
                     ? `bg-white dark:bg-slate-800 ${tab.color} shadow-sm`
                     : "text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-slate-100"
@@ -470,12 +573,12 @@ export default function FormBuilder({ initialData, isEditMode = false }: FormBui
           </div>
 
           {/* Undo / Redo */}
-          <div className="flex items-center gap-1 bg-slate-100 dark:bg-slate-700 p-1 rounded-xl">
+          <div className="flex items-center gap-1 bg-slate-100 dark:bg-slate-700 p-1 rounded-xl shrink-0">
             <button
               onClick={handleUndo}
               disabled={!canUndo}
               title="Undo (Ctrl+Z)"
-              className="p-2 rounded-lg text-slate-500 dark:text-slate-400 hover:bg-white dark:hover:bg-slate-600 hover:text-slate-800 dark:hover:text-slate-100 disabled:opacity-30 transition-all"
+              className="p-1.5 sm:p-2 rounded-lg text-slate-500 dark:text-slate-400 hover:bg-white dark:hover:bg-slate-600 hover:text-slate-800 dark:hover:text-slate-100 disabled:opacity-30 transition-all"
             >
               <FaUndo className="text-xs" />
             </button>
@@ -483,22 +586,46 @@ export default function FormBuilder({ initialData, isEditMode = false }: FormBui
               onClick={handleRedo}
               disabled={!canRedo}
               title="Redo (Ctrl+Y)"
-              className="p-2 rounded-lg text-slate-500 dark:text-slate-400 hover:bg-white dark:hover:bg-slate-600 hover:text-slate-800 dark:hover:text-slate-100 disabled:opacity-30 transition-all"
+              className="p-1.5 sm:p-2 rounded-lg text-slate-500 dark:text-slate-400 hover:bg-white dark:hover:bg-slate-600 hover:text-slate-800 dark:hover:text-slate-100 disabled:opacity-30 transition-all"
             >
               <FaRedo className="text-xs" />
             </button>
           </div>
 
+          {/* Guide / Walkthrough Button */}
+          <button
+            onClick={() => setShowGuideModal(true)}
+            className="px-3 sm:px-3.5 py-1.5 sm:py-2 bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white text-xs font-bold rounded-xl shadow-md transition-all flex items-center gap-1.5 shrink-0 group ring-2 ring-indigo-300/40 dark:ring-indigo-700/40 hover:scale-[1.02]"
+            title="Open Interactive Form Walkthrough & Field Cheatsheet"
+          >
+            <FaBookOpen className="text-amber-300 text-xs transition-transform group-hover:rotate-6" /> 📖 Walkthrough
+          </button>
+
+          {/* Side-by-Side Split Preview Toggle (Desktop/Laptops Only) */}
+          {activeTab === "builder" && (
+            <button
+              onClick={() => setIsSplitPreview(!isSplitPreview)}
+              className={`hidden lg:flex px-3 py-1.5 sm:py-2 rounded-xl text-xs font-bold transition-all items-center gap-1.5 shrink-0 ${
+                isSplitPreview
+                  ? "bg-indigo-600 text-white shadow-md ring-2 ring-indigo-300 dark:ring-indigo-800"
+                  : "bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-600"
+              }`}
+              title="Toggle Side-by-Side Live Form Preview while editing"
+            >
+              <FaColumns className="text-xs" /> {isSplitPreview ? "Hide Preview" : "Split Preview"}
+            </button>
+          )}
+
           <button
             onClick={() => setShowAiModal(true)}
-            className="px-3 py-2 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white text-xs font-bold rounded-xl shadow-md transition-all flex items-center gap-1.5 shrink-0"
+            className="px-2.5 sm:px-3 py-1.5 sm:py-2 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white text-xs font-bold rounded-xl shadow-md transition-all flex items-center gap-1.5 shrink-0"
           >
             <FaMagic className="text-amber-300" /> AI Studio
           </button>
 
           <button
             onClick={() => setShowPharmaModal(true)}
-            className="px-3 py-2 bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-700 hover:to-indigo-700 text-white text-xs font-bold rounded-xl shadow-md transition-all flex items-center gap-1.5 shrink-0"
+            className="px-2.5 sm:px-3 py-1.5 sm:py-2 bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-700 hover:to-indigo-700 text-white text-xs font-bold rounded-xl shadow-md transition-all flex items-center gap-1.5 shrink-0"
           >
             <FaMagic /> Presets
           </button>
@@ -506,7 +633,7 @@ export default function FormBuilder({ initialData, isEditMode = false }: FormBui
           <button
             onClick={handleSaveForm}
             disabled={saving}
-            className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold rounded-xl shadow-md transition-all flex items-center gap-1.5 disabled:opacity-50 shrink-0"
+            className="px-3.5 sm:px-4 py-1.5 sm:py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold rounded-xl shadow-md transition-all flex items-center gap-1.5 disabled:opacity-50 shrink-0"
           >
             <FaSave /> {saving ? "Saving..." : "Save Form"}
           </button>
@@ -533,6 +660,14 @@ export default function FormBuilder({ initialData, isEditMode = false }: FormBui
         isOpen={showAiModal}
         onClose={() => setShowAiModal(false)}
         onApplySchema={handleApplyAiSchema}
+      />
+
+      {/* Interactive Builder Walkthrough & Field Cheatsheet Modal */}
+      <BuilderGuideModal
+        isOpen={showGuideModal}
+        onClose={() => setShowGuideModal(false)}
+        onOpenPresets={() => setShowPharmaModal(true)}
+        onOpenAi={() => setShowAiModal(true)}
       />
 
       {/* Alerts */}
@@ -899,11 +1034,11 @@ export default function FormBuilder({ initialData, isEditMode = false }: FormBui
           />
         </div>
       ) : (
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className={`grid grid-cols-1 ${isSplitPreview ? "lg:grid-cols-12" : "lg:grid-cols-3"} gap-6`}>
           {/* Left Column: Form Details & Field Toolboxes */}
-          <div className="space-y-6 lg:col-span-1">
+          <div className={`space-y-6 ${isSplitPreview ? "lg:col-span-4 xl:col-span-3" : "lg:col-span-1"}`}>
             {/* Form Meta Box */}
-            <div className="bg-white dark:bg-slate-800 p-5 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700 space-y-4">
+            <div className="bg-white dark:bg-slate-800 p-4 sm:p-5 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700 space-y-4">
               <h3 className="font-bold text-slate-800 dark:text-slate-200 text-base pb-2 border-b border-slate-100 dark:border-slate-700 flex items-center gap-2">
                 <FaLayerGroup className="text-indigo-500" /> Form Settings
               </h3>
@@ -934,7 +1069,7 @@ export default function FormBuilder({ initialData, isEditMode = false }: FormBui
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1">
                     Category
@@ -970,89 +1105,224 @@ export default function FormBuilder({ initialData, isEditMode = false }: FormBui
               </div>
             </div>
 
-            {/* Toolbox 1: Add Custom Standard Fields */}
-            <div className="bg-white dark:bg-slate-800 p-5 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700 space-y-3">
-              <h3 className="font-bold text-slate-800 dark:text-slate-200 text-base pb-2 border-b border-slate-100 dark:border-slate-700 flex items-center gap-2">
-                <FaPlus className="text-emerald-500" /> Add Rich Field Type
-              </h3>
-              <div className="grid grid-cols-2 gap-2 text-xs">
-                <button
-                  onClick={() => addField("text")}
-                  className="p-2.5 bg-slate-50 dark:bg-slate-700 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 text-slate-700 dark:text-slate-200 rounded-xl border border-slate-200 dark:border-slate-600 flex items-center gap-2 font-medium transition-all"
-                >
-                  <FaICursor className="text-indigo-500" /> Text Line
-                </button>
-                <button
-                  onClick={() => addField("number")}
-                  className="p-2.5 bg-slate-50 dark:bg-slate-700 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 text-slate-700 dark:text-slate-200 rounded-xl border border-slate-200 dark:border-slate-600 flex items-center gap-2 font-medium transition-all"
-                >
-                  <FaHashtag className="text-amber-500" /> Number
-                </button>
-                <button
-                  onClick={() => addField("date")}
-                  className="p-2.5 bg-slate-50 dark:bg-slate-700 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 text-slate-700 dark:text-slate-200 rounded-xl border border-slate-200 dark:border-slate-600 flex items-center gap-2 font-medium transition-all"
-                >
-                  <FaCalendar className="text-rose-500" /> Date
-                </button>
-                <button
-                  onClick={() => addField("select")}
-                  className="p-2.5 bg-slate-50 dark:bg-slate-700 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 text-slate-700 dark:text-slate-200 rounded-xl border border-slate-200 dark:border-slate-600 flex items-center gap-2 font-medium transition-all"
-                >
-                  <FaChevronDown className="text-sky-500" /> Dropdown
-                </button>
-                <button
-                  onClick={() => addField("textarea")}
-                  className="p-2.5 bg-slate-50 dark:bg-slate-700 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 text-slate-700 dark:text-slate-200 rounded-xl border border-slate-200 dark:border-slate-600 flex items-center gap-2 font-medium transition-all"
-                >
-                  <FaList className="text-violet-500" /> Textarea
-                </button>
-                <button
-                  onClick={() => addField("checkbox")}
-                  className="p-2.5 bg-slate-50 dark:bg-slate-700 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 text-slate-700 dark:text-slate-200 rounded-xl border border-slate-200 dark:border-slate-600 flex items-center gap-2 font-medium transition-all"
-                >
-                  <FaCheckSquare className="text-emerald-500" /> Checkbox
-                </button>
-                <button
-                  onClick={() => addField("signature")}
-                  className="p-2.5 bg-slate-50 dark:bg-slate-700 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 text-slate-700 dark:text-slate-200 rounded-xl border border-slate-200 dark:border-slate-600 flex items-center gap-2 font-medium transition-all"
-                >
-                  <FaSignature className="text-violet-600" /> E-Signature Pad
-                </button>
-                <button
-                  onClick={() => addField("gps")}
-                  className="p-2.5 bg-slate-50 dark:bg-slate-700 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 text-slate-700 dark:text-slate-200 rounded-xl border border-slate-200 dark:border-slate-600 flex items-center gap-2 font-medium transition-all"
-                >
-                  <FaMapMarkerAlt className="text-rose-600" /> GPS Stamp
-                </button>
-                <button
-                  onClick={() => addField("fileUpload")}
-                  className="p-2.5 bg-slate-50 dark:bg-slate-700 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 text-slate-700 dark:text-slate-200 rounded-xl border border-slate-200 dark:border-slate-600 flex items-center gap-2 font-medium transition-all"
-                >
-                  <FaCloudUploadAlt className="text-indigo-600" /> File / Photo
-                </button>
-                <button
-                  onClick={() => addField("formula")}
-                  className="p-2.5 bg-slate-50 dark:bg-slate-700 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 text-slate-700 dark:text-slate-200 rounded-xl border border-slate-200 dark:border-slate-600 flex items-center gap-2 font-medium transition-all"
-                >
-                  <FaCalculator className="text-amber-600" /> Formula Calc
-                </button>
-                <button
-                  onClick={() => addField("repeaterTable")}
-                  className="p-2.5 bg-slate-50 dark:bg-slate-700 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 text-slate-700 dark:text-slate-200 rounded-xl border border-slate-200 dark:border-slate-600 flex items-center gap-2 font-medium transition-all col-span-2"
-                >
-                  <FaTable className="text-cyan-600" /> Line Items Repeater Table
-                </button>
-                <button
-                  onClick={() => addField("rating")}
-                  className="p-2.5 bg-slate-50 dark:bg-slate-700 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 text-slate-700 dark:text-slate-200 rounded-xl border border-slate-200 dark:border-slate-600 flex items-center gap-2 font-medium transition-all col-span-2"
-                >
-                  <FaStar className="text-amber-400" /> 5-Star Rating / NPS
-                </button>
+            {/* Toolbox 1: Add Fields by Category */}
+            <div className="bg-white dark:bg-slate-800 p-4 sm:p-5 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700 space-y-4">
+              <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-700 pb-2.5">
+                <h3 className="font-bold text-slate-800 dark:text-slate-200 text-sm flex items-center gap-2">
+                  <FaPlus className="text-emerald-500" /> Add Form Field
+                </h3>
+                <span className="text-[10px] font-semibold text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-700 px-2 py-0.5 rounded-full">
+                  12 Types
+                </span>
+              </div>
+
+              {/* Group 1: Standard Input Fields */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+                  <span>Standard Inputs</span>
+                  <span className="text-[10px] font-normal lowercase text-slate-400">basic data</span>
+                </div>
+                <div className="grid grid-cols-2 gap-2 text-xs">
+                  <button
+                    onClick={() => addField("text")}
+                    className="p-2.5 bg-slate-50 dark:bg-slate-700/60 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 text-slate-700 dark:text-slate-200 rounded-xl border border-slate-200 dark:border-slate-600 flex flex-col items-start gap-0.5 transition-all text-left group"
+                    title="Single line text: Doctor name, station, chemist name"
+                  >
+                    <span className="flex items-center gap-1.5 font-semibold text-slate-800 dark:text-slate-100 group-hover:text-indigo-600 dark:group-hover:text-indigo-400">
+                      <FaICursor className="text-indigo-500 shrink-0" /> Text Line
+                    </span>
+                    <span className="text-[10px] text-slate-400 truncate w-full">Names, Area, HQ</span>
+                  </button>
+
+                  <button
+                    onClick={() => addField("number")}
+                    className="p-2.5 bg-slate-50 dark:bg-slate-700/60 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 text-slate-700 dark:text-slate-200 rounded-xl border border-slate-200 dark:border-slate-600 flex flex-col items-start gap-0.5 transition-all text-left group"
+                    title="Numeric field: Quantity, POB amount, count"
+                  >
+                    <span className="flex items-center gap-1.5 font-semibold text-slate-800 dark:text-slate-100 group-hover:text-amber-600 dark:group-hover:text-amber-400">
+                      <FaHashtag className="text-amber-500 shrink-0" /> Number
+                    </span>
+                    <span className="text-[10px] text-slate-400 truncate w-full">Qty, Amount, Pin</span>
+                  </button>
+
+                  <button
+                    onClick={() => addField("date")}
+                    className="p-2.5 bg-slate-50 dark:bg-slate-700/60 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 text-slate-700 dark:text-slate-200 rounded-xl border border-slate-200 dark:border-slate-600 flex flex-col items-start gap-0.5 transition-all text-left group"
+                    title="Calendar date: Visit date, expiry date"
+                  >
+                    <span className="flex items-center gap-1.5 font-semibold text-slate-800 dark:text-slate-100 group-hover:text-rose-600 dark:group-hover:text-rose-400">
+                      <FaCalendar className="text-rose-500 shrink-0" /> Date
+                    </span>
+                    <span className="text-[10px] text-slate-400 truncate w-full">Calendar picker</span>
+                  </button>
+
+                  <button
+                    onClick={() => addField("select")}
+                    className="p-2.5 bg-slate-50 dark:bg-slate-700/60 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 text-slate-700 dark:text-slate-200 rounded-xl border border-slate-200 dark:border-slate-600 flex flex-col items-start gap-0.5 transition-all text-left group"
+                    title="Dropdown list: Work type, division"
+                  >
+                    <span className="flex items-center gap-1.5 font-semibold text-slate-800 dark:text-slate-100 group-hover:text-sky-600 dark:group-hover:text-sky-400">
+                      <FaChevronDown className="text-sky-500 shrink-0" /> Dropdown
+                    </span>
+                    <span className="text-[10px] text-slate-400 truncate w-full">Single select list</span>
+                  </button>
+
+                  <button
+                    onClick={() => addField("textarea")}
+                    className="p-2.5 bg-slate-50 dark:bg-slate-700/60 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 text-slate-700 dark:text-slate-200 rounded-xl border border-slate-200 dark:border-slate-600 flex flex-col items-start gap-0.5 transition-all text-left group"
+                    title="Multi-line notes: Doctor discussion, feedback"
+                  >
+                    <span className="flex items-center gap-1.5 font-semibold text-slate-800 dark:text-slate-100 group-hover:text-violet-600 dark:group-hover:text-violet-400">
+                      <FaList className="text-violet-500 shrink-0" /> Textarea
+                    </span>
+                    <span className="text-[10px] text-slate-400 truncate w-full">Long remarks, notes</span>
+                  </button>
+
+                  <button
+                    onClick={() => addField("checkbox")}
+                    className="p-2.5 bg-slate-50 dark:bg-slate-700/60 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 text-slate-700 dark:text-slate-200 rounded-xl border border-slate-200 dark:border-slate-600 flex flex-col items-start gap-0.5 transition-all text-left group"
+                    title="Yes/No toggle or confirmation"
+                  >
+                    <span className="flex items-center gap-1.5 font-semibold text-slate-800 dark:text-slate-100 group-hover:text-emerald-600 dark:group-hover:text-emerald-400">
+                      <FaCheckSquare className="text-emerald-500 shrink-0" /> Checkbox
+                    </span>
+                    <span className="text-[10px] text-slate-400 truncate w-full">Yes/No toggle</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Group 2: Pharma Field Specials */}
+              <div className="space-y-2 pt-2 border-t border-slate-100 dark:border-slate-700">
+                <div className="flex items-center justify-between text-[11px] font-bold text-violet-600 dark:text-violet-400 uppercase tracking-wider">
+                  <span className="flex items-center gap-1">
+                    <FaBolt className="text-amber-500 text-[10px]" /> Pharma Specials
+                  </span>
+                  <span className="text-[10px] font-semibold bg-violet-100 dark:bg-violet-900/40 text-violet-700 dark:text-violet-300 px-1.5 py-0.2 rounded">
+                    Field Tools
+                  </span>
+                </div>
+                <div className="grid grid-cols-1 gap-2 text-xs">
+                  <button
+                    onClick={() => addField("signature")}
+                    className="p-2.5 bg-violet-50/60 dark:bg-violet-950/30 hover:bg-violet-100/80 dark:hover:bg-violet-900/50 text-slate-700 dark:text-slate-200 rounded-xl border border-violet-200 dark:border-violet-800/60 flex items-center justify-between transition-all text-left group"
+                    title="Touchscreen/mouse digital signature pad for doctor acknowledgment"
+                  >
+                    <div className="flex items-center gap-2">
+                      <div className="w-7 h-7 rounded-lg bg-violet-600 text-white flex items-center justify-center shrink-0">
+                        <FaSignature className="text-xs" />
+                      </div>
+                      <div>
+                        <div className="font-bold text-slate-800 dark:text-slate-100 group-hover:text-violet-600 dark:group-hover:text-violet-400 text-xs">
+                          E-Signature Pad
+                        </div>
+                        <div className="text-[10px] text-slate-400">Doctor / Chemist touch sign</div>
+                      </div>
+                    </div>
+                    <span className="text-[10px] font-bold text-violet-600 dark:text-violet-400 bg-white dark:bg-slate-800 px-2 py-0.5 rounded-md border border-violet-200 dark:border-violet-800">
+                      + Add
+                    </span>
+                  </button>
+
+                  <button
+                    onClick={() => addField("gps")}
+                    className="p-2.5 bg-rose-50/60 dark:bg-rose-950/30 hover:bg-rose-100/80 dark:hover:bg-rose-900/50 text-slate-700 dark:text-slate-200 rounded-xl border border-rose-200 dark:border-rose-800/60 flex items-center justify-between transition-all text-left group"
+                    title="One-click live GPS coordinate stamp and clinic address verification"
+                  >
+                    <div className="flex items-center gap-2">
+                      <div className="w-7 h-7 rounded-lg bg-rose-600 text-white flex items-center justify-center shrink-0">
+                        <FaMapMarkerAlt className="text-xs" />
+                      </div>
+                      <div>
+                        <div className="font-bold text-slate-800 dark:text-slate-100 group-hover:text-rose-600 dark:group-hover:text-rose-400 text-xs">
+                          GPS Location Stamp
+                        </div>
+                        <div className="text-[10px] text-slate-400">MR live physical audit verification</div>
+                      </div>
+                    </div>
+                    <span className="text-[10px] font-bold text-rose-600 dark:text-rose-400 bg-white dark:bg-slate-800 px-2 py-0.5 rounded-md border border-rose-200 dark:border-rose-800">
+                      + Add
+                    </span>
+                  </button>
+
+                  <button
+                    onClick={() => addField("fileUpload")}
+                    className="p-2.5 bg-indigo-50/60 dark:bg-indigo-950/30 hover:bg-indigo-100/80 dark:hover:bg-indigo-900/50 text-slate-700 dark:text-slate-200 rounded-xl border border-indigo-200 dark:border-indigo-800/60 flex items-center justify-between transition-all text-left group"
+                    title="Upload travel receipts, doctor Rx cards, or chemist drug license photos"
+                  >
+                    <div className="flex items-center gap-2">
+                      <div className="w-7 h-7 rounded-lg bg-indigo-600 text-white flex items-center justify-center shrink-0">
+                        <FaCloudUploadAlt className="text-xs" />
+                      </div>
+                      <div>
+                        <div className="font-bold text-slate-800 dark:text-slate-100 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 text-xs">
+                          File / Photo Uploader
+                        </div>
+                        <div className="text-[10px] text-slate-400">Rx cards, travel receipts, bills</div>
+                      </div>
+                    </div>
+                    <span className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 bg-white dark:bg-slate-800 px-2 py-0.5 rounded-md border border-indigo-200 dark:border-indigo-800">
+                      + Add
+                    </span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Group 3: Advanced Grids & Calculations */}
+              <div className="space-y-2 pt-2 border-t border-slate-100 dark:border-slate-700">
+                <div className="flex items-center justify-between text-[11px] font-bold text-teal-600 dark:text-teal-400 uppercase tracking-wider">
+                  <span>Advanced & Calculations</span>
+                </div>
+                <div className="grid grid-cols-1 gap-2 text-xs">
+                  <button
+                    onClick={() => addField("repeaterTable")}
+                    className="p-2.5 bg-teal-50/60 dark:bg-teal-950/30 hover:bg-teal-100/80 dark:hover:bg-teal-900/50 text-slate-700 dark:text-slate-200 rounded-xl border border-teal-200 dark:border-teal-800/60 flex items-center justify-between transition-all text-left group"
+                    title="Multi-row dynamic table: Add multiple sample products or expense line items"
+                  >
+                    <div className="flex items-center gap-2">
+                      <div className="w-7 h-7 rounded-lg bg-teal-600 text-white flex items-center justify-center shrink-0">
+                        <FaTable className="text-xs" />
+                      </div>
+                      <div>
+                        <div className="font-bold text-slate-800 dark:text-slate-100 group-hover:text-teal-600 dark:group-hover:text-teal-400 text-xs">
+                          Line Items Repeater Table
+                        </div>
+                        <div className="text-[10px] text-slate-400">Multi-row sample medicines / expense rows</div>
+                      </div>
+                    </div>
+                    <span className="text-[10px] font-bold text-teal-600 dark:text-teal-400 bg-white dark:bg-slate-800 px-2 py-0.5 rounded-md border border-teal-200 dark:border-teal-800">
+                      + Add
+                    </span>
+                  </button>
+
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      onClick={() => addField("formula")}
+                      className="p-2.5 bg-amber-50/60 dark:bg-amber-950/30 hover:bg-amber-100/80 dark:hover:bg-amber-900/50 text-slate-700 dark:text-slate-200 rounded-xl border border-amber-200 dark:border-amber-800/60 flex flex-col items-start gap-0.5 transition-all text-left group"
+                      title="Auto-calculate math e.g. [qty] * [rate]"
+                    >
+                      <span className="flex items-center gap-1.5 font-bold text-slate-800 dark:text-slate-100 group-hover:text-amber-600 dark:group-hover:text-amber-400">
+                        <FaCalculator className="text-amber-600 shrink-0" /> Formula Calc
+                      </span>
+                      <span className="text-[10px] text-slate-400 truncate w-full">e.g. [qty] * [rate]</span>
+                    </button>
+
+                    <button
+                      onClick={() => addField("rating")}
+                      className="p-2.5 bg-amber-50/60 dark:bg-amber-950/30 hover:bg-amber-100/80 dark:hover:bg-amber-900/50 text-slate-700 dark:text-slate-200 rounded-xl border border-amber-200 dark:border-amber-800/60 flex flex-col items-start gap-0.5 transition-all text-left group"
+                      title="1-5 Star satisfaction or NPS rating"
+                    >
+                      <span className="flex items-center gap-1.5 font-bold text-slate-800 dark:text-slate-100 group-hover:text-amber-600 dark:group-hover:text-amber-400">
+                        <FaStar className="text-amber-400 shrink-0" /> 5-Star Rating
+                      </span>
+                      <span className="text-[10px] text-slate-400 truncate w-full">Doctor NPS feedback</span>
+                    </button>
+                  </div>
+                </div>
               </div>
             </div>
 
             {/* Toolbox 2: Import from Existing System & MongoDB Database Tables */}
-            <div className="bg-white dark:bg-slate-800 p-5 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700 space-y-3">
+            <div className="bg-white dark:bg-slate-800 p-4 sm:p-5 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700 space-y-3">
               <h3 className="font-bold text-slate-800 dark:text-slate-200 text-base pb-2 border-b border-slate-100 dark:border-slate-700 flex items-center justify-between">
                 <span className="flex items-center gap-2">
                   <FaDatabase className="text-cyan-500" /> Import Table Fields
@@ -1216,12 +1486,17 @@ export default function FormBuilder({ initialData, isEditMode = false }: FormBui
           </div>
 
           {/* Right Column: Form Fields List & Reordering Canvas */}
-          <div className="lg:col-span-2 space-y-4">
-            <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700 space-y-4">
+          <div className={`${isSplitPreview ? "lg:col-span-4 xl:col-span-5" : "lg:col-span-2"} space-y-4`}>
+            <div className="bg-white dark:bg-slate-800 p-4 sm:p-6 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700 space-y-4">
               <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-700 pb-3">
-                <h3 className="font-bold text-slate-800 dark:text-slate-100 text-base">
-                  Form Fields Canvas ({fields.length} fields)
-                </h3>
+                <div className="flex items-center gap-2">
+                  <h3 className="font-bold text-slate-800 dark:text-slate-100 text-base">
+                    Form Fields Canvas
+                  </h3>
+                  <span className="text-xs font-bold px-2.5 py-0.5 rounded-full bg-indigo-50 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300">
+                    {fields.length} {fields.length === 1 ? "field" : "fields"}
+                  </span>
+                </div>
                 {fields.length > 0 && (
                   <button
                     onClick={() => setFields([])}
@@ -1233,14 +1508,88 @@ export default function FormBuilder({ initialData, isEditMode = false }: FormBui
               </div>
 
               {fields.length === 0 ? (
-                <div className="py-16 text-center border-2 border-dashed border-slate-200 dark:border-slate-700 rounded-2xl bg-slate-50/50 dark:bg-slate-900/30">
-                  <FaSlidersH className="mx-auto text-4xl text-slate-300 dark:text-slate-600 mb-3" />
-                  <p className="text-slate-600 dark:text-slate-300 font-semibold">
-                    No fields added yet
-                  </p>
-                  <p className="text-xs text-slate-400 mt-1 max-w-sm mx-auto">
-                    Use the toolboxes on the left to add custom input fields or import fields from system database tables.
-                  </p>
+                <div className="py-10 px-4 border-2 border-dashed border-indigo-200 dark:border-indigo-900/60 rounded-2xl bg-gradient-to-b from-indigo-50/40 to-slate-50/50 dark:from-slate-900/60 dark:to-slate-900/30 text-center space-y-5">
+                  <div className="max-w-md mx-auto space-y-2">
+                    <div className="w-12 h-12 rounded-2xl bg-indigo-100 dark:bg-indigo-900/40 text-indigo-600 dark:text-indigo-400 flex items-center justify-center text-xl mx-auto shadow-inner">
+                      <FaSlidersH />
+                    </div>
+                    <h4 className="text-base font-bold text-slate-800 dark:text-slate-100">
+                      Your Form Canvas is Empty
+                    </h4>
+                    <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
+                      Choose how you want to start building. You can use 1-click ready pharma templates, ask AI, or load standard visit fields:
+                    </p>
+                  </div>
+
+                  {/* 3 Action Cards for Instant Startup */}
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3 max-w-2xl mx-auto text-left">
+                    {/* Card 1: 1-Click Pharma Presets */}
+                    <div
+                      onClick={() => setShowPharmaModal(true)}
+                      className="p-4 rounded-2xl bg-white dark:bg-slate-800 border-2 border-violet-200 dark:border-violet-800/80 hover:border-violet-500 hover:shadow-md cursor-pointer transition-all space-y-2 group"
+                    >
+                      <div className="flex items-center justify-between">
+                        <div className="w-8 h-8 rounded-xl bg-violet-100 dark:bg-violet-900/50 text-violet-600 dark:text-violet-400 flex items-center justify-center text-sm">
+                          <FaBolt />
+                        </div>
+                        <span className="text-[10px] font-bold bg-violet-100 text-violet-700 dark:bg-violet-900/50 dark:text-violet-300 px-2 py-0.5 rounded-full">
+                          Fastest
+                        </span>
+                      </div>
+                      <h5 className="font-bold text-xs text-slate-800 dark:text-slate-100 group-hover:text-violet-600 transition-colors">
+                        1-Click Pharma Presets
+                      </h5>
+                      <p className="text-[11px] text-slate-400 leading-snug">
+                        Ready DCR, Chemist Order, Doctor Survey, and Expense forms.
+                      </p>
+                    </div>
+
+                    {/* Card 2: AI Studio */}
+                    <div
+                      onClick={() => setShowAiModal(true)}
+                      className="p-4 rounded-2xl bg-white dark:bg-slate-800 border-2 border-purple-200 dark:border-purple-800/80 hover:border-purple-500 hover:shadow-md cursor-pointer transition-all space-y-2 group"
+                    >
+                      <div className="flex items-center justify-between">
+                        <div className="w-8 h-8 rounded-xl bg-purple-100 dark:bg-purple-900/50 text-purple-600 dark:text-purple-400 flex items-center justify-center text-sm">
+                          <FaMagic />
+                        </div>
+                        <span className="text-[10px] font-bold bg-purple-100 text-purple-700 dark:bg-purple-900/50 dark:text-purple-300 px-2 py-0.5 rounded-full">
+                          AI Smart
+                        </span>
+                      </div>
+                      <h5 className="font-bold text-xs text-slate-800 dark:text-slate-100 group-hover:text-purple-600 transition-colors">
+                        Generate with AI
+                      </h5>
+                      <p className="text-[11px] text-slate-400 leading-snug">
+                        Type what you need in plain English and let AI create fields & logic.
+                      </p>
+                    </div>
+
+                    {/* Card 3: Standard Visit Fields */}
+                    <div
+                      onClick={addQuickStarterFields}
+                      className="p-4 rounded-2xl bg-white dark:bg-slate-800 border-2 border-indigo-200 dark:border-indigo-800/80 hover:border-indigo-500 hover:shadow-md cursor-pointer transition-all space-y-2 group"
+                    >
+                      <div className="flex items-center justify-between">
+                        <div className="w-8 h-8 rounded-xl bg-indigo-100 dark:bg-indigo-900/50 text-indigo-600 dark:text-indigo-400 flex items-center justify-center text-sm">
+                          <FaSlidersH />
+                        </div>
+                        <span className="text-[10px] font-bold bg-indigo-100 text-indigo-700 dark:bg-indigo-900/50 dark:text-indigo-300 px-2 py-0.5 rounded-full">
+                          Standard
+                        </span>
+                      </div>
+                      <h5 className="font-bold text-xs text-slate-800 dark:text-slate-100 group-hover:text-indigo-600 transition-colors">
+                        Standard Visit Fields
+                      </h5>
+                      <p className="text-[11px] text-slate-400 leading-snug">
+                        Add Doctor Name, Date, Notes, GPS Stamp, and Signature instantly.
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="text-[11px] text-slate-400 pt-1">
+                    Or click any single field button on the left sidebar to add fields individually.
+                  </div>
                 </div>
               ) : (
                 <div className="space-y-3">
@@ -1254,44 +1603,43 @@ export default function FormBuilder({ initialData, isEditMode = false }: FormBui
                         isExpanded ? "border-indigo-300 dark:border-indigo-700 shadow-sm" : "border-slate-200 dark:border-slate-700 hover:border-indigo-200 dark:hover:border-indigo-800"
                       }`}
                     >
-                      {/* ── Collapsed Header (always visible) ── */}
-                      <div className="flex items-center gap-3 px-4 py-3">
-                        {/* Drag handle */}
-                        <FaGripVertical className="text-slate-300 dark:text-slate-600 text-xs flex-shrink-0 cursor-grab" />
+                      {/* ── Collapsed Header (always visible & responsive) ── */}
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 px-3.5 sm:px-4 py-3">
+                        {/* Left: Drag handle, Index, Type, Label, Badges */}
+                        <div className="flex items-center gap-2 sm:gap-2.5 min-w-0 flex-1">
+                          <FaGripVertical className="text-slate-300 dark:text-slate-600 text-xs flex-shrink-0 cursor-grab" />
 
-                        {/* Index badge */}
-                        <span className="w-6 h-6 bg-indigo-100 dark:bg-indigo-900/50 text-indigo-700 dark:text-indigo-300 rounded-full flex items-center justify-center text-[11px] font-bold flex-shrink-0">
-                          {idx + 1}
-                        </span>
-
-                        {/* Type pill */}
-                        <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full flex-shrink-0 ${meta.color}`}>
-                          {meta.icon} {meta.label}
-                        </span>
-
-                        {/* Label preview */}
-                        <span className="flex-1 text-sm font-semibold text-slate-700 dark:text-slate-200 truncate">
-                          {field.label || <span className="text-slate-400 italic">Unlabeled field</span>}
-                        </span>
-
-                        {/* Required badge */}
-                        {field.required && (
-                          <span className="text-[10px] font-bold text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-900/30 px-2 py-0.5 rounded-full flex-shrink-0">Required</span>
-                        )}
-
-                        {/* Mapped table */}
-                        {field.mappedTable && (
-                          <span className="text-[10px] font-medium bg-cyan-100 text-cyan-700 dark:bg-cyan-900/40 dark:text-cyan-300 px-2 py-0.5 rounded-full flex-shrink-0 truncate max-w-[100px]">
-                            {field.mappedTable}
+                          <span className="w-5 h-5 sm:w-6 sm:h-6 bg-indigo-100 dark:bg-indigo-900/50 text-indigo-700 dark:text-indigo-300 rounded-full flex items-center justify-center text-[10px] sm:text-[11px] font-bold flex-shrink-0">
+                            {idx + 1}
                           </span>
-                        )}
 
-                        {/* Action buttons */}
-                        <div className="flex items-center gap-0.5 flex-shrink-0">
-                          <button onClick={() => moveField(idx, "up")} disabled={idx === 0} className="p-1.5 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 disabled:opacity-20 transition-all" title="Move Up"><FaArrowUp className="text-[10px]" /></button>
-                          <button onClick={() => moveField(idx, "down")} disabled={idx === fields.length - 1} className="p-1.5 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 disabled:opacity-20 transition-all" title="Move Down"><FaArrowDown className="text-[10px]" /></button>
-                          <button onClick={() => duplicateField(idx)} className="p-1.5 text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 transition-all" title="Duplicate Field"><FaCopy className="text-[10px]" /></button>
-                          <button onClick={() => removeField(idx)} className="p-1.5 text-rose-400 hover:text-rose-600 transition-all" title="Delete Field"><FaTrash className="text-[10px]" /></button>
+                          <span className={`text-[10px] sm:text-[11px] font-bold px-2 py-0.5 rounded-full flex-shrink-0 ${meta.color}`}>
+                            {meta.icon} {meta.label}
+                          </span>
+
+                          <span className="flex-1 text-xs sm:text-sm font-semibold text-slate-700 dark:text-slate-200 truncate">
+                            {field.label || <span className="text-slate-400 italic">Unlabeled field</span>}
+                          </span>
+
+                          {field.required && (
+                            <span className="text-[9px] sm:text-[10px] font-bold text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-900/30 px-1.5 py-0.5 rounded-full flex-shrink-0">
+                              Required
+                            </span>
+                          )}
+
+                          {field.mappedTable && (
+                            <span className="hidden md:inline-block text-[10px] font-medium bg-cyan-100 text-cyan-700 dark:bg-cyan-900/40 dark:text-cyan-300 px-2 py-0.5 rounded-full flex-shrink-0 truncate max-w-[90px]">
+                              {field.mappedTable}
+                            </span>
+                          )}
+                        </div>
+
+                        {/* Right: Actions */}
+                        <div className="flex items-center justify-end gap-1 flex-shrink-0 border-t sm:border-t-0 pt-1.5 sm:pt-0 border-slate-100 dark:border-slate-800">
+                          <button onClick={() => moveField(idx, "up")} disabled={idx === 0} className="p-1.5 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 disabled:opacity-20 transition-all rounded hover:bg-slate-100 dark:hover:bg-slate-800" title="Move Up"><FaArrowUp className="text-[10px]" /></button>
+                          <button onClick={() => moveField(idx, "down")} disabled={idx === fields.length - 1} className="p-1.5 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 disabled:opacity-20 transition-all rounded hover:bg-slate-100 dark:hover:bg-slate-800" title="Move Down"><FaArrowDown className="text-[10px]" /></button>
+                          <button onClick={() => duplicateField(idx)} className="p-1.5 text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 transition-all rounded hover:bg-slate-100 dark:hover:bg-slate-800" title="Duplicate Field"><FaCopy className="text-[10px]" /></button>
+                          <button onClick={() => removeField(idx)} className="p-1.5 text-rose-400 hover:text-rose-600 transition-all rounded hover:bg-slate-100 dark:hover:bg-slate-800" title="Delete Field"><FaTrash className="text-[10px]" /></button>
                           <button
                             onClick={() => toggleFieldExpand(field.id)}
                             className={`p-1.5 ml-1 rounded-lg transition-all text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 ${ isExpanded ? "bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400" : ""}`}
@@ -1311,7 +1659,14 @@ export default function FormBuilder({ initialData, isEditMode = false }: FormBui
                               <input
                                 type="text"
                                 value={field.label}
-                                onChange={(e) => updateField(idx, { label: e.target.value })}
+                                onChange={(e) => {
+                                  const newLabel = e.target.value;
+                                  const updates: Partial<FormFieldConfig> = { label: newLabel };
+                                  if (field.key.startsWith("field_") || !field.key) {
+                                    updates.key = newLabel.toLowerCase().replace(/[^a-z0-9_]/g, "_").slice(0, 32);
+                                  }
+                                  updateField(idx, updates);
+                                }}
                                 className="w-full px-3 py-1.5 border border-slate-300 dark:border-slate-600 rounded-lg dark:bg-slate-800 text-slate-800 dark:text-slate-100 outline-none focus:ring-2 focus:ring-indigo-500"
                               />
                             </div>
@@ -1324,6 +1679,7 @@ export default function FormBuilder({ initialData, isEditMode = false }: FormBui
                                 onChange={(e) => updateField(idx, { key: e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, "_") })}
                                 className="w-full px-3 py-1.5 border border-slate-300 dark:border-slate-600 rounded-lg dark:bg-slate-800 text-slate-800 dark:text-slate-100 outline-none font-mono focus:ring-2 focus:ring-indigo-500"
                               />
+                              <p className="text-[10px] text-slate-400 mt-0.5">Database identifier (auto-generated from label).</p>
                             </div>
 
                             <div>
@@ -1345,6 +1701,7 @@ export default function FormBuilder({ initialData, isEditMode = false }: FormBui
                                 placeholder="e.g. Personal Info, Visit Details"
                                 className="w-full px-3 py-1.5 border border-slate-300 dark:border-slate-600 rounded-lg dark:bg-slate-800 text-slate-800 dark:text-slate-100 outline-none focus:ring-2 focus:ring-indigo-500"
                               />
+                              <p className="text-[10px] text-slate-400 mt-0.5">💡 Fields with the same section name appear grouped in a card.</p>
                             </div>
 
                             <div className="md:col-span-2">
@@ -1368,6 +1725,7 @@ export default function FormBuilder({ initialData, isEditMode = false }: FormBui
                                   placeholder="e.g. High, Medium, Low"
                                   className="w-full px-3 py-1.5 border border-slate-300 dark:border-slate-600 rounded-lg dark:bg-slate-800 text-slate-800 dark:text-slate-100 outline-none focus:ring-2 focus:ring-indigo-500"
                                 />
+                                <p className="text-[10px] text-slate-400 mt-0.5">💡 Separate each option with a comma, e.g. Option 1, Option 2</p>
                               </div>
                             )}
 
@@ -1381,6 +1739,7 @@ export default function FormBuilder({ initialData, isEditMode = false }: FormBui
                                   placeholder="e.g. [qty] * [rate]"
                                   className="w-full px-3 py-1.5 border border-slate-300 dark:border-slate-600 rounded-lg dark:bg-slate-800 text-slate-800 dark:text-slate-100 outline-none font-mono focus:ring-2 focus:ring-amber-500"
                                 />
+                                <p className="text-[10px] text-slate-400 mt-0.5">💡 Wrap field keys in brackets, e.g. [qty] * [rate] or [ta] + [da]</p>
                               </div>
                             )}
 
@@ -1405,6 +1764,44 @@ export default function FormBuilder({ initialData, isEditMode = false }: FormBui
               )}
             </div>
           </div>
+
+          {/* Third Column: Live Interactive Split Preview */}
+          {isSplitPreview && (
+            <div className="lg:col-span-4 xl:col-span-4 space-y-4">
+              <div className="sticky top-6 bg-white dark:bg-slate-800 p-5 rounded-2xl shadow-lg border-2 border-indigo-200 dark:border-indigo-800 space-y-4 max-h-[calc(100vh-5rem)] overflow-y-auto">
+                <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-700 pb-3">
+                  <div className="flex items-center gap-2">
+                    <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" />
+                    <h3 className="font-bold text-slate-800 dark:text-slate-100 text-sm flex items-center gap-1.5">
+                      <FaEye className="text-indigo-600 dark:text-indigo-400" /> Live Interactive Preview
+                    </h3>
+                  </div>
+                  <button
+                    onClick={() => setIsSplitPreview(false)}
+                    className="p-1 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-all"
+                    title="Close Split Preview"
+                  >
+                    <FaTimes className="text-xs" />
+                  </button>
+                </div>
+                <p className="text-[11px] text-slate-400">
+                  Preview updates in real time as you add, modify, or rearrange fields.
+                </p>
+                <div className="pt-2">
+                  <DynamicFormRenderer
+                    template={{
+                      title: title || "Untitled Form",
+                      description,
+                      fields,
+                      conditions,
+                      theme: { accentColor },
+                    }}
+                    readOnly={false}
+                  />
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>

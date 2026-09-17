@@ -22,8 +22,8 @@ const SalesHierarchySchema = new Schema(
     // Hierarchy Role Level
     roleLevel: {
       type: String,
-      enum: ["RSM", "MR", "ASM", "VP", "NSM", "ZSM"],
       required: true,
+      trim: true,
     },
 
     // Geographic Jurisdiction

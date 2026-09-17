@@ -1,0 +1,2374 @@
+{
+  "b2b,sez,de": {
+    "1": {
+      "rgb": "FF0070C0",
+      "bold": true,
+      "size": 11.0,
+      "h": "left",
+      "v": "top",
+      "val": "Summary For B2B, SEZ, DE (4A, 4B, 6B, 6C)"
+    },
+    "2": {
+      "rgb": "FF0070C0",
+      "bold": true,
+      "size": 11.0,
+      "h": "center",
+      "v": "top",
+      "val": ""
+    },
+    "3": {
+      "rgb": "00000000",
+      "bold": false,
+      "size": 11.0,
+      "h": "",
+      "v": "",
+      "val": ""
+    },
+    "4": {
+      "rgb": "00000000",
+      "bold": true,
+      "size": 11.0,
+      "h": "center",
+      "v": "",
+      "val": ""
+    },
+    "5": {
+      "rgb": "00000000",
+      "bold": true,
+      "size": 11.0,
+      "h": "right",
+      "v": "",
+      "val": ""
+    },
+    "6": {
+      "rgb": "00000000",
+      "bold": true,
+      "size": 11.0,
+      "h": "left",
+      "v": "",
+      "val": ""
+    },
+    "7": {
+      "rgb": "00000000",
+      "bold": true,
+      "size": 11.0,
+      "h": "center",
+      "v": "",
+      "val": ""
+    },
+    "8": {
+      "rgb": "00000000",
+      "bold": true,
+      "size": 11.0,
+      "h": "center",
+      "v": "",
+      "val": ""
+    },
+    "9": {
+      "rgb": "00000000",
+      "bold": true,
+      "size": 11.0,
+      "h": "left",
+      "v": "",
+      "val": ""
+    },
+    "10": {
+      "rgb": "00000000",
+      "bold": true,
+      "size": 11.0,
+      "h": "center",
+      "v": "",
+      "val": ""
+    },
+    "11": {
+      "rgb": "00000000",
+      "bold": true,
+      "size": 11.0,
+      "h": "right",
+      "v": "",
+      "val": ""
+    },
+    "12": {
+      "rgb": "00000000",
+      "bold": true,
+      "size": 11.0,
+      "h": "right",
+      "v": "",
+      "val": ""
+    },
+    "13": {
+      "rgb": "00000000",
+      "bold": false,
+      "size": 11.0,
+      "h": "center",
+      "v": "top",
+      "val": "HELP"
+    },
+    "14": {
+      "rgb": "00000000",
+      "bold": false,
+      "size": 11.0,
+      "h": "",
+      "v": "",
+      "val": ""
+    }
+  },
+  "b2ba": {
+    "1": {
+      "rgb": "FF0070C0",
+      "bold": true,
+      "size": 11.0,
+      "h": "center",
+      "v": "top",
+      "val": "Summary For B2BA"
+    },
+    "2": {
+      "rgb": "Values must be of type <class 'str'>",
+      "bold": true,
+      "size": 11.0,
+      "h": "center",
+      "v": "",
+      "val": "Original details "
+    },
+    "3": {
+      "rgb": "Values must be of type <class 'str'>",
+      "bold": false,
+      "size": 11.0,
+      "h": "center",
+      "v": "",
+      "val": ""
+    },
+    "4": {
+      "rgb": "Values must be of type <class 'str'>",
+      "bold": false,
+      "size": 11.0,
+      "h": "center",
+      "v": "",
+      "val": ""
+    },
+    "5": {
+      "rgb": "Values must be of type <class 'str'>",
+      "bold": true,
+      "size": 11.0,
+      "h": "center",
+      "v": "",
+      "val": "Revised Details "
+    },
+    "6": {
+      "rgb": "00000000",
+      "bold": false,
+      "size": 11.0,
+      "h": "",
+      "v": "",
+      "val": ""
+    },
+    "7": {
+      "rgb": "00000000",
+      "bold": false,
+      "size": 11.0,
+      "h": "",
+      "v": "",
+      "val": ""
+    },
+    "8": {
+      "rgb": "00000000",
+      "bold": false,
+      "size": 11.0,
+      "h": "",
+      "v": "",
+      "val": ""
+    },
+    "9": {
+      "rgb": "00000000",
+      "bold": false,
+      "size": 11.0,
+      "h": "",
+      "v": "",
+      "val": ""
+    },
+    "10": {
+      "rgb": "00000000",
+      "bold": false,
+      "size": 11.0,
+      "h": "",
+      "v": "",
+      "val": ""
+    },
+    "11": {
+      "rgb": "00000000",
+      "bold": false,
+      "size": 11.0,
+      "h": "",
+      "v": "",
+      "val": ""
+    },
+    "12": {
+      "rgb": "00000000",
+      "bold": false,
+      "size": 11.0,
+      "h": "",
+      "v": "",
+      "val": ""
+    },
+    "13": {
+      "rgb": "00000000",
+      "bold": false,
+      "size": 11.0,
+      "h": "",
+      "v": "",
+      "val": ""
+    },
+    "14": {
+      "rgb": "00000000",
+      "bold": false,
+      "size": 11.0,
+      "h": "",
+      "v": "",
+      "val": ""
+    },
+    "15": {
+      "rgb": "Values must be of type <class 'str'>",
+      "bold": false,
+      "size": 11.0,
+      "h": "center",
+      "v": "",
+      "val": "HELP"
+    }
+  },
+  "b2cl": {
+    "1": {
+      "rgb": "FF0070C0",
+      "bold": true,
+      "size": 11.0,
+      "h": "center",
+      "v": "top",
+      "val": "Summary For B2CL(5)"
+    },
+    "2": {
+      "rgb": "Values must be of type <class 'str'>",
+      "bold": false,
+      "size": 11.0,
+      "h": "center",
+      "v": "",
+      "val": ""
+    },
+    "3": {
+      "rgb": "00000000",
+      "bold": false,
+      "size": 11.0,
+      "h": "",
+      "v": "",
+      "val": ""
+    },
+    "4": {
+      "rgb": "00000000",
+      "bold": false,
+      "size": 11.0,
+      "h": "",
+      "v": "",
+      "val": ""
+    },
+    "5": {
+      "rgb": "00000000",
+      "bold": true,
+      "size": 11.0,
+      "h": "center",
+      "v": "",
+      "val": ""
+    },
+    "6": {
+      "rgb": "00000000",
+      "bold": false,
+      "size": 11.0,
+      "h": "right",
+      "v": "",
+      "val": ""
+    },
+    "7": {
+      "rgb": "00000000",
+      "bold": false,
+      "size": 11.0,
+      "h": "",
+      "v": "",
+      "val": ""
+    },
+    "8": {
+      "rgb": "00000000",
+      "bold": false,
+      "size": 11.0,
+      "h": "right",
+      "v": "",
+      "val": ""
+    },
+    "9": {
+      "rgb": "00000000",
+      "bold": false,
+      "size": 11.0,
+      "h": "center",
+      "v": "top",
+      "val": "HELP"
+    }
+  },
+  "b2cla": {
+    "1": {
+      "rgb": "FF0070C0",
+      "bold": true,
+      "size": 11.0,
+      "h": "center",
+      "v": "top",
+      "val": "Summary For B2CLA"
+    },
+    "2": {
+      "rgb": "Values must be of type <class 'str'>",
+      "bold": false,
+      "size": 11.0,
+      "h": "center",
+      "v": "",
+      "val": "Original details "
+    },
+    "3": {
+      "rgb": "Values must be of type <class 'str'>",
+      "bold": false,
+      "size": 11.0,
+      "h": "center",
+      "v": "",
+      "val": ""
+    },
+    "4": {
+      "rgb": "Values must be of type <class 'str'>",
+      "bold": false,
+      "size": 11.0,
+      "h": "center",
+      "v": "",
+      "val": ""
+    },
+    "5": {
+      "rgb": "Values must be of type <class 'str'>",
+      "bold": true,
+      "size": 11.0,
+      "h": "center",
+      "v": "",
+      "val": "Revised Details "
+    },
+    "6": {
+      "rgb": "00000000",
+      "bold": false,
+      "size": 11.0,
+      "h": "",
+      "v": "",
+      "val": ""
+    },
+    "7": {
+      "rgb": "00000000",
+      "bold": false,
+      "size": 11.0,
+      "h": "",
+      "v": "",
+      "val": ""
+    },
+    "8": {
+      "rgb": "00000000",
+      "bold": false,
+      "size": 11.0,
+      "h": "",
+      "v": "",
+      "val": ""
+    },
+    "9": {
+      "rgb": "00000000",
+      "bold": false,
+      "size": 11.0,
+      "h": "",
+      "v": "",
+      "val": ""
+    },
+    "10": {
+      "rgb": "00000000",
+      "bold": false,
+      "size": 11.0,
+      "h": "",
+      "v": "",
+      "val": ""
+    },
+    "11": {
+      "rgb": "Values must be of type <class 'str'>",
+      "bold": false,
+      "size": 11.0,
+      "h": "center",
+      "v": "",
+      "val": "HELP"
+    }
+  },
+  "b2cs": {
+    "1": {
+      "rgb": "FF0070C0",
+      "bold": true,
+      "size": 11.0,
+      "h": "center",
+      "v": "top",
+      "val": "Summary For B2CS(7)"
+    },
+    "2": {
+      "rgb": "Values must be of type <class 'str'>",
+      "bold": false,
+      "size": 11.0,
+      "h": "center",
+      "v": "",
+      "val": ""
+    },
+    "3": {
+      "rgb": "00000000",
+      "bold": true,
+      "size": 11.0,
+      "h": "center",
+      "v": "",
+      "val": ""
+    },
+    "4": {
+      "rgb": "00000000",
+      "bold": false,
+      "size": 11.0,
+      "h": "right",
+      "v": "top",
+      "val": ""
+    },
+    "5": {
+      "rgb": "00000000",
+      "bold": false,
+      "size": 11.0,
+      "h": "right",
+      "v": "",
+      "val": ""
+    },
+    "6": {
+      "rgb": "00000000",
+      "bold": false,
+      "size": 11.0,
+      "h": "right",
+      "v": "",
+      "val": ""
+    },
+    "7": {
+      "rgb": "00000000",
+      "bold": false,
+      "size": 11.0,
+      "h": "center",
+      "v": "top",
+      "val": "HELP"
+    },
+    "8": {
+      "rgb": "00000000",
+      "bold": false,
+      "size": 11.0,
+      "h": "",
+      "v": "",
+      "val": ""
+    }
+  },
+  "b2csa": {
+    "1": {
+      "rgb": "FF0070C0",
+      "bold": true,
+      "size": 11.0,
+      "h": "center",
+      "v": "top",
+      "val": "Summary For B2CSA"
+    },
+    "2": {
+      "rgb": "Values must be of type <class 'str'>",
+      "bold": true,
+      "size": 11.0,
+      "h": "center",
+      "v": "",
+      "val": "Original details "
+    },
+    "3": {
+      "rgb": "Values must be of type <class 'str'>",
+      "bold": true,
+      "size": 11.0,
+      "h": "center",
+      "v": "",
+      "val": "Revised details"
+    },
+    "4": {
+      "rgb": "00000000",
+      "bold": false,
+      "size": 11.0,
+      "h": "",
+      "v": "",
+      "val": ""
+    },
+    "5": {
+      "rgb": "00000000",
+      "bold": false,
+      "size": 11.0,
+      "h": "",
+      "v": "",
+      "val": ""
+    },
+    "6": {
+      "rgb": "00000000",
+      "bold": false,
+      "size": 11.0,
+      "h": "",
+      "v": "",
+      "val": ""
+    },
+    "7": {
+      "rgb": "00000000",
+      "bold": false,
+      "size": 11.0,
+      "h": "",
+      "v": "",
+      "val": ""
+    },
+    "8": {
+      "rgb": "00000000",
+      "bold": false,
+      "size": 11.0,
+      "h": "",
+      "v": "",
+      "val": ""
+    },
+    "9": {
+      "rgb": "Values must be of type <class 'str'>",
+      "bold": false,
+      "size": 11.0,
+      "h": "center",
+      "v": "",
+      "val": "HELP"
+    }
+  },
+  "cdnr": {
+    "1": {
+      "rgb": "FF0070C0",
+      "bold": true,
+      "size": 11.0,
+      "h": "center",
+      "v": "top",
+      "val": "Summary For CDNR(9B)"
+    },
+    "2": {
+      "rgb": "FF0070C0",
+      "bold": true,
+      "size": 11.0,
+      "h": "center",
+      "v": "top",
+      "val": ""
+    },
+    "3": {
+      "rgb": "00000000",
+      "bold": false,
+      "size": 11.0,
+      "h": "",
+      "v": "",
+      "val": ""
+    },
+    "4": {
+      "rgb": "00000000",
+      "bold": false,
+      "size": 11.0,
+      "h": "center",
+      "v": "",
+      "val": ""
+    },
+    "5": {
+      "rgb": "00000000",
+      "bold": false,
+      "size": 11.0,
+      "h": "",
+      "v": "",
+      "val": ""
+    },
+    "6": {
+      "rgb": "00000000",
+      "bold": false,
+      "size": 11.0,
+      "h": "",
+      "v": "",
+      "val": ""
+    },
+    "7": {
+      "rgb": "00000000",
+      "bold": true,
+      "size": 11.0,
+      "h": "center",
+      "v": "",
+      "val": ""
+    },
+    "8": {
+      "rgb": "00000000",
+      "bold": true,
+      "size": 11.0,
+      "h": "left",
+      "v": "",
+      "val": ""
+    },
+    "9": {
+      "rgb": "00000000",
+      "bold": true,
+      "size": 11.0,
+      "h": "right",
+      "v": "",
+      "val": ""
+    },
+    "10": {
+      "rgb": "00000000",
+      "bold": true,
+      "size": 11.0,
+      "h": "center",
+      "v": "",
+      "val": ""
+    },
+    "11": {
+      "rgb": "00000000",
+      "bold": false,
+      "size": 11.0,
+      "h": "right",
+      "v": "",
+      "val": ""
+    },
+    "12": {
+      "rgb": "00000000",
+      "bold": false,
+      "size": 11.0,
+      "h": "right",
+      "v": "",
+      "val": ""
+    },
+    "13": {
+      "rgb": "00000000",
+      "bold": false,
+      "size": 11.0,
+      "h": "center",
+      "v": "top",
+      "val": "HELP"
+    }
+  },
+  "cdnra": {
+    "1": {
+      "rgb": "FF0070C0",
+      "bold": true,
+      "size": 11.0,
+      "h": "center",
+      "v": "top",
+      "val": "Summary For CDNRA"
+    },
+    "2": {
+      "rgb": "Values must be of type <class 'str'>",
+      "bold": true,
+      "size": 11.0,
+      "h": "center",
+      "v": "",
+      "val": "Original details "
+    },
+    "3": {
+      "rgb": "00000000",
+      "bold": false,
+      "size": 11.0,
+      "h": "",
+      "v": "",
+      "val": ""
+    },
+    "4": {
+      "rgb": "00000000",
+      "bold": false,
+      "size": 11.0,
+      "h": "",
+      "v": "",
+      "val": ""
+    },
+    "5": {
+      "rgb": "Values must be of type <class 'str'>",
+      "bold": true,
+      "size": 11.0,
+      "h": "center",
+      "v": "",
+      "val": "Revised details"
+    },
+    "6": {
+      "rgb": "00000000",
+      "bold": false,
+      "size": 11.0,
+      "h": "",
+      "v": "",
+      "val": ""
+    },
+    "7": {
+      "rgb": "00000000",
+      "bold": false,
+      "size": 11.0,
+      "h": "",
+      "v": "",
+      "val": ""
+    },
+    "8": {
+      "rgb": "00000000",
+      "bold": false,
+      "size": 11.0,
+      "h": "",
+      "v": "",
+      "val": ""
+    },
+    "9": {
+      "rgb": "00000000",
+      "bold": false,
+      "size": 11.0,
+      "h": "",
+      "v": "",
+      "val": ""
+    },
+    "10": {
+      "rgb": "00000000",
+      "bold": false,
+      "size": 11.0,
+      "h": "",
+      "v": "",
+      "val": ""
+    },
+    "11": {
+      "rgb": "00000000",
+      "bold": false,
+      "size": 11.0,
+      "h": "",
+      "v": "",
+      "val": ""
+    },
+    "12": {
+      "rgb": "00000000",
+      "bold": false,
+      "size": 11.0,
+      "h": "",
+      "v": "",
+      "val": ""
+    },
+    "13": {
+      "rgb": "00000000",
+      "bold": false,
+      "size": 11.0,
+      "h": "",
+      "v": "",
+      "val": ""
+    },
+    "14": {
+      "rgb": "00000000",
+      "bold": false,
+      "size": 11.0,
+      "h": "",
+      "v": "",
+      "val": ""
+    },
+    "15": {
+      "rgb": "Values must be of type <class 'str'>",
+      "bold": false,
+      "size": 11.0,
+      "h": "center",
+      "v": "center",
+      "val": "HELP"
+    }
+  },
+  "cdnur": {
+    "1": {
+      "rgb": "FF0070C0",
+      "bold": true,
+      "size": 11.0,
+      "h": "center",
+      "v": "top",
+      "val": "Summary For CDNUR(9B)"
+    },
+    "2": {
+      "rgb": "00000000",
+      "bold": false,
+      "size": 11.0,
+      "h": "",
+      "v": "",
+      "val": ""
+    },
+    "3": {
+      "rgb": "00000000",
+      "bold": false,
+      "size": 11.0,
+      "h": "center",
+      "v": "",
+      "val": ""
+    },
+    "4": {
+      "rgb": "00000000",
+      "bold": false,
+      "size": 11.0,
+      "h": "",
+      "v": "",
+      "val": ""
+    },
+    "5": {
+      "rgb": "00000000",
+      "bold": false,
+      "size": 11.0,
+      "h": "",
+      "v": "",
+      "val": ""
+    },
+    "6": {
+      "rgb": "00000000",
+      "bold": true,
+      "size": 11.0,
+      "h": "right",
+      "v": "",
+      "val": ""
+    },
+    "7": {
+      "rgb": "00000000",
+      "bold": true,
+      "size": 11.0,
+      "h": "center",
+      "v": "",
+      "val": ""
+    },
+    "8": {
+      "rgb": "00000000",
+      "bold": false,
+      "size": 11.0,
+      "h": "",
+      "v": "",
+      "val": ""
+    },
+    "9": {
+      "rgb": "00000000",
+      "bold": false,
+      "size": 11.0,
+      "h": "right",
+      "v": "",
+      "val": ""
+    },
+    "10": {
+      "rgb": "00000000",
+      "bold": false,
+      "size": 11.0,
+      "h": "center",
+      "v": "top",
+      "val": "HELP"
+    }
+  },
+  "cdnura": {
+    "1": {
+      "rgb": "FF0070C0",
+      "bold": true,
+      "size": 11.0,
+      "h": "center",
+      "v": "top",
+      "val": "Summary For CDNURA"
+    },
+    "2": {
+      "rgb": "Values must be of type <class 'str'>",
+      "bold": true,
+      "size": 11.0,
+      "h": "center",
+      "v": "",
+      "val": "Original details "
+    },
+    "3": {
+      "rgb": "00000000",
+      "bold": false,
+      "size": 11.0,
+      "h": "",
+      "v": "",
+      "val": ""
+    },
+    "4": {
+      "rgb": "Values must be of type <class 'str'>",
+      "bold": true,
+      "size": 11.0,
+      "h": "center",
+      "v": "",
+      "val": "Revised details"
+    },
+    "5": {
+      "rgb": "00000000",
+      "bold": false,
+      "size": 11.0,
+      "h": "",
+      "v": "",
+      "val": ""
+    },
+    "6": {
+      "rgb": "00000000",
+      "bold": false,
+      "size": 11.0,
+      "h": "",
+      "v": "",
+      "val": ""
+    },
+    "7": {
+      "rgb": "00000000",
+      "bold": false,
+      "size": 11.0,
+      "h": "",
+      "v": "",
+      "val": ""
+    },
+    "8": {
+      "rgb": "00000000",
+      "bold": false,
+      "size": 11.0,
+      "h": "",
+      "v": "",
+      "val": ""
+    },
+    "9": {
+      "rgb": "00000000",
+      "bold": false,
+      "size": 11.0,
+      "h": "",
+      "v": "",
+      "val": ""
+    },
+    "10": {
+      "rgb": "00000000",
+      "bold": false,
+      "size": 11.0,
+      "h": "",
+      "v": "",
+      "val": ""
+    },
+    "11": {
+      "rgb": "00000000",
+      "bold": false,
+      "size": 11.0,
+      "h": "",
+      "v": "",
+      "val": ""
+    },
+    "12": {
+      "rgb": "Values must be of type <class 'str'>",
+      "bold": false,
+      "size": 11.0,
+      "h": "center",
+      "v": "center",
+      "val": "HELP"
+    }
+  },
+  "exp": {
+    "1": {
+      "rgb": "FF0070C0",
+      "bold": true,
+      "size": 11.0,
+      "h": "center",
+      "v": "top",
+      "val": "Summary For EXP(6)"
+    },
+    "2": {
+      "rgb": "00000000",
+      "bold": false,
+      "size": 11.0,
+      "h": "",
+      "v": "",
+      "val": ""
+    },
+    "3": {
+      "rgb": "00000000",
+      "bold": false,
+      "size": 11.0,
+      "h": "",
+      "v": "",
+      "val": ""
+    },
+    "4": {
+      "rgb": "00000000",
+      "bold": false,
+      "size": 11.0,
+      "h": "right",
+      "v": "",
+      "val": ""
+    },
+    "5": {
+      "rgb": "00000000",
+      "bold": false,
+      "size": 11.0,
+      "h": "",
+      "v": "",
+      "val": ""
+    },
+    "6": {
+      "rgb": "00000000",
+      "bold": false,
+      "size": 11.0,
+      "h": "",
+      "v": "",
+      "val": ""
+    },
+    "7": {
+      "rgb": "00000000",
+      "bold": false,
+      "size": 11.0,
+      "h": "",
+      "v": "",
+      "val": ""
+    },
+    "8": {
+      "rgb": "00000000",
+      "bold": false,
+      "size": 11.0,
+      "h": "right",
+      "v": "",
+      "val": ""
+    },
+    "9": {
+      "rgb": "00000000",
+      "bold": false,
+      "size": 11.0,
+      "h": "",
+      "v": "",
+      "val": ""
+    },
+    "10": {
+      "rgb": "00000000",
+      "bold": false,
+      "size": 11.0,
+      "h": "center",
+      "v": "top",
+      "val": "HELP"
+    }
+  },
+  "expa": {
+    "1": {
+      "rgb": "FF0070C0",
+      "bold": true,
+      "size": 11.0,
+      "h": "center",
+      "v": "top",
+      "val": "Summary For EXPA"
+    },
+    "2": {
+      "rgb": "Values must be of type <class 'str'>",
+      "bold": false,
+      "size": 11.0,
+      "h": "left",
+      "v": "",
+      "val": "Original details "
+    },
+    "3": {
+      "rgb": "Values must be of type <class 'str'>",
+      "bold": false,
+      "size": 11.0,
+      "h": "left",
+      "v": "",
+      "val": ""
+    },
+    "4": {
+      "rgb": "Values must be of type <class 'str'>",
+      "bold": true,
+      "size": 11.0,
+      "h": "center",
+      "v": "",
+      "val": "Revised details"
+    },
+    "5": {
+      "rgb": "00000000",
+      "bold": false,
+      "size": 11.0,
+      "h": "",
+      "v": "",
+      "val": ""
+    },
+    "6": {
+      "rgb": "00000000",
+      "bold": false,
+      "size": 11.0,
+      "h": "",
+      "v": "",
+      "val": ""
+    },
+    "7": {
+      "rgb": "00000000",
+      "bold": false,
+      "size": 11.0,
+      "h": "",
+      "v": "",
+      "val": ""
+    },
+    "8": {
+      "rgb": "00000000",
+      "bold": false,
+      "size": 11.0,
+      "h": "",
+      "v": "",
+      "val": ""
+    },
+    "9": {
+      "rgb": "00000000",
+      "bold": false,
+      "size": 11.0,
+      "h": "",
+      "v": "",
+      "val": ""
+    },
+    "10": {
+      "rgb": "00000000",
+      "bold": false,
+      "size": 11.0,
+      "h": "",
+      "v": "",
+      "val": ""
+    },
+    "11": {
+      "rgb": "00000000",
+      "bold": false,
+      "size": 11.0,
+      "h": "",
+      "v": "",
+      "val": ""
+    },
+    "12": {
+      "rgb": "Values must be of type <class 'str'>",
+      "bold": false,
+      "size": 11.0,
+      "h": "center",
+      "v": "center",
+      "val": "HELP"
+    }
+  },
+  "at": {
+    "1": {
+      "rgb": "FF0070C0",
+      "bold": true,
+      "size": 11.0,
+      "h": "center",
+      "v": "top",
+      "val": "Summary For Advance Received (11B) "
+    },
+    "2": {
+      "rgb": "00000000",
+      "bold": true,
+      "size": 11.0,
+      "h": "center",
+      "v": "",
+      "val": ""
+    },
+    "3": {
+      "rgb": "00000000",
+      "bold": false,
+      "size": 11.0,
+      "h": "right",
+      "v": "",
+      "val": ""
+    },
+    "4": {
+      "rgb": "00000000",
+      "bold": false,
+      "size": 11.0,
+      "h": "",
+      "v": "",
+      "val": ""
+    },
+    "5": {
+      "rgb": "00000000",
+      "bold": false,
+      "size": 11.0,
+      "h": "center",
+      "v": "top",
+      "val": "HELP"
+    }
+  },
+  "ata": {
+    "1": {
+      "rgb": "FF0070C0",
+      "bold": true,
+      "size": 11.0,
+      "h": "center",
+      "v": "top",
+      "val": "Summary For Amended Tax Liability(Advance Received) "
+    },
+    "2": {
+      "rgb": "Values must be of type <class 'str'>",
+      "bold": true,
+      "size": 11.0,
+      "h": "center",
+      "v": "center",
+      "val": "Original details "
+    },
+    "3": {
+      "rgb": "00000000",
+      "bold": false,
+      "size": 11.0,
+      "h": "",
+      "v": "",
+      "val": ""
+    },
+    "4": {
+      "rgb": "Values must be of type <class 'str'>",
+      "bold": true,
+      "size": 11.0,
+      "h": "center",
+      "v": "center",
+      "val": "Revised details"
+    },
+    "5": {
+      "rgb": "00000000",
+      "bold": false,
+      "size": 11.0,
+      "h": "",
+      "v": "",
+      "val": ""
+    },
+    "6": {
+      "rgb": "00000000",
+      "bold": false,
+      "size": 11.0,
+      "h": "",
+      "v": "",
+      "val": ""
+    },
+    "7": {
+      "rgb": "Values must be of type <class 'str'>",
+      "bold": false,
+      "size": 11.0,
+      "h": "center",
+      "v": "center",
+      "val": "HELP"
+    }
+  },
+  "atadj": {
+    "1": {
+      "rgb": "FF0070C0",
+      "bold": true,
+      "size": 11.0,
+      "h": "center",
+      "v": "top",
+      "val": "Summary For Advance Adjusted (11B) "
+    },
+    "2": {
+      "rgb": "00000000",
+      "bold": true,
+      "size": 11.0,
+      "h": "center",
+      "v": "",
+      "val": ""
+    },
+    "3": {
+      "rgb": "00000000",
+      "bold": false,
+      "size": 11.0,
+      "h": "right",
+      "v": "",
+      "val": ""
+    },
+    "4": {
+      "rgb": "00000000",
+      "bold": false,
+      "size": 11.0,
+      "h": "",
+      "v": "",
+      "val": ""
+    },
+    "5": {
+      "rgb": "00000000",
+      "bold": false,
+      "size": 11.0,
+      "h": "center",
+      "v": "top",
+      "val": "HELP"
+    }
+  },
+  "atadja": {
+    "1": {
+      "rgb": "FF0070C0",
+      "bold": true,
+      "size": 11.0,
+      "h": "center",
+      "v": "top",
+      "val": "Summary For Amendement Of Adjustment Advances"
+    },
+    "2": {
+      "rgb": "Values must be of type <class 'str'>",
+      "bold": true,
+      "size": 11.0,
+      "h": "center",
+      "v": "center",
+      "val": "Original details "
+    },
+    "3": {
+      "rgb": "00000000",
+      "bold": false,
+      "size": 11.0,
+      "h": "",
+      "v": "",
+      "val": ""
+    },
+    "4": {
+      "rgb": "Values must be of type <class 'str'>",
+      "bold": true,
+      "size": 11.0,
+      "h": "center",
+      "v": "center",
+      "val": "Revised details"
+    },
+    "5": {
+      "rgb": "00000000",
+      "bold": false,
+      "size": 11.0,
+      "h": "",
+      "v": "",
+      "val": ""
+    },
+    "6": {
+      "rgb": "00000000",
+      "bold": false,
+      "size": 11.0,
+      "h": "",
+      "v": "",
+      "val": ""
+    },
+    "7": {
+      "rgb": "Values must be of type <class 'str'>",
+      "bold": false,
+      "size": 11.0,
+      "h": "center",
+      "v": "center",
+      "val": "HELP"
+    }
+  },
+  "exemp": {
+    "1": {
+      "rgb": "FF0070C0",
+      "bold": true,
+      "size": 11.0,
+      "h": "center",
+      "v": "top",
+      "val": "Summary For Nil rated, exempted and non GST outward supplies (8)"
+    },
+    "2": {
+      "rgb": "00000000",
+      "bold": false,
+      "size": 11.0,
+      "h": "",
+      "v": "",
+      "val": ""
+    },
+    "3": {
+      "rgb": "00000000",
+      "bold": false,
+      "size": 11.0,
+      "h": "right",
+      "v": "",
+      "val": ""
+    },
+    "4": {
+      "rgb": "00000000",
+      "bold": false,
+      "size": 11.0,
+      "h": "center",
+      "v": "top",
+      "val": "HELP"
+    }
+  },
+  "hsn(b2b)": {
+    "1": {
+      "rgb": "FF0070C0",
+      "bold": true,
+      "size": 11.0,
+      "h": "center",
+      "v": "top",
+      "val": "Summary For HSN(12)"
+    },
+    "2": {
+      "rgb": "00000000",
+      "bold": false,
+      "size": 11.0,
+      "h": "left",
+      "v": "",
+      "val": ""
+    },
+    "3": {
+      "rgb": "00000000",
+      "bold": false,
+      "size": 11.0,
+      "h": "",
+      "v": "",
+      "val": ""
+    },
+    "4": {
+      "rgb": "00000000",
+      "bold": false,
+      "size": 11.0,
+      "h": "",
+      "v": "",
+      "val": ""
+    },
+    "5": {
+      "rgb": "00000000",
+      "bold": false,
+      "size": 11.0,
+      "h": "",
+      "v": "",
+      "val": ""
+    },
+    "6": {
+      "rgb": "00000000",
+      "bold": false,
+      "size": 11.0,
+      "h": "",
+      "v": "",
+      "val": ""
+    },
+    "7": {
+      "rgb": "00000000",
+      "bold": false,
+      "size": 11.0,
+      "h": "",
+      "v": "",
+      "val": ""
+    },
+    "8": {
+      "rgb": "00000000",
+      "bold": false,
+      "size": 11.0,
+      "h": "",
+      "v": "",
+      "val": ""
+    },
+    "9": {
+      "rgb": "00000000",
+      "bold": false,
+      "size": 11.0,
+      "h": "",
+      "v": "",
+      "val": ""
+    },
+    "10": {
+      "rgb": "00000000",
+      "bold": false,
+      "size": 11.0,
+      "h": "",
+      "v": "",
+      "val": ""
+    },
+    "11": {
+      "rgb": "00000000",
+      "bold": false,
+      "size": 11.0,
+      "h": "center",
+      "v": "top",
+      "val": "HELP"
+    }
+  },
+  "hsn(b2c)": {
+    "1": {
+      "rgb": "FF0070C0",
+      "bold": true,
+      "size": 11.0,
+      "h": "center",
+      "v": "top",
+      "val": "Summary For HSN(12)"
+    },
+    "2": {
+      "rgb": "00000000",
+      "bold": false,
+      "size": 11.0,
+      "h": "left",
+      "v": "",
+      "val": ""
+    },
+    "3": {
+      "rgb": "00000000",
+      "bold": false,
+      "size": 11.0,
+      "h": "",
+      "v": "",
+      "val": ""
+    },
+    "4": {
+      "rgb": "00000000",
+      "bold": false,
+      "size": 11.0,
+      "h": "",
+      "v": "",
+      "val": ""
+    },
+    "5": {
+      "rgb": "00000000",
+      "bold": false,
+      "size": 11.0,
+      "h": "",
+      "v": "",
+      "val": ""
+    },
+    "6": {
+      "rgb": "00000000",
+      "bold": false,
+      "size": 11.0,
+      "h": "",
+      "v": "",
+      "val": ""
+    },
+    "7": {
+      "rgb": "00000000",
+      "bold": false,
+      "size": 11.0,
+      "h": "",
+      "v": "",
+      "val": ""
+    },
+    "8": {
+      "rgb": "00000000",
+      "bold": false,
+      "size": 11.0,
+      "h": "",
+      "v": "",
+      "val": ""
+    },
+    "9": {
+      "rgb": "00000000",
+      "bold": false,
+      "size": 11.0,
+      "h": "",
+      "v": "",
+      "val": ""
+    },
+    "10": {
+      "rgb": "00000000",
+      "bold": false,
+      "size": 11.0,
+      "h": "",
+      "v": "",
+      "val": ""
+    },
+    "11": {
+      "rgb": "00000000",
+      "bold": false,
+      "size": 11.0,
+      "h": "center",
+      "v": "top",
+      "val": "HELP"
+    }
+  },
+  "docs": {
+    "1": {
+      "rgb": "FF0070C0",
+      "bold": true,
+      "size": 11.0,
+      "h": "left",
+      "v": "top",
+      "val": "Summary of documents issued during the tax period (13)"
+    },
+    "2": {
+      "rgb": "00000000",
+      "bold": false,
+      "size": 11.0,
+      "h": "left",
+      "v": "",
+      "val": ""
+    },
+    "3": {
+      "rgb": "00000000",
+      "bold": false,
+      "size": 11.0,
+      "h": "",
+      "v": "",
+      "val": ""
+    },
+    "4": {
+      "rgb": "00000000",
+      "bold": false,
+      "size": 11.0,
+      "h": "right",
+      "v": "",
+      "val": ""
+    },
+    "5": {
+      "rgb": "00000000",
+      "bold": false,
+      "size": 11.0,
+      "h": "center",
+      "v": "top",
+      "val": "HELP"
+    }
+  },
+  "eco": {
+    "1": {
+      "rgb": "FF0070C0",
+      "bold": true,
+      "size": 12.0,
+      "h": "",
+      "v": "center",
+      "val": "Summary For Supplies through ECO-14"
+    },
+    "2": {
+      "rgb": "FF0070C0",
+      "bold": true,
+      "size": 12.0,
+      "h": "",
+      "v": "center",
+      "val": ""
+    },
+    "3": {
+      "rgb": "FF0070C0",
+      "bold": true,
+      "size": 12.0,
+      "h": "",
+      "v": "center",
+      "val": ""
+    },
+    "4": {
+      "rgb": "00000000",
+      "bold": false,
+      "size": 12.0,
+      "h": "",
+      "v": "center",
+      "val": ""
+    },
+    "5": {
+      "rgb": "00000000",
+      "bold": false,
+      "size": 12.0,
+      "h": "",
+      "v": "center",
+      "val": ""
+    },
+    "6": {
+      "rgb": "00000000",
+      "bold": false,
+      "size": 12.0,
+      "h": "",
+      "v": "center",
+      "val": ""
+    },
+    "7": {
+      "rgb": "00000000",
+      "bold": false,
+      "size": 12.0,
+      "h": "",
+      "v": "center",
+      "val": ""
+    },
+    "8": {
+      "rgb": "00000000",
+      "bold": false,
+      "size": 11.0,
+      "h": "center",
+      "v": "center",
+      "val": "HELP"
+    }
+  },
+  "ecoa": {
+    "1": {
+      "rgb": "FF0070C0",
+      "bold": true,
+      "size": 12.0,
+      "h": "center",
+      "v": "center",
+      "val": "Summary For Amended Supplies through ECO-14A"
+    },
+    "2": {
+      "rgb": "Values must be of type <class 'str'>",
+      "bold": true,
+      "size": 12.0,
+      "h": "center",
+      "v": "center",
+      "val": "Original details "
+    },
+    "3": {
+      "rgb": "00000000",
+      "bold": false,
+      "size": 11.0,
+      "h": "",
+      "v": "",
+      "val": ""
+    },
+    "4": {
+      "rgb": "Values must be of type <class 'str'>",
+      "bold": true,
+      "size": 12.0,
+      "h": "center",
+      "v": "center",
+      "val": "Revised details"
+    },
+    "5": {
+      "rgb": "00000000",
+      "bold": false,
+      "size": 11.0,
+      "h": "",
+      "v": "",
+      "val": ""
+    },
+    "6": {
+      "rgb": "00000000",
+      "bold": false,
+      "size": 11.0,
+      "h": "",
+      "v": "",
+      "val": ""
+    },
+    "7": {
+      "rgb": "00000000",
+      "bold": false,
+      "size": 11.0,
+      "h": "",
+      "v": "",
+      "val": ""
+    },
+    "8": {
+      "rgb": "00000000",
+      "bold": false,
+      "size": 11.0,
+      "h": "",
+      "v": "",
+      "val": ""
+    },
+    "9": {
+      "rgb": "00000000",
+      "bold": false,
+      "size": 11.0,
+      "h": "",
+      "v": "",
+      "val": ""
+    },
+    "10": {
+      "rgb": "00000000",
+      "bold": false,
+      "size": 11.0,
+      "h": "",
+      "v": "",
+      "val": ""
+    },
+    "11": {
+      "rgb": "Values must be of type <class 'str'>",
+      "bold": false,
+      "size": 11.0,
+      "h": "center",
+      "v": "center",
+      "val": "HELP"
+    }
+  },
+  "ecob2b": {
+    "1": {
+      "rgb": "FF0070C0",
+      "bold": true,
+      "size": 12.0,
+      "h": "left",
+      "v": "center",
+      "val": "Summary For Supplies U/s 9(5)-15-B2B"
+    },
+    "2": {
+      "rgb": "00000000",
+      "bold": true,
+      "size": 12.0,
+      "h": "center",
+      "v": "center",
+      "val": ""
+    },
+    "3": {
+      "rgb": "00000000",
+      "bold": true,
+      "size": 12.0,
+      "h": "center",
+      "v": "center",
+      "val": ""
+    },
+    "4": {
+      "rgb": "00000000",
+      "bold": true,
+      "size": 12.0,
+      "h": "center",
+      "v": "center",
+      "val": ""
+    },
+    "5": {
+      "rgb": "00000000",
+      "bold": true,
+      "size": 12.0,
+      "h": "center",
+      "v": "center",
+      "val": ""
+    },
+    "6": {
+      "rgb": "00000000",
+      "bold": true,
+      "size": 12.0,
+      "h": "center",
+      "v": "center",
+      "val": ""
+    },
+    "7": {
+      "rgb": "00000000",
+      "bold": true,
+      "size": 12.0,
+      "h": "center",
+      "v": "center",
+      "val": ""
+    },
+    "8": {
+      "rgb": "00000000",
+      "bold": true,
+      "size": 12.0,
+      "h": "center",
+      "v": "center",
+      "val": ""
+    },
+    "9": {
+      "rgb": "00000000",
+      "bold": true,
+      "size": 12.0,
+      "h": "center",
+      "v": "center",
+      "val": ""
+    },
+    "10": {
+      "rgb": "00000000",
+      "bold": false,
+      "size": 12.0,
+      "h": "center",
+      "v": "center",
+      "val": ""
+    },
+    "11": {
+      "rgb": "00000000",
+      "bold": false,
+      "size": 12.0,
+      "h": "center",
+      "v": "center",
+      "val": ""
+    },
+    "12": {
+      "rgb": "00000000",
+      "bold": false,
+      "size": 11.0,
+      "h": "center",
+      "v": "center",
+      "val": "HELP"
+    }
+  },
+  "ecourp2b": {
+    "1": {
+      "rgb": "FF0070C0",
+      "bold": true,
+      "size": 12.0,
+      "h": "left",
+      "v": "center",
+      "val": "Summary For Supplies U/s 9(5)-15-URP2B"
+    },
+    "2": {
+      "rgb": "00000000",
+      "bold": true,
+      "size": 12.0,
+      "h": "center",
+      "v": "center",
+      "val": ""
+    },
+    "3": {
+      "rgb": "00000000",
+      "bold": true,
+      "size": 12.0,
+      "h": "center",
+      "v": "center",
+      "val": ""
+    },
+    "4": {
+      "rgb": "00000000",
+      "bold": true,
+      "size": 12.0,
+      "h": "center",
+      "v": "center",
+      "val": ""
+    },
+    "5": {
+      "rgb": "00000000",
+      "bold": true,
+      "size": 12.0,
+      "h": "center",
+      "v": "center",
+      "val": ""
+    },
+    "6": {
+      "rgb": "00000000",
+      "bold": true,
+      "size": 12.0,
+      "h": "center",
+      "v": "center",
+      "val": ""
+    },
+    "7": {
+      "rgb": "00000000",
+      "bold": true,
+      "size": 12.0,
+      "h": "center",
+      "v": "center",
+      "val": ""
+    },
+    "8": {
+      "rgb": "00000000",
+      "bold": false,
+      "size": 12.0,
+      "h": "center",
+      "v": "center",
+      "val": ""
+    },
+    "9": {
+      "rgb": "00000000",
+      "bold": false,
+      "size": 12.0,
+      "h": "center",
+      "v": "center",
+      "val": ""
+    },
+    "10": {
+      "rgb": "00000000",
+      "bold": false,
+      "size": 11.0,
+      "h": "center",
+      "v": "center",
+      "val": "HELP"
+    }
+  },
+  "ecob2c": {
+    "1": {
+      "rgb": "FF0070C0",
+      "bold": true,
+      "size": 12.0,
+      "h": "left",
+      "v": "center",
+      "val": "Summary For Supplies U/s 9(5)-15-B2C"
+    },
+    "2": {
+      "rgb": "00000000",
+      "bold": true,
+      "size": 12.0,
+      "h": "center",
+      "v": "center",
+      "val": ""
+    },
+    "3": {
+      "rgb": "00000000",
+      "bold": true,
+      "size": 12.0,
+      "h": "center",
+      "v": "center",
+      "val": ""
+    },
+    "4": {
+      "rgb": "00000000",
+      "bold": false,
+      "size": 12.0,
+      "h": "center",
+      "v": "center",
+      "val": ""
+    },
+    "5": {
+      "rgb": "00000000",
+      "bold": false,
+      "size": 12.0,
+      "h": "center",
+      "v": "center",
+      "val": ""
+    },
+    "6": {
+      "rgb": "00000000",
+      "bold": false,
+      "size": 11.0,
+      "h": "center",
+      "v": "center",
+      "val": "HELP"
+    }
+  },
+  "ecourp2c": {
+    "1": {
+      "rgb": "FF0070C0",
+      "bold": true,
+      "size": 12.0,
+      "h": "left",
+      "v": "top",
+      "val": "Summary For Supplies U/s 9(5)-15-URP2C"
+    },
+    "2": {
+      "rgb": "00000000",
+      "bold": false,
+      "size": 12.0,
+      "h": "center",
+      "v": "",
+      "val": ""
+    },
+    "3": {
+      "rgb": "00000000",
+      "bold": false,
+      "size": 12.0,
+      "h": "center",
+      "v": "",
+      "val": ""
+    },
+    "4": {
+      "rgb": "00000000",
+      "bold": false,
+      "size": 11.0,
+      "h": "center",
+      "v": "top",
+      "val": "HELP"
+    }
+  },
+  "ecoab2b": {
+    "1": {
+      "rgb": "FF0070C0",
+      "bold": true,
+      "size": 12.0,
+      "h": "left",
+      "v": "top",
+      "val": "Summary For Supplies U/s 9(5) - 15A-B2B"
+    },
+    "2": {
+      "rgb": "Values must be of type <class 'str'>",
+      "bold": true,
+      "size": 12.0,
+      "h": "center",
+      "v": "",
+      "val": "Original details "
+    },
+    "3": {
+      "rgb": "00000000",
+      "bold": false,
+      "size": 11.0,
+      "h": "",
+      "v": "",
+      "val": ""
+    },
+    "4": {
+      "rgb": "00000000",
+      "bold": false,
+      "size": 11.0,
+      "h": "",
+      "v": "",
+      "val": ""
+    },
+    "5": {
+      "rgb": "00000000",
+      "bold": false,
+      "size": 11.0,
+      "h": "",
+      "v": "",
+      "val": ""
+    },
+    "6": {
+      "rgb": "00000000",
+      "bold": false,
+      "size": 11.0,
+      "h": "",
+      "v": "",
+      "val": ""
+    },
+    "7": {
+      "rgb": "Values must be of type <class 'str'>",
+      "bold": true,
+      "size": 12.0,
+      "h": "center",
+      "v": "",
+      "val": "Revised details "
+    },
+    "8": {
+      "rgb": "00000000",
+      "bold": false,
+      "size": 11.0,
+      "h": "",
+      "v": "",
+      "val": ""
+    },
+    "9": {
+      "rgb": "00000000",
+      "bold": false,
+      "size": 11.0,
+      "h": "",
+      "v": "",
+      "val": ""
+    },
+    "10": {
+      "rgb": "00000000",
+      "bold": false,
+      "size": 11.0,
+      "h": "",
+      "v": "",
+      "val": ""
+    },
+    "11": {
+      "rgb": "00000000",
+      "bold": false,
+      "size": 11.0,
+      "h": "",
+      "v": "",
+      "val": ""
+    },
+    "12": {
+      "rgb": "00000000",
+      "bold": false,
+      "size": 11.0,
+      "h": "",
+      "v": "",
+      "val": ""
+    },
+    "13": {
+      "rgb": "00000000",
+      "bold": false,
+      "size": 11.0,
+      "h": "",
+      "v": "",
+      "val": ""
+    },
+    "14": {
+      "rgb": "00000000",
+      "bold": false,
+      "size": 12.0,
+      "h": "center",
+      "v": "top",
+      "val": "HELP"
+    }
+  },
+  "ecoab2c": {
+    "1": {
+      "rgb": "FF0070C0",
+      "bold": true,
+      "size": 12.0,
+      "h": "center",
+      "v": "center",
+      "val": "Summary For Supplies U/s 9(5)-15A-B2C"
+    },
+    "2": {
+      "rgb": "Values must be of type <class 'str'>",
+      "bold": true,
+      "size": 12.0,
+      "h": "center",
+      "v": "center",
+      "val": "Original details "
+    },
+    "3": {
+      "rgb": "00000000",
+      "bold": false,
+      "size": 11.0,
+      "h": "",
+      "v": "",
+      "val": ""
+    },
+    "4": {
+      "rgb": "00000000",
+      "bold": false,
+      "size": 11.0,
+      "h": "",
+      "v": "",
+      "val": ""
+    },
+    "5": {
+      "rgb": "Values must be of type <class 'str'>",
+      "bold": true,
+      "size": 12.0,
+      "h": "center",
+      "v": "center",
+      "val": "Revised details "
+    },
+    "6": {
+      "rgb": "00000000",
+      "bold": false,
+      "size": 11.0,
+      "h": "",
+      "v": "",
+      "val": ""
+    },
+    "7": {
+      "rgb": "00000000",
+      "bold": false,
+      "size": 11.0,
+      "h": "",
+      "v": "",
+      "val": ""
+    },
+    "8": {
+      "rgb": "00000000",
+      "bold": false,
+      "size": 12.0,
+      "h": "center",
+      "v": "center",
+      "val": "HELP"
+    }
+  },
+  "ecoaurp2b": {
+    "1": {
+      "rgb": "FF0070C0",
+      "bold": true,
+      "size": 12.0,
+      "h": "center",
+      "v": "center",
+      "val": "Summary For Supplies U/s 9(5)-15A-URP2B"
+    },
+    "2": {
+      "rgb": "Values must be of type <class 'str'>",
+      "bold": true,
+      "size": 12.0,
+      "h": "center",
+      "v": "center",
+      "val": "Original details "
+    },
+    "3": {
+      "rgb": "00000000",
+      "bold": false,
+      "size": 11.0,
+      "h": "",
+      "v": "",
+      "val": ""
+    },
+    "4": {
+      "rgb": "00000000",
+      "bold": false,
+      "size": 11.0,
+      "h": "",
+      "v": "",
+      "val": ""
+    },
+    "5": {
+      "rgb": "Values must be of type <class 'str'>",
+      "bold": true,
+      "size": 12.0,
+      "h": "center",
+      "v": "center",
+      "val": "Revised details "
+    },
+    "6": {
+      "rgb": "00000000",
+      "bold": false,
+      "size": 11.0,
+      "h": "",
+      "v": "",
+      "val": ""
+    },
+    "7": {
+      "rgb": "00000000",
+      "bold": false,
+      "size": 11.0,
+      "h": "",
+      "v": "",
+      "val": ""
+    },
+    "8": {
+      "rgb": "00000000",
+      "bold": false,
+      "size": 11.0,
+      "h": "",
+      "v": "",
+      "val": ""
+    },
+    "9": {
+      "rgb": "00000000",
+      "bold": false,
+      "size": 11.0,
+      "h": "",
+      "v": "",
+      "val": ""
+    },
+    "10": {
+      "rgb": "00000000",
+      "bold": false,
+      "size": 11.0,
+      "h": "",
+      "v": "",
+      "val": ""
+    },
+    "11": {
+      "rgb": "00000000",
+      "bold": false,
+      "size": 11.0,
+      "h": "",
+      "v": "",
+      "val": ""
+    },
+    "12": {
+      "rgb": "00000000",
+      "bold": false,
+      "size": 12.0,
+      "h": "center",
+      "v": "center",
+      "val": "HELP"
+    }
+  },
+  "ecoaurp2c": {
+    "1": {
+      "rgb": "FF0070C0",
+      "bold": true,
+      "size": 12.0,
+      "h": "left",
+      "v": "center",
+      "val": "Summary For Supplies U/s 9(5)-15A-URP2C"
+    },
+    "2": {
+      "rgb": "Values must be of type <class 'str'>",
+      "bold": true,
+      "size": 12.0,
+      "h": "left",
+      "v": "center",
+      "val": "Original details "
+    },
+    "3": {
+      "rgb": "Values must be of type <class 'str'>",
+      "bold": true,
+      "size": 12.0,
+      "h": "center",
+      "v": "center",
+      "val": "Revised details "
+    },
+    "4": {
+      "rgb": "00000000",
+      "bold": false,
+      "size": 11.0,
+      "h": "",
+      "v": "",
+      "val": ""
+    },
+    "5": {
+      "rgb": "00000000",
+      "bold": false,
+      "size": 11.0,
+      "h": "",
+      "v": "",
+      "val": ""
+    },
+    "6": {
+      "rgb": "00000000",
+      "bold": false,
+      "size": 12.0,
+      "h": "center",
+      "v": "center",
+      "val": "HELP"
+    },
+    "7": {
+      "rgb": "00000000",
+      "bold": false,
+      "size": 12.0,
+      "h": "",
+      "v": "center",
+      "val": ""
+    },
+    "8": {
+      "rgb": "00000000",
+      "bold": false,
+      "size": 12.0,
+      "h": "",
+      "v": "center",
+      "val": ""
+    },
+    "9": {
+      "rgb": "00000000",
+      "bold": false,
+      "size": 12.0,
+      "h": "",
+      "v": "center",
+      "val": ""
+    },
+    "10": {
+      "rgb": "00000000",
+      "bold": false,
+      "size": 12.0,
+      "h": "",
+      "v": "center",
+      "val": ""
+    },
+    "11": {
+      "rgb": "00000000",
+      "bold": false,
+      "size": 12.0,
+      "h": "",
+      "v": "center",
+      "val": ""
+    }
+  }
+}

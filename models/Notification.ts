@@ -30,13 +30,26 @@ const NotificationSchema = new mongoose.Schema(
         "NEW_ORDER",
         "ORDER_APPROVAL",
         "SYNC_ALERT",
+        "AI_INSIGHT",
+        "BRIEFING",
+        "FIELD_ALERT",
+        "FORM_ALERT",
         "GENERAL",
       ],
       default: "GENERAL",
     },
     category: {
       type: String,
-      enum: ["FINANCIAL", "TARGETS", "INVENTORY", "ORDERS", "SYSTEM"],
+      enum: [
+        "FINANCIAL",
+        "TARGETS",
+        "INVENTORY",
+        "ORDERS",
+        "SYSTEM",
+        "AI_INSIGHT",
+        "CUSTOM_FORMS",
+        "FIELD_FORCE",
+      ],
       default: "SYSTEM",
     },
     severity: {
@@ -56,6 +69,19 @@ const NotificationSchema = new mongoose.Schema(
     actionUrl: {
       type: String,
       default: "",
+    },
+    suggestedAction: {
+      type: String,
+      default: "",
+    },
+    impactScore: {
+      type: String,
+      enum: ["CRITICAL", "HIGH", "MEDIUM", "LOW", ""],
+      default: "",
+    },
+    aiGenerated: {
+      type: Boolean,
+      default: false,
     },
     metadata: {
       type: Object,

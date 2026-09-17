@@ -153,6 +153,8 @@ export default function CustomerPage() {
     }
   };
 
+
+
   const loadCustomers = async () => {
     try {
       setLoading(true);
@@ -200,12 +202,7 @@ export default function CustomerPage() {
         cell: (info) => info.row.index + 1,
         size: 48,
       }),
-      columnHelper.accessor("CODEP", {
-        header: "Code",
-        cell: (info) => (
-          <span className="font-semibold text-[#343872]">{info.getValue() || "-"}</span>
-        ),
-      }),
+ 
       columnHelper.accessor("PARNAM", {
         header: "Customer Name",
         cell: (info) => (

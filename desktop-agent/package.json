@@ -1,0 +1,80 @@
+{
+  "name": "mabsol-sync-agent",
+  "productName": "MabsolSyncAgent",
+  "appId": "com.mabsol.syncagent",
+  "version": "1.0.0",
+  "description": "Mabsol Pharma CRM - Desktop Data Synchronization Agent",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "build": "electron-builder"
+  },
+  "build": {
+    "appId": "com.mabsol.syncagent",
+    "productName": "MabsolSyncAgent",
+    "directories": {
+      "output": "../dist-electron"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "mabsol_logo.ico",
+      "renderer/**/*",
+      "node_modules/**/*"
+    ],
+    "extraResources": [
+      {
+        "from": "engine",
+        "to": "engine",
+        "filter": [
+          "**/*"
+        ]
+      }
+    ],
+    "asar": true,
+    "win": {
+      "icon": "mabsol_logo.ico",
+      "target": [
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "requestedExecutionLevel": "asInvoker"
+    },
+    "nsis": {
+      "oneClick": true,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": false,
+      "deleteAppDataOnUninstall": false
+    },
+    "portable": {
+      "splashImage": null
+    },
+    "electronVersion": "33.4.11"
+  },
+  "keywords": [
+    "mabsol",
+    "pharma-crm",
+    "sync-agent",
+    "database-sync"
+  ],
+  "author": "Mabsol Infotech",
+  "license": "ISC",
+  "dependencies": {
+    "axios": "^1.7.9",
+    "form-data": "^4.0.0"
+  },
+  "devDependencies": {
+    "electron": "33.4.11",
+    "electron-builder": "26.15.3"
+  }
+}

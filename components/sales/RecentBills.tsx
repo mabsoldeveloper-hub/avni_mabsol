@@ -64,17 +64,10 @@ export default function RecentBills() {
             console.error(err);
             setBills([]);
         }
-    }, [selectedFY, selectedCompany?._id]);
+    }, [selectedFY?._id, selectedCompany?._id]);
 
     useEffect(() => {
         loadBills();
-        const onFyChange = () => loadBills();
-        window.addEventListener("financial-year-changed", onFyChange);
-        window.addEventListener("company-changed", onFyChange);
-        return () => {
-            window.removeEventListener("financial-year-changed", onFyChange);
-            window.removeEventListener("company-changed", onFyChange);
-        };
     }, [loadBills]);
 
     // search filter (voucher + customer + city + user)

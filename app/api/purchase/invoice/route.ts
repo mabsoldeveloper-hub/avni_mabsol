@@ -225,8 +225,12 @@ export async function POST(req: Request) {
       const gst = Number(it.gstPercent || 12);
 
       const gross = qty * rate;
-      const discAmt = gross * (disc / 100);
-      const taxable = gross - discAmt;
+      const tradeDiscAmt = gross * (disc / 100);
+      const afterTradeDisc = Math.max(0, gross - tradeDiscAmt);
+      const schemeDisc = Number(it.schemeDiscountPercent || 0);
+      const schemeDiscAmt = afterTradeDisc * (schemeDisc / 100);
+      const discAmt = tradeDiscAmt + schemeDiscAmt;
+      const taxable = Math.max(0, gross - discAmt);
       const gstAmt = taxable * (gst / 100);
       const lineTotal = taxable + gstAmt;
 
@@ -238,6 +242,7 @@ export async function POST(req: Request) {
         productId: it.productId || "",
         productCode: it.productCode || "",
         productName: it.productName || "Product",
+        companyName: it.companyName || "",
         hsnCode: it.hsnCode || "",
         batchNo: it.batchNo || "BATCH-01",
         expDate: it.expDate || "",
@@ -248,10 +253,13 @@ export async function POST(req: Request) {
         unit: it.unit || "Box",
         rate,
         discountPercent: disc,
+        schemeDiscountPercent: Number(it.schemeDiscountPercent || 0),
         gstPercent: gst,
         taxableAmount: Math.round(taxable * 100) / 100,
         gstAmount: Math.round(gstAmt * 100) / 100,
         total: Math.round(lineTotal * 100) / 100,
+        location: it.location || "",
+        itemRemark: it.itemRemark || "",
       };
     });
 

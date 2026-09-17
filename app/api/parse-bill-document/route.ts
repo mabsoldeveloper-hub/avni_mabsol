@@ -49,8 +49,18 @@ function normalizeDate(rawDateStr: string): string {
 }
 function normalizeExpiry(rawExp: string): string {
   if (!rawExp) return "";
-  const clean = rawExp.trim();
-  const m = clean.match(/^(\d{1,2})[\/\-](\d{2}|\d{4})$/);
+  const clean = rawExp.trim().toUpperCase();
+  const months: Record<string, string> = {
+    JAN: "01", FEB: "02", MAR: "03", APR: "04", MAY: "05", JUN: "06",
+    JUL: "07", AUG: "08", SEP: "09", OCT: "10", NOV: "11", DEC: "12",
+  };
+  const monthNameMatch = clean.match(/([A-Z]{3})[\/\-.](\d{2,4})/);
+  if (monthNameMatch && months[monthNameMatch[1]]) {
+    const month = months[monthNameMatch[1]];
+    const year = monthNameMatch[2].length === 2 ? `20${monthNameMatch[2]}` : monthNameMatch[2];
+    return `${year}-${month}`;
+  }
+  const m = clean.match(/^(\d{1,2})[\/\-.](\d{2}|\d{4})$/);
   if (m) {
     const month = m[1].padStart(2, "0");
     const year = m[2].length === 2 ? `20${m[2]}` : m[2];
@@ -378,6 +388,34 @@ function parseUniversalInvoiceText(rawText: string) {
   };
 }
 
+function detectMimeType(buffer: Buffer, fallbackName?: string, fallbackType?: string): string {
+  if (buffer && buffer.length >= 4) {
+    if (buffer.slice(0, 4).toString() === "%PDF") {
+      return "application/pdf";
+    }
+    if (buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff) {
+      return "image/jpeg";
+    }
+    if (buffer.slice(0, 4).toString("hex") === "89504e47") {
+      return "image/png";
+    }
+    if (buffer.slice(0, 4).toString() === "RIFF" && buffer.length >= 12 && buffer.slice(8, 12).toString() === "WEBP") {
+      return "image/webp";
+    }
+  }
+  if (fallbackType && fallbackType !== "application/octet-stream") {
+    return fallbackType;
+  }
+  if (fallbackName) {
+    const lower = fallbackName.toLowerCase();
+    if (lower.endsWith(".pdf")) return "application/pdf";
+    if (lower.endsWith(".png")) return "image/png";
+    if (lower.endsWith(".webp")) return "image/webp";
+    if (lower.endsWith(".jpg") || lower.endsWith(".jpeg")) return "image/jpeg";
+  }
+  return "image/jpeg";
+}
+
 export async function POST(req: Request) {
   try {
     const contentType = req.headers.get("content-type") || "";
@@ -393,9 +431,9 @@ export async function POST(req: Request) {
       if (file) {
         const arrayBuffer = await file.arrayBuffer();
         fileBuffer = Buffer.from(arrayBuffer);
-        mimeType = file.type || (file.name.endsWith(".pdf") ? "application/pdf" : "image/jpeg");
+        mimeType = detectMimeType(fileBuffer, file.name, file.type);
         base64Data = bufferToBase64(fileBuffer);
-        if (mimeType.includes("pdf") || file.name.endsWith(".pdf")) {
+        if (mimeType === "application/pdf" || file.name.toLowerCase().endsWith(".pdf")) {
           const pdfExtractedText = extractTextFromPdfBuffer(fileBuffer);
           if (pdfExtractedText) rawTextPayload = `${rawTextPayload}\n${pdfExtractedText}`;
         }
@@ -410,55 +448,62 @@ export async function POST(req: Request) {
         mimeType = parts[0].replace("data:", "");
         base64Data = parts[1];
       }
+      if (base64Data) {
+        try {
+          const buf = Buffer.from(base64Data, "base64");
+          mimeType = detectMimeType(buf, undefined, mimeType);
+        } catch {}
+      }
     }
 
-    const apiKey = process.env.GEMINI_API_KEY;
+    const apiKey = process.env.GEMINI_API_KEY || process.env.AI_API_KEY || process.env.GOOGLE_API_KEY;
 
-    if (!apiKey && mimeType.startsWith("image/") && !rawTextPayload.trim()) {
+    if (!apiKey && !rawTextPayload.trim()) {
       return NextResponse.json({
         success: false,
         noApiKey: true,
-        message: "GEMINI_API_KEY not configured. Please add it to your .env file to enable AI bill reading from images. Get a free key at https://aistudio.google.com/apikey",
+        message: "AI Vision License Key not configured in server environment. Please configure your key in the .env file.",
       });
     }
 
     if (apiKey && base64Data) {
       let lastErrorMessage = "";
       try {
-        const promptText = `You are a world-class AI pharmaceutical invoice & Goods Receipt Note parser for Indian pharma ERP systems.
+        const promptText = `You are a world-class AI pharmaceutical invoice & Goods Receipt Note parser for Indian pharma ERP systems (MabsolCRM ERP, Tally, Busy, Vyapar).
 
-Your task is to parse ANY pharmaceutical purchase bill image/PDF (Wholesale GST Invoice, Tax Invoice, Delivery Challan, Marg ERP, Tally, Busy, Vyapar, etc.).
+Your task is to parse ANY pharmaceutical purchase bill document (PDF or Image), including Wholesale GST Invoices, Tax Invoices, Delivery Challans, and GRNs.
 
 CRITICAL PARTY IDENTIFICATION RULES:
-1. SELLER / SUPPLIER / DISTRIBUTOR (Party issuing the bill):
-   - Found at the TOP HEADER of the bill / Letterhead (e.g. "BHASIN AGENCIES", "ARORA MEDICOS", "HETERO HEALTHCARE LTD", "SUN PHARMA DISTRIBUTORS").
+1. SELLER / SUPPLIER / DISTRIBUTOR (Party issuing the invoice):
+   - Found at the TOP HEADER of the bill / Letterhead (e.g. "BHASIN PHARMA AGENCIES", "ARORA MEDICOS", "HETERO HEALTHCARE LTD", "SUN PHARMA DISTRIBUTORS").
    - Often has their GSTIN, Phone, Address, DL No (20B, 21B), Email printed at the top or bottom footer.
    - Set this as "vendorName", "vendorGst", "vendorPhone", "vendorAddress", "vendorDlNo".
 
-2. BUYER / BILLED TO / CUSTOMER (Party receiving the bill):
+2. BUYER / BILLED TO / CUSTOMER (Party receiving the goods):
    - Found in "M/s", "Party Name:", "Sold To:", "Billed To:", "Customer:", "Consignee:" block (e.g. "BALA JI MEDICOS"). Strip "M/s" prefix.
    - Set this as "buyerName", "buyerGst", "buyerPhone", "buyerAddress", "buyerDlNo".
 
 3. CANDIDATE PARTIES LIST:
-   - Identify ALL parties mentioned in the document (Header Seller, M/s Buyer, Consignee, Transport, etc.) and return them in the "candidateParties" array so the user can easily select the exact supplier from a popup.
+   - Identify ALL parties mentioned in the document (Header Seller, M/s Buyer, Consignee, Transport, etc.) and return them in the "candidateParties" array so the user can easily switch or verify.
 
 4. INVOICE HEADER DETAILS:
    - supplierInvoiceNo: Look for "Invoice No.", "Bill No.", "Challan No.", "GST Inv No." (e.g. "AR26-27/3991", "GST-22000", "MSG-4596").
    - billDate: Look for "Date:", "Invoice Date:", "Bill Date:". Format strictly as YYYY-MM-DD.
    - dueDate: Look for "Due Date:". If missing, set to 30 days after billDate.
 
-5. TABLE LINE ITEMS (EVERY SINGLE ROW MUST BE CAPTURED):
-   - productName: Full medicine / product name (e.g. "DR.ULTRA ISABGOL", "GLYCOMET TRIO 1", "ROZUCOR ASP 20 CAP").
-   - hsnCode: HSN Code (e.g. "3004", "30049099").
-   - batchNo: Batch number (e.g. "DRU25002", "CMR260305", "464799@").
+5. TABLE LINE ITEMS (EVERY SINGLE MEDICINE ROW MUST BE CAPTURED ACCURATELY):
+   - productName: Full medicine / product brand name (e.g. "DR.ULTRA ISABGOL", "GLYCOMET TRIO 1", "ROZUCOR ASP 20 CAP", "AUGMENTIN 625").
+   - hsnCode: HSN Code (usually 4 to 8 digits, default "3004" for pharma if blank).
+   - batchNo: Batch number (e.g. "DRU25002", "CMR260305", "464799").
+   - mfgDate: Manufacturing date in YYYY-MM format (e.g. "2025-01") or empty string if not present.
    - expDate: Expiry date in YYYY-MM format (e.g. "2027-02", "2026-12", "2028-03").
    - mrp: Maximum Retail Price per unit.
-   - qty: Quantity billed (integer/number).
+   - qty: Invoiced quantity (numeric).
    - freeQty: Free / scheme / bonus quantity (often labelled "FREE", "F", "SCH.", "SCHEME"). Return 0 if none.
-   - unit: Pack size or unit (e.g. "1*100G", "1X10", "10*10", "60ML", "Box", "Strip").
+   - unit: Pack size or unit (e.g. "1*100G", "1X10", "10*10", "60ML", "Box", "Strip", "Bottle").
    - rate: Purchase rate per unit before discount.
    - discountPercent: Discount percentage (CD %, TD %, Trade Disc %, Cash Disc %, Disc %).
-   - gstPercent: GST percentage (5, 12, 18, 28).
+   - gstPercent: GST percentage (0, 5, 12, 18, 28).
 
 6. Return ONLY valid JSON matching this exact schema (no markdown, no backticks, no wrap):
 {
@@ -499,6 +544,7 @@ CRITICAL PARTY IDENTIFICATION RULES:
       "productName": "string",
       "hsnCode": "string",
       "batchNo": "string",
+      "mfgDate": "YYYY-MM",
       "expDate": "YYYY-MM",
       "mrp": number,
       "qty": number,
@@ -512,21 +558,34 @@ CRITICAL PARTY IDENTIFICATION RULES:
   "remarks": "string"
 }`;
 
+        const supportedMimeTypes = [
+          "application/pdf",
+          "image/jpeg",
+          "image/png",
+          "image/webp",
+          "image/heic",
+          "image/heif",
+        ];
+        const effectiveMimeType = supportedMimeTypes.includes(mimeType)
+          ? mimeType
+          : mimeType.includes("pdf")
+          ? "application/pdf"
+          : "image/jpeg";
+
         const modelsToTry = [
           "gemini-2.5-flash",
+          "gemini-flash-latest",
+          "gemini-2.5-pro",
+          "gemini-pro-latest",
           "gemini-2.0-flash",
           "gemini-1.5-flash",
-          "gemini-2.5-pro",
-          "gemini-1.5-pro",
-          "gemini-flash-latest",
-          "gemini-pro-latest",
         ];
 
-        let geminiRes: Response | null = null;
+        let aiRes: Response | null = null;
         for (const model of modelsToTry) {
           const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
           const controller = new AbortController();
-          const timer = setTimeout(() => controller.abort(), 45000); // 45s timeout for AI vision
+          const timer = setTimeout(() => controller.abort(), 60000);
 
           try {
             const r = await fetch(url, {
@@ -540,7 +599,7 @@ CRITICAL PARTY IDENTIFICATION RULES:
                       { text: promptText },
                       {
                         inlineData: {
-                          mimeType: mimeType.startsWith("image/") ? mimeType : "image/jpeg",
+                          mimeType: effectiveMimeType,
                           data: base64Data,
                         },
                       },
@@ -550,14 +609,14 @@ CRITICAL PARTY IDENTIFICATION RULES:
                 generationConfig: {
                   temperature: 0.1,
                   topP: 0.95,
-                  maxOutputTokens: 8192,
+                  maxOutputTokens: 16384,
                   responseMimeType: "application/json",
                 },
               }),
             });
             clearTimeout(timer);
             if (r.ok) {
-              geminiRes = r;
+              aiRes = r;
               break;
             } else {
               const errBody = await r.json().catch(() => ({}));
@@ -565,20 +624,21 @@ CRITICAL PARTY IDENTIFICATION RULES:
               if (!lastErrorMessage || r.status !== 404) {
                 lastErrorMessage = msg;
               }
-              console.error(`Gemini model ${model} error:`, msg);
+              console.error(`AI Model ${model} returned error:`, msg);
             }
           } catch (fetchErr: any) {
             clearTimeout(timer);
             lastErrorMessage = fetchErr.message || "Network request timed out";
-            console.error(`Gemini fetch error for model ${model}:`, fetchErr);
+            console.error(`AI fetch error for model ${model}:`, fetchErr);
           }
         }
 
-        if (geminiRes && geminiRes.ok) {
-          const geminiData = await geminiRes.json();
-          // Collect text from ALL parts (handles thinking models or multiple text parts)
-          const partsArray = geminiData.candidates?.[0]?.content?.parts || [];
-          const combinedText = partsArray
+        if (aiRes && aiRes.ok) {
+          const aiData = await aiRes.json();
+          // Filter out internal thinking parts so only output JSON text is parsed
+          const partsArray = aiData.candidates?.[0]?.content?.parts || [];
+          const validParts = partsArray.filter((p: any) => !p.thought && p.text);
+          const combinedText = (validParts.length > 0 ? validParts : partsArray)
             .map((p: any) => p.text || "")
             .filter(Boolean)
             .join("\n");
@@ -588,6 +648,7 @@ CRITICAL PARTY IDENTIFICATION RULES:
           if (parsed.items && Array.isArray(parsed.items)) {
             parsed.items = parsed.items.map((item: any) => ({
               ...item,
+              mfgDate: item.mfgDate ? normalizeExpiry(String(item.mfgDate)) : "",
               expDate: item.expDate ? normalizeExpiry(String(item.expDate)) : "",
               mrp: Number(item.mrp || 0),
               qty: Number(item.qty || 1),
@@ -632,28 +693,27 @@ CRITICAL PARTY IDENTIFICATION RULES:
 
           return NextResponse.json({
             success: true,
-            source: "Gemini AI Vision",
+            source: "AI Smart Vision Engine",
             data: parsed,
           });
         } else {
-          // If this is an image file and AI failed, return explicit error instead of silent empty fallback
-          if (mimeType.startsWith("image/") && !rawTextPayload.trim()) {
+          if ((effectiveMimeType === "application/pdf" || effectiveMimeType.startsWith("image/")) && !rawTextPayload.trim()) {
             return NextResponse.json(
               {
                 success: false,
-                message: `Gemini AI Vision failed to extract bill: ${lastErrorMessage || "Unable to parse bill image"}`,
+                message: `AI Vision Document Extraction Error: ${lastErrorMessage || "Unable to parse invoice document"}`,
               },
               { status: 400 }
             );
           }
         }
-      } catch (geminiErr: any) {
-        console.error("Gemini Vision API processing error:", geminiErr);
-        if (mimeType.startsWith("image/") && !rawTextPayload.trim()) {
+      } catch (aiErr: any) {
+        console.error("AI Vision API processing error:", aiErr);
+        if ((mimeType === "application/pdf" || mimeType.startsWith("image/")) && !rawTextPayload.trim()) {
           return NextResponse.json(
             {
               success: false,
-              message: `AI Bill Parsing Error: ${geminiErr?.message || "Failed to process image with Gemini AI"}`,
+              message: `AI Bill Parsing Error: ${aiErr?.message || "Failed to process document with AI engine"}`,
             },
             { status: 400 }
           );
@@ -663,12 +723,11 @@ CRITICAL PARTY IDENTIFICATION RULES:
 
     const parsedData = parseUniversalInvoiceText(rawTextPayload);
 
-    // If fallback returned 0 items on an image upload without OCR text, return error
-    if (mimeType.startsWith("image/") && (!parsedData.items || parsedData.items.length === 0)) {
+    if (!parsedData.items || parsedData.items.length === 0) {
       return NextResponse.json(
         {
           success: false,
-          message: "Could not extract bill items from the image. Please verify your GEMINI_API_KEY or upload a clearer photo.",
+          message: "Could not extract bill items from document. Please verify your AI API key in .env or ensure the document is clear.",
         },
         { status: 400 }
       );

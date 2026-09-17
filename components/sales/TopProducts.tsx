@@ -70,17 +70,10 @@ export default function TopProducts() {
         } catch {
             setProducts([]);
         }
-    }, [selectedFY, selectedCompany?._id]);
+    }, [selectedFY?._id, selectedCompany?._id]);
 
     useEffect(() => {
         loadProducts();
-        const onFyChange = () => loadProducts();
-        window.addEventListener("financial-year-changed", onFyChange);
-        window.addEventListener("company-changed", onFyChange);
-        return () => {
-            window.removeEventListener("financial-year-changed", onFyChange);
-            window.removeEventListener("company-changed", onFyChange);
-        };
     }, [loadProducts]);
 
     const columns = useMemo(

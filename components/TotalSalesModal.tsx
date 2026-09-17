@@ -30,7 +30,7 @@ interface TotalSalesModalProps {
   onClose: () => void;
 }
 
-// Marg ERP Consolidated Sales Book Filter Options
+// MabsolCRM Consolidated Sales Book Filter Options
 const MARG_FILTER_OPTIONS = [
   { id: "S", label: "3. Sale (Gross Sales Invoices)", desc: "Gross sale bills only" },
   { id: "NET_SALE", label: "2. Sale - S/R (Sales Net of Returns)", desc: "Sales minus returns" },

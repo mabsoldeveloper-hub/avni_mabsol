@@ -108,7 +108,7 @@ export async function POST() {
     let prgLines = [
       "SET SAFETY OFF",
       "SET TALK OFF",
-      'WAIT WINDOW "Mabsol Pharma CRM - Starting VFP Marg Import..." TIMEOUT 1',
+      'WAIT WINDOW "Mabsol Pharma CRM - Starting MabsolCRM Import..." TIMEOUT 1',
       ""
     ];
     let copiedCount = 0;
@@ -134,7 +134,7 @@ export async function POST() {
       copiedCount++;
     }
 
-    prgLines.push('WAIT WINDOW "Mabsol Pharma CRM - VFP Import Complete!" TIMEOUT 1.5');
+    prgLines.push('WAIT WINDOW "Mabsol Pharma CRM - MabsolCRM Import Complete!" TIMEOUT 1.5');
     prgLines.push("QUIT");
     fs.writeFileSync(prgPath, prgLines.join("\r\n"));
 
@@ -151,7 +151,7 @@ export async function POST() {
       email: user.email,
       action: "rescan",
       status: "queued",
-      message: "Direct VFP import and rescan triggered from dashboard.",
+      message: "Direct MabsolCRM import and rescan triggered from dashboard.",
     });
 
     // Run VFP command in foreground setting cwd to VFP folder so DLLs are found
@@ -162,7 +162,7 @@ export async function POST() {
 
     return NextResponse.json({
       success: true,
-      message: `VFP Engine successfully extracted and imported ${copiedCount} tables from Marg!`,
+      message: `MabsolCRM Engine successfully extracted and imported ${copiedCount} tables!`,
       copiedCount,
     });
   } catch (error: any) {

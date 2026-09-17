@@ -7,64 +7,88 @@ import mongoose from "mongoose";
 import "@/models/Role";
 import Company from "@/models/Company";
 import { getCurrentUser } from "@/lib/auth";
+import { getHierarchyAccess } from "@/lib/hierarchyAccess";
 
 export const dynamic = "force-dynamic";
 
 export async function GET() {
   try {
     await connectDB();
-    const currentUser = await getCurrentUser();
 
-    let query: any = {};
-    if (currentUser?.tenantId) {
-      query.tenantId = currentUser.tenantId;
-    } else if (currentUser?.companyId) {
-      query.companyId = currentUser.companyId;
+    const currentUser = await getCurrentUser();
+    const access = await getHierarchyAccess(currentUser);
+
+    if (!access.isAuthenticated) {
+      return NextResponse.json(
+        { success: false, error: "Unauthorized" },
+        { status: 401 }
+      );
     }
 
-    const users = await User.find(query)
+    // Admin gets every active user in the tenant. Other roles get only their
+    // own user plus the complete recursive reportsTo subtree.
+    const userQuery: any = access.isAdmin
+      ? { ...(currentUser?.tenantId ? { tenantId: currentUser.tenantId } : {}) }
+      : { _id: { $in: access.accessibleUserIds.map(String) }, status: "Active" };
+
+    const users = await User.find(userQuery)
       .populate("companyId", "companyName")
       .populate("roleId", "roleName")
       .sort({ createdAt: -1 })
       .lean();
 
-    // Fetch all active Sales Hierarchy records
-    const hierarchies = await SalesHierarchy.find({ status: "Active" }).lean();
+    const hierarchies = await SalesHierarchy.find({
+      userId: { $in: users.map((u: any) => u._id) },
+      status: "Active",
+    }).lean();
+
     const hierarchyMap = new Map<string, any>();
     hierarchies.forEach((h: any) => {
-      if (h.userId) {
-        hierarchyMap.set(String(h.userId).trim(), h);
-      }
+      if (h.userId) hierarchyMap.set(String(h.userId), h);
     });
 
-    // Enrich users with salesHierarchy details
+    const childrenByParent = new Map<string, any[]>();
+    users.forEach((u: any) => {
+      if (!u.reportsTo) return;
+      const parent = String(u.reportsTo);
+      const arr = childrenByParent.get(parent) || [];
+      arr.push(u);
+      childrenByParent.set(parent, arr);
+    });
+
     const enrichedUsers = users.map((u: any) => {
-      const uid = String(u._id).trim();
-      const h = hierarchyMap.get(uid);
+      const uid = String(u._id);
+      const h = hierarchyMap.get(uid) || null;
+      const directTeamCount = (childrenByParent.get(uid) || []).length;
       return {
         ...u,
-        salesHierarchy: h || null,
+        salesHierarchy: h,
+        hierarchy: {
+          reportsTo: u.reportsTo ? String(u.reportsTo) : null,
+          reportsToName: h?.reportsToName || "",
+          roleLevel: h?.roleLevel || u.roleType || "",
+          directTeamCount,
+          isInMyHierarchy: true,
+        },
       };
     });
 
     return NextResponse.json({
       success: true,
       users: enrichedUsers,
-    });
-
-  } catch (error: any) {
-
-
-    return NextResponse.json(
-      {
-        success: false,
-        error: error.message,
+      hierarchy: {
+        currentUserId: access.userId,
+        currentRole: access.role,
+        isAdmin: access.isAdmin,
+        totalAccessibleUsers: enrichedUsers.length,
       },
-      {
-        status: 500,
-      }
+    });
+  } catch (error: any) {
+    console.error("GET /api/users error:", error);
+    return NextResponse.json(
+      { success: false, error: error?.message || "Failed to load users" },
+      { status: 500 }
     );
-
   }
 }
 

@@ -25,7 +25,7 @@ export default function FolderSelectorModal({
   onClose,
   currentPath,
   onFolderSelected,
-  title = "Configure VFP Sync Directory",
+  title = "Configure MabsolCRM Sync Directory",
   selectOnly = false,
 }: FolderSelectorModalProps) {
   const [pathInput, setPathInput] = useState("");
@@ -221,7 +221,7 @@ export default function FolderSelectorModal({
                 {title}
               </h2>
               <p className="text-[12.5px] text-[#9297A1] m-0 leading-normal">
-                Browse your server filesystem to configure VFP paths
+                Browse your server filesystem to configure MabsolCRM paths
               </p>
             </div>
           </div>

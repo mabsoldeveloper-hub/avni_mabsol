@@ -21,6 +21,8 @@ export default function CustomerViewPage() {
     loadCustomer();
   }, [id]);
 
+  
+
   const loadCustomer = async () => {
     setLoading(true);
     setError(null);

@@ -44,6 +44,7 @@ export async function GET(req: NextRequest) {
         const { searchParams } = new URL(req.url);
         const companyVfpMatch = await getCompanyVfpFilter(searchParams);
         const action = searchParams.get("action");
+        const restriction = await getMrTerritoryRestriction();
         const partyCode = (searchParams.get("partyCode") || searchParams.get("customer") || "").trim();
 
         // Action 1: Preview next voucher number for RECEIPT series
@@ -62,16 +63,16 @@ export async function GET(req: NextRequest) {
                 GLedger.aggregate([
                     {
                         $match: combineFilters({
-                            $or: [
-                                { BOOK: "R" },
-                                { TYPE: "CR" },
-                                { TYPE: "RC" },
-                                { VOUCHER: /^RCT/i },
-                                { VCN: /^RCT/i },
-                            ],
-                            CREDIT: { $gt: 0 },
-                            DATE: todayStr(),
-                        }, companyVfpMatch)
+                        $and: [
+                            { $or: [
+                                { BOOK: "R" }, { TYPE: "CR" }, { TYPE: "RC" },
+                                { VOUCHER: /^RCT/i }, { VCN: /^RCT/i }
+                            ] },
+                            { CREDIT: { $gt: 0 } },
+                            { DATE: todayStr() },
+                            ...(restriction.isMrRestricted ? [{ CODE: { $in: restriction.allowedOrdnos?.length ? restriction.allowedOrdnos : ["NONE_MATCH"] } }] : [])
+                        ]
+                    }, companyVfpMatch)
                     },
                     { $group: { _id: null, totalCollected: { $sum: "$CREDIT" }, count: { $sum: 1 } } }
                 ])
@@ -89,6 +90,10 @@ export async function GET(req: NextRequest) {
         // Action 1c: Customer Financial Profile & Balance Summary
         if (action === "customerDetails" && partyCode) {
             const partyConds = buildPartyConds(partyCode);
+            const party = await Customer.findOne(combineFilters({ $or: partyConds }, companyVfpMatch)).lean();
+            if (restriction.isMrRestricted && (!party || !restriction.isPartyAllowed(party))) {
+                return NextResponse.json({ success: false, error: "Party is outside your assigned hierarchy" }, { status: 403 });
+            }
 
             const [orderCust, mainCust, pendingsAgg, glAgg, salesAgg] = await Promise.all([
                 Order.findOne(combineFilters({ $or: partyConds }, companyVfpMatch)).lean(),
@@ -132,6 +137,10 @@ export async function GET(req: NextRequest) {
         // Action 2: Get Pending Outstanding Invoices for a selected customer
         if (action === "pendingInvoices" && partyCode) {
             const partyConds = buildPartyConds(partyCode);
+            const party = await Customer.findOne(combineFilters({ $or: partyConds }, companyVfpMatch)).lean();
+            if (restriction.isMrRestricted && (!party || !restriction.isPartyAllowed(party))) {
+                return NextResponse.json({ success: false, error: "Party is outside your assigned hierarchy" }, { status: 403 });
+            }
 
             let pendingDocs = await Pendings.find(
                 combineFilters({ $or: partyConds, BALANCE: { $gt: 0 } }, companyVfpMatch),
@@ -183,8 +192,6 @@ export async function GET(req: NextRequest) {
         const page = Math.max(1, parseInt(searchParams.get("page") || "1", 10));
         const limit = Math.max(1, Math.min(200, parseInt(searchParams.get("limit") || "50", 10)));
 
-        const restriction = await getMrTerritoryRestriction();
-
         // Build filter for Receipts (BOOK: "R" or TYPE: "CR" or VCN starts with RCT)
         let filter: any = combineFilters({
             $or: [
@@ -197,8 +204,8 @@ export async function GET(req: NextRequest) {
             CREDIT: { $gt: 0 },
         }, companyVfpMatch);
 
-        if (restriction.isMrRestricted && restriction.allowedOrdnos && restriction.allowedOrdnos.length > 0) {
-            filter.CODE = { $in: restriction.allowedOrdnos };
+        if (restriction.isMrRestricted) {
+            filter.CODE = { $in: restriction.allowedOrdnos?.length ? restriction.allowedOrdnos : ["NONE_MATCH"] };
         }
 
         if (partyCode) {
@@ -230,7 +237,15 @@ export async function GET(req: NextRequest) {
         }
 
         // Fetch Customer details map
-        const customerOrders = await Order.find({ SALDR: "Y" }, { ORDNO: 1, CODEP: 1, PARNAM: 1, CITY: 1 }).lean();
+        const customerOrders = await Order.find(
+            restriction.isMrRestricted
+                ? { SALDR: "Y", $or: [
+                    { ORDNO: { $in: restriction.allowedOrdnos?.length ? restriction.allowedOrdnos : ["NONE_MATCH"] } },
+                    { CODEP: { $in: restriction.allowedOrdnos?.length ? restriction.allowedOrdnos : ["NONE_MATCH"] } },
+                ] }
+                : { SALDR: "Y" },
+            { ORDNO: 1, CODEP: 1, PARNAM: 1, CITY: 1 }
+        ).lean();
         const partyMap = new Map<string, { name: string; city: string }>();
         customerOrders.forEach((o: any) => {
             if (o.ORDNO) {
@@ -317,6 +332,15 @@ export async function POST(req: NextRequest) {
                 { success: false, error: "Customer / Party is required" },
                 { status: 400 }
             );
+        }
+
+        const restriction = await getMrTerritoryRestriction();
+        if (restriction.isMrRestricted) {
+            const partyConds = buildPartyConds(String(partyCode).trim());
+            const party = await Customer.findOne({ $or: partyConds }).lean();
+            if (!party || !restriction.isPartyAllowed(party)) {
+                return NextResponse.json({ success: false, error: "Party is outside your assigned hierarchy" }, { status: 403 });
+            }
         }
 
         if (amount <= 0) {

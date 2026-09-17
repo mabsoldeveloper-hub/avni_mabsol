@@ -4,6 +4,7 @@ import SalesMdis from "@/models/SalesMdis";
 import SalesDis from "@/models/SalesDis";
 import Customer from "@/models/Customer";
 import Product from "@/models/Product";
+import { getMrTerritoryRestriction } from "@/lib/mrTerritoryHelper";
 
 export async function GET(
   req: NextRequest,
@@ -33,6 +34,41 @@ export async function GET(
         },
         { status: 404 }
       );
+    }
+
+    /* ---------------------------------------------------------- */
+    /* Hierarchy access control                                   */
+    /* ---------------------------------------------------------- */
+    const restriction = await getMrTerritoryRestriction();
+
+    /*
+     * SalesMdis.CODEP is the customer/account code used by the invoice.
+     * Verify the party BEFORE loading invoice items or returning any
+     * invoice/customer data. For restricted users, return 404 so an
+     * inaccessible invoice cannot be distinguished from a missing one.
+     */
+    if (restriction.isMrRestricted) {
+      const invoiceCustomer: any = await Customer.findOne({
+        ORDNO: header.CODEP,
+      }).lean();
+
+      const partyForAuthorization = invoiceCustomer || {
+        ORDNO: header.CODEP,
+        CODEP: header.CODEP,
+        CODE: header.CODEP,
+        COMPANY: header.COMPANY,
+        SCODE: header.SCODE,
+      };
+
+      if (!restriction.isPartyAllowed(partyForAuthorization)) {
+        return NextResponse.json(
+          {
+            success: false,
+            message: "Invoice not found",
+          },
+          { status: 404 }
+        );
+      }
     }
 
     // Invoice Items

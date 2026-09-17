@@ -83,14 +83,14 @@ export default function FYListPage() {
       }),
       columnHelper.accessor((row: any) => row.fyCode, {
         id: "fyCode",
-        header: "Marg Code",
+        header: "MabsolCRM Code",
         cell: (info) => {
           const val = info.getValue();
           const row = info.row.original;
           return (
             <button
               onClick={async () => {
-                const newCode = prompt("Enter Marg FY Code (e.g. I05, I06, I04):", val || "");
+                const newCode = prompt("Enter MabsolCRM FY Code (e.g. I05, I06, I04):", val || "");
                 if (newCode !== null && newCode.trim() !== (val || "")) {
                   await fetch(`/api/financial-year/${row._id}`, {
                     method: "PUT",
@@ -100,7 +100,7 @@ export default function FYListPage() {
                   loadData();
                 }
               }}
-              title="Click to edit Marg FY Code"
+              title="Click to edit MabsolCRM FY Code"
               className="font-mono text-xs font-bold text-amber-800 bg-amber-100 hover:bg-amber-200 border border-amber-300 px-2.5 py-0.5 rounded-md cursor-pointer transition-colors shadow-2xs"
             >
               {val || "+ Set Code"}

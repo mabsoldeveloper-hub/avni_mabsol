@@ -61,10 +61,15 @@ export async function GET(req: Request) {
       bills = [];
     }
 
-    // Fallback within the company scope if date match returns 0 bills
+    // If hierarchy restriction is active, NEVER fall back to an unrestricted
+    // company-only query. That could expose another user's invoices.
     if (!bills || bills.length === 0) {
       try {
-        bills = await SalesMdis.find(combineFilters(saleFilterBase, companyVfpMatch), projection)
+        const fallbackFilter = restriction.isMrRestricted
+          ? billMatch
+          : combineFilters(saleFilterBase, companyVfpMatch);
+
+        bills = await SalesMdis.find(fallbackFilter, projection)
           .sort({ _id: -1 })
           .limit(30)
           .lean();
@@ -132,4 +137,4 @@ export async function GET(req: Request) {
   }
 }
 
-
+

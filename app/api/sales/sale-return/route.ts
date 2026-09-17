@@ -46,6 +46,7 @@ export async function GET(req: NextRequest) {
         const { searchParams } = new URL(req.url);
         const companyVfpMatch = await getCompanyVfpFilter(searchParams);
         const action = searchParams.get("action");
+        const restriction = await getMrTerritoryRestriction();
 
         // Action 1: Preview next voucher number for Return series
         if (action === "nextNumber") {
@@ -57,11 +58,26 @@ export async function GET(req: NextRequest) {
         if (action === "metrics") {
             const [totalAgg, todayAgg] = await Promise.all([
                 SalesMdis.aggregate([
-                    { $match: combineFilters({ $or: [{ TYPE: "SR" }, { INVTYPE: "R" }, { VCN: /^RET/i }] }, companyVfpMatch) },
+                    { $match: combineFilters({
+                        $and: [
+                            { $or: [{ TYPE: "SR" }, { INVTYPE: "R" }, { VCN: /^RET/i }] },
+                            ...(restriction.isMrRestricted
+                                ? [{ CODEP: { $in: restriction.allowedOrdnos?.length ? restriction.allowedOrdnos : ["NONE_MATCH"] } }]
+                                : [])
+                        ]
+                    }, companyVfpMatch) },
                     { $group: { _id: null, totalAmount: { $sum: "$FINAL" }, count: { $sum: 1 } } }
                 ]),
                 SalesMdis.aggregate([
-                    { $match: combineFilters({ $or: [{ TYPE: "SR" }, { INVTYPE: "R" }, { VCN: /^RET/i }], DATE: todayStr() }, companyVfpMatch) },
+                    { $match: combineFilters({
+                        $and: [
+                            { $or: [{ TYPE: "SR" }, { INVTYPE: "R" }, { VCN: /^RET/i }] },
+                            { DATE: todayStr() },
+                            ...(restriction.isMrRestricted
+                                ? [{ CODEP: { $in: restriction.allowedOrdnos?.length ? restriction.allowedOrdnos : ["NONE_MATCH"] } }]
+                                : [])
+                        ]
+                    }, companyVfpMatch) },
                     { $group: { _id: null, totalAmount: { $sum: "$FINAL" }, count: { $sum: 1 } } }
                 ])
             ]);
@@ -83,6 +99,11 @@ export async function GET(req: NextRequest) {
             }
 
             const partyConds = buildPartyConds(partyCode);
+
+            const party = await Customer.findOne(combineFilters({ $or: partyConds }, companyVfpMatch)).lean();
+            if (restriction.isMrRestricted && (!party || !restriction.isPartyAllowed(party))) {
+                return NextResponse.json({ success: false, error: "Party is outside your assigned hierarchy" }, { status: 403 });
+            }
 
             // Find all Sale Invoices for this customer (excluding returns)
             const invoiceHeaders = await SalesMdis.find(
@@ -204,8 +225,6 @@ export async function GET(req: NextRequest) {
         const page = Math.max(1, parseInt(searchParams.get("page") || "1", 10));
         const limit = Math.max(1, Math.min(200, parseInt(searchParams.get("limit") || "50", 10)));
 
-        const restriction = await getMrTerritoryRestriction();
-
         // Build filter for Sales Returns (INVTYPE: "R" or TYPE: "SR" or VCN starts with RET/SR)
         const filter: any = combineFilters(
             {
@@ -218,8 +237,8 @@ export async function GET(req: NextRequest) {
             companyVfpMatch
         );
 
-        if (restriction.isMrRestricted && restriction.allowedOrdnos && restriction.allowedOrdnos.length > 0) {
-            filter.CODEP = { $in: restriction.allowedOrdnos };
+        if (restriction.isMrRestricted) {
+            filter.CODEP = { $in: restriction.allowedOrdnos?.length ? restriction.allowedOrdnos : ["NONE_MATCH"] };
         }
 
         if (partyCode) {
@@ -333,6 +352,15 @@ export async function POST(req: NextRequest) {
                 { success: false, error: "Customer / Party is required" },
                 { status: 400 }
             );
+        }
+
+        const restriction = await getMrTerritoryRestriction();
+        if (restriction.isMrRestricted) {
+            const partyConds = buildPartyConds(String(partyCode).trim());
+            const party = await Customer.findOne({ $or: partyConds }).lean();
+            if (!party || !restriction.isPartyAllowed(party)) {
+                return NextResponse.json({ success: false, error: "Party is outside your assigned hierarchy" }, { status: 403 });
+            }
         }
 
         if (!items || !Array.isArray(items) || items.length === 0) {

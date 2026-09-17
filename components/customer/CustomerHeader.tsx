@@ -55,9 +55,8 @@ export default function CustomerHeader({ customer }: Props) {
                 {getInitials(customer.PARNAM)}
               </div>
               <div
-                className={`absolute -bottom-1 -right-1 w-4 h-4 rounded-full border-2 border-white ${
-                  isActive ? "bg-emerald-500" : "bg-rose-500"
-                }`}
+                className={`absolute -bottom-1 -right-1 w-4 h-4 rounded-full border-2 border-white ${isActive ? "bg-emerald-500" : "bg-rose-500"
+                  }`}
                 title={isActive ? "Active Account" : "Inactive Account"}
               />
             </div>
@@ -68,11 +67,10 @@ export default function CustomerHeader({ customer }: Props) {
                   {customer.PARNAM || "Unnamed Customer"}
                 </h1>
                 <span
-                  className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-semibold ring-1 ${
-                    isActive
-                      ? "bg-emerald-500/15 text-emerald-700 ring-emerald-500/30"
-                      : "bg-rose-500/15 text-rose-700 ring-rose-500/30"
-                  }`}
+                  className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-semibold ring-1 ${isActive
+                    ? "bg-emerald-500/15 text-emerald-700 ring-emerald-500/30"
+                    : "bg-rose-500/15 text-rose-700 ring-rose-500/30"
+                    }`}
                 >
                   <FaShieldAlt size={10} />
                   {isActive ? "Active Customer" : "Inactive Customer"}
@@ -80,10 +78,10 @@ export default function CustomerHeader({ customer }: Props) {
               </div>
 
               <div className="flex items-center gap-3 mt-1 text-xs text-slate-500 flex-wrap">
-                <span className="flex items-center gap-1 font-medium text-indigo-700 bg-indigo-50/80 px-2 py-0.5 rounded-md border border-indigo-100/80">
+                {/* <span className="flex items-center gap-1 font-medium text-indigo-700 bg-indigo-50/80 px-2 py-0.5 rounded-md border border-indigo-100/80">
                   <FaIdCard size={11} className="text-indigo-500" />
                   Code: <strong className="font-semibold text-slate-800">{customer.CODEP || customer.ORDNO || "-"}</strong>
-                </span>
+                </span> */}
 
                 {customer.GROUPNAME && (
                   <span className="flex items-center gap-1 font-medium text-slate-600 bg-slate-100/80 px-2 py-0.5 rounded-md border border-slate-200/80">

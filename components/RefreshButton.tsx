@@ -11,7 +11,7 @@ export default function RefreshButton() {
   const handleRefresh = () => {
     setRefreshing(true);
     router.refresh();
-    setTimeout(() => setRefreshing(false), 600);
+    // setTimeout(() => setRefreshing(false), 600);
   };
 
   return (

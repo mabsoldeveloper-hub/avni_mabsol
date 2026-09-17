@@ -11,6 +11,19 @@ export async function getCompanyVfpFilter(searchParams: URLSearchParams): Promis
 
   const codesToMatch = new Set<string>();
 
+  const addCode = (val: any) => {
+    if (!val) return;
+    if (Array.isArray(val)) {
+      val.forEach(addCode);
+    } else if (typeof val === "string") {
+      val.split(/[\s,;]+/).forEach((item) => {
+        const trimmed = item.trim().toUpperCase();
+        if (trimmed) codesToMatch.add(trimmed);
+      });
+    }
+  };
+
+  // 1. Resolve Company
   let compDoc: any = null;
   if (companyId && companyId !== "ALL") {
     try {
@@ -19,28 +32,39 @@ export async function getCompanyVfpFilter(searchParams: URLSearchParams): Promis
       } else {
         compDoc = await Company.findOne({ companyCode: new RegExp(`^${companyId}$`, "i") }).lean();
       }
-
-      if (compDoc?.companyCode) {
-        codesToMatch.add(compDoc.companyCode.trim().toUpperCase());
-      }
-      if (compDoc?.code) {
-        codesToMatch.add(compDoc.code.trim().toUpperCase());
-      }
-
-      if (!fyId || fyId === "ALL") {
-        const fyDocs = await FinancialYear.find({ companyId: compDoc?._id || companyId }, { fyCode: 1 }).lean();
-        for (const fy of fyDocs) {
-          if (fy.fyCode) {
-            codesToMatch.add(fy.fyCode.trim().toUpperCase());
-          }
-        }
-      }
     } catch (e) {
       console.error("Error matching companyId in getCompanyVfpFilter:", e);
     }
+  } else {
+    // If no companyId or "ALL", check if there is a single active company
+    try {
+      const companyCount = await Company.countDocuments({ status: { $ne: "Inactive" } });
+      if (companyCount === 1) {
+        compDoc = await Company.findOne({ status: { $ne: "Inactive" } }).lean();
+      }
+    } catch (e) {
+      console.error("Error detecting single company in getCompanyVfpFilter:", e);
+    }
   }
 
-  if (fyId && fyId !== "ALL") {
+  // 2. Resolve Financial Year Codes strictly per selection (DO NOT mix years together!)
+  const targetCompanyId = compDoc?._id || (companyId && companyId !== "ALL" ? companyId : null);
+
+  if (fyId === "ALL") {
+    // User explicitly requested ALL financial years: include codes for all FYs of this company
+    try {
+      const fyDocs = await FinancialYear.find(
+        targetCompanyId ? { companyId: targetCompanyId } : {},
+        { fyCode: 1 }
+      ).lean();
+      for (const fy of fyDocs) {
+        addCode(fy.fyCode);
+      }
+    } catch (e) {
+      console.error("Error fetching all FY codes in getCompanyVfpFilter:", e);
+    }
+  } else if (fyId && fyId !== "ALL") {
+    // User requested one SPECIFIC financial year: include ONLY that FY's code
     try {
       let fyDoc: any = null;
       if (mongoose.Types.ObjectId.isValid(fyId)) {
@@ -48,20 +72,41 @@ export async function getCompanyVfpFilter(searchParams: URLSearchParams): Promis
       } else {
         fyDoc = await FinancialYear.findOne({ fyCode: new RegExp(`^${fyId}$`, "i") }).lean();
       }
-
       if (fyDoc?.fyCode) {
-        codesToMatch.add(fyDoc.fyCode.trim().toUpperCase());
-      }
-      if (fyDoc?.companyId) {
-        const fyComp: any = await Company.findById(fyDoc.companyId).lean();
-        if (fyComp?.companyCode) codesToMatch.add(fyComp.companyCode.trim().toUpperCase());
-        if (fyComp?.code) codesToMatch.add(fyComp.code.trim().toUpperCase());
+        addCode(fyDoc.fyCode);
       }
     } catch (e) {
-      console.error("Error matching fyId in getCompanyVfpFilter:", e);
+      console.error("Error matching specific fyId in getCompanyVfpFilter:", e);
+    }
+  } else {
+    // No fyId parameter passed: Default strictly to CURRENT active financial year
+    try {
+      let currentFy = await FinancialYear.findOne(
+        targetCompanyId ? { companyId: targetCompanyId, isCurrent: true } : { isCurrent: true }
+      ).lean();
+      if (!currentFy) {
+        // Fallback to latest FY
+        currentFy = await FinancialYear.findOne(
+          targetCompanyId ? { companyId: targetCompanyId } : {}
+        ).sort({ startDate: -1 }).lean();
+      }
+      if (currentFy?.fyCode) {
+        addCode(currentFy.fyCode);
+      }
+    } catch (e) {
+      console.error("Error matching current FY in getCompanyVfpFilter:", e);
     }
   }
 
+  // 3. Company code identification
+  if (compDoc?.companyCode) {
+    addCode(compDoc.companyCode);
+  }
+  if (compDoc?.code) {
+    addCode(compDoc.code);
+  }
+
+  // 4. Build MongoDB Query
   const vfpOrList: any[] = [];
   for (const code of Array.from(codesToMatch)) {
     if (code) {
@@ -72,8 +117,8 @@ export async function getCompanyVfpFilter(searchParams: URLSearchParams): Promis
     }
   }
 
-  if (companyId && companyId !== "ALL") {
-    const compStr = String(companyId).trim();
+  if (compDoc?._id || (companyId && companyId !== "ALL")) {
+    const compStr = String(compDoc?._id || companyId).trim();
     if (mongoose.Types.ObjectId.isValid(compStr)) {
       vfpOrList.push({ companyId: new mongoose.Types.ObjectId(compStr) });
     }

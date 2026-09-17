@@ -720,7 +720,7 @@ export default function ComparisonDashboardPage() {
                         <StatCard
                             label="Gross Sales"
                             value={`₹ ${formatINR(summary.totalSales)}`}
-                            subtext="Exact Marg Sales Book match"
+                            subtext="Exact MabsolCRM Sales Book match"
                             icon={<FaRupeeSign size={15} />}
                         />
                         <StatCard
@@ -801,7 +801,7 @@ export default function ComparisonDashboardPage() {
                             </ChartBox>
                         </Card>
 
-                        <Card title="Creditor Outstanding Aging Breakdown" subtitle="Purchase Bill aging buckets matching Marg ERP Pendings">
+                        <Card title="Creditor Outstanding Aging Breakdown" subtitle="Purchase Bill aging buckets matching MabsolCRM ERP Pendings">
                             <ChartBox heightClass="h-[240px] sm:h-[290px]">
                                 <BarChart data={data.collectionVsOutstanding.aging} margin={{ left: isMobile ? -20 : 0, right: 8 }}>
                                     <CartesianGrid strokeDasharray="3 3" stroke="rgba(100,116,139,0.15)" />

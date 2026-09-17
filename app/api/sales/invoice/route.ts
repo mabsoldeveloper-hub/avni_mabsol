@@ -209,6 +209,30 @@ export async function POST(req: Request) {
       );
     }
 
+    // Hierarchy authorization: a user may create a sales invoice only for a party
+    // that belongs to their accessible hierarchy/territory.
+    const restriction = await getMrTerritoryRestriction();
+
+    if (restriction.isMrRestricted) {
+      const customerForAuth: any = await Customer.findOne({
+        $or: [
+          { CODEP: customerCode },
+          { ORDNO: customerCode },
+          { CODE: customerCode },
+          { SCODE: customerCode },
+          { CODEP: new RegExp(`^${customerCode.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`, "i") },
+          { ORDNO: new RegExp(`^${customerCode.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`, "i") },
+        ],
+      }).lean();
+
+      if (!customerForAuth || !restriction.isPartyAllowed(customerForAuth)) {
+        return NextResponse.json(
+          { success: false, message: "You are not allowed to create an invoice for this customer" },
+          { status: 403 }
+        );
+      }
+    }
+
     const rawBillType = String(body.billType || body.type || body.TYPE || "S").toUpperCase();
     const effectiveType = rawBillType.includes("PROFORMA") || rawBillType.includes("ESTIMATE") ? "PROFORMA" : "S";
     const convertFromVcn = String(body.convertFromVcn || "").trim();

@@ -34,6 +34,7 @@ import {
 interface BillItem {
   productId?: string;
   productCode?: string;
+  companyName?: string;
   productName: string;
   hsnCode: string;
   batchNo: string;
@@ -45,7 +46,10 @@ interface BillItem {
   unit: string;
   rate: number;
   discountPercent: number;
+  schemeDiscountPercent?: number;
   gstPercent: number;
+  location?: string;
+  itemRemark?: string;
 }
 
 interface SupplierMaster {
@@ -85,7 +89,9 @@ interface POSelectOption {
 }
 
 // Column Visibility State
-interface ColumnConfig {
+export interface ColumnConfig {
+  itemCode: boolean;
+  company: boolean;
   hsn: boolean;
   pack: boolean;
   batch: boolean;
@@ -93,11 +99,232 @@ interface ColumnConfig {
   expDate: boolean;
   mrp: boolean;
   freeQty: boolean;
+  grossAmt: boolean;
   tradeDisc: boolean;
-  gst: boolean;
+  discAmt: boolean;
+  schemeDisc: boolean;
   taxableAmt: boolean;
+  gst: boolean;
+  cgstAmt: boolean;
+  sgstAmt: boolean;
+  igstAmt: boolean;
   gstAmt: boolean;
+  netCost: boolean;
+  margin: boolean;
+  location: boolean;
+  itemRemark: boolean;
 }
+
+export const DEFAULT_COLUMNS: ColumnConfig = {
+  itemCode: false,
+  company: false,
+  hsn: true,
+  pack: true,
+  batch: true,
+  mfgDate: true,
+  expDate: true,
+  mrp: true,
+  freeQty: true,
+  grossAmt: false,
+  tradeDisc: true,
+  discAmt: false,
+  schemeDisc: false,
+  taxableAmt: true,
+  gst: true,
+  cgstAmt: false,
+  sgstAmt: false,
+  igstAmt: false,
+  gstAmt: true,
+  netCost: false,
+  margin: false,
+  location: false,
+  itemRemark: false,
+};
+
+export const COLUMN_PRESETS: Record<string, { label: string; badge: string; config: ColumnConfig }> = {
+  default: {
+    label: "Pharma Standard",
+    badge: "11 Cols",
+    config: DEFAULT_COLUMNS,
+  },
+  all: {
+    label: "Select All Fields",
+    badge: "23 Cols",
+    config: {
+      itemCode: true,
+      company: true,
+      hsn: true,
+      pack: true,
+      batch: true,
+      mfgDate: true,
+      expDate: true,
+      mrp: true,
+      freeQty: true,
+      grossAmt: true,
+      tradeDisc: true,
+      discAmt: true,
+      schemeDisc: true,
+      taxableAmt: true,
+      gst: true,
+      cgstAmt: true,
+      sgstAmt: true,
+      igstAmt: true,
+      gstAmt: true,
+      netCost: true,
+      margin: true,
+      location: true,
+      itemRemark: true,
+    },
+  },
+  taxBreakdown: {
+    label: "Detailed Tax Split",
+    badge: "12 Cols",
+    config: {
+      itemCode: false,
+      company: false,
+      hsn: true,
+      pack: false,
+      batch: true,
+      mfgDate: false,
+      expDate: true,
+      mrp: true,
+      freeQty: false,
+      grossAmt: true,
+      tradeDisc: true,
+      discAmt: true,
+      schemeDisc: false,
+      taxableAmt: true,
+      gst: true,
+      cgstAmt: true,
+      sgstAmt: true,
+      igstAmt: true,
+      gstAmt: true,
+      netCost: false,
+      margin: false,
+      location: false,
+      itemRemark: false,
+    },
+  },
+  marginCost: {
+    label: "Margin & Costing",
+    badge: "10 Cols",
+    config: {
+      itemCode: false,
+      company: true,
+      hsn: false,
+      pack: true,
+      batch: true,
+      mfgDate: false,
+      expDate: true,
+      mrp: true,
+      freeQty: true,
+      grossAmt: false,
+      tradeDisc: true,
+      discAmt: false,
+      schemeDisc: false,
+      taxableAmt: true,
+      gst: true,
+      cgstAmt: false,
+      sgstAmt: false,
+      igstAmt: false,
+      gstAmt: false,
+      netCost: true,
+      margin: true,
+      location: true,
+      itemRemark: false,
+    },
+  },
+  compact: {
+    label: "Compact / Minimal",
+    badge: "5 Cols",
+    config: {
+      itemCode: false,
+      company: false,
+      hsn: false,
+      pack: true,
+      batch: true,
+      mfgDate: false,
+      expDate: true,
+      mrp: true,
+      freeQty: false,
+      grossAmt: false,
+      tradeDisc: false,
+      discAmt: false,
+      schemeDisc: false,
+      taxableAmt: false,
+      gst: true,
+      cgstAmt: false,
+      sgstAmt: false,
+      igstAmt: false,
+      gstAmt: false,
+      netCost: false,
+      margin: false,
+      location: false,
+      itemRemark: false,
+    },
+  },
+};
+
+export const COLUMN_GROUPS = [
+  {
+    category: "Product & Packaging",
+    tag: "Core",
+    color: "amber",
+    columns: [
+      { key: "itemCode" as const, label: "Item / Product Code", desc: "SKU or system code" },
+      { key: "company" as const, label: "Brand / Mfr Name", desc: "Pharma company or division" },
+      { key: "hsn" as const, label: "HSN Code", desc: "Tax classification code" },
+      { key: "pack" as const, label: "Pack / Unit", desc: "Strip, Box, Bottle size" },
+    ],
+  },
+  {
+    category: "Batch & Shelf Life",
+    tag: "Dates",
+    color: "blue",
+    columns: [
+      { key: "batch" as const, label: "Batch Number", desc: "Manufacturing batch code" },
+      { key: "mfgDate" as const, label: "Mfg Date (MM/YY)", desc: "Production month/year" },
+      { key: "expDate" as const, label: "Expiry Date (MM/YY)", desc: "Shelf expiry month/year" },
+    ],
+  },
+  {
+    category: "Pricing, Scheme & Discounts",
+    tag: "Pricing",
+    color: "emerald",
+    columns: [
+      { key: "mrp" as const, label: "MRP (₹)", desc: "Maximum Retail Price" },
+      { key: "freeQty" as const, label: "Free / Bonus Qty", desc: "Deal / scheme bonus units" },
+      { key: "grossAmt" as const, label: "Gross Amount (₹)", desc: "Billed Qty × Rate" },
+      { key: "tradeDisc" as const, label: "Trade Disc %", desc: "Primary trade discount %" },
+      { key: "discAmt" as const, label: "Discount Total (₹)", desc: "Total discount value in ₹" },
+      { key: "schemeDisc" as const, label: "Scheme Disc %", desc: "Secondary scheme discount %" },
+    ],
+  },
+  {
+    category: "GST & Tax Breakdown",
+    tag: "Taxation",
+    color: "purple",
+    columns: [
+      { key: "taxableAmt" as const, label: "Taxable Value (₹)", desc: "Value subject to GST" },
+      { key: "gst" as const, label: "GST Rate %", desc: "5%, 12%, 18%, 28%" },
+      { key: "cgstAmt" as const, label: "CGST (₹)", desc: "Central GST (Intrastate)" },
+      { key: "sgstAmt" as const, label: "SGST (₹)", desc: "State GST (Intrastate)" },
+      { key: "igstAmt" as const, label: "IGST (₹)", desc: "Integrated GST (Interstate)" },
+      { key: "gstAmt" as const, label: "Total GST (₹)", desc: "Combined tax amount" },
+    ],
+  },
+  {
+    category: "Costing, Margins & Storage",
+    tag: "Analytics",
+    color: "teal",
+    columns: [
+      { key: "netCost" as const, label: "Net Cost / Unit (₹)", desc: "Cost per unit with tax & free" },
+      { key: "margin" as const, label: "Profit Margin %", desc: "Gross margin vs MRP" },
+      { key: "location" as const, label: "Rack / Shelf / Bin", desc: "Storage location in store" },
+      { key: "itemRemark" as const, label: "Item Note / Remark", desc: "Line-specific remarks" },
+    ],
+  },
+];
 
 function getGstStateCode(gstin?: string): string {
   if (!gstin) return "";
@@ -144,19 +371,41 @@ export default function PurchaseBillForm() {
 
   // Column Customization Visibility Checkboxes
   const [showColSettings, setShowColSettings] = useState(false);
-  const [columns, setColumns] = useState<ColumnConfig>({
-    hsn: true,
-    pack: true,
-    batch: true,
-    mfgDate: true,
-    expDate: true,
-    mrp: true,
-    freeQty: true,
-    tradeDisc: true,
-    gst: true,
-    taxableAmt: true,
-    gstAmt: true,
-  });
+  const [columns, setColumns] = useState<ColumnConfig>(DEFAULT_COLUMNS);
+
+  // Load saved column preferences on mount
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem("mabsol_purchase_cols_pref");
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        setColumns((prev) => ({ ...prev, ...parsed }));
+      }
+    } catch {
+      // ignore
+    }
+  }, []);
+
+  const handleApplyPreset = (presetKey: string) => {
+    const preset = COLUMN_PRESETS[presetKey];
+    if (preset) {
+      setColumns(preset.config);
+      try {
+        localStorage.setItem("mabsol_purchase_cols_pref", JSON.stringify(preset.config));
+      } catch { }
+    }
+  };
+
+  // Toggle Column Visibility
+  const toggleColumn = (key: keyof ColumnConfig) => {
+    setColumns((prev) => {
+      const next = { ...prev, [key]: !prev[key] };
+      try {
+        localStorage.setItem("mabsol_purchase_cols_pref", JSON.stringify(next));
+      } catch { }
+      return next;
+    });
+  };
 
   // Quick Multi-Product Selection Drawer
   const [showMultiProductModal, setShowMultiProductModal] = useState(false);
@@ -169,16 +418,22 @@ export default function PurchaseBillForm() {
   const [items, setItems] = useState<BillItem[]>([
     {
       productName: "",
+      productCode: "",
+      companyName: "",
       hsnCode: "",
       batchNo: "BATCH-01",
       expDate: "2027-12",
+      mfgDate: "",
       mrp: 0,
       qty: 1,
       freeQty: 0,
       unit: "Box",
       rate: 0,
       discountPercent: 0,
+      schemeDiscountPercent: 0,
       gstPercent: 12,
+      location: "",
+      itemRemark: "",
     },
   ]);
 
@@ -245,17 +500,22 @@ export default function PurchaseBillForm() {
             const importedItems: BillItem[] = po.items.map((it: any) => ({
               productId: it.productId || "",
               productCode: it.productCode || "",
+              companyName: it.companyName || "",
               productName: it.productName || "",
               hsnCode: it.hsnCode || "30049099",
-              batchNo: "BATCH-01",
-              expDate: "2027-12",
+              batchNo: it.batchNo || "BATCH-01",
+              expDate: it.expDate || "2027-12",
+              mfgDate: it.mfgDate || "",
               mrp: Number(it.mrp || 0) || Math.round(Number(it.rate || 0) * 1.3),
               qty: Number(it.qty || 1),
               freeQty: Number(it.freeQty || 0),
               unit: it.unit || "Box",
               rate: Number(it.rate || 0),
               discountPercent: Number(it.discountPercent || 0),
+              schemeDiscountPercent: Number(it.schemeDiscountPercent || 0),
               gstPercent: Number(it.gstPercent || 12),
+              location: it.location || "",
+              itemRemark: it.itemRemark || "",
             }));
             setItems(importedItems);
           }
@@ -289,11 +549,6 @@ export default function PurchaseBillForm() {
     }
   }, [selectedCompany, vendorGst]);
 
-  // Toggle Column Visibility
-  const toggleColumn = (key: keyof ColumnConfig) => {
-    setColumns((prev) => ({ ...prev, [key]: !prev[key] }));
-  };
-
   // Handle Supplier Selection
   const handleSupplierSelect = (supplierId: string) => {
     setSelectedSupplierId(supplierId);
@@ -315,8 +570,9 @@ export default function PurchaseBillForm() {
       updated[index] = {
         ...updated[index],
         productId: prod.id,
-        productCode: prod.code,
+        productCode: prod.code || "",
         productName: prod.name,
+        companyName: prod.companyName || "",
         hsnCode: prod.hsn || "30049099",
         rate: prod.purchaseRate || 0,
         mrp: prod.mrp || Math.round((prod.purchaseRate || 0) * 1.3),
@@ -332,18 +588,23 @@ export default function PurchaseBillForm() {
   const handleQuickAddProduct = (prod: ProductMaster) => {
     const newItem: BillItem = {
       productId: prod.id,
-      productCode: prod.code,
+      productCode: prod.code || "",
       productName: prod.name,
+      companyName: prod.companyName || "",
       hsnCode: prod.hsn || "30049099",
       batchNo: "BATCH-01",
       expDate: "2027-12",
+      mfgDate: "",
       mrp: prod.mrp || Math.round((prod.purchaseRate || 0) * 1.3),
       qty: 1,
       freeQty: 0,
       unit: prod.unit || "Box",
       rate: prod.purchaseRate || 0,
       discountPercent: 0,
+      schemeDiscountPercent: 0,
       gstPercent: prod.gstPercent || 12,
+      location: "",
+      itemRemark: "",
     };
 
     if (items.length === 1 && !items[0].productName) {
@@ -390,17 +651,22 @@ export default function PurchaseBillForm() {
       const importedItems: BillItem[] = po.items.map((it: any) => ({
         productId: it.productId || "",
         productCode: it.productCode || "",
+        companyName: it.companyName || "",
         productName: it.productName || "",
         hsnCode: it.hsnCode || "30049099",
-        batchNo: "BATCH-01",
-        expDate: "2027-12",
+        batchNo: it.batchNo || "BATCH-01",
+        expDate: it.expDate || "2027-12",
+        mfgDate: it.mfgDate || "",
         mrp: Number(it.mrp || 0) || Math.round(Number(it.rate || 0) * 1.3),
         qty: Number(it.qty || 1),
         freeQty: Number(it.freeQty || 0),
         unit: it.unit || "Box",
         rate: Number(it.rate || 0),
         discountPercent: Number(it.discountPercent || 0),
+        schemeDiscountPercent: Number(it.schemeDiscountPercent || 0),
         gstPercent: Number(it.gstPercent || 12),
+        location: it.location || "",
+        itemRemark: it.itemRemark || "",
       }));
       setItems(importedItems);
     }
@@ -413,16 +679,22 @@ export default function PurchaseBillForm() {
       ...items,
       {
         productName: "",
+        productCode: "",
+        companyName: "",
         hsnCode: "",
         batchNo: "BATCH-01",
         expDate: "2027-12",
+        mfgDate: "",
         mrp: 0,
         qty: 1,
         freeQty: 0,
         unit: "Box",
         rate: 0,
         discountPercent: 0,
+        schemeDiscountPercent: 0,
         gstPercent: 12,
+        location: "",
+        itemRemark: "",
       },
     ]);
   };
@@ -453,32 +725,57 @@ export default function PurchaseBillForm() {
 
   // Line & Overall Calculations
   const calculatedItems = items.map((it) => {
-    const isSelected = it.productName.trim() !== "" || Boolean(it.productId);
+    const isSelected = (it.productName || "").trim() !== "" || Boolean(it.productId);
     const qty = isSelected ? Number(it.qty || 0) : 0;
+    const freeQty = isSelected ? Number(it.freeQty || 0) : 0;
     const rate = isSelected ? Number(it.rate || 0) : 0;
-    const disc = Number(it.discountPercent || 0);
+    const mrp = Number(it.mrp || 0);
+    const tradeDisc = Number(it.discountPercent || 0);
+    const schemeDisc = Number(it.schemeDiscountPercent || 0);
     const gst = Number(it.gstPercent || 0);
 
     const gross = qty * rate;
-    const discAmt = gross * (disc / 100);
-    const taxable = Math.max(0, gross - discAmt);
+    const tradeDiscAmt = gross * (tradeDisc / 100);
+    const afterTradeDisc = Math.max(0, gross - tradeDiscAmt);
+    const schemeDiscAmt = afterTradeDisc * (schemeDisc / 100);
+    const totalDiscAmt = tradeDiscAmt + schemeDiscAmt;
+    const taxable = Math.max(0, gross - totalDiscAmt);
     const gstAmt = taxable * (gst / 100);
     const lineTotal = taxable + gstAmt;
+
+    const isInter = taxType === "Interstate";
+    const igstAmt = isInter ? gstAmt : 0;
+    const cgstAmt = isInter ? 0 : gstAmt / 2;
+    const sgstAmt = isInter ? 0 : gstAmt / 2;
+
+    const totalUnits = qty + freeQty;
+    const netCostPerUnit = totalUnits > 0 ? lineTotal / totalUnits : rate;
+    const profitMargin = mrp > 0 ? Math.max(0, ((mrp - netCostPerUnit) / mrp) * 100) : 0;
 
     return {
       ...it,
       isSelected,
       gross,
-      discAmt,
+      tradeDiscAmt,
+      schemeDiscAmt,
+      discAmt: totalDiscAmt,
       taxable,
       gstAmt,
+      cgstAmt,
+      sgstAmt,
+      igstAmt,
       lineTotal,
+      netCostPerUnit,
+      profitMargin,
     };
   });
 
   const subtotal = calculatedItems.reduce((acc, it) => acc + (it.isSelected ? it.gross : 0), 0);
   const totalDiscount = calculatedItems.reduce((acc, it) => acc + (it.isSelected ? it.discAmt : 0), 0);
   const totalTax = calculatedItems.reduce((acc, it) => acc + (it.isSelected ? it.gstAmt : 0), 0);
+  const totalCGST = calculatedItems.reduce((acc, it) => acc + (it.isSelected ? it.cgstAmt : 0), 0);
+  const totalSGST = calculatedItems.reduce((acc, it) => acc + (it.isSelected ? it.sgstAmt : 0), 0);
+  const totalIGST = calculatedItems.reduce((acc, it) => acc + (it.isSelected ? it.igstAmt : 0), 0);
   const rawNet = subtotal - totalDiscount + totalTax;
   const netAmount = Math.round(rawNet);
   const roundOff = Math.round((netAmount - rawNet) * 100) / 100;
@@ -487,6 +784,7 @@ export default function PurchaseBillForm() {
   const compStateCode = getGstStateCode(selectedCompany?.gstNo);
   const suppStateCode = getGstStateCode(vendorGst);
   const isInterstate = taxType === "Interstate";
+
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -523,6 +821,13 @@ export default function PurchaseBillForm() {
           vendorPhone,
           vendorAddress,
           items: validItems,
+          subtotal,
+          totalDiscount,
+          cgst: isInterstate ? 0 : totalCGST,
+          sgst: isInterstate ? 0 : totalSGST,
+          igst: isInterstate ? totalIGST : 0,
+          totalTax,
+          netAmount,
           paidAmount,
           paymentMode,
           remarks,
@@ -684,48 +989,121 @@ export default function PurchaseBillForm() {
 
       {/* Customizable Columns Settings Drawer */}
       {showColSettings && (
-        <div className="bg-amber-500/10 border border-amber-500/30 rounded-3xl p-4 animate-fadeIn space-y-2">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-extrabold text-amber-900 dark:text-amber-300 flex items-center gap-2">
-              <FaSlidersH /> Select Table Fields To Display (Checkboxes):
-            </span>
-            <button
-              onClick={() => setShowColSettings(false)}
-              className="text-xs text-slate-400 hover:text-slate-600 font-bold"
-            >
-              Close ✕
-            </button>
+        <div className="bg-slate-50 dark:bg-slate-900/90 border border-amber-500/30 rounded-3xl p-5 shadow-xl animate-fadeIn space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-200 dark:border-slate-800 pb-3">
+            <div className="flex items-center gap-2.5">
+              <div className="w-8 h-8 rounded-xl bg-amber-500/15 text-amber-600 flex items-center justify-center font-bold text-sm">
+                <FaSlidersH />
+              </div>
+              <div>
+                <span className="text-sm font-extrabold text-slate-800 dark:text-white flex items-center gap-2">
+                  Select Table Fields To Display (Checkboxes)
+                  <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 border border-amber-300/50">
+                    {Object.values(columns).filter(Boolean).length} / 23 Columns Active
+                  </span>
+                </span>
+                <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                  Select or deselect any field to customize your purchase bill item entry table. Preferences are auto-saved.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => handleApplyPreset("all")}
+                className="text-[11px] font-bold px-2.5 py-1 rounded-lg bg-amber-500 hover:bg-amber-600 text-white transition shadow-xs cursor-pointer"
+              >
+                Select All
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const empty: any = {};
+                  Object.keys(DEFAULT_COLUMNS).forEach((k) => (empty[k] = false));
+                  setColumns(empty);
+                  try {
+                    localStorage.setItem("mabsol_purchase_cols_pref", JSON.stringify(empty));
+                  } catch { }
+                }}
+                className="text-[11px] font-bold px-2.5 py-1 rounded-lg bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 transition cursor-pointer"
+              >
+                Clear All
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowColSettings(false)}
+                className="text-xs font-bold px-3 py-1 rounded-lg bg-rose-50 dark:bg-rose-950/40 text-rose-600 hover:bg-rose-100 transition cursor-pointer"
+              >
+                Close ✕
+              </button>
+            </div>
           </div>
-          <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 pt-1">
-            {[
-              { key: "hsn", label: "HSN Code" },
-              { key: "pack", label: "Pack / Unit" },
-              { key: "batch", label: "Batch No" },
-              { key: "mfgDate", label: "Mfg Date" },
-              { key: "expDate", label: "Expiry Date" },
-              { key: "mrp", label: "MRP (₹)" },
-              { key: "freeQty", label: "Free Qty" },
-              { key: "tradeDisc", label: "Trade Disc %" },
-              { key: "gst", label: "GST %" },
-              { key: "taxableAmt", label: "Taxable Value" },
-              { key: "gstAmt", label: "GST Amount" },
-            ].map((col) => {
-              const active = columns[col.key as keyof ColumnConfig];
-              return (
-                <label
-                  key={col.key}
-                  className="flex items-center gap-2 text-xs font-semibold cursor-pointer select-none text-slate-700 dark:text-slate-300 bg-white/70 dark:bg-slate-800/80 p-2 rounded-xl border border-slate-200/60 dark:border-white/10"
-                >
-                  <input
-                    type="checkbox"
-                    checked={active}
-                    onChange={() => toggleColumn(col.key as keyof ColumnConfig)}
-                    className="w-4 h-4 text-amber-600 rounded focus:ring-amber-500"
-                  />
-                  <span>{col.label}</span>
-                </label>
-              );
-            })}
+
+          {/* Quick 1-Click Presets */}
+          <div className="flex flex-wrap items-center gap-2 pt-1">
+            <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Presets:</span>
+            {Object.entries(COLUMN_PRESETS).map(([key, preset]) => (
+              <button
+                key={key}
+                type="button"
+                onClick={() => handleApplyPreset(key)}
+                className="flex items-center gap-1.5 px-3 py-1 rounded-xl text-xs font-bold border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:border-amber-500 hover:text-amber-600 dark:hover:text-amber-400 transition text-slate-700 dark:text-slate-300 shadow-2xs cursor-pointer"
+              >
+                <span>{preset.label}</span>
+                <span className="text-[10px] px-1.5 py-0.2 rounded-md bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-400 font-mono">
+                  {preset.badge}
+                </span>
+              </button>
+            ))}
+          </div>
+
+          {/* Categorized Columns Grid */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-3 pt-2">
+            {COLUMN_GROUPS.map((grp, gIdx) => (
+              <div
+                key={gIdx}
+                className="bg-white/90 dark:bg-slate-800/90 border border-slate-200/80 dark:border-white/10 rounded-2xl p-3 space-y-2 shadow-xs flex flex-col justify-between"
+              >
+                <div>
+                  <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-700/60 pb-1.5 mb-2">
+                    <span className="text-xs font-bold text-slate-800 dark:text-slate-100 truncate">
+                      {grp.category}
+                    </span>
+                    <span className="text-[10px] uppercase font-bold px-1.5 py-0.5 rounded-md bg-slate-100 dark:bg-slate-700 text-slate-500">
+                      {grp.tag}
+                    </span>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    {grp.columns.map((col) => {
+                      const active = columns[col.key];
+                      return (
+                        <label
+                          key={col.key}
+                          title={col.desc}
+                          className={`flex items-start gap-2 text-xs font-medium cursor-pointer select-none p-1.5 rounded-xl border transition ${active
+                              ? "bg-amber-50 dark:bg-amber-950/30 border-amber-300 dark:border-amber-700/50 text-amber-950 dark:text-amber-200"
+                              : "bg-slate-50/50 dark:bg-slate-900/40 border-transparent hover:border-slate-200 dark:hover:border-slate-700 text-slate-600 dark:text-slate-400"
+                            }`}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={active}
+                            onChange={() => toggleColumn(col.key)}
+                            className="mt-0.5 w-4 h-4 text-amber-600 rounded focus:ring-amber-500 cursor-pointer"
+                          />
+                          <div className="flex flex-col min-w-0">
+                            <span className="leading-tight font-semibold text-[12px]">{col.label}</span>
+                            <span className="text-[10px] text-slate-400 dark:text-slate-500 truncate">{col.desc}</span>
+                          </div>
+                        </label>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+            ))}
           </div>
         </div>
       )}
@@ -870,23 +1248,35 @@ export default function PurchaseBillForm() {
             </button>
           </div>
 
-          <table className="w-full text-left text-xs min-w-[1250px] border-collapse">
+          <table className="w-full text-left text-xs min-w-max border-collapse">
             <thead>
               <tr className="border-b border-slate-200 dark:border-slate-700 text-slate-500 font-bold uppercase tracking-wider">
-                <th className="pb-3 px-2 min-w-[280px]">Product Name *</th>
+                <th className="pb-3 px-2 min-w-[260px]">Product Name *</th>
+                {columns.itemCode && <th className="pb-3 px-2 min-w-[90px]">Code</th>}
+                {columns.company && <th className="pb-3 px-2 min-w-[110px]">Brand / Mfr</th>}
                 {columns.hsn && <th className="pb-3 px-2 min-w-[85px]">HSN</th>}
                 {columns.pack && <th className="pb-3 px-2 min-w-[80px]">Pack</th>}
                 {columns.batch && <th className="pb-3 px-2 min-w-[95px]">Batch</th>}
                 {columns.mfgDate && <th className="pb-3 px-2 min-w-[125px]">Mfg Date</th>}
                 {columns.expDate && <th className="pb-3 px-2 min-w-[125px]">Exp Date</th>}
                 {columns.mrp && <th className="pb-3 px-2 text-right min-w-[90px]">MRP (₹)</th>}
-                <th className="pb-3 px-2 text-right min-w-[80px]">Qty *</th>
-                {columns.freeQty && <th className="pb-3 px-2 text-right min-w-[75px]">Free</th>}
-                <th className="pb-3 px-2 text-right min-w-[95px]">Rate (₹) *</th>
-                {columns.tradeDisc && <th className="pb-3 px-2 text-right min-w-[75px]">Dis %</th>}
-                {columns.gst && <th className="pb-3 px-2 text-right min-w-[75px]">GST %</th>}
+                <th className="pb-3 px-2 text-right min-w-[75px]">Qty *</th>
+                {columns.freeQty && <th className="pb-3 px-2 text-right min-w-[70px]">Free</th>}
+                <th className="pb-3 px-2 text-right min-w-[90px]">Rate (₹) *</th>
+                {columns.grossAmt && <th className="pb-3 px-2 text-right min-w-[85px]">Gross (₹)</th>}
+                {columns.tradeDisc && <th className="pb-3 px-2 text-right min-w-[75px]">Disc %</th>}
+                {columns.discAmt && <th className="pb-3 px-2 text-right min-w-[80px]">Disc (₹)</th>}
+                {columns.schemeDisc && <th className="pb-3 px-2 text-right min-w-[75px]">Sch %</th>}
                 {columns.taxableAmt && <th className="pb-3 px-2 text-right min-w-[95px]">Taxable</th>}
+                {columns.gst && <th className="pb-3 px-2 text-right min-w-[75px]">GST %</th>}
+                {columns.cgstAmt && <th className="pb-3 px-2 text-right min-w-[80px]">CGST (₹)</th>}
+                {columns.sgstAmt && <th className="pb-3 px-2 text-right min-w-[80px]">SGST (₹)</th>}
+                {columns.igstAmt && <th className="pb-3 px-2 text-right min-w-[80px]">IGST (₹)</th>}
                 {columns.gstAmt && <th className="pb-3 px-2 text-right min-w-[90px]">GST Amt</th>}
+                {columns.netCost && <th className="pb-3 px-2 text-right min-w-[90px]" title="Cost per unit with tax & free">Cost/Unit</th>}
+                {columns.margin && <th className="pb-3 px-2 text-right min-w-[75px]" title="Gross Margin % vs MRP">Margin %</th>}
+                {columns.location && <th className="pb-3 px-2 min-w-[95px]">Rack/Loc</th>}
+                {columns.itemRemark && <th className="pb-3 px-2 min-w-[120px]">Remark</th>}
                 <th className="pb-3 px-2 text-right min-w-[95px]">Total</th>
                 <th className="pb-3 px-2 text-center w-10">✕</th>
               </tr>
@@ -894,7 +1284,7 @@ export default function PurchaseBillForm() {
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
               {calculatedItems.map((item, idx) => (
                 <tr key={idx} className="hover:bg-slate-50/50 dark:hover:bg-slate-900/30 transition">
-                  <td className="py-2.5 px-2 min-w-[280px]">
+                  <td className="py-2.5 px-2 min-w-[260px]">
                     <SearchableSelect
                       options={productOptions}
                       value={item.productId || ""}
@@ -902,13 +1292,35 @@ export default function PurchaseBillForm() {
                       placeholder="Search / Select Product..."
                     />
                   </td>
+                  {columns.itemCode && (
+                    <td className="py-2.5 px-2 min-w-[90px]">
+                      <input
+                        type="text"
+                        value={item.productCode || ""}
+                        onChange={(e) => handleItemChange(idx, "productCode", e.target.value)}
+                        placeholder="Code"
+                        className="w-full min-w-0 px-2 py-1.5 rounded-lg text-xs bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 focus:outline-none focus:ring-1 focus:ring-amber-500 font-mono"
+                      />
+                    </td>
+                  )}
+                  {columns.company && (
+                    <td className="py-2.5 px-2 min-w-[110px]">
+                      <input
+                        type="text"
+                        value={item.companyName || ""}
+                        onChange={(e) => handleItemChange(idx, "companyName", e.target.value)}
+                        placeholder="Brand/Mfr"
+                        className="w-full min-w-0 px-2 py-1.5 rounded-lg text-xs bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 focus:outline-none focus:ring-1 focus:ring-amber-500"
+                      />
+                    </td>
+                  )}
                   {columns.hsn && (
                     <td className="py-2.5 px-2 min-w-[85px]">
                       <input
                         type="text"
                         value={item.hsnCode}
                         onChange={(e) => handleItemChange(idx, "hsnCode", e.target.value)}
-                        className="w-full min-w-0 px-2 py-1.5 rounded-lg text-xs bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 focus:outline-none focus:ring-1 focus:ring-amber-500"
+                        className="w-full min-w-0 px-2 py-1.5 rounded-lg text-xs bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 focus:outline-none focus:ring-1 focus:ring-amber-500 font-mono"
                       />
                     </td>
                   )}
@@ -929,7 +1341,7 @@ export default function PurchaseBillForm() {
                         type="text"
                         value={item.batchNo}
                         onChange={(e) => handleItemChange(idx, "batchNo", e.target.value)}
-                        className="w-full min-w-0 px-2 py-1.5 rounded-lg text-xs bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 focus:outline-none focus:ring-1 focus:ring-amber-500"
+                        className="w-full min-w-0 px-2 py-1.5 rounded-lg text-xs bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 focus:outline-none focus:ring-1 focus:ring-amber-500 font-mono font-bold"
                       />
                     </td>
                   )}
@@ -949,7 +1361,7 @@ export default function PurchaseBillForm() {
                         type="month"
                         value={item.expDate}
                         onChange={(e) => handleItemChange(idx, "expDate", e.target.value)}
-                        className="w-full min-w-0 px-2 py-1.5 rounded-lg text-xs bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 focus:outline-none focus:ring-1 focus:ring-amber-500"
+                        className="w-full min-w-0 px-2 py-1.5 rounded-lg text-xs bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 focus:outline-none focus:ring-1 focus:ring-amber-500 font-semibold text-rose-600 dark:text-rose-400"
                       />
                     </td>
                   )}
@@ -959,12 +1371,12 @@ export default function PurchaseBillForm() {
                         type="number"
                         step="0.01"
                         value={item.mrp || ""}
-                        onChange={(e) => handleItemChange(idx, "mrp", e.target.value)}
+                        onChange={(e) => handleItemChange(idx, "mrp", Number(e.target.value))}
                         className="w-full min-w-0 px-2 py-1.5 text-right rounded-lg text-xs bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 focus:outline-none focus:ring-1 focus:ring-amber-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                       />
                     </td>
                   )}
-                  <td className="py-2.5 px-2 min-w-[80px]">
+                  <td className="py-2.5 px-2 min-w-[75px]">
                     <input
                       type="number"
                       min="1"
@@ -974,17 +1386,17 @@ export default function PurchaseBillForm() {
                     />
                   </td>
                   {columns.freeQty && (
-                    <td className="py-2.5 px-2 min-w-[75px]">
+                    <td className="py-2.5 px-2 min-w-[70px]">
                       <input
                         type="number"
                         min="0"
                         value={item.freeQty}
                         onChange={(e) => handleItemChange(idx, "freeQty", Math.max(0, Number(e.target.value)))}
-                        className="w-full min-w-0 px-2 py-1.5 text-right rounded-lg text-xs bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 focus:outline-none focus:ring-1 focus:ring-amber-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                        className="w-full min-w-0 px-2 py-1.5 text-right rounded-lg text-xs bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 focus:outline-none focus:ring-1 focus:ring-amber-500 text-emerald-600 font-bold [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                       />
                     </td>
                   )}
-                  <td className="py-2.5 px-2 min-w-[95px]">
+                  <td className="py-2.5 px-2 min-w-[90px]">
                     <input
                       type="number"
                       step="0.01"
@@ -993,6 +1405,11 @@ export default function PurchaseBillForm() {
                       className="w-full min-w-0 px-2 py-1.5 text-right font-bold text-amber-600 rounded-lg text-xs bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 focus:outline-none focus:ring-1 focus:ring-amber-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                     />
                   </td>
+                  {columns.grossAmt && (
+                    <td className="py-2.5 px-2 text-right font-medium text-slate-600 dark:text-slate-300 min-w-[85px]">
+                      ₹{item.gross.toFixed(2)}
+                    </td>
+                  )}
                   {columns.tradeDisc && (
                     <td className="py-2.5 px-2 min-w-[75px]">
                       <input
@@ -1000,8 +1417,31 @@ export default function PurchaseBillForm() {
                         step="0.1"
                         value={item.discountPercent || ""}
                         onChange={(e) => handleItemChange(idx, "discountPercent", Number(e.target.value))}
+                        placeholder="0%"
                         className="w-full min-w-0 px-2 py-1.5 text-right rounded-lg text-xs bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 focus:outline-none focus:ring-1 focus:ring-amber-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                       />
+                    </td>
+                  )}
+                  {columns.discAmt && (
+                    <td className="py-2.5 px-2 text-right text-rose-600 dark:text-rose-400 font-semibold min-w-[80px]">
+                      {item.discAmt > 0 ? `-₹${item.discAmt.toFixed(2)}` : "₹0.00"}
+                    </td>
+                  )}
+                  {columns.schemeDisc && (
+                    <td className="py-2.5 px-2 min-w-[75px]">
+                      <input
+                        type="number"
+                        step="0.1"
+                        value={item.schemeDiscountPercent || ""}
+                        onChange={(e) => handleItemChange(idx, "schemeDiscountPercent", Number(e.target.value))}
+                        placeholder="0%"
+                        className="w-full min-w-0 px-2 py-1.5 text-right rounded-lg text-xs bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 focus:outline-none focus:ring-1 focus:ring-amber-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                      />
+                    </td>
+                  )}
+                  {columns.taxableAmt && (
+                    <td className="py-2.5 px-2 text-right font-semibold text-slate-800 dark:text-slate-200 min-w-[95px]">
+                      ₹{item.taxable.toFixed(2)}
                     </td>
                   )}
                   {columns.gst && (
@@ -1015,14 +1455,56 @@ export default function PurchaseBillForm() {
                       />
                     </td>
                   )}
-                  {columns.taxableAmt && (
-                    <td className="py-2.5 px-2 text-right font-semibold min-w-[95px]">
-                      ₹{item.taxable.toFixed(2)}
+                  {columns.cgstAmt && (
+                    <td className="py-2.5 px-2 text-right text-slate-500 min-w-[80px]">
+                      ₹{item.cgstAmt.toFixed(2)}
+                    </td>
+                  )}
+                  {columns.sgstAmt && (
+                    <td className="py-2.5 px-2 text-right text-slate-500 min-w-[80px]">
+                      ₹{item.sgstAmt.toFixed(2)}
+                    </td>
+                  )}
+                  {columns.igstAmt && (
+                    <td className="py-2.5 px-2 text-right text-slate-500 min-w-[80px]">
+                      ₹{item.igstAmt.toFixed(2)}
                     </td>
                   )}
                   {columns.gstAmt && (
                     <td className="py-2.5 px-2 text-right text-slate-500 min-w-[90px]">
                       ₹{item.gstAmt.toFixed(2)}
+                    </td>
+                  )}
+                  {columns.netCost && (
+                    <td className="py-2.5 px-2 text-right font-bold text-teal-600 dark:text-teal-400 min-w-[90px]" title="Cost per unit with tax & free">
+                      ₹{item.netCostPerUnit.toFixed(2)}
+                    </td>
+                  )}
+                  {columns.margin && (
+                    <td className="py-2.5 px-2 text-right font-bold text-emerald-600 dark:text-emerald-400 min-w-[75px]" title="Gross Margin % vs MRP">
+                      {item.profitMargin > 0 ? `${item.profitMargin.toFixed(1)}%` : "0%"}
+                    </td>
+                  )}
+                  {columns.location && (
+                    <td className="py-2.5 px-2 min-w-[95px]">
+                      <input
+                        type="text"
+                        value={item.location || ""}
+                        onChange={(e) => handleItemChange(idx, "location", e.target.value)}
+                        placeholder="Rack A-1"
+                        className="w-full min-w-0 px-2 py-1.5 rounded-lg text-xs bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 focus:outline-none focus:ring-1 focus:ring-amber-500"
+                      />
+                    </td>
+                  )}
+                  {columns.itemRemark && (
+                    <td className="py-2.5 px-2 min-w-[120px]">
+                      <input
+                        type="text"
+                        value={item.itemRemark || ""}
+                        onChange={(e) => handleItemChange(idx, "itemRemark", e.target.value)}
+                        placeholder="Note..."
+                        className="w-full min-w-0 px-2 py-1.5 rounded-lg text-xs bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 focus:outline-none focus:ring-1 focus:ring-amber-500"
+                      />
                     </td>
                   )}
                   <td className="py-2.5 px-2 text-right font-black text-amber-600 min-w-[95px]">
@@ -1033,7 +1515,7 @@ export default function PurchaseBillForm() {
                       type="button"
                       onClick={() => handleRemoveItem(idx)}
                       disabled={items.length <= 1}
-                      className="p-1 text-slate-400 hover:text-rose-600 disabled:opacity-30 transition"
+                      className="p-1 text-slate-400 hover:text-rose-600 disabled:opacity-30 transition cursor-pointer"
                     >
                       <FaTrash size={12} />
                     </button>
@@ -1120,8 +1602,25 @@ export default function PurchaseBillForm() {
                 <span>Taxable Amount:</span>
                 <span>₹{(subtotal - totalDiscount).toLocaleString("en-IN", { minimumFractionDigits: 2 })}</span>
               </div>
-              <div className="flex justify-between text-amber-100">
-                <span>{isInterstate ? "IGST Tax" : "CGST + SGST Tax"}:</span>
+              {!isInterstate ? (
+                <>
+                  <div className="flex justify-between text-amber-100 text-[11px]">
+                    <span>CGST (Intrastate):</span>
+                    <span>₹{totalCGST.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</span>
+                  </div>
+                  <div className="flex justify-between text-amber-100 text-[11px]">
+                    <span>SGST (Intrastate):</span>
+                    <span>₹{totalSGST.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</span>
+                  </div>
+                </>
+              ) : (
+                <div className="flex justify-between text-amber-100 text-[11px]">
+                  <span>IGST (Interstate):</span>
+                  <span>₹{totalIGST.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</span>
+                </div>
+              )}
+              <div className="flex justify-between text-amber-100 font-bold">
+                <span>Total GST Tax:</span>
                 <span>₹{totalTax.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</span>
               </div>
               <div className="border-t border-amber-400/40 pt-2 flex justify-between items-center">

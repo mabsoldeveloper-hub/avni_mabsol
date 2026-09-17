@@ -12,6 +12,7 @@ export default function DashboardLayout({
 
   const [collapsed, setCollapsed] = useState(false);
   const [mobile, setMobile] = useState(false);
+  const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
     const checkScreen = () => {
@@ -27,6 +28,7 @@ export default function DashboardLayout({
     };
   
     checkScreen();
+    setMounted(true);
   
     window.addEventListener("resize", checkScreen);
   
@@ -60,23 +62,17 @@ export default function DashboardLayout({
 )}
 
         <div
-        style={{
-          marginLeft: mobile
-            ? "0"
-            : collapsed
-            ? "76px"
-            : "265px",
-
-          width: mobile
-            ? "100%"
-            : collapsed
-            ? "calc(100% - 76px)"
-            : "calc(100% - 265px)",
-
-          transition: "margin-left 0.35s cubic-bezier(0.25, 1, 0.5, 1), width 0.35s cubic-bezier(0.25, 1, 0.5, 1)",
-          minHeight: "100vh",
-          overflowX: "hidden",
-        }}
+          style={{
+            paddingLeft: mobile
+              ? "0px"
+              : collapsed
+              ? "76px"
+              : "265px",
+            width: "100%",
+            transition: mounted ? "padding-left 0.28s cubic-bezier(0.4, 0, 0.2, 1)" : "none",
+            minHeight: "100vh",
+            overflowX: "clip",
+          }}
         >
 
 

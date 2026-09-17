@@ -413,7 +413,7 @@ export default function PurchaseSalesCharts({
                 <h3 className="text-sm sm:text-base font-bold text-slate-800 dark:text-slate-100 leading-tight">
                   Category Spider Radar
                 </h3>
-                <InfoTooltip text="Evaluates top categories across 5 dimensions: Sales Volume, Purchase Spend, Gross Margin %, Low Return Rate %, and Inventory Turnover Velocity." />
+                <InfoTooltip text="Compares the returned category metrics on a 0–100 chart scale. Sales and purchase values are normalized from stored transaction totals; unavailable source metrics remain 0 rather than being estimated." />
               </div>
               <p className="text-xs text-slate-500 dark:text-slate-400 truncate">
                 5-dimensional trade metrics radar
@@ -427,9 +427,26 @@ export default function PurchaseSalesCharts({
                 <PolarGrid stroke="#e2e8f0" />
                 <PolarAngleAxis dataKey="metric" tick={{ fill: "#64748b", fontSize: 10 }} />
                 <PolarRadiusAxis angle={30} domain={[0, 100]} tick={{ fontSize: 9 }} />
-                <Radar name="Antibiotics" dataKey="Antibiotics" stroke="#6366f1" fill="#6366f1" fillOpacity={0.35} />
-                <Radar name="Cardiac" dataKey="Cardiac" stroke="#10b981" fill="#10b981" fillOpacity={0.3} />
-                <Radar name="Analgesics" dataKey="Analgesics" stroke="#f59e0b" fill="#f59e0b" fillOpacity={0.25} />
+                {Array.from(
+                  new Set(
+                    categoryRadarData.flatMap((row: any) =>
+                      Object.keys(row).filter((key) => key !== "metric")
+                    )
+                  )
+                ).slice(0, 5).map((categoryName, index) => {
+                  const strokes = ["#6366f1", "#10b981", "#f59e0b", "#8b5cf6", "#06b6d4"];
+                  const stroke = strokes[index % strokes.length];
+                  return (
+                    <Radar
+                      key={categoryName}
+                      name={categoryName}
+                      dataKey={categoryName}
+                      stroke={stroke}
+                      fill={stroke}
+                      fillOpacity={0.25}
+                    />
+                  );
+                })}
                 <Legend wrapperStyle={{ fontSize: "11px", paddingTop: "5px" }} />
                 <Tooltip />
               </RadarChart>

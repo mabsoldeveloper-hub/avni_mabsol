@@ -36,10 +36,26 @@ export async function GET(req: NextRequest) {
 
         const restriction = await getMrTerritoryRestriction();
 
-        // 1. Fetch Customer / Order party map with full metadata
+        // 1. Fetch only party masters allowed by the current hierarchy.
+        // Admin can see the full company scope; restricted users can only
+        // receive parties belonging to their recursive downline.
+        const allowedOrdnos = (restriction.allowedOrdnos || [])
+            .map((v: any) => String(v).trim())
+            .filter(Boolean);
+
+        const partyAccessFilter: any = restriction.isMrRestricted
+            ? allowedOrdnos.length > 0
+                ? { $or: [
+                    { ORDNO: { $in: allowedOrdnos } },
+                    { CODEP: { $in: allowedOrdnos } },
+                    { SCODE: { $in: allowedOrdnos } },
+                ] }
+                : { _id: null }
+            : {};
+
         const [orders, mainCustomers] = await Promise.all([
-            Order.find(combineFilters(companyVfpMatch), { ORDNO: 1, CODEP: 1, SCODE: 1, PARNAM: 1, NAME: 1, CITY: 1, AREA: 1, ROUT: 1, ROUTE: 1, COMPANY: 1, DIVISION: 1, DSM: 1, SALESMAN: 1, PHONE: 1, MOBILE: 1, GSTIN: 1, GST: 1, BALANCE: 1 }).lean(),
-            Customer.find(combineFilters(companyVfpMatch), { ORDNO: 1, CODEP: 1, SCODE: 1, PARNAM: 1, NAME: 1, CITY: 1, AREA: 1, ROUT: 1, ROUTE: 1, COMPANY: 1, DIVISION: 1, DSM: 1, SALESMAN: 1, PHONE: 1, MOBILE: 1, GSTIN: 1, GST: 1, GSTNO: 1, BALANCE: 1 }).lean(),
+            Order.find(combineFilters(companyVfpMatch, partyAccessFilter), { ORDNO: 1, CODEP: 1, SCODE: 1, PARNAM: 1, NAME: 1, CITY: 1, AREA: 1, ROUT: 1, ROUTE: 1, COMPANY: 1, DIVISION: 1, DSM: 1, SALESMAN: 1, PHONE: 1, MOBILE: 1, GSTIN: 1, GST: 1, BALANCE: 1 }).lean(),
+            Customer.find(combineFilters(companyVfpMatch, partyAccessFilter), { ORDNO: 1, CODEP: 1, SCODE: 1, PARNAM: 1, NAME: 1, CITY: 1, AREA: 1, ROUT: 1, ROUTE: 1, COMPANY: 1, DIVISION: 1, DSM: 1, SALESMAN: 1, PHONE: 1, MOBILE: 1, GSTIN: 1, GST: 1, GSTNO: 1, BALANCE: 1 }).lean(),
         ]);
 
         const partyMap = new Map<string, any>();
@@ -94,8 +110,11 @@ export async function GET(req: NextRequest) {
             CREDIT: { $gt: 0 },
         }, companyVfpMatch);
 
-        if (restriction.isMrRestricted && restriction.allowedOrdnos && restriction.allowedOrdnos.length > 0) {
-            filter = combineFilters(filter, { CODE: { $in: restriction.allowedOrdnos } });
+        if (restriction.isMrRestricted) {
+            // Fail closed when the user has no assigned parties.
+            filter = combineFilters(filter, {
+                CODE: { $in: allowedOrdnos.length > 0 ? allowedOrdnos : ["__NO_HIERARCHY_ACCESS__"] }
+            });
         }
 
         const effStart = startDate || fyRange.startDate;

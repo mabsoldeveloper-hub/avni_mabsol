@@ -53,6 +53,7 @@ import {
   FaHeartbeat,
   FaShieldAlt,
   FaCreditCard,
+  FaSearch,
 } from "react-icons/fa";
 
 export type ColorKey =
@@ -267,6 +268,8 @@ export function renderMenuIcon(iconName: string): React.ReactNode {
       return <FaShieldAlt />;
     case "FaCreditCard":
       return <FaCreditCard />;
+    case "FaSearch":
+      return <FaSearch />;
     default:
       return <FaLayerGroup />;
   }
@@ -285,6 +288,17 @@ export const DEFAULT_MENU_ITEMS: MenuItemConfig[] = [
     order: 0,
   },
   {
+    id: "global-search",
+    label: "Global Search & Voice AI",
+    icon: "FaSearch",
+    color: "cyan",
+    href: "/dashboard/search",
+    isGroup: false,
+    permission: "dashboard.view",
+    isVisible: true,
+    order: 1,
+  },
+  {
     id: "executive-ai",
     label: "Executive AI Dashboard",
     icon: "FaBrain",
@@ -293,7 +307,7 @@ export const DEFAULT_MENU_ITEMS: MenuItemConfig[] = [
     isGroup: false,
     permission: "dashboard.view",
     isVisible: true,
-    order: 1,
+    order: 2,
   },
   {
     id: "ai-notifications",
@@ -350,6 +364,28 @@ export const DEFAULT_MENU_ITEMS: MenuItemConfig[] = [
     permission: "dashboard.view",
     isVisible: true,
     order: 5,
+  },
+  {
+    id: "broadcast-hub",
+    label: "1-Click Broadcast Hub",
+    icon: "FaBullhorn",
+    color: "violet",
+    href: "/dashboard/broadcast",
+    isGroup: false,
+    permission: "dashboard.view",
+    isVisible: true,
+    order: 6,
+  },
+  {
+    id: "order-stock-tracking",
+    label: "Live Order & Stock Tracking",
+    icon: "FaTruck",
+    color: "sky",
+    href: "/dashboard/orders/tracking",
+    isGroup: false,
+    permission: "dashboard.view",
+    isVisible: true,
+    order: 7,
   },
   {
     id: "leads",
@@ -1076,6 +1112,15 @@ export const DEFAULT_MENU_ITEMS: MenuItemConfig[] = [
         permission: "settings.edit",
         isVisible: true,
         order: 2,
+      },
+      {
+        id: "settings-notifications",
+        label: "Notification Gateway Settings",
+        href: "/dashboard/settings/notifications",
+        icon: "FaEnvelope",
+        permission: "settings.edit",
+        isVisible: true,
+        order: 3,
       },
     ],
   },

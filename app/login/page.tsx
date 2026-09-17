@@ -41,6 +41,17 @@ export default function LoginPage() {
   const [error, setError] = useState<string | null>(null);
   const [emailTouched, setEmailTouched] = useState(false);
 
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      if (params.get("suspended") === "1" || params.get("suspended") === "true") {
+        setError(
+          "Your account has been deactivated or suspended by the Super Administrator. You cannot access this platform until re-approved by the Super Admin."
+        );
+      }
+    }
+  }, []);
+
   // Typing reactivity for ECG Heartbeat chip
   const [isTyping, setIsTyping] = useState(false);
   const typingTimerRef = useRef<NodeJS.Timeout | null>(null);
@@ -502,6 +513,10 @@ export default function LoginPage() {
       const data = await res.json();
 
       if (data.success) {
+        if (data.directLogin) {
+          router.push(data.redirectUrl || "/dashboard/super-admin");
+          return;
+        }
         setStep("otp");
         setOtp(Array(OTP_LENGTH).fill(""));
         setResendTimer(RESEND_SECONDS);
@@ -597,7 +612,11 @@ export default function LoginPage() {
       const data = await res.json();
 
       if (data.success) {
-        router.push("/dashboard");
+        if (data.user?.isSuperAdmin || data.user?.roleType === "SuperAdmin") {
+          router.push("/dashboard/super-admin");
+        } else {
+          router.push("/dashboard");
+        }
       } else {
         setOtpError(data.message || "That code didn't work. Please try again.");
       }

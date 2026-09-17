@@ -32,7 +32,7 @@ export function extractStateCodeFromGstin(gstin: string): string {
 }
 
 export function getStateNameFromCode(stateCode: string): string {
-  return stateCode || "";
+  return (stateCode || "").trim();
 }
 
 /**
@@ -60,14 +60,15 @@ export async function verifyGST(gstin: string) {
     if (data.status_cd === '1' && data.data) {
       const gst = data.data;
       const addressParts = gst.pradr?.addr;
-      const fullAddress = `${addressParts?.bno || ''}, ${addressParts?.st || ''}, ${addressParts?.loc || ''}, ${addressParts?.dst || ''}, ${addressParts?.stcd || ''}`;
+      const stateName = gst.pradr?.addr?.state || gst.pradr?.addr?.stcd || gst.stj || '';
+      const fullAddress = `${addressParts?.bno || ''}, ${addressParts?.st || ''}, ${addressParts?.loc || ''}, ${addressParts?.dst || ''}, ${stateName}`;
       return {
         businessName: gst.lgnm,
         tradeName: gst.tradeNam,
         legalName: gst.lgnm,
-        address: fullAddress.trim(),
-        state: gst.pradr?.addr?.stcd || '',
-        city: gst.pradr?.addr?.dst || '',
+        address: fullAddress.trim().replace(/,\s*,/g, ', ').replace(/^,\s*/, ''),
+        state: stateName,
+        city: gst.pradr?.addr?.dst || gst.pradr?.addr?.city || '',
         pincode: gst.pradr?.addr?.pncd || '',
         gstin,
         pan: extractPanFromGstin(gstin),

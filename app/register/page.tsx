@@ -747,14 +747,7 @@ export default function RegisterPage() {
       if (json.success) {
         setMobileOtpSent(true);
         setMobileCountdown(60);
-        if (json.deliveredLive) {
-          showToast(`Verification code sent to +91 ${cleanMobile}`, "success");
-        } else if (json.otp) {
-          setMobileOtp(json.otp);
-          showToast(`OTP: ${json.otp} (Auto-filled for instant testing)`, "info");
-        } else {
-          showToast(`Verification code sent to +91 ${cleanMobile}`, "success");
-        }
+        showToast(`Verification code sent to WhatsApp (+91 ${cleanMobile})`, "success");
       } else {
         showToast(json.message || "Failed to send WhatsApp OTP", "error");
       }

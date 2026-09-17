@@ -14,6 +14,7 @@ import {
   validatePassword,
 } from "@/lib/constants/validation.constant";
 import { ROLE_TYPE } from "@/lib/constants/roles.constant";
+import { USER_APPROVAL_STATUS, DEFAULT_ACCESS_DAYS } from "@/lib/constants/superAdmin.constant";
 
 /**
  * Generate a unique tenant ID for multi-tenant data isolation.
@@ -338,7 +339,10 @@ export async function POST(req: Request) {
       state: finalState,
       country: "India",
       pincode: pincode ? pincode.trim() : "",
-      status: "Active",
+      status: USER_APPROVAL_STATUS.PENDING,
+      isApproved: false,
+      accessDurationDays: DEFAULT_ACCESS_DAYS,
+      accessValidUntil: null,
       mobileVerified: true,
       termsAccepted: Boolean(termsAccepted),
     });
@@ -407,7 +411,10 @@ export async function POST(req: Request) {
           state: branchState,
           country: "India",
           pincode: branch.pincode || "",
-          status: "Active",
+          status: USER_APPROVAL_STATUS.PENDING,
+          isApproved: false,
+          accessDurationDays: DEFAULT_ACCESS_DAYS,
+          accessValidUntil: null,
           mobileVerified: true,
           termsAccepted: Boolean(termsAccepted),
         });
@@ -428,7 +435,9 @@ export async function POST(req: Request) {
 
     return NextResponse.json({
       success: true,
-      message: "Pharma CRM Workspace & Account Created Successfully",
+      message: "Pharma CRM Workspace & Account Created. Your account is pending Super Admin approval before you can log in.",
+      isApproved: false,
+      status: USER_APPROVAL_STATUS.PENDING,
       tenantId,
       user: {
         _id: user._id,

@@ -45,6 +45,16 @@ const UserSchema = new mongoose.Schema(
       default: "MR",
     },
 
+    role: {
+      type: String,
+      default: "",
+    },
+
+    isSuperAdmin: {
+      type: Boolean,
+      default: false,
+    },
+
     // Original Customer record for MR / Field Staff mapping
     mrCustomerId: {
       type: mongoose.Schema.Types.ObjectId,
@@ -62,6 +72,49 @@ const UserSchema = new mongoose.Schema(
     status: {
       type: String,
       default: "Active",
+    },
+
+    // Super Admin Approval & Time-Bound Access
+    isApproved: {
+      type: Boolean,
+      default: false,
+    },
+
+    approvedAt: {
+      type: Date,
+      default: null,
+    },
+
+    approvedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      default: null,
+    },
+
+    accessDurationDays: {
+      type: Number,
+      default: 30,
+    },
+
+    accessValidUntil: {
+      type: Date,
+      default: null,
+    },
+
+    isUnlimitedAccess: {
+      type: Boolean,
+      default: false,
+    },
+
+    approvalNotes: {
+      type: String,
+      default: "",
+    },
+
+    // Session Timeout / Login Validity Duration (in Hours: 1hr, 2hr, 4hr, 8hr, etc.)
+    sessionTimeoutHours: {
+      type: Number,
+      default: 1,
     },
 
     // Profile Fields

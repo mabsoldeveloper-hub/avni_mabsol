@@ -22,10 +22,11 @@ export async function GET(req: Request) {
 
     // If no tracked orders exist yet, seed a few realistic demo orders so the tracker works instantly
     if (orders.length === 0 && (!status || status === "ALL") && !salespersonId) {
-      const demoOrders = [
-      ];
-      await OrderTracking.insertMany(demoOrders);
-      orders = await OrderTracking.find(query).sort({ orderDate: -1 }).lean();
+      const demoOrders: any[] = [];
+      if (demoOrders.length > 0) {
+        await OrderTracking.insertMany(demoOrders);
+        orders = await OrderTracking.find(query).sort({ orderDate: -1 }).lean();
+      }
     }
 
     return NextResponse.json({ success: true, orders });

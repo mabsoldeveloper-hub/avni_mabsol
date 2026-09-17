@@ -52,10 +52,7 @@ export async function POST(req: Request) {
 
     return NextResponse.json({
       success: true,
-      message: isLiveDelivered
-        ? `Verification code sent to +91 ${cleanMobile}`
-        : `Verification code generated: ${otp} (Local/Dev Mode)`,
-      otp: otp,
+      message: `Verification code sent to WhatsApp (+91 ${cleanMobile})`,
       deliveredLive: isLiveDelivered,
       provider: sendResult.provider,
     });

@@ -34,7 +34,7 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
   const userRef = useRef<any>(null);
   userRef.current = user;
 
-  const logoutAndRedirect = useCallback(async () => {
+  const logoutAndRedirect = useCallback(async (isSuspended = false) => {
     try {
       await fetch("/api/auth/logout", { method: "POST" });
     } catch (e) {
@@ -43,8 +43,9 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
     setUser(null);
     if (typeof window !== "undefined") {
       localStorage.removeItem("mabsol_user");
+      localStorage.removeItem("mabsol_permissions");
       if (window.location.pathname.startsWith("/dashboard")) {
-        window.location.href = "/login";
+        window.location.href = isSuspended ? "/login?suspended=1" : "/login";
       }
     }
   }, []);
@@ -58,10 +59,16 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
         },
       });
 
-      if (res.status === 401) {
+      if (res.status === 401 || res.status === 403) {
+        let isSuspended = false;
+        try {
+          const errData = await res.json();
+          if (errData.suspended || errData.expired) isSuspended = true;
+        } catch {}
+
         setUser(null);
         if (typeof window !== "undefined" && window.location.pathname.startsWith("/dashboard")) {
-          await logoutAndRedirect();
+          await logoutAndRedirect(isSuspended);
         }
         return;
       }
@@ -124,16 +131,22 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
     loadUser(false);
   }, [loadUser]);
 
-  // Periodically verify session in background without triggering UI loading flicker
+  // Periodically verify session in background & on window focus/visibility change
   useEffect(() => {
-    const interval = setInterval(() => {
+    const checkSession = () => {
       if (typeof window !== "undefined" && window.location.pathname.startsWith("/dashboard")) {
         loadUser(true);
       }
-    }, SESSION_CHECK_INTERVAL_MS);
+    };
+
+    const interval = setInterval(checkSession, SESSION_CHECK_INTERVAL_MS);
+    window.addEventListener("focus", checkSession);
+    document.addEventListener("visibilitychange", checkSession);
 
     return () => {
       clearInterval(interval);
+      window.removeEventListener("focus", checkSession);
+      document.removeEventListener("visibilitychange", checkSession);
     };
   }, [loadUser]);
 

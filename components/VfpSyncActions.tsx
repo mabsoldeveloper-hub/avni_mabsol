@@ -381,38 +381,66 @@ export default function VfpSyncActions({
     }
 
     setUploading(true);
-    setMessage({
-      type: "info",
-      text: `Uploading ${dbfFiles.length} DBF file(s) to AWS Cloud server storage & syncing...`,
-    });
-
-    const formData = new FormData();
-    formData.append("directSync", "true");
-    dbfFiles.forEach((file) => {
-      formData.append("files", file);
-    });
+    let successCount = 0;
+    let totalImportedRows = 0;
+    const allUploadedNames: string[] = [];
 
     try {
-      const res = await fetch("/api/mabsolcrmsync/upload-dbf", {
-        method: "POST",
-        body: formData,
-      });
-      const data = await res.json();
-
-      if (data.success) {
+      for (let i = 0; i < dbfFiles.length; i++) {
+        const file = dbfFiles[i];
+        const mbSize = (file.size / (1024 * 1024)).toFixed(1);
         setMessage({
-          type: "success",
-          text: data.message || `Uploaded ${dbfFiles.length} DBF file(s) and synced successfully!`,
+          type: "info",
+          text: `[${i + 1}/${dbfFiles.length}] Uploading & syncing ${file.name} (${mbSize} MB)... Please wait.`,
         });
-        if (data.uploadedFileNames && data.uploadedFileNames.length > 0) {
-          setSelectedFiles((prev) => Array.from(new Set([...prev, ...data.uploadedFileNames])));
+
+        const formData = new FormData();
+        formData.append("directSync", "true");
+        formData.append("files", file);
+
+        const res = await fetch("/api/mabsolcrmsync/upload-dbf", {
+          method: "POST",
+          body: formData,
+        });
+
+        if (!res.ok) {
+          if (res.status === 413) {
+            throw new Error(`File ${file.name} (${mbSize} MB) exceeds server upload limit. Run: sudo sed -i 's/client_max_body_size .*/client_max_body_size 500M;/' /etc/nginx/sites-available/* && sudo systemctl reload nginx on server.`);
+          }
+          const errText = await res.text().catch(() => "");
+          throw new Error(errText || `Server returned HTTP status ${res.status}`);
         }
-        router.refresh();
-      } else {
-        setMessage({ type: "error", text: data.error || "Failed to upload DBF files." });
+
+        const data = await res.json();
+        if (data.success) {
+          successCount++;
+          const rows = data.result?.importedRows || 0;
+          totalImportedRows += rows;
+          if (data.uploadedFileNames) {
+            allUploadedNames.push(...data.uploadedFileNames);
+          }
+          setMessage({
+            type: "info",
+            text: `[${i + 1}/${dbfFiles.length}] Synced ${file.name} (${rows.toLocaleString()} rows). Moving to next...`,
+          });
+        } else {
+          throw new Error(data.error || `Failed to sync ${file.name}`);
+        }
       }
-    } catch {
-      setMessage({ type: "error", text: "Error occurred while uploading DBF files." });
+
+      setMessage({
+        type: "success",
+        text: `Successfully synced ${successCount} DBF table(s) (${totalImportedRows.toLocaleString()} rows) directly into database! Server temporary files cleaned up.`,
+      });
+      if (allUploadedNames.length > 0) {
+        setSelectedFiles((prev) => Array.from(new Set([...prev, ...allUploadedNames])));
+      }
+      router.refresh();
+    } catch (err: any) {
+      setMessage({
+        type: "error",
+        text: err?.message || "Error occurred while uploading DBF files.",
+      });
     } finally {
       setUploading(false);
     }

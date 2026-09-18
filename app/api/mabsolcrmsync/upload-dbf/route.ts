@@ -143,11 +143,28 @@ export async function POST(request: NextRequest) {
     // Always execute direct DBF sync into database upon upload
     const syncResult = await performDirectServerSync(user.email, uploadDir);
 
+    // Auto-delete processed DBF files from the server folder immediately after sync
+    const dirsToClean = [uploadDir, migrationDir];
+    for (const dir of dirsToClean) {
+      if (dir && fs.existsSync(dir)) {
+        try {
+          const filesInDir = fs.readdirSync(dir);
+          for (const f of filesInDir) {
+            const ext = path.extname(f).toLowerCase();
+            if (ext === ".dbf" || ext === ".fpt" || ext === ".cdx") {
+              try { fs.unlinkSync(path.join(dir, f)); } catch {}
+            }
+          }
+        } catch (cleanErr) {
+          console.error("[upload-dbf] Error cleaning up synced files:", cleanErr);
+        }
+      }
+    }
+
     return NextResponse.json({
       success: true,
       companyCode,
-      folder: uploadDir.replace(/\\/g, "/"),
-      message: `Uploaded ${allUploadDbfFiles.length} table(s) to company [${companyCode}] folder & synced successfully! Synced ${syncResult.importedTables} table(s), ${syncResult.importedRows} row(s).`,
+      message: `Uploaded and synced ${syncResult.importedTables} table(s) (${syncResult.importedRows} rows) directly into database! Server temporary files cleaned up.`,
       result: syncResult,
       uploadedFileNames,
     });

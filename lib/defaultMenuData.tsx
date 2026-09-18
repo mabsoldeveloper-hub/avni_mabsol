@@ -1122,6 +1122,15 @@ export const DEFAULT_MENU_ITEMS: MenuItemConfig[] = [
         isVisible: true,
         order: 3,
       },
+      {
+        id: "settings-notifications",
+        label: "Backup & Restore Settings",
+        href: "/admin/backup",
+        icon: "FaEnvelope",
+        permission: "settings.edit",
+        isVisible: true,
+        order: 3,
+      },
     ],
   },
 ];

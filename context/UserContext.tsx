@@ -31,8 +31,10 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
     return true;
   });
   const loadStarted = useRef(false);
+  const userRef = useRef<any>(null);
+  userRef.current = user;
 
-  const logoutAndRedirect = useCallback(async () => {
+  const logoutAndRedirect = useCallback(async (isSuspended = false) => {
     try {
       await fetch("/api/auth/logout", { method: "POST" });
     } catch (e) {
@@ -41,13 +43,14 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
     setUser(null);
     if (typeof window !== "undefined") {
       localStorage.removeItem("mabsol_user");
+      localStorage.removeItem("mabsol_permissions");
       if (window.location.pathname.startsWith("/dashboard")) {
-        window.location.href = "/login";
+        window.location.href = isSuspended ? "/login?suspended=1" : "/login";
       }
     }
   }, []);
 
-  const loadUser = useCallback(async () => {
+  const loadUser = useCallback(async (isBackground = false) => {
     try {
       const res = await fetch(`/api/auth/me?_t=${Date.now()}`, {
         cache: "no-store",
@@ -55,6 +58,26 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
           "Cache-Control": "no-cache",
         },
       });
+
+      if (res.status === 401 || res.status === 403) {
+        let isSuspended = false;
+        try {
+          const errData = await res.json();
+          if (errData.suspended || errData.expired) isSuspended = true;
+        } catch {}
+
+        setUser(null);
+        if (typeof window !== "undefined" && window.location.pathname.startsWith("/dashboard")) {
+          await logoutAndRedirect(isSuspended);
+        }
+        return;
+      }
+
+      if (!res.ok) {
+        // Transient network or server error: do not force logout during background check
+        return;
+      }
+
       const data = await res.json();
 
       if (res.ok && data.success && data.user) {
@@ -80,46 +103,50 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
           return data.user;
         });
       } else {
+        if (!isBackground) {
+          setUser(null);
+          if (typeof window !== "undefined" && window.location.pathname.startsWith("/dashboard")) {
+            await logoutAndRedirect();
+          }
+        }
+      }
+    } catch (err) {
+      console.error("Failed to load user:", err);
+      if (!isBackground && !userRef.current) {
         setUser(null);
         if (typeof window !== "undefined" && window.location.pathname.startsWith("/dashboard")) {
           await logoutAndRedirect();
         }
       }
-    } catch {
-      setUser(null);
-      if (typeof window !== "undefined" && window.location.pathname.startsWith("/dashboard")) {
-        await logoutAndRedirect();
-      }
     } finally {
-      setLoading(false);
+      if (!isBackground) {
+        setLoading(false);
+      }
     }
   }, [logoutAndRedirect]);
 
   useEffect(() => {
     if (loadStarted.current) return;
     loadStarted.current = true;
-    loadUser();
+    loadUser(false);
   }, [loadUser]);
 
-  // Periodically check session (based on SESSION_CHECK_INTERVAL_MS) and when window gets focus
+  // Periodically verify session in background & on window focus/visibility change
   useEffect(() => {
-    const interval = setInterval(() => {
+    const checkSession = () => {
       if (typeof window !== "undefined" && window.location.pathname.startsWith("/dashboard")) {
-        loadUser();
-      }
-    }, SESSION_CHECK_INTERVAL_MS);
-
-    const onFocus = () => {
-      if (typeof window !== "undefined" && window.location.pathname.startsWith("/dashboard")) {
-        loadUser();
+        loadUser(true);
       }
     };
 
-    window.addEventListener("focus", onFocus);
+    const interval = setInterval(checkSession, SESSION_CHECK_INTERVAL_MS);
+    window.addEventListener("focus", checkSession);
+    document.addEventListener("visibilitychange", checkSession);
 
     return () => {
       clearInterval(interval);
-      window.removeEventListener("focus", onFocus);
+      window.removeEventListener("focus", checkSession);
+      document.removeEventListener("visibilitychange", checkSession);
     };
   }, [loadUser]);
 
@@ -128,7 +155,7 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
       value={{
         user,
         loading,
-        reload: loadUser,
+        reload: () => loadUser(false),
         logout: logoutAndRedirect,
       }}
     >

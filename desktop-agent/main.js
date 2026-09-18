@@ -673,8 +673,8 @@ async function executeDecryptionAndSync(triggerReason = "manual") {
 
     if (uploadResult.success) {
       totalUploadedTables += dbfFiles.length;
-      summaryMessages.push(`[${compCode}]: Synced ${dbfFiles.length} tables`);
-      emitLog("success", `[${compCode}] Upload completed successfully!`);
+      summaryMessages.push(`[${compCode}]: Stored ${dbfFiles.length} tables`);
+      emitLog("success", `[${compCode}] Stored ${dbfFiles.length} table(s) on cloud server (direct DB sync skipped)!`);
 
       // Clean up internal staging files once uploaded to save client disk space
       try {
@@ -708,12 +708,12 @@ async function executeDecryptionAndSync(triggerReason = "manual") {
   emitStatus({
     isSyncing: false,
     isOnline: true,
-    lastStatus: "synced",
+    lastStatus: "stored",
     tablesCount: totalUploadedTables,
     message: summaryMessages.join(" | ")
   });
 
-  emitLog("success", `=== Sync Completed! Summary: ${summaryMessages.join(" | ")} ===`);
+  emitLog("success", `=== Transfer Completed! Files safely stored on cloud server (${totalUploadedTables} tables) ===`);
   return { success: true, message: summaryMessages.join(" | ") };
 }
 
@@ -750,6 +750,8 @@ async function uploadDbfBatch(cloudUrl, destDir, dbfFiles, token, email, license
 
       const form = new FormData();
       form.append("isFinalBatch", isFinal ? "true" : "false");
+      form.append("storeOnly", "true");
+      form.append("skipDirectSync", "true");
       if (companyCode) form.append("companyCode", companyCode);
       if (companyName) form.append("companyName", companyName);
 

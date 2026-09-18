@@ -235,7 +235,7 @@ export const MODULE_KEY_MAP: Record<string, string[]> = {
   leads: ["leads", "email-campaign", "whatsapp-campaign"],
   fieldforce: ["fieldforce", "mr-reporting", "mr-customer", "mr-territory", "mr-fieldforce"],
   reports: ["reports", "sales-report", "purchase-report", "stock-report", "ledger-report"],
-  master: ["master", "area", "division", "category", "hsn", "company", "backup-settings"],
+  master: ["master", "area", "division", "category", "hsn", "company","backup"],
   custom_forms: ["custom-forms"],
 };
 

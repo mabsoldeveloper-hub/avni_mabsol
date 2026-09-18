@@ -30,8 +30,7 @@ export default function LeadsPage() {
     if (!currentUser) return false;
     const roleType = (currentUser.roleType || "").toUpperCase();
     const roleName = (currentUser.roleId?.roleName || currentUser.role || "").toLowerCase();
-    if (roleType === "MR" || roleType === "RSM" || roleType === "ZSM" || roleName === "employee") return false;
-    return roleType === "ADMIN" || roleName.includes("admin") || roleName.includes("superadmin") || currentUser.isAdmin === true || currentUser.email === "admin@mabsol.com" || !currentUser.roleType;
+    return roleType === "ADMIN" || roleName.includes("admin") || roleName.includes("superadmin") || currentUser.isAdmin === true || currentUser.isSuperAdmin === true || !currentUser.roleType;
   })();
   const [view, setView]           = useState<"kanban"|"table">("kanban");
   const [leads, setLeads]         = useState<any[]>([]);

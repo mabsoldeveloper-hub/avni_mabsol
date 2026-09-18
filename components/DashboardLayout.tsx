@@ -84,9 +84,9 @@ export default function DashboardLayout({
   mobile={mobile}
 />
 
-        <div className="container-fluid p-4">
+        <main className="w-full px-2.5 sm:px-4 py-2.5 min-h-[calc(100vh-68px)]">
           {children}
-        </div>
+        </main>
       </div>
     </>
   );

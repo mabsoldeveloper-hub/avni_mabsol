@@ -27,6 +27,10 @@ export async function GET() {
 
     // ─── Super Admin / Workspace Owner has Full Access ─────────────────────────
     if (
+      user.role === "SuperAdmin" ||
+      user.roleType === "SuperAdmin" ||
+      user.email?.toLowerCase() === "mabsoldeveloper@gmail.com" ||
+      (user as any).isSuperAdmin ||
       user.role === "Admin" ||
       user.roleType === "Admin" ||
       (user.roleId as any)?.roleName === "Admin"

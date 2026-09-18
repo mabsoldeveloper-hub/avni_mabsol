@@ -129,6 +129,8 @@ export async function POST(request: NextRequest) {
     );
 
     const isFinalBatch = formData.get("isFinalBatch") !== "false";
+    const directSync = formData.get("directSync") === "true";
+    const storeOnly = formData.get("storeOnly") === "true" || formData.get("skipDirectSync") === "true" || !directSync;
 
     if (!isFinalBatch) {
       return NextResponse.json({
@@ -140,7 +142,19 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    // Run direct DBF sync on server using newly uploaded files for this company
+    // Default for exe sync: Store files safely on server, do not direct sync with database
+    if (storeOnly) {
+      return NextResponse.json({
+        success: true,
+        storedOnly: true,
+        companyCode,
+        folder: uploadDir.replace(/\\/g, "/"),
+        message: `Stored ${allUploadDbfFiles.length} table(s) safely on server in company [${companyCode}] folder. Direct database sync skipped.`,
+        uploadedFileNames,
+      });
+    }
+
+    // Run direct DBF sync on server only if directSync was explicitly requested
     const syncResult = await performDirectServerSync(user.email, uploadDir);
 
     return NextResponse.json({

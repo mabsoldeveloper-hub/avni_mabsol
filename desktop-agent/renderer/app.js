@@ -526,10 +526,10 @@ function updateStatusDisplay(status) {
   }
 
   if (status.isSyncing) {
-    statLastStatus.textContent = "Syncing...";
+    statLastStatus.textContent = "Storing...";
     statLastStatus.style.color = "#38bdf8";
-  } else if (status.lastStatus === "synced") {
-    statLastStatus.textContent = "Synced (Cloud)";
+  } else if (status.lastStatus === "stored" || status.lastStatus === "synced") {
+    statLastStatus.textContent = "Stored (Cloud)";
     statLastStatus.style.color = "#34d399";
   } else if (status.lastStatus === "offline_queued") {
     statLastStatus.textContent = "Offline (Queued)";

@@ -275,13 +275,9 @@ className="form-check-label"
 }
 
 <button
-
-className="btn btn-success"
-
+className="px-6 py-2.5 rounded-full text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white border border-emerald-600 shadow-md shadow-emerald-600/25 transition-all cursor-pointer disabled:opacity-50"
 disabled={loading}
-
 onClick={savePermissions}
-
 >
 
 {

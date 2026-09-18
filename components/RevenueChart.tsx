@@ -27,6 +27,7 @@ export default function RevenueChart() {
         <ResponsiveContainer
           width="100%"
           height={300}
+          minWidth={0}
         >
           <LineChart data={data}>
             <XAxis dataKey="month" />

@@ -59,6 +59,8 @@ export interface SidebarNavLinkProps {
   active: boolean;
   color: ColorKey;
   iconOnly: boolean;
+  badge?: string;
+  customActiveStyle?: boolean;
   onNavigate?: () => void;
 }
 

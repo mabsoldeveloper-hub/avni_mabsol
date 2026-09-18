@@ -42,6 +42,9 @@ async function dbConnect() {
       const collections = await db.listCollections().toArray();
       const colNames = collections.map(c => c.name);
       
+      if (colNames.includes("users")) {
+        await db.collection("users").dropIndex("mrCustomerId_1").catch(() => {});
+      }
       if (colNames.includes("vfpsyncstates")) {
         await db.collection("vfpsyncstates").dropIndex("tableName_1").catch(() => {});
       }

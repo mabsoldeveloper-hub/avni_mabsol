@@ -59,9 +59,7 @@ const UserSchema = new mongoose.Schema(
     mrCustomerId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Customer",
-      default: null,
-      unique: true,
-      sparse: true,
+      index: true,
     },
 
     reportsTo: {

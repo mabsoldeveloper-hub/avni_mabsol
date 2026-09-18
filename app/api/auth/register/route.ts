@@ -56,6 +56,8 @@ async function generateUniqueEmployeeCode(userName: string): Promise<string> {
 }
 
 export async function POST(req: Request) {
+  let createdCompanyId: any = null;
+  let userCreated = false;
   try {
     await connectDB();
 
@@ -109,20 +111,12 @@ export async function POST(req: Request) {
       }, { status: 409 });
     }
 
-    // If an orphaned company exists without any active user from an earlier incomplete signup, clean it up
-    const existingCompany = await Company.findOne({ email: cleanEmail });
-    if (existingCompany) {
-      const companyUser = await User.findOne({
-        $or: [{ companyId: existingCompany._id }, { email: cleanEmail }],
-      });
-      if (companyUser) {
-        return NextResponse.json({
-          success: false,
-          message: "This email address is already registered. Please use a different email or sign in.",
-        }, { status: 409 });
-      } else {
-        // Clean up stale company record from previous failed registration
-        await Company.deleteOne({ _id: existingCompany._id }).catch(() => {});
+    // If an orphaned company exists without any active user from an earlier failed signup, clean it up
+    const existingCompanies = await Company.find({ email: cleanEmail });
+    for (const ec of existingCompanies) {
+      const companyUser = await User.findOne({ companyId: ec._id });
+      if (!companyUser) {
+        await Company.deleteOne({ _id: ec._id }).catch(() => {});
       }
     }
 
@@ -166,14 +160,21 @@ export async function POST(req: Request) {
         }
         branchEmailSet.add(brEmail);
 
-        // Must not already exist in database (User or Company)
+        // Must not already exist in database as an active User
         const userWithBranchEmail = await User.findOne({ email: brEmail });
-        const companyWithBranchEmail = await Company.findOne({ email: brEmail });
-        if (userWithBranchEmail || companyWithBranchEmail) {
+        if (userWithBranchEmail) {
           return NextResponse.json({
             success: false,
             message: `Branch #${i + 1} email (${brEmail}) is already registered in the system. Please use a different email address.`,
           }, { status: 409 });
+        }
+        // Clean up any stale orphaned company record matching this branch email
+        const branchComps = await Company.find({ email: brEmail });
+        for (const bComp of branchComps) {
+          const compUser = await User.findOne({ companyId: bComp._id });
+          if (!compUser) {
+            await Company.deleteOne({ _id: bComp._id }).catch(() => {});
+          }
         }
       }
     }
@@ -291,6 +292,7 @@ export async function POST(req: Request) {
       currency: null,
       termsAccepted: Boolean(termsAccepted),
     });
+    createdCompanyId = newCompany._id;
 
     // ── Dynamically Calculate Active Financial Year (April 1 to March 31) ─────
     const now = new Date();
@@ -363,6 +365,7 @@ export async function POST(req: Request) {
       mobileVerified: true,
       termsAccepted: Boolean(termsAccepted),
     });
+    userCreated = true;
 
     // Link createdBy on Head Office
     newCompany.createdBy = user._id;
@@ -478,6 +481,10 @@ export async function POST(req: Request) {
     });
   } catch (error: any) {
     console.error("[REGISTER ERROR]:", error);
+    // If company was created but registration failed before User was created, delete orphaned company
+    if (createdCompanyId && !userCreated) {
+      await Company.deleteOne({ _id: createdCompanyId }).catch(() => {});
+    }
     return NextResponse.json(
       {
         success: false,

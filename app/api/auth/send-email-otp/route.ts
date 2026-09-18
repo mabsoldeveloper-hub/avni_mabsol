@@ -23,12 +23,24 @@ export async function POST(req: Request) {
     const cleanEmail = email.toLowerCase().trim();
 
     const existingUser = await User.findOne({ email: cleanEmail });
-    const existingCompany = await Company.findOne({ email: cleanEmail });
-    if (existingUser || existingCompany) {
+    if (existingUser) {
       return NextResponse.json({
         success: false,
         message: "This email address is already registered in the system. Please use a different email or sign in.",
       });
+    }
+
+    const existingCompany = await Company.findOne({ email: cleanEmail });
+    if (existingCompany) {
+      const companyUser = await User.findOne({
+        $or: [{ companyId: existingCompany._id }, { email: cleanEmail }],
+      });
+      if (companyUser) {
+        return NextResponse.json({
+          success: false,
+          message: "This email address is already registered in the system. Please use a different email or sign in.",
+        });
+      }
     }
 
     const otp = Math.floor(100000 + Math.random() * 900000).toString();

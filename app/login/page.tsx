@@ -514,7 +514,13 @@ export default function LoginPage() {
 
       if (data.success) {
         if (data.directLogin) {
-          router.push(data.redirectUrl || "/dashboard/super-admin");
+          if (data.user) {
+            try {
+              localStorage.setItem("mabsol_user", JSON.stringify(data.user));
+            } catch {}
+          }
+          const destination = data.redirectUrl || (data.user?.isSuperAdmin || data.user?.roleType === "SuperAdmin" ? "/dashboard/super-admin" : "/dashboard");
+          router.push(destination);
           return;
         }
         setStep("otp");

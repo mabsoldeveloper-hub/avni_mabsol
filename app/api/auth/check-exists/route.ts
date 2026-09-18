@@ -13,13 +13,27 @@ export async function POST(req: Request) {
     if (email) {
       const cleanEmail = String(email).toLowerCase().trim();
       const existingUser = await User.findOne({ email: cleanEmail });
-      const existingCompany = await Company.findOne({ email: cleanEmail });
-      if (existingUser || existingCompany) {
+      if (existingUser) {
         return NextResponse.json({
           exists: true,
           field: "email",
           message: "This email address is already registered in the system. Please use a different email.",
         });
+      }
+
+      // If company exists, only consider it taken if an active user belongs to it
+      const existingCompany = await Company.findOne({ email: cleanEmail });
+      if (existingCompany) {
+        const companyUser = await User.findOne({
+          $or: [{ companyId: existingCompany._id }, { email: cleanEmail }],
+        });
+        if (companyUser) {
+          return NextResponse.json({
+            exists: true,
+            field: "email",
+            message: "This email address is already registered in the system. Please use a different email.",
+          });
+        }
       }
     }
 

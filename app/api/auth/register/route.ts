@@ -101,12 +101,29 @@ export async function POST(req: Request) {
     const cleanMobile = mobile.replace(/\D/g, "");
 
     // ── Duplicate Checks for Head Office ──────────────────────────────────────
-    const emailExists = await User.findOne({ email: cleanEmail }) || await Company.findOne({ email: cleanEmail });
+    const emailExists = await User.findOne({ email: cleanEmail });
     if (emailExists) {
       return NextResponse.json({
         success: false,
         message: "This email address is already registered. Please use a different email or sign in.",
       }, { status: 409 });
+    }
+
+    // If an orphaned company exists without any active user from an earlier incomplete signup, clean it up
+    const existingCompany = await Company.findOne({ email: cleanEmail });
+    if (existingCompany) {
+      const companyUser = await User.findOne({
+        $or: [{ companyId: existingCompany._id }, { email: cleanEmail }],
+      });
+      if (companyUser) {
+        return NextResponse.json({
+          success: false,
+          message: "This email address is already registered. Please use a different email or sign in.",
+        }, { status: 409 });
+      } else {
+        // Clean up stale company record from previous failed registration
+        await Company.deleteOne({ _id: existingCompany._id }).catch(() => {});
+      }
     }
 
     const mobileExists = await User.findOne({ mobile: cleanMobile });

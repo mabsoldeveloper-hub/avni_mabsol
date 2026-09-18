@@ -45,6 +45,9 @@ async function dbConnect() {
       if (colNames.includes("users")) {
         await db.collection("users").dropIndex("mrCustomerId_1").catch(() => {});
       }
+      if (colNames.includes("roles")) {
+        await db.collection("roles").dropIndex("roleName_1").catch(() => {});
+      }
       if (colNames.includes("vfpsyncstates")) {
         await db.collection("vfpsyncstates").dropIndex("tableName_1").catch(() => {});
       }

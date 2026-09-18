@@ -24,21 +24,43 @@ export async function performDirectServerSync(userEmail: string, customDataDir?:
   let dataDir: string = customDataDir || config?.consoleSyncDir || config?.sourceDir || config?.dataDir || process.env.VFP_DATA_DIR || "";
   const enabledFiles: string[] = config?.enabledFiles || [];
 
-  // User-specific upload directory (browser-uploaded DBF files)
   const sanitizedEmail = (userEmail || "global").replace(/[^a-zA-Z0-9_-]/g, "_");
   const uploadDir = path.join(process.cwd(), "data", "vfp_uploads", sanitizedEmail);
 
-  const hasUploadedFiles =
-    fs.existsSync(uploadDir) &&
-    fs.readdirSync(uploadDir).some((f) => f.toLowerCase().endsWith(".dbf"));
+  // Helper to find directory containing DBF files
+  const findDbfInDir = (dirPath: string): string | null => {
+    try {
+      if (!fs.existsSync(dirPath)) return null;
+      const entries = fs.readdirSync(dirPath, { withFileTypes: true });
+      if (entries.some((e) => !e.isDirectory() && e.name.toLowerCase().endsWith(".dbf"))) {
+        return dirPath;
+      }
+      for (const e of entries) {
+        if (e.isDirectory()) {
+          const sub = path.join(dirPath, e.name);
+          const found = findDbfInDir(sub);
+          if (found) return found;
+        }
+      }
+    } catch {}
+    return null;
+  };
 
-  // Fallback: check if DBF files were uploaded via browser to THIS USER's server storage
-  if ((!dataDir || !fs.existsSync(dataDir)) && hasUploadedFiles) {
-    dataDir = uploadDir;
+  if (!dataDir || !fs.existsSync(dataDir) || !findDbfInDir(dataDir)) {
+    const candidates = [
+      uploadDir,
+      path.join("/home/vfpuser/data", sanitizedEmail),
+      "/home/vfpuser/data",
+      path.join(process.cwd(), "data"),
+    ];
+    for (const c of candidates) {
+      const found = findDbfInDir(c);
+      if (found) {
+        dataDir = found;
+        break;
+      }
+    }
   }
-
-  // REMOVED: Cross-user fallback that searched all configs in DB.
-  // That fallback was incorrectly picking up other users' folder paths.
 
   if (!dataDir || !fs.existsSync(dataDir)) {
     throw new Error(

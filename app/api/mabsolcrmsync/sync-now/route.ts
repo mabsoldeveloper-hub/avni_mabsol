@@ -55,27 +55,57 @@ export async function POST(request: NextRequest) {
       message: `Sync manually triggered from dashboard.`,
     });
 
-    const dataDir: string =
-      config?.consoleSyncDir || config?.sourceDir || config?.dataDir || process.env.VFP_DATA_DIR || "";
-
     const sanitizedEmail = user.email.replace(/[^a-zA-Z0-9_-]/g, "_");
-    const uploadDir = path.join(/*turbopackIgnore: true*/ process.cwd(), "data", "vfp_uploads", sanitizedEmail);
 
-    const hasUploadedDbfs =
-      fs.existsSync(uploadDir) &&
-      fs.readdirSync(uploadDir).some((f) => f.toLowerCase().endsWith(".dbf"));
+    // Helper to find directory containing DBF files
+    const findDbfInDir = (dirPath: string): string | null => {
+      try {
+        if (!fs.existsSync(dirPath)) return null;
+        const entries = fs.readdirSync(dirPath, { withFileTypes: true });
+        if (entries.some((e) => !e.isDirectory() && e.name.toLowerCase().endsWith(".dbf"))) {
+          return dirPath;
+        }
+        for (const e of entries) {
+          if (e.isDirectory()) {
+            const sub = path.join(dirPath, e.name);
+            const found = findDbfInDir(sub);
+            if (found) return found;
+          }
+        }
+      } catch {}
+      return null;
+    };
 
-    const canSyncDirectlyOnServer = (dataDir && fs.existsSync(dataDir)) || hasUploadedDbfs;
+    let resolvedDataDir: string | null = null;
+    const candidates = [
+      config?.consoleSyncDir,
+      config?.sourceDir,
+      config?.dataDir,
+      path.join("/home/vfpuser/data", sanitizedEmail),
+      "/home/vfpuser/data",
+      path.join(process.cwd(), "data", "vfp_uploads", sanitizedEmail),
+      path.join(process.cwd(), "data"),
+    ];
 
-    if (canSyncDirectlyOnServer) {
+    for (const c of candidates) {
+      if (c) {
+        const found = findDbfInDir(c);
+        if (found) {
+          resolvedDataDir = found;
+          break;
+        }
+      }
+    }
+
+    if (resolvedDataDir) {
       // Execute direct server-side DBF sync in background so HTTP connection does not time out on large DBF tables
-      performDirectServerSync(user.email).catch((err) => {
+      performDirectServerSync(user.email, resolvedDataDir).catch((err) => {
         console.error("Direct server sync background error:", err);
       });
 
       return NextResponse.json({
         success: true,
-        message: `DBF synchronization started in background! Processing all selected DBF tables...`,
+        message: `DBF synchronization started in background! Importing all tables into database...`,
         result: {
           importedTables: 0,
           importedRows: 0,
@@ -83,30 +113,14 @@ export async function POST(request: NextRequest) {
         },
       });
     } else {
-      // AWS Live Cloud mode: Folder is on client's Windows PC 
-      // Queue command for the desktop sync worker
-      await VfpSyncCommand.create({
-        email: user.email,
-        command: user.email,
-        status: "queued",
-        createdAt: new Date(),
-      });
-
-      const heartbeat = await VfpWorkerHeartbeat.findOne({}).sort({ lastSeenAt: -1 }).lean();
-      const lastSeenAt = (heartbeat as any)?.lastSeenAt ? new Date((heartbeat as any).lastSeenAt) : null;
-      const workerOnline = lastSeenAt && Date.now() - lastSeenAt.getTime() < 30000;
-
+      // No DBF files uploaded to server yet
       return NextResponse.json({
         success: true,
-        queued: true,
-        workerOnline,
-        message: workerOnline
-          ? `Sync command queued! Local desktop sync worker is ONLINE and syncing ${dataDir || "DBF folder"}.`
-          : `Sync command queued in Cloud! Local worker is OFFLINE. Start 'run_local_sync.bat' on your local PC or upload DBF files.`,
+        queued: false,
+        message: `No DBF files found on server yet. Please drag and drop your DBF files into "Upload DBF to Cloud" below to sync them directly into the database.`,
         result: {
           importedTables: 0,
           importedRows: 0,
-          queued: true,
         },
       });
     }

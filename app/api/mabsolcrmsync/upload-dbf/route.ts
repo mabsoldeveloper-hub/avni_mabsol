@@ -129,7 +129,6 @@ export async function POST(request: NextRequest) {
     );
 
     const isFinalBatch = formData.get("isFinalBatch") !== "false";
-    const storeOnly = formData.get("storeOnly") === "true" || formData.get("skipDirectSync") === "true";
 
     if (!isFinalBatch) {
       return NextResponse.json({
@@ -141,19 +140,7 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    // Default for exe sync: Store files safely on server, do not direct sync with database
-    if (storeOnly) {
-      return NextResponse.json({
-        success: true,
-        storedOnly: true,
-        companyCode,
-        folder: uploadDir.replace(/\\/g, "/"),
-        message: `Stored ${allUploadDbfFiles.length} table(s) safely on server in company [${companyCode}] folder. Direct database sync skipped.`,
-        uploadedFileNames,
-      });
-    }
-
-    // Run direct DBF sync on server only if directSync was explicitly requested
+    // Always execute direct DBF sync into database upon upload
     const syncResult = await performDirectServerSync(user.email, uploadDir);
 
     return NextResponse.json({

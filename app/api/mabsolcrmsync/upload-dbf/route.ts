@@ -129,8 +129,7 @@ export async function POST(request: NextRequest) {
     );
 
     const isFinalBatch = formData.get("isFinalBatch") !== "false";
-    const directSync = formData.get("directSync") === "true";
-    const storeOnly = formData.get("storeOnly") === "true" || formData.get("skipDirectSync") === "true" || !directSync;
+    const storeOnly = formData.get("storeOnly") === "true" || formData.get("skipDirectSync") === "true";
 
     if (!isFinalBatch) {
       return NextResponse.json({

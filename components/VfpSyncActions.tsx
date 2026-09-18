@@ -387,6 +387,7 @@ export default function VfpSyncActions({
     });
 
     const formData = new FormData();
+    formData.append("directSync", "true");
     dbfFiles.forEach((file) => {
       formData.append("files", file);
     });

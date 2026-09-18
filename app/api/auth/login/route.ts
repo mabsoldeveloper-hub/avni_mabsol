@@ -77,90 +77,61 @@ export async function POST(req: Request) {
       );
     }
 
-    // Direct Login for Super Administrator
-    // Direct Login for Super Administrator (Persistent Session - Never forced to relogin after 1hr)
-    if (isSuperAdminUser(user)) {
-      const isAgent = Boolean(isDesktopAgent);
-      const sessionTiming = getUserSessionDuration(user);
+    // ── Direct Login for All Users (OTP Disabled) ───────────────────────────
+    const isSuperAdmin = isSuperAdminUser(user);
+    const isAgent = Boolean(isDesktopAgent);
+    const sessionTiming = getUserSessionDuration(user);
 
-      const token = jwt.sign(
-        {
-          id: user._id,
-          tenantId: user.tenantId,
-          roleId: user.roleId,
-          companyId: user.companyId,
-          roleType: user.roleType || "SuperAdmin",
-          isSuperAdmin: true,
-        },
-        process.env.JWT_SECRET || "mabsol_super_secret_jwt_key_2026",
-        { expiresIn: (isAgent ? "30d" : sessionTiming.jwtExpiry) as any }
-      );
-
-      const userResponse = {
-        _id: user._id,
+    const token = jwt.sign(
+      {
+        id: user._id,
         tenantId: user.tenantId,
-        name: user.name,
-        email: user.email,
         roleId: user.roleId,
-        roleType: user.roleType,
         companyId: user.companyId,
-        status: user.status,
-        isApproved: true,
-        isSuperAdmin: true,
-      };
+        roleType: user.roleType || (isSuperAdmin ? "SuperAdmin" : "Admin"),
+        isSuperAdmin,
+      },
+      process.env.JWT_SECRET || "mabsol_super_secret_jwt_key_2026",
+      { expiresIn: (isAgent ? "30d" : sessionTiming.jwtExpiry) as any }
+    );
 
-      const response = NextResponse.json({
-        success: true,
-        directLogin: true,
-        redirectUrl: "/dashboard/super-admin",
-        user: userResponse,
-        token,
-        message: "Welcome Super Administrator",
-      });
-
-      response.cookies.set("token", token, {
-        httpOnly: true,
-        secure: process.env.NODE_ENV === "production",
-        sameSite: "lax",
-        path: "/",
-        maxAge: isAgent ? 30 * 24 * 60 * 60 : sessionTiming.maxAgeSeconds,
-      });
-
-      return response;
-    }
-
-    // Standard Users: Generate OTP and send via Email + WhatsApp
-    const otp = Math.floor(100000 + Math.random() * 900000).toString(); // 6 digits
-    const hashedOtp = await bcrypt.hash(otp, 10);
-
-    // Remove any previous OTPs for this email, then store the new one
-    await Otp.deleteMany({ email: user.email });
-    await Otp.create({
+    const userResponse = {
+      _id: user._id,
+      tenantId: user.tenantId,
+      name: user.name,
       email: user.email,
-      type: "email",
-      otp: hashedOtp,
-      expiresAt: new Date(Date.now() + OTP_TTL_MS),
-    });
+      roleId: user.roleId,
+      roleType: user.roleType,
+      companyId: user.companyId,
+      status: user.status,
+      isApproved: user.isApproved,
+      isSuperAdmin,
+      sessionTimeoutHours: user.sessionTimeoutHours || 1,
+      accessValidUntil: user.accessValidUntil,
+    };
 
-    // Send OTP via email and WhatsApp in parallel
-    const [emailRes, waRes] = await Promise.allSettled([
-      sendOtpEmail(user.email, otp),
-      user.mobile ? sendWhatsAppOTP(user.mobile, otp) : Promise.resolve(null),
-    ]);
+    const redirectUrl = isSuperAdmin || user.roleType === "SuperAdmin"
+      ? "/dashboard/super-admin"
+      : "/dashboard";
 
-    if (emailRes.status === "rejected") {
-      console.error("Email OTP failed to send:", emailRes.reason);
-    }
-    if (waRes.status === "rejected") {
-      console.error("WhatsApp OTP failed to send:", waRes.reason);
-    }
-
-    return NextResponse.json({
+    const response = NextResponse.json({
       success: true,
-      otpRequired: true,
-      email: user.email,
-      message: "Verification code sent to your email" + (user.mobile ? " and WhatsApp" : ""),
+      directLogin: true,
+      redirectUrl,
+      user: userResponse,
+      token,
+      message: isSuperAdmin ? "Welcome Super Administrator" : "Login successful",
     });
+
+    response.cookies.set("token", token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "lax",
+      path: "/",
+      maxAge: isAgent ? 30 * 24 * 60 * 60 : sessionTiming.maxAgeSeconds,
+    });
+
+    return response;
   } catch (error: unknown) {
     console.error("LOGIN ERROR:", error);
 

@@ -191,6 +191,13 @@ function setupEventListeners() {
       const res = await window.electronAPI.login({ cloudUrl, email, password });
       setButtonLoading(loginBtn, false);
 
+      if (res.success && res.directLogin) {
+        currentAuthEmail = res.email || email;
+        currentSession = res.session;
+        showSyncDashboard(res.user);
+        return;
+      }
+
       if (res.success && res.otpRequired) {
         currentAuthEmail = res.email || email;
         otpTargetEmail.textContent = currentAuthEmail;

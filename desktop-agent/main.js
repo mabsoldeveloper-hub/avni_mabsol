@@ -189,6 +189,37 @@ ipcMain.handle("auth:login", async (_event, { cloudUrl, email, password }) => {
     const res = await axios.post(`${cleanUrl}/api/auth/login`, { email, password }, { timeout: 15000 });
 
     if (res.data && res.data.success) {
+      if (res.data.directLogin || res.data.token) {
+        let token = res.data.token || "";
+        if (!token) {
+          const setCookies = res.headers["set-cookie"];
+          if (Array.isArray(setCookies)) {
+            for (const c of setCookies) {
+              const match = c.match(/token=([^;]+)/);
+              if (match) {
+                token = match[1];
+                break;
+              }
+            }
+          }
+        }
+        const verifiedEmail = email || res.data.user?.email || "";
+        const session = {
+          user: res.data.user,
+          email: verifiedEmail,
+          token,
+          cloudUrl: cleanUrl,
+          loggedInAt: new Date().toISOString()
+        };
+        saveSession(session);
+        const cfg = loadConfig();
+        cfg.userEmail = verifiedEmail;
+        cfg.cloudUrl = cleanUrl;
+        saveConfig(cfg);
+        emitLog("success", `Login verified! Welcome, ${res.data.user?.name || verifiedEmail}`);
+        return { success: true, directLogin: true, user: res.data.user, session };
+      }
+
       emitLog("success", `Credentials validated! Verification OTP sent to ${email}`);
       return {
         success: true,

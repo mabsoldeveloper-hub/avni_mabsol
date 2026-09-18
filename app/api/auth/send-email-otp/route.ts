@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import connectDB from "@/lib/mongodb";
 import User from "@/models/User";
-import Company from "@/models/Company";
 import Otp from "@/models/Otp";
 import { sendEmailOTP } from "@/lib/mail";
 
@@ -23,8 +22,7 @@ export async function POST(req: Request) {
     const cleanEmail = email.toLowerCase().trim();
 
     const existingUser = await User.findOne({ email: cleanEmail });
-    const existingCompany = await Company.findOne({ email: cleanEmail });
-    if (existingUser || existingCompany) {
+    if (existingUser) {
       return NextResponse.json({
         success: false,
         message: "This email address is already registered in the system. Please use a different email or sign in.",

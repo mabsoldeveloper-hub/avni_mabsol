@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import connectDB from "@/lib/mongodb";
 import User from "@/models/User";
-import Company from "@/models/Company";
 
 export const dynamic = "force-dynamic";
 
@@ -13,8 +12,7 @@ export async function POST(req: Request) {
     if (email) {
       const cleanEmail = String(email).toLowerCase().trim();
       const existingUser = await User.findOne({ email: cleanEmail });
-      const existingCompany = await Company.findOne({ email: cleanEmail });
-      if (existingUser || existingCompany) {
+      if (existingUser) {
         return NextResponse.json({
           exists: true,
           field: "email",

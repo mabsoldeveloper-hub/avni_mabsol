@@ -543,40 +543,7 @@ export default function VfpSyncActions({
   const handleNativeFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (files && files.length > 0) {
-      const newFileNames: string[] = [];
-      let detectedFolderPath = dataDir;
-
-      Array.from(files).forEach((file) => {
-        const fileName = file.name;
-        if (!newFileNames.includes(fileName)) {
-          newFileNames.push(fileName);
-        }
-
-        const fullPath = (file as any).path;
-        if (fullPath) {
-          const lastSlash = Math.max(fullPath.lastIndexOf("/"), fullPath.lastIndexOf("\\"));
-          if (lastSlash !== -1) {
-            detectedFolderPath = fullPath.substring(0, lastSlash);
-          }
-        } else if (!detectedFolderPath) {
-          const relPath = (file as any).webkitRelativePath || "";
-          if (relPath) {
-            const firstSlash = relPath.indexOf("/");
-            if (firstSlash !== -1) {
-              detectedFolderPath = relPath.substring(0, firstSlash);
-            }
-          }
-        }
-      });
-
-      if (detectedFolderPath && detectedFolderPath !== dataDir) {
-        setDataDir(detectedFolderPath);
-      }
-
-      const updated = Array.from(new Set([...selectedFiles, ...newFileNames]));
-      setSelectedFiles(updated);
-      setSyncScope("selected");
-      saveConfiguration(detectedFolderPath, "selected", updated, autoSync, autoSyncInterval, true);
+      handleDirectDbfUpload(files);
     }
     e.target.value = "";
   };
@@ -950,91 +917,67 @@ export default function VfpSyncActions({
                 return (
                   <div className="p-3.5 bg-slate-50/80 border border-slate-200/80 rounded-2xl space-y-3.5 shadow-2xs">
                     
-                    {/* SELECTED FILES FOLDER LOCATION FIELD (PLACED AT TOP WITH BROWSE BUTTON) */}
-                    <div className="space-y-1.5 pb-3 border-b border-slate-200/80">
+                    {/* DIRECT FILE UPLOAD AREA (REPLACES FOLDER PATH SELECTION) */}
+                    <div className="space-y-2 pb-3 border-b border-slate-200/80">
                       <div className="flex items-center justify-between gap-2">
                         <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider flex items-center gap-1.5">
-                          <FolderOpen size={13} className="text-teal-600" />
-                          <span>SELECTED FILES FOLDER LOCATION</span>
+                          <UploadCloud size={13} className="text-slate-700" />
+                          <span>UPLOAD FILES DIRECTLY TO SYNC</span>
                         </span>
-                        {dataDir ? (
-                          <span className="text-[10px] text-emerald-700 bg-emerald-50 border border-emerald-200/80 px-2 py-0.5 rounded-full font-bold font-mono truncate max-w-[220px]" title={dataDir}>
-                            ✓ Folder set
+                        {selectedFiles.length > 0 ? (
+                          <span className="text-[10px] text-emerald-700 bg-emerald-50 border border-emerald-200/80 px-2.5 py-0.5 rounded-full font-bold font-mono">
+                            ✓ {selectedFiles.length} file(s) ready
                           </span>
                         ) : (
-                          <span className="text-[10px] text-amber-700 bg-amber-50 border border-amber-200/80 px-2 py-0.5 rounded-full font-bold font-mono">
-                            ⚠️ Folder path empty
+                          <span className="text-[10px] text-amber-700 bg-amber-50 border border-amber-200/80 px-2.5 py-0.5 rounded-full font-bold font-mono">
+                            No files uploaded
                           </span>
                         )}
                       </div>
-                      <div className="flex items-center gap-2 w-full">
-                        <div 
-                          className="flex-1 flex items-center gap-2 px-3.5 py-2 bg-white border border-slate-200/90 text-xs font-mono text-slate-800 overflow-hidden box-border shadow-2xs focus-within:border-slate-400 focus-within:ring-1 focus-within:ring-slate-400 transition-all"
-                          style={{ borderRadius: "10px" }}
-                        >
-                          <input
-                            type="text"
-                            value={dataDir}
-                            onChange={(e) => {
-                              const newDir = e.target.value;
-                              setDataDir(newDir);
-                              saveConfiguration(newDir, "selected", selectedFiles, autoSync, autoSyncInterval, true);
-                            }}
-                            placeholder="Enter folder path or click Browse folder..."
-                            className="w-full bg-transparent border-0 outline-none text-xs font-mono text-slate-800 placeholder:text-slate-400"
-                            disabled={autoSync}
-                            title="Directory path containing your selected DBF tables"
-                          />
-                          {dataDir && !autoSync && (
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setDataDir("");
-                                saveConfiguration("", "selected", selectedFiles, autoSync, autoSyncInterval, true);
-                              }}
-                              className="text-slate-400 hover:text-slate-600 p-0.5 shrink-0 cursor-pointer"
-                              title="Clear folder path"
-                            >
-                              <X size={14} />
-                            </button>
-                          )}
-                        </div>
 
-                        <button
-                          type="button"
-                          disabled={autoSync}
-                          onClick={handleOpenNativeFolderPicker}
-                          className={`inline-flex items-center gap-1 px-3 py-2 text-xs font-bold bg-white border border-slate-200 text-slate-800 transition-all shadow-2xs btn-pill shrink-0 ${
-                            autoSync ? "opacity-50 cursor-not-allowed" : "hover:bg-slate-100 cursor-pointer"
-                          }`}
-                          style={{ borderRadius: "10px" }}
-                          title={autoSync ? "Turn off Auto-sync to change folder" : "Browse Windows folder for DBF files"}
-                        >
-                          <FolderOpen size={13} className="text-slate-600" />
-                          <span>Browse folder</span>
-                        </button>
-
-                        {dataDir && (
-                          <button
-                            type="button"
-                            disabled={autoSync}
-                            onClick={() => {
-                              if (autoSync) {
-                                setMessage({ type: "info", text: "Please turn off Auto-sync below to clear folder path." });
-                                return;
-                              }
-                              setDataDir("");
-                              saveConfiguration("", "selected", selectedFiles, autoSync, autoSyncInterval, true);
-                            }}
-                            className={`inline-flex items-center gap-1 px-3 py-2 text-xs font-bold bg-white border border-red-200 text-red-600 transition-all shadow-2xs btn-pill shrink-0 ${
-                              autoSync ? "opacity-50 cursor-not-allowed" : "hover:bg-red-50 hover:border-red-300 cursor-pointer"
-                            }`}
-                            style={{ borderRadius: "10px" }}
-                            title={autoSync ? "Turn off Auto-sync to clear path" : "Clear folder path"}
-                          >
-                            <X size={13} className="text-red-500" />
-                            <span>Clear path</span>
-                          </button>
+                      {/* Dropzone & Browse button */}
+                      <div
+                        onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); }}
+                        onDrop={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          if (autoSync) {
+                            setMessage({ type: "info", text: "Please turn off Auto-sync below to upload new files." });
+                            return;
+                          }
+                          if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+                            handleDirectDbfUpload(e.dataTransfer.files);
+                          }
+                        }}
+                        onClick={() => {
+                          if (autoSync) {
+                            setMessage({ type: "info", text: "Please turn off Auto-sync below to upload new files." });
+                            return;
+                          }
+                          nativeFileInputRef.current?.click();
+                        }}
+                        className={`border-2 border-dashed rounded-xl p-3.5 text-center transition-all cursor-pointer ${
+                          uploading
+                            ? "bg-slate-50 border-slate-300 pointer-events-none"
+                            : autoSync
+                            ? "bg-slate-50 border-slate-200 opacity-60 cursor-not-allowed"
+                            : "bg-white hover:bg-slate-50/80 border-slate-300 hover:border-slate-400 shadow-2xs"
+                        }`}
+                      >
+                        {uploading ? (
+                          <div className="flex items-center justify-center gap-2 py-1 text-xs font-semibold text-slate-700">
+                            <Loader2 size={15} className="animate-spin text-slate-900" />
+                            <span>Uploading files directly... Please wait</span>
+                          </div>
+                        ) : (
+                          <div className="flex flex-col sm:flex-row items-center justify-center gap-2 text-xs text-slate-600">
+                            <div className="flex items-center gap-1.5">
+                              <UploadCloud size={16} className="text-slate-700 shrink-0" />
+                              <span className="font-bold text-slate-900 underline">Click to choose files</span>
+                            </div>
+                            <span className="text-slate-400 hidden sm:inline">|</span>
+                            <span className="text-slate-500 text-[11px]">or drag & drop files here (.DBF)</span>
+                          </div>
                         )}
                       </div>
                     </div>
@@ -1445,32 +1388,49 @@ export default function VfpSyncActions({
                   className={`w-full inline-flex items-center justify-center gap-2 py-2.5 px-4 text-xs sm:text-sm font-bold transition-all btn-pill ${
                     autoSync 
                       ? "bg-slate-900 text-white opacity-90 cursor-not-allowed" 
+                      : uploading || selectedFiles.length === 0
+                      ? "bg-slate-100 text-slate-400 border border-slate-200 cursor-not-allowed shadow-none"
                       : "bg-black hover:bg-slate-900 text-white shadow-xs cursor-pointer active:scale-[0.99]"
                   } disabled:cursor-not-allowed`} 
                   style={{ borderRadius: "9999px" }}
                   id="sync-btn" 
                   onClick={() => triggerSyncNow(false)}
-                  disabled={selectedFiles.length === 0 || Boolean(busyAction) || autoSync}
+                  disabled={uploading || selectedFiles.length === 0 || Boolean(busyAction) || autoSync}
                   type="button"
-                  title={autoSync ? "Auto-sync is running on a schedule. Click 'Cancel sync' below to stop." : selectedFiles.length === 0 ? "Please select at least 1 DBF table to sync" : "Click to trigger immediate manual sync"}
-                >
-                  {busyAction === "sync" ? (
-                    <RefreshCw size={14} className="animate-spin text-white" />
-                  ) : autoSync ? (
-                    <span className="flex items-center gap-1.5 shrink-0">
-                      <RefreshCw size={13} className="animate-spin text-emerald-400" />
-                      <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse shrink-0" />
-                    </span>
-                  ) : (
-                    <Play size={13} fill="currentColor" className="text-white" />
-                  )}
-                  <span>
-                    {busyAction === "sync" 
-                      ? "Syncing data..." 
+                  title={
+                    uploading
+                      ? "Files are currently uploading... Please wait."
                       : autoSync 
-                      ? "Auto-sync active" 
-                      : "Sync now"}
-                  </span>
+                      ? "Auto-sync is running on a schedule. Click 'Cancel sync' below to stop." 
+                      : selectedFiles.length === 0 
+                      ? "No files uploaded. Please upload files directly to enable sync." 
+                      : "Click to trigger immediate manual sync"
+                  }
+                >
+                  {uploading ? (
+                    <>
+                      <Loader2 size={14} className="animate-spin text-slate-500" />
+                      <span>Uploading files...</span>
+                    </>
+                  ) : busyAction === "sync" ? (
+                    <>
+                      <RefreshCw size={14} className="animate-spin text-white" />
+                      <span>Syncing data...</span>
+                    </>
+                  ) : autoSync ? (
+                    <>
+                      <span className="flex items-center gap-1.5 shrink-0">
+                        <RefreshCw size={13} className="animate-spin text-emerald-400" />
+                        <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse shrink-0" />
+                      </span>
+                      <span>Auto-sync active</span>
+                    </>
+                  ) : (
+                    <>
+                      <Play size={13} fill="currentColor" className={selectedFiles.length === 0 ? "text-slate-400" : "text-white"} />
+                      <span>{selectedFiles.length === 0 ? "Upload files to sync" : "Sync now"}</span>
+                    </>
+                  )}
                 </button>
 
                 <button 
@@ -1496,17 +1456,17 @@ export default function VfpSyncActions({
 
             {/* DIRECT CLOUD DBF UPLOAD CARD */}
             <div
-              className="border border-teal-200/70 p-4 sm:p-5 bg-gradient-to-b from-teal-50/40 to-white space-y-3 shadow-2xs"
+              className="border border-slate-200 p-4 sm:p-5 bg-white space-y-3 shadow-2xs"
               style={{ borderRadius: "20px" }}
             >
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <div className="w-7 h-7 rounded-lg bg-teal-100 text-teal-700 flex items-center justify-center font-bold">
+                  <div className="w-7 h-7 rounded-lg bg-slate-100 text-slate-700 flex items-center justify-center font-bold">
                     <UploadCloud size={16} />
                   </div>
                   <div>
-                    <span className="text-xs font-bold text-slate-900 block leading-snug">Upload DBF to Cloud</span>
-                    <span className="text-[10px] text-slate-500 block">Direct browser upload to AWS Linux server</span>
+                    <span className="text-xs font-bold text-slate-900 block leading-snug">Upload Files Directly</span>
+                    <span className="text-[10px] text-slate-500 block">Browser upload directly into database</span>
                   </div>
                 </div>
               </div>
@@ -1522,7 +1482,7 @@ export default function VfpSyncActions({
                   }
                 }}
                 onClick={() => directDbfInputRef.current?.click()}
-                className="border-2 border-dashed border-teal-200 hover:border-teal-400 bg-white/80 p-4 rounded-xl text-center cursor-pointer transition-all hover:bg-teal-50/30 group"
+                className="border-2 border-dashed border-slate-200 hover:border-slate-400 bg-slate-50/50 p-4 rounded-xl text-center cursor-pointer transition-all hover:bg-slate-50 group"
               >
                 <input
                   type="file"
@@ -1533,15 +1493,15 @@ export default function VfpSyncActions({
                   onChange={(e) => handleDirectDbfUpload(e.target.files)}
                 />
                 {uploading ? (
-                  <div className="flex items-center justify-center gap-2 text-xs font-bold text-teal-700 py-1">
-                    <Loader2 size={16} className="animate-spin text-teal-600" />
-                    <span>Uploading DBF files & syncing...</span>
+                  <div className="flex items-center justify-center gap-2 text-xs font-bold text-slate-700 py-1">
+                    <Loader2 size={16} className="animate-spin text-slate-900" />
+                    <span>Uploading files & syncing...</span>
                   </div>
                 ) : (
                   <div className="space-y-1">
-                    <UploadCloud size={22} className="mx-auto text-teal-600 group-hover:scale-110 transition-transform" />
+                    <UploadCloud size={22} className="mx-auto text-slate-600 group-hover:scale-110 transition-transform" />
                     <div className="text-xs font-bold text-slate-800">
-                      Drop <span className="text-teal-600 font-mono">.DBF</span> files here, or <span className="underline">browse</span>
+                      Drop <span className="text-slate-900 font-mono">.DBF</span> files here, or <span className="underline">browse</span>
                     </div>
                     <div className="text-[10px] text-slate-400">
                       Supports multiple DBF tables (e.g. CUST.DBF, ITEM.DBF)

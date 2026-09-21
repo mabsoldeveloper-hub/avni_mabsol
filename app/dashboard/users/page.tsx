@@ -2,58 +2,26 @@ import PermissionButton from "@/components/PermissionButton";
 import ProtectedPage from "@/components/ProtectedPage";
 import UsersTable from "@/components/UsersTable";
 import Link from "next/link";
-import { cookies } from "next/headers";
+import { fetchUsersList } from "@/app/api/users/route";
 
-type UsersApiResponse = {
-  success?: boolean;
-  users?: any[];
-  hierarchy?: {
-    currentUserId?: string;
-    currentRole?: string;
-    isAdmin?: boolean;
-    totalAccessibleUsers?: number;
-  };
-  error?: string;
-};
+export const dynamic = "force-dynamic";
 
 async function getUsers() {
   try {
-    /*
-     * IMPORTANT:
-     * This page is a Server Component.
-     * When the server calls /api/users internally, the browser's
-     * authentication cookie is NOT automatically forwarded.
-     *
-     * /api/users uses getCurrentUser(), which reads the "token" cookie.
-     * Therefore we explicitly forward the token cookie here.
-     */
-    const cookieStore = await cookies();
-    const token = cookieStore.get("token")?.value || "";
+    const data = await fetchUsersList();
 
-    const res = await fetch("http://localhost:3000/api/users", {
-      method: "GET",
-      headers: {
-        ...(token ? { Cookie: `token=${token}` } : {}),
-      },
-      cache: "no-store",
-    });
-
-    const data: UsersApiResponse = await res.json();
-
-    if (!res.ok || !data?.success) {
-      console.error(
-        "GET /api/users failed:",
-        data?.error || res.statusText
-      );
-
+    if (!data?.success) {
       return {
         users: [],
         hierarchy: null,
       };
     }
 
+    // Convert to plain serializable objects for Client Component
+    const users = JSON.parse(JSON.stringify(data.users || []));
+
     return {
-      users: Array.isArray(data.users) ? data.users : [],
+      users: Array.isArray(users) ? users : [],
       hierarchy: data.hierarchy || null,
     };
   } catch (error) {

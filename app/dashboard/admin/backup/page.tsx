@@ -92,7 +92,7 @@ export default function BackupPage() {
 
   const [settingsLoading, setSettingsLoading] = useState(true);
   const [saveLoading, setSaveLoading] = useState(false);
-  const [sendLoading, setSendLoading] = useState(false);
+  // const [sendLoading, setSendLoading] = useState(false);
   const [downloadLoading, setDownloadLoading] = useState(false);
   const [restoreLoading, setRestoreLoading] = useState(false);
 
@@ -180,38 +180,38 @@ export default function BackupPage() {
     }
   };
 
-  const handleSendBackup = async () => {
-    if (!receiverEmail.trim()) {
-      toast.error("Please specify a receiver email first and save settings");
-      return;
-    }
+  // const handleSendBackup = async () => {
+  //   if (!receiverEmail.trim()) {
+  //     toast.error("Please specify a receiver email first and save settings");
+  //     return;
+  //   }
 
-    try {
-      setSendLoading(true);
-      const response = await fetch(`${BACKEND_URL}/api/admin/backup/send`, {
-        method: "POST",
-        credentials: "include",
-      });
+  //   try {
+  //     setSendLoading(true);
+  //     const response = await fetch(`${BACKEND_URL}/api/admin/backup/send`, {
+  //       method: "POST",
+  //       credentials: "include",
+  //     });
 
-      const result: ApiResponse = await response.json();
+  //     const result: ApiResponse = await response.json();
 
-      if (!response.ok) {
-        throw new Error(result.message || "Failed to send backup");
-      }
+  //     if (!response.ok) {
+  //       throw new Error(result.message || "Failed to send backup");
+  //     }
 
-      toast.success(
-        result.message || `Encrypted backup sent to ${receiverEmail} successfully!`
-      );
-      void loadSettings();
-    } catch (error) {
-      console.error("Send backup error:", error);
-      toast.error(
-        error instanceof Error ? error.message : "Failed to send backup email"
-      );
-    } finally {
-      setSendLoading(false);
-    }
-  };
+  //     toast.success(
+  //       result.message || `Encrypted backup sent to ${receiverEmail} successfully!`
+  //     );
+  //     void loadSettings();
+  //   } catch (error) {
+  //     console.error("Send backup error:", error);
+  //     toast.error(
+  //       error instanceof Error ? error.message : "Failed to send backup email"
+  //     );
+  //   } finally {
+  //     setSendLoading(false);
+  //   }
+  // };
 
   const handleDownloadBackup = async () => {
     try {
@@ -597,7 +597,7 @@ export default function BackupPage() {
                   {saveLoading ? "Saving Settings..." : "Save Schedule Settings"}
                 </button>
 
-                <button
+                {/* <button
                   type="button"
                   onClick={handleSendBackup}
                   disabled={sendLoading}
@@ -606,7 +606,7 @@ export default function BackupPage() {
                 >
                   <Send className={`h-4 w-4 ${sendLoading ? "animate-spin" : ""}`} />
                   {sendLoading ? "Sending to Gmail..." : "Send Backup Now"}
-                </button>
+                </button> */}
               </div>
             </form>
           </div>

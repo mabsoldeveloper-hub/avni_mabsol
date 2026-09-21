@@ -17,7 +17,7 @@ function getTransporter() {
   }
 
   const transporter = nodemailer.createTransport({
-    // host: process.env.BACKUP_SMTP_HOST || "smtp.gmail.com",
+    host: process.env.BACKUP_SMTP_HOST || "smtp.gmail.com",
     port: Number(process.env.SMTP_PORT || 465),
     secure: process.env.BACKUP_SMTP_SECURE !== "false",
     auth: {

@@ -4,124 +4,240 @@ import Product from "@/models/Product";
 import SaleType from "@/models/SaleType";
 import MrTerritory from "@/models/MrTerritory";
 import { getCurrentUser } from "@/lib/auth";
-
-// GET /api/master/product
-//
-// MR Territory Filtering Logic:
-//   - If the logged-in user has ACTIVE MrTerritory records → they are an MR.
-//     Only products whose GCODE matches one of their allowed company codes are returned.
-//   - If no territory records exist → user is admin / non-MR → all products returned.
-//
-// Product ↔ Company link:
-//   Product.GCODE  →  SaleType.SCODE  →  SaleType.SNAME (company name)
-//   So "allowed company codes" = MrTerritory.companyCode values for this user.
-
 import { getCompanyVfpFilter, combineFilters } from "@/lib/companyVfpHelper";
 
 export const dynamic = "force-dynamic";
 
+const PRODUCT_PROJECTION = {
+  _id: 1,
+  CODE: 1,
+  PRODUCT: 1,
+  NAME: 1,
+  DESCRIPT: 1,
+  GCODE: 1,
+  GCODE6: 1,
+  COMPANY: 1,
+  MRP: 1,
+  PRATE: 1,
+  RATEF: 1,
+  BALANCE: 1,
+  IGST: 1,
+  STATUS: 1,
+};
+
+function clean(value: unknown) {
+  return String(value ?? "").trim();
+}
+
 export async function GET(req: Request) {
+  const startedAt = Date.now();
+
+  try {
     await connectDB();
 
     const { searchParams } = new URL(req.url);
-    const companyVfpMatch = await getCompanyVfpFilter(searchParams);
 
-    // ── Step 1: Determine MR territory restrictions ───────────────────────
-    let allowedGCODEs: string[] | null = null; // null = no restriction (admin/non-MR)
+    // Optional: allow frontend to request limited data
+    const limit = Math.min(Number(searchParams.get("limit") || 0) || 0, 5000); // 0 = no limit
+    const search = clean(searchParams.get("search"));
+    const page = Math.max(1, Number(searchParams.get("page") || 1));
+    const pageSize = Math.min(Number(searchParams.get("pageSize") || 50), 200);
 
-    try {
-        const user = await getCurrentUser();
+    const [companyVfpMatch, user] = await Promise.all([
+      getCompanyVfpFilter(searchParams),
+      getCurrentUser(),
+    ]);
 
-        if (user) {
-            const roleName = String(user.roleId?.roleName || "").trim().toLowerCase();
+    // ---------- MR Territory ----------
+    let allowedGCODEs: string[] | null = null;
 
-            // Admin role users get FULL access to all products
-            if (roleName.includes("admin")) {
-                allowedGCODEs = null;
-            } else {
-                // Find all ACTIVE territories for this user
-                const territories = await MrTerritory.find(
-                    { userId: user._id, status: "Active" },
-                    { companyCode: 1 }
-                );
+    if (user) {
+      const roleName = clean(user.roleId?.roleName).toLowerCase();
 
-                if (territories && territories.length > 0) {
-                    // Non-admin user with territory assignments → restrict to allowed company codes
-                    const allowedCompanyCodes = Array.from(
-                        new Set(
-                            territories.map((t: any) =>
-                                String(t.companyCode || "").trim()
-                            )
-                        )
-                    ).filter(Boolean);
+      if (!roleName.includes("admin")) {
+        const territories = await MrTerritory.find(
+          { userId: user._id, status: "Active" },
+          { companyCode: 1, _id: 0 }
+        )
+          .lean()
+          .maxTimeMS(3000);
 
-                    allowedGCODEs = allowedCompanyCodes;
-                }
-            }
+        if (territories.length > 0) {
+          allowedGCODEs = Array.from(
+            new Set(
+              territories
+                .map((t: any) => clean(t.companyCode))
+                .filter(Boolean)
+            )
+          );
         }
-
-    } catch {
-        // If session check fails, fall back to showing all products
-        allowedGCODEs = null;
+      }
     }
 
-    // ── Step 2: Build product query with optional GCODE filter ────────────
+    if (allowedGCODEs !== null && allowedGCODEs.length === 0) {
+      return NextResponse.json([]);
+    }
+
+    // ---------- Product Filter ----------
     let productFilter: any = combineFilters(companyVfpMatch);
-    if (allowedGCODEs !== null && allowedGCODEs.length > 0) {
-        productFilter = combineFilters(companyVfpMatch, { GCODE: { $in: allowedGCODEs } });
-    } else if (allowedGCODEs !== null && allowedGCODEs.length === 0) {
-        // MR is assigned but company codes couldn't be resolved → return nothing
-        return NextResponse.json([]);
+
+    if (allowedGCODEs !== null) {
+      productFilter = combineFilters(productFilter, {
+        GCODE: { $in: allowedGCODEs },
+      });
     }
 
-    const products = await Product.find(productFilter).sort({ PRODUCT: 1 });
+    // Server-side search (very important for performance)
+    if (search) {
+      const regex = new RegExp(search.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i");
+      productFilter = {
+        $and: [
+          productFilter,
+          {
+            $or: [
+              { PRODUCT: regex },
+              { CODE: regex },
+              { GCODE: regex },
+              { COMPANY: regex },
+            ],
+          },
+        ],
+      };
+    }
 
-    // ── Step 3: Build enrichment maps from SaleType ───────────────────────
-    const saleTypes = await SaleType.find(
-        {},
-        { SCODE: 1, SNAME: 1, SGCODE: 1 }
+    // ---------- Count + Data in parallel (if paginated) ----------
+    const usePagination = !limit && searchParams.has("page");
+
+    let products: any[] = [];
+    let total = 0;
+
+    if (usePagination) {
+      const skip = (page - 1) * pageSize;
+
+      const [countResult, productResult] = await Promise.all([
+        Product.countDocuments(productFilter).maxTimeMS(5000),
+        Product.find(productFilter, PRODUCT_PROJECTION)
+          .sort({ PRODUCT: 1 })
+          .skip(skip)
+          .limit(pageSize)
+          .lean()
+          .maxTimeMS(8000),
+      ]);
+
+      total = countResult;
+      products = productResult;
+    } else {
+      // Full list (old behaviour) – but with optional hard limit
+      const query = Product.find(productFilter, PRODUCT_PROJECTION)
+        .sort({ PRODUCT: 1 })
+        .lean()
+        .maxTimeMS(12000);
+
+      if (limit > 0) {
+        query.limit(limit);
+      }
+
+      products = await query;
+    }
+
+    if (products.length === 0) {
+      console.log(
+        `GET /api/master/product: 0 products in ${Date.now() - startedAt}ms`
+      );
+      return NextResponse.json(usePagination ? { data: [], total: 0, page, pageSize } : []);
+    }
+
+    // ---------- SaleType (only needed codes) ----------
+    const requiredCodes = Array.from(
+      new Set(
+        products
+          .flatMap((p: any) => [clean(p.GCODE), clean(p.GCODE6)])
+          .filter(Boolean)
+      )
     );
 
-    // SCODE -> SNAME map (company name lookup by Product.GCODE)
-    const companyMap = new Map<string, string>();
+    const saleTypes =
+      requiredCodes.length > 0
+        ? await SaleType.find(
+            { SCODE: { $in: requiredCodes } },
+            { _id: 0, SCODE: 1, SNAME: 1, SGCODE: 1 }
+          )
+            .lean()
+            .maxTimeMS(4000)
+        : [];
 
-    // SCODE -> SNAME map, ONLY for HSN rows (Product.GCODE6 join)
+    const companyMap = new Map<string, string>();
     const hsnMap = new Map<string, string>();
 
-    saleTypes.forEach((item: any) => {
-        if (!item.SCODE) return;
-        const code = String(item.SCODE).trim();
-        companyMap.set(code, item.SNAME);
+    for (const item of saleTypes as any[]) {
+      const code = clean(item.SCODE);
+      if (!code) continue;
 
-        // Only rows tagged as commodity codes hold an actual HSN value
-        if (String(item.SGCODE || "").trim() === "COMMCD") {
-            hsnMap.set(code, item.SNAME);
-        }
-    });
+      if (item.SNAME) companyMap.set(code, clean(item.SNAME));
+      if (clean(item.SGCODE).toUpperCase() === "COMMCD") {
+        hsnMap.set(code, clean(item.SNAME));
+      }
+    }
 
-    // ── Step 4: Enrich products with derived fields ───────────────────────
+    // ---------- Enrich ----------
     const result = products.map((p: any) => {
-        const gcode  = p.GCODE  ? String(p.GCODE).trim()  : "";
-        const gcode6 = p.GCODE6 ? String(p.GCODE6).trim() : "";
-        const obj = p.toObject();
+      const gcode = clean(p.GCODE);
+      const gcode6 = clean(p.GCODE6);
+      const currentStock = Number(p.BALANCE ?? 0);
+      const ratef = Number(p.RATEF ?? 0);
+      const prate = Number(p.PRATE ?? 0);
+      const mrp = Number(p.MRP ?? 0);
 
-        const ratef = Number(obj.RATEF   || 0);
-        const prate = Number(obj.PRATE   || 0);
-        const mrp   = Number(obj.MRP     || 0);
-        const bal   = Number(obj.BALANCE || 0);
+      const marginPct =
+        ratef > 0 && prate > 0
+          ? Math.round(((ratef - prate) / ratef) * 100)
+          : 0;
 
-        const marginPct  = ratef > 0 && prate > 0
-            ? Math.round(((ratef - prate) / ratef) * 100) : 0;
-        const stockValue = bal > 0 ? Math.round(bal * (ratef || mrp)) : 0;
+      const stockValue =
+        currentStock > 0 ? Math.round(currentStock * (prate || mrp)) : 0;
 
-        return {
-            ...obj,
-            companyName: companyMap.get(gcode)  || "",
-            HSN:         hsnMap.get(gcode6)     || "",
-            marginPct,
-            stockValue,
-        };
+      return {
+        ...p,
+        companyName:
+          companyMap.get(gcode) ||
+          (p.COMPANY && p.COMPANY !== "ZZZZZZ 144" ? String(p.COMPANY) : ""),
+        HSN: hsnMap.get(gcode6) || "",
+        marginPct,
+        stockValue,
+        BALANCE: currentStock,
+        currentStock,
+      };
     });
 
+    console.log(
+      `GET /api/master/product: ${result.length} products in ${Date.now() - startedAt}ms`
+    );
+
+    // Paginated response (recommended going forward)
+    if (usePagination) {
+      return NextResponse.json({
+        data: result,
+        total,
+        page,
+        pageSize,
+        totalPages: Math.ceil(total / pageSize),
+      });
+    }
+
+    // Backward compatible (full list)
     return NextResponse.json(result);
-}
+  } catch (error: any) {
+    console.error("GET /api/master/product error:", error);
+
+    return NextResponse.json(
+      {
+        error: "Failed to load products",
+        message:
+          process.env.NODE_ENV === "development"
+            ? String(error?.message || error)
+            : undefined,
+      },
+      { status: 500 }
+    );
+  }
+}

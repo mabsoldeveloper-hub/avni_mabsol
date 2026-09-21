@@ -5,6 +5,8 @@ import PurchaseBill from "@/models/PurchaseBill";
 import Product from "@/models/Product";
 import ProductBatch from "@/models/ProductBatch";
 import { consumeNextVoucherNumber, peekNextVoucherNumber } from "@/lib/voucherSeriesHelper";
+import { getCurrentUser } from "@/lib/auth";
+import { applyStockMovement } from "@/lib/stockService";
 
 export const dynamic = "force-dynamic";
 
@@ -297,23 +299,35 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // 2. Deduct inventory stock if deductFromInventory is true
+    // 2. Deduct inventory through the central stock ledger.
     if (deductFromInventory !== false && Array.isArray(cleanedItems)) {
-      for (const item of cleanedItems) {
-        if (item.productId || item.productCode || item.productName) {
-          try {
-            const pQuery: any = {};
-            if (item.productId) pQuery._id = item.productId;
-            else if (item.productCode) pQuery.$or = [{ CODE: item.productCode }, { CODEP: item.productCode }];
-            else pQuery.$or = [{ PRODUCT: item.productName }, { NAME: item.productName }];
-
-            await Product.findOneAndUpdate(pQuery, {
-              $inc: { STK: -Number(item.qty || 1), CLOSING: -Number(item.qty || 1) },
-            });
-          } catch (stkErr) {
-            console.error("Stock deduction error on return:", stkErr);
-          }
-        }
+      const currentUser: any = await getCurrentUser();
+      for (let i = 0; i < cleanedItems.length; i++) {
+        const item: any = cleanedItems[i];
+        const productCode = String(item.productCode || item.code || "").trim();
+        const qty = Number(item.qty || 0);
+        if (!productCode || qty <= 0) continue;
+        await applyStockMovement({
+          companyId: String(companyId || ""),
+          companyCode: String(companyCode || ""),
+          fyId: String(fyId || ""),
+          fyCode: String(fyCode || ""),
+          productId: String(item.productId || ""),
+          productCode,
+          productName: String(item.productName || ""),
+          batchNo: String(item.batchNo || ""),
+          expiry: String(item.expDate || ""),
+          quantity: qty,
+          type: "PURCHASE_RETURN",
+          referenceType: "PURCHASE_RETURN",
+          referenceId: String(newReturn._id),
+          referenceNo: String(vcn),
+          referenceKey: `PURCHASE_RETURN:${newReturn._id}:${i}`,
+          rate: Number(item.rate || 0),
+          mrp: 0,
+          remarks: `Purchase Return ${vcn}`,
+          createdBy: String(currentUser?._id || ""),
+        });
       }
     }
 

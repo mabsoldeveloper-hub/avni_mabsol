@@ -178,7 +178,7 @@ export default function ProductsPage() {
     if (selectedCompany?._id) params.set("companyId", selectedCompany._id);
     if (selectedFY?._id) params.set("fyId", selectedFY._id);
 
-    const res = await fetch(`/api/products?${params.toString()}`);
+    const res = await fetch(`/api/master/product?${params.toString()}`, { cache: "no-store" });
     const data = await res.json();
     setProducts(Array.isArray(data) ? data : []);
   };

@@ -3,7 +3,7 @@ import jwt from "jsonwebtoken";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 
-import DashboardContent from "@/components/DashboardContent";
+import DashboardContent from "@/components/dashboard/DashboardContent";
 
 export default async function DashboardPage() {
   const cookieStore = await cookies();

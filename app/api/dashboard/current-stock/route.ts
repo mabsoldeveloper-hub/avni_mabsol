@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import dbConnect from "@/lib/mongodb";
 import { Product, ProductBatch } from "@/models/StockModels";
+import StockBalance from "@/models/StockBalance";
 import SaleType from "@/models/SaleType";
 import { getMrTerritoryRestriction } from "@/lib/mrTerritoryHelper";
 
@@ -34,6 +35,60 @@ export async function GET(req: NextRequest) {
 
         // 1. Resolve MR Territory restrictions
         const restriction = await getMrTerritoryRestriction();
+
+        // Prefer the new StockBalance ledger when the selected Company + FY has
+        // ledger rows. This makes the existing Stock Overview reflect the same
+        // balance used by Opening Stock / Purchase / Sale / Return.
+        const ledgerCompanyId = String(searchParams.get("companyId") || "").trim();
+        const ledgerFyId = String(searchParams.get("fyId") || "").trim();
+        if (ledgerCompanyId && ledgerFyId) {
+            const stockQuery: any = { companyId: ledgerCompanyId, fyId: ledgerFyId };
+            if (restriction.isMrRestricted) {
+                if (restriction.allowedCompanyCodes?.length) {
+                    stockQuery.companyCode = { $in: restriction.allowedCompanyCodes };
+                } else {
+                    stockQuery.productCode = "__NO_ACCESS__";
+                }
+            }
+            if (company) stockQuery.companyCode = company;
+            if (search) {
+                const sr = new RegExp(search.replace(/[-[\]{}()*+?.,\\^$|#\s]/g, "\\$&"), "i");
+                stockQuery.$or = [{ productCode: sr }, { productName: sr }, { batchNo: sr }];
+            }
+            const ledgerCount = await StockBalance.countDocuments(stockQuery);
+            if (ledgerCount > 0) {
+                if (view === "batch") {
+                    const rows: any[] = await StockBalance.find(stockQuery).sort({ productName: sortOrder, batchNo: 1 }).skip((page - 1) * limit).limit(limit).lean();
+                    const totalQty = rows.reduce((s, x) => s + Number(x.currentQty || 0), 0);
+                    const items = rows.map((x: any) => ({
+                        id: String(x._id), code: x.productCode, product: x.productName || "Unknown Product",
+                        batchNo: x.batchNo || "N/A", expiryDate: x.expiry || null, mfd: x.mfgDate || null,
+                        packing: "", mrp: Number(x.mrp || 0), prate: Number(x.rate || 0), lprate: Number(x.rate || 0), ratef: Number(x.rate || 0),
+                        selectedRate: rateType === "mrp" ? Number(x.mrp || 0) : Number(x.rate || x.mrp || 0),
+                        balance: Number(x.currentQty || 0), stockValue: Number(x.currentQty || 0) * Number(x.rate || x.mrp || 0),
+                        status: Number(x.currentQty || 0) <= 0 ? "out_of_stock" : Number(x.currentQty || 0) <= 10 ? "low_stock" : "in_stock",
+                        companyCode: x.companyCode || "", companyName: x.companyCode || "",
+                    }));
+                    return NextResponse.json({ success: true, view: "batch", items, pagination: { page, limit, totalCount: ledgerCount, totalPages: Math.ceil(ledgerCount / limit) || 1 }, summary: { totalStockQty: totalQty, totalStockValue: rows.reduce((s,x)=>s + Number(x.currentQty||0)*Number(x.rate||x.mrp||0),0), totalItems: ledgerCount, inStockCount: rows.filter(x=>Number(x.currentQty||0)>0).length, outOfStockCount: rows.filter(x=>Number(x.currentQty||0)<=0).length } });
+                }
+
+                const grouped = await StockBalance.aggregate([
+                    { $match: stockQuery },
+                    { $group: { _id: "$productCode", productName: { $first: "$productName" }, companyCode: { $first: "$companyCode" }, mrp: { $max: "$mrp" }, rate: { $max: "$rate" }, balance: { $sum: "$currentQty" } } },
+                    { $sort: { productName: sortOrder } },
+                    { $skip: (page - 1) * limit },
+                    { $limit: limit },
+                ]);
+                const productCountAgg = await StockBalance.aggregate([{ $match: stockQuery }, { $group: { _id: "$productCode" } }, { $count: "count" }]);
+                const items = grouped.map((x: any) => ({
+                    id: String(x._id), code: x._id, product: x.productName || "Unknown Product", company: x.companyCode || "",
+                    currentQty: Number(x.balance || 0), balance: Number(x.balance || 0), mrp: Number(x.mrp || 0), prate: Number(x.rate || 0),
+                    lprate: Number(x.rate || 0), ratef: Number(x.rate || 0), selectedRate: rateType === "mrp" ? Number(x.mrp || 0) : Number(x.rate || x.mrp || 0),
+                    stockValue: Number(x.balance || 0) * Number(x.rate || x.mrp || 0), status: Number(x.balance || 0) <= 0 ? "out_of_stock" : Number(x.balance || 0) <= 10 ? "low_stock" : "in_stock",
+                }));
+                return NextResponse.json({ success: true, view: "product", items, pagination: { page, limit, totalCount: productCountAgg[0]?.count || 0, totalPages: Math.ceil((productCountAgg[0]?.count || 0) / limit) || 1 }, summary: { totalStockQty: items.reduce((s,x)=>s+x.balance,0), totalStockValue: items.reduce((s,x)=>s+x.stockValue,0), totalItems: productCountAgg[0]?.count || 0, inStockCount: items.filter(x=>x.balance>0).length, outOfStockCount: items.filter(x=>x.balance<=0).length } });
+            }
+        }
 
         // Build base company map from SaleType
         const saleTypes = await SaleType.find({}, { SCODE: 1, SNAME: 1 }).lean();

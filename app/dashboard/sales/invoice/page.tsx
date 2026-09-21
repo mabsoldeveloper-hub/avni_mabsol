@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState, useCallback, type ReactElement } from "react";
 import Link from "next/link";
 import { useFinancialYear } from "@/context/FinancialYearContext";
+import { useCompany } from "@/context/CompanyContext";
 import {
     FaFileInvoice,
     FaRupeeSign,
@@ -99,6 +100,7 @@ export default function InvoicePage() {
     const [mrTerritoryInfo, setMrTerritoryInfo] = useState<MrTerritoryInfo | null>(null);
     const pageSize = 10;
     const { selectedFY } = useFinancialYear();
+    const { selectedCompany } = useCompany();
 
     useEffect(() => {
         loadMrTerritoryInfo();
@@ -124,21 +126,33 @@ export default function InvoicePage() {
 
     const loadInvoices = useCallback(async () => {
         try {
-            let url = "/api/sales/invoice";
+            const params = new URLSearchParams();
+
+            // IMPORTANT: always send the currently selected/active company.
+            // Without this, /api/sales/invoice can fall back to a different
+            // company scope and the active company's invoices may disappear.
+            if (selectedCompany?._id) {
+                params.set("companyId", String(selectedCompany._id));
+            }
+
             if (selectedFY) {
                 if (selectedFY.isAll) {
-                    url += "?fyId=ALL";
+                    params.set("fyId", "ALL");
                 } else if (selectedFY._id) {
-                    url += `?fyId=${selectedFY._id}`;
+                    params.set("fyId", selectedFY._id);
                     if (selectedFY.startDate && selectedFY.endDate) {
                         const s = new Date(selectedFY.startDate).toISOString().slice(0, 10);
                         const e = new Date(selectedFY.endDate).toISOString().slice(0, 10);
-                        url += `&startDate=${s}&endDate=${e}`;
+                        params.set("startDate", s);
+                        params.set("endDate", e);
                     }
                 }
             }
 
-            const res = await fetch(url);
+            const query = params.toString();
+            const url = query ? `/api/sales/invoice?${query}` : "/api/sales/invoice";
+
+            const res = await fetch(url, { cache: "no-store" });
             const data = await res.json();
 
             if (Array.isArray(data)) {
@@ -153,7 +167,7 @@ export default function InvoicePage() {
             console.error(err);
             setInvoices([]);
         }
-    }, [selectedFY]);
+    }, [selectedFY, selectedCompany?._id]);
 
     useEffect(() => {
         loadInvoices();

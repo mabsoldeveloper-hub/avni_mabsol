@@ -147,7 +147,7 @@ export default function AddStockPage() {
             <p className="text-xs text-slate-500">Manual inward stock entry for the active Company & Financial Year.</p>
           </div>
           <div className="text-right text-xs">
-            <div className="font-bold">{selectedCompany?.name || selectedCompany?.companyName || "No Company"}</div>
+            <div className="font-bold">{selectedCompany?.companyName || "No Company"}</div>
             <div className="text-slate-500">{selectedFY?.fyCode || "No FY"}</div>
           </div>
         </div>

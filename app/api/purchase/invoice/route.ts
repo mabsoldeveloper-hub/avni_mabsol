@@ -5,6 +5,7 @@ import PurchaseOrder from "@/models/PurchaseOrder";
 import PurchasePayment from "@/models/PurchasePayment";
 import SalesMdis from "@/models/SalesMdis";
 import Pendings from "@/models/Pendings";
+import Order from "@/models/Order";
 import { consumeNextVoucherNumber, peekNextVoucherNumber } from "@/lib/voucherSeriesHelper";
 import { getFYDateRange, buildFYDateQuery } from "@/lib/financialYearHelper";
 import { getCompanyVfpFilter, combineFilters } from "@/lib/companyVfpHelper";
@@ -33,20 +34,43 @@ export async function GET(req: Request) {
     if (billId) {
       let bill = await PurchaseBill.findById(billId).lean();
       if (!bill) {
-        // Fallback to check SalesMdis / Pendings
-        const mdis = await SalesMdis.findById(billId).lean();
+        // Fallback to check SalesMdis
+        const mdis: any = await SalesMdis.findById(billId).lean();
         if (mdis) {
+          const partyCode = String(mdis.CODEP || "").trim().toUpperCase();
+          const orderDoc: any = partyCode ? await Order.findOne({ ORDNO: partyCode }).lean() : null;
+          const vendorName = orderDoc?.PARNAM || orderDoc?.NAME || mdis.NAME || mdis.PARNAM || partyCode || "Supplier";
+          const pm = String(mdis.PM || mdis.SUPPINVNO || mdis.INVNO || "").trim();
+
+          const pendingDoc: any = await Pendings.findOne({
+            $or: [
+              ...(pm ? [{ VCN: pm }] : []),
+              ...(mdis.VCN ? [{ VCN: mdis.VCN }] : []),
+              ...(mdis.VOUCHER ? [{ VOUCHER: mdis.VOUCHER }, { SVOUCHER: mdis.VOUCHER }] : []),
+            ],
+          }).lean();
+
+          const finalAmt = Math.abs(Number(mdis.FINAL || mdis.NETAMT || 0));
+          const bal = pendingDoc ? Math.abs(Number(pendingDoc.BALANCE ?? finalAmt)) : finalAmt;
+          const paid = Math.max(0, finalAmt - bal);
+          const paymentStatus = bal === 0 ? "Paid" : bal < finalAmt ? "Partial" : "Pending";
+
+          const displayBillNo = pm || mdis.VCN || mdis.VOUCHER || "N/A";
+          const displaySupplierInvNo = partyCode;
+
           bill = {
             _id: mdis._id,
-            billNumber: mdis.VCN || mdis.VOUCHER || "N/A",
-           //upplierInvoiceNo: mdis.SUPPINVNO || "VFP-INV",
-            supplierInvoiceNo: mdis.SUPPINVNO || "",
+            billNumber: displayBillNo,
+            supplierInvoiceNo: displaySupplierInvNo,
+            voucherNo: mdis.VCN || mdis.VOUCHER || "",
             billDate: mdis.DATE ? String(mdis.DATE).slice(0, 10) : "",
-            vendorName: mdis.NAME || mdis.PARNAM || "Supplier",
-            netAmount: Math.abs(Number(mdis.FINAL || 0)),
-            balanceAmount: Math.abs(Number(mdis.FINAL || 0)),
-            paymentStatus: "Pending",
+            vendorName,
+            netAmount: finalAmt,
+            paidAmount: paid,
+            balanceAmount: bal,
+            paymentStatus,
             items: [],
+            isLegacy: true,
           } as any;
         }
       }
@@ -87,7 +111,7 @@ export async function GET(req: Request) {
 
     const webBills = await PurchaseBill.find(query).sort({ createdAt: -1 }).lean();
 
-    // Fetch Legacy VFP Purchase Bills from SalesMdis & Pendings
+    // Fetch Legacy VFP Purchase Bills from SalesMdis
     const companyVfpMatch = await getCompanyVfpFilter(searchParams);
     const fyRange = await getFYDateRange(searchParams);
     const dateMatchDate = buildFYDateQuery("DATE", fyRange.startDate, fyRange.endDate);
@@ -100,77 +124,123 @@ export async function GET(req: Request) {
 
     if (search) {
       const sReg = new RegExp(search, "i");
+      // Also find party codes matching vendor name from Order
+      const matchingVendors = await Order.find(
+        { $or: [{ PARNAM: sReg }, { NAME: sReg }] },
+        { ORDNO: 1 }
+      ).lean();
+      const matchingCodes = matchingVendors.map((v: any) => v.ORDNO).filter(Boolean);
+
       purchaseMdisFilter.$or = [
         { VCN: sReg },
         { VOUCHER: sReg },
         { NAME: sReg },
         { PARNAM: sReg },
+        { PM: sReg },
+        { CODEP: sReg },
+        ...(matchingCodes.length > 0 ? [{ CODEP: { $in: matchingCodes } }] : []),
       ];
     }
 
-    const [mdisRows, pendingsRows] = await Promise.all([
-      SalesMdis.find(purchaseMdisFilter).sort({ DATE: -1 }).limit(150).lean(),
-      Pendings.find(combineFilters({ ACGROUP: /^D/i, INVTYPE: "I" }, companyVfpMatch)).limit(150).lean(),
+    const mdisRows = await SalesMdis.find(purchaseMdisFilter)
+      .sort({ DATE: -1 })
+      .limit(200)
+      .lean();
+
+    // Extract party codes, PM supplier invoice numbers and vouchers to enrich vendor details & balances
+    const partyCodes = [...new Set(mdisRows.map((r: any) => r.CODEP).filter(Boolean))];
+    const pmList = [...new Set(mdisRows.map((r: any) => r.PM).filter(Boolean))];
+    const vcnList = [...new Set(mdisRows.map((r: any) => r.VCN).filter(Boolean))];
+    const vchList = [...new Set(mdisRows.map((r: any) => r.VOUCHER).filter(Boolean))];
+
+    const [orders, pendings] = await Promise.all([
+      partyCodes.length > 0
+        ? Order.find({ ORDNO: { $in: partyCodes } }, { ORDNO: 1, PARNAM: 1, NAME: 1 }).lean()
+        : [],
+      pmList.length > 0 || vcnList.length > 0 || vchList.length > 0
+        ? Pendings.find({
+            $or: [
+              ...(pmList.length > 0 || vcnList.length > 0 ? [{ VCN: { $in: [...pmList, ...vcnList] } }] : []),
+              ...(vchList.length > 0 ? [{ VOUCHER: { $in: vchList } }, { SVOUCHER: { $in: vchList } }] : []),
+            ],
+          }, { VCN: 1, VOUCHER: 1, SVOUCHER: 1, ORD: 1, BALANCE: 1, FINAL: 1 }).lean()
+        : [],
     ]);
 
+    const vendorMap = new Map<string, string>();
+    orders.forEach((o: any) => {
+      if (o.ORDNO) {
+        vendorMap.set(String(o.ORDNO).trim().toUpperCase(), o.PARNAM || o.NAME || "");
+      }
+    });
+
+    const pendingByVcn = new Map<string, any>();
+    const pendingByVoucher = new Map<string, any>();
+    pendings.forEach((p: any) => {
+      const vcn = String(p.VCN || "").trim().toUpperCase();
+      const vch = String(p.VOUCHER || "").trim();
+      const svch = String(p.SVOUCHER || "").trim();
+      if (vcn && !pendingByVcn.has(vcn)) pendingByVcn.set(vcn, p);
+      if (vch && !pendingByVoucher.has(vch)) pendingByVoucher.set(vch, p);
+      if (svch && !pendingByVoucher.has(svch)) pendingByVoucher.set(svch, p);
+    });
+
     const legacyBills: any[] = [];
-    const seenVcn = new Set<string>();
+    const seenKeys = new Set<string>();
 
     webBills.forEach((b: any) => {
-      if (b.billNumber) seenVcn.add(b.billNumber);
+      if (b.billNumber) seenKeys.add(String(b.billNumber).trim().toUpperCase());
+      if (b.supplierInvoiceNo) seenKeys.add(String(b.supplierInvoiceNo).trim().toUpperCase());
     });
 
     mdisRows.forEach((row: any) => {
-      const vcn = row.VCN || row.VOUCHER || "";
-      if (vcn && !seenVcn.has(vcn)) {
-        seenVcn.add(vcn);
-        const finalAmt = Math.abs(Number(row.FINAL || row.NETAMT || 0));
-        legacyBills.push({
-          _id: row._id,
-          billNumber: vcn,
+      const vcn = String(row.VCN || row.VOUCHER || "").trim();
+      const pm = String(row.PM || row.SUPPINVNO || row.INVNO || "").trim();
+      const partyCode = String(row.CODEP || "").trim().toUpperCase();
 
-          // supplierInvoiceNo: row.SUPPINVNO || row.INVNO || "VFP-INV",
+      const displayBillNo = pm || vcn;
+      const displaySupplierInvNo = partyCode;
 
-          supplierInvoiceNo: row.SUPPINVNO || row.INVNO || "",
+      const vcnUpper = vcn.toUpperCase();
+      const pmUpper = pm.toUpperCase();
+      const billNoUpper = displayBillNo.toUpperCase();
 
-          billDate: row.DATE ? String(row.DATE).slice(0, 10) : "",
-          vendorName: row.NAME || row.PARNAM || row.CODEP || "Supplier",
-          poNumber: row.PONO || "",
-          netAmount: finalAmt,
-          paidAmount: 0,
-          balanceAmount: finalAmt,
-          paymentStatus: "Pending",
-          items: [],
-          isLegacy: true,
-        });
+      // Avoid duplicates against webBills or earlier legacy bills
+      if (seenKeys.has(billNoUpper) || (vcnUpper && seenKeys.has(vcnUpper))) {
+        return;
       }
-    });
+      if (billNoUpper) seenKeys.add(billNoUpper);
+      if (vcnUpper) seenKeys.add(vcnUpper);
+      if (pmUpper) seenKeys.add(pmUpper);
 
-    pendingsRows.forEach((row: any) => {
-      const vcn = row.VCN || row.VOUCHER || "";
-      if (vcn && !seenVcn.has(vcn)) {
-        seenVcn.add(vcn);
-        const bal = Math.abs(Number(row.BALANCE || 0));
-        const billAmt = Math.abs(Number(row.BILLAMT || row.NETAMT || bal));
-        legacyBills.push({
-          _id: row._id,
-          billNumber: vcn,
-          
-        // supplierInvoiceNo: row.ORD || "VFP-INV",
+      const finalAmt = Math.abs(Number(row.FINAL || row.NETAMT || 0));
+      const p = (pmUpper && pendingByVcn.get(pmUpper)) ||
+                (vcnUpper && pendingByVcn.get(vcnUpper)) ||
+                (row.VOUCHER && pendingByVoucher.get(String(row.VOUCHER)));
 
-           supplierInvoiceNo: row.ORD || "",
-
-          billDate: row.DDATE ? String(row.DDATE).slice(0, 10) : "",
-          vendorName: row.PARNAM || row.NAME || row.CODEP || "Supplier",
-          poNumber: "",
-          netAmount: billAmt,
-          paidAmount: Math.max(0, billAmt - bal),
-          balanceAmount: bal,
-          paymentStatus: bal === 0 ? "Paid" : bal < billAmt ? "Partial" : "Pending",
-          items: [],
-          isLegacy: true,
-        });
+      let bal = finalAmt;
+      if (p) {
+        bal = Math.abs(Number(p.BALANCE ?? finalAmt));
       }
+      const paid = Math.max(0, finalAmt - bal);
+      const paymentStatus = bal === 0 ? "Paid" : bal < finalAmt ? "Partial" : "Pending";
+      const vendorName = vendorMap.get(partyCode) || row.NAME || row.PARNAM || partyCode || "Supplier";
+
+      legacyBills.push({
+        _id: row._id,
+        billNumber: displayBillNo,
+        supplierInvoiceNo: displaySupplierInvNo,
+        voucherNo: vcn,
+        billDate: row.DATE ? String(row.DATE).slice(0, 10) : "",
+        vendorName,
+        poNumber: row.PONO || "",
+        netAmount: finalAmt,
+        paidAmount: paid,
+        balanceAmount: bal,
+        paymentStatus,
+        items: [],
+        isLegacy: true,
+      });
     });
 
     const allBills = [...webBills, ...legacyBills];

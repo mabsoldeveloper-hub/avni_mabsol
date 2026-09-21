@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 
 import connectDB from "@/lib/mongodb";
+import { getCurrentUser } from "@/lib/auth";
 
 import SalesMdis from "@/models/SalesMdis";
 import SalesDis from "@/models/SalesDis";
@@ -79,6 +80,21 @@ export async function GET(
         // Format header DATE cleanly
         if (header.DATE) {
             header.DATE = formatInvoiceDate(header.DATE);
+        }
+
+        const currentUser: any = await getCurrentUser();
+        const { searchParams } = new URL(req.url);
+        const companyId = String(searchParams.get("companyId") || "").trim();
+        const fyId = String(searchParams.get("fyId") || "").trim();
+        if (!currentUser) return NextResponse.json({ success:false, message:"Unauthorized" }, { status:401 });
+
+        const headerCompanyId = String(header.companyId || "").trim();
+        const headerFyId = String(header.fyId || "").trim();
+        if (companyId && headerCompanyId && companyId !== headerCompanyId) {
+            return NextResponse.json({ success:false, message:"Invoice not found" }, { status:404 });
+        }
+        if (fyId && headerFyId && fyId !== headerFyId) {
+            return NextResponse.json({ success:false, message:"Invoice not found" }, { status:404 });
         }
 
         const resolvedVcn = String(header.VCN || header.VOUCHER || vcn).trim();

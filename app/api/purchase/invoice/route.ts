@@ -8,6 +8,8 @@ import Pendings from "@/models/Pendings";
 import { consumeNextVoucherNumber, peekNextVoucherNumber } from "@/lib/voucherSeriesHelper";
 import { getFYDateRange, buildFYDateQuery } from "@/lib/financialYearHelper";
 import { getCompanyVfpFilter, combineFilters } from "@/lib/companyVfpHelper";
+import { getCurrentUser } from "@/lib/auth";
+import { applyStockMovement } from "@/lib/stockService";
 
 export const dynamic = "force-dynamic";
 
@@ -37,7 +39,8 @@ export async function GET(req: Request) {
           bill = {
             _id: mdis._id,
             billNumber: mdis.VCN || mdis.VOUCHER || "N/A",
-            supplierInvoiceNo: mdis.SUPPINVNO || "VFP-INV",
+           //upplierInvoiceNo: mdis.SUPPINVNO || "VFP-INV",
+            supplierInvoiceNo: mdis.SUPPINVNO || "",
             billDate: mdis.DATE ? String(mdis.DATE).slice(0, 10) : "",
             vendorName: mdis.NAME || mdis.PARNAM || "Supplier",
             netAmount: Math.abs(Number(mdis.FINAL || 0)),
@@ -125,7 +128,11 @@ export async function GET(req: Request) {
         legacyBills.push({
           _id: row._id,
           billNumber: vcn,
-          supplierInvoiceNo: row.SUPPINVNO || row.INVNO || "VFP-INV",
+
+          // supplierInvoiceNo: row.SUPPINVNO || row.INVNO || "VFP-INV",
+
+          supplierInvoiceNo: row.SUPPINVNO || row.INVNO || "",
+
           billDate: row.DATE ? String(row.DATE).slice(0, 10) : "",
           vendorName: row.NAME || row.PARNAM || row.CODEP || "Supplier",
           poNumber: row.PONO || "",
@@ -148,7 +155,11 @@ export async function GET(req: Request) {
         legacyBills.push({
           _id: row._id,
           billNumber: vcn,
-          supplierInvoiceNo: row.ORD || "VFP-INV",
+          
+        // supplierInvoiceNo: row.ORD || "VFP-INV",
+
+           supplierInvoiceNo: row.ORD || "",
+
           billDate: row.DDATE ? String(row.DDATE).slice(0, 10) : "",
           vendorName: row.PARNAM || row.NAME || row.CODEP || "Supplier",
           poNumber: "",
@@ -225,12 +236,8 @@ export async function POST(req: Request) {
       const gst = Number(it.gstPercent || 12);
 
       const gross = qty * rate;
-      const tradeDiscAmt = gross * (disc / 100);
-      const afterTradeDisc = Math.max(0, gross - tradeDiscAmt);
-      const schemeDisc = Number(it.schemeDiscountPercent || 0);
-      const schemeDiscAmt = afterTradeDisc * (schemeDisc / 100);
-      const discAmt = tradeDiscAmt + schemeDiscAmt;
-      const taxable = Math.max(0, gross - discAmt);
+      const discAmt = gross * (disc / 100);
+      const taxable = gross - discAmt;
       const gstAmt = taxable * (gst / 100);
       const lineTotal = taxable + gstAmt;
 
@@ -242,7 +249,6 @@ export async function POST(req: Request) {
         productId: it.productId || "",
         productCode: it.productCode || "",
         productName: it.productName || "Product",
-        companyName: it.companyName || "",
         hsnCode: it.hsnCode || "",
         batchNo: it.batchNo || "BATCH-01",
         expDate: it.expDate || "",
@@ -253,13 +259,10 @@ export async function POST(req: Request) {
         unit: it.unit || "Box",
         rate,
         discountPercent: disc,
-        schemeDiscountPercent: Number(it.schemeDiscountPercent || 0),
         gstPercent: gst,
         taxableAmount: Math.round(taxable * 100) / 100,
         gstAmount: Math.round(gstAmt * 100) / 100,
         total: Math.round(lineTotal * 100) / 100,
-        location: it.location || "",
-        itemRemark: it.itemRemark || "",
       };
     });
 
@@ -327,6 +330,40 @@ export async function POST(req: Request) {
       paymentStatus,
       remarks,
     });
+
+    // Update the new stock ledger only after the purchase bill itself is saved.
+    // Qty + Free Qty is inward stock for every purchase line.
+    const currentUser: any = await getCurrentUser();
+    for (let i = 0; i < processedItems.length; i++) {
+      const item: any = processedItems[i];
+      const productCode = String(item.productCode || item.productId || "").trim();
+      if (!productCode) continue;
+      const batchNo = String(item.batchNo || "").trim();
+      const inwardQty = Number(item.qty || 0) + Number(item.freeQty || 0);
+      if (inwardQty <= 0) continue;
+      await applyStockMovement({
+        companyId: String(companyId || ""),
+        companyCode: String(companyCode || ""),
+        fyId: String(fyId || ""),
+        fyCode: String(fyCode || ""),
+        productId: String(item.productId || ""),
+        productCode,
+        productName: String(item.productName || ""),
+        batchNo,
+        expiry: String(item.expDate || ""),
+        mfgDate: String(item.mfgDate || ""),
+        quantity: inwardQty,
+        type: "PURCHASE",
+        referenceType: "PURCHASE_BILL",
+        referenceId: String(bill._id),
+        referenceNo: String(finalBillNumber),
+        referenceKey: `PURCHASE:${bill._id}:${i}`,
+        rate: Number(item.rate || 0),
+        mrp: Number(item.mrp || 0),
+        remarks: `Purchase Bill ${finalBillNumber}`,
+        createdBy: String(currentUser?._id || ""),
+      });
+    }
 
     // If instant payment was entered, generate a PurchasePayment voucher for payment history & reporting
     if (paid > 0) {

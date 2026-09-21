@@ -1,4 +1,9 @@
-// import DashboardLayout from "@/components/DashboardLayout";
+
+// import { UserProvider } from "@/context/UserContext";
+// import { CompanyProvider } from "@/context/CompanyContext";
+// import { PermissionProvider } from "@/context/PermissionContext";
+// import { FinancialYearProvider } from "@/context/FinancialYearContext";
+// import DashboardLayout from "@/components/dashboard/DashboardLayout";
 
 // export default function DashboardRootLayout({
 //   children,
@@ -6,9 +11,15 @@
 //   children: React.ReactNode;
 // }) {
 //   return (
-//     <DashboardLayout>
-//       {children}
-//     </DashboardLayout>
+//     <UserProvider>
+//       <CompanyProvider>
+//         <PermissionProvider>
+//           <FinancialYearProvider>
+//             <DashboardLayout>{children}</DashboardLayout>
+//           </FinancialYearProvider>
+//         </PermissionProvider>
+//       </CompanyProvider>
+//     </UserProvider>
 //   );
 // }
 
@@ -16,22 +27,15 @@ import { UserProvider } from "@/context/UserContext";
 import { CompanyProvider } from "@/context/CompanyContext";
 import { PermissionProvider } from "@/context/PermissionContext";
 import { FinancialYearProvider } from "@/context/FinancialYearContext";
-import DashboardLayout from "@/components/DashboardLayout";
+import DashboardLayout from "@/components/dashboard/DashboardLayout";
+import DashboardHydrationGate from "@/components/DashboardHydrationGate";
 
-export default function DashboardRootLayout({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
+export default function DashboardRootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <UserProvider>
-      <CompanyProvider>
-        <PermissionProvider>
-          <FinancialYearProvider>
-            <DashboardLayout>{children}</DashboardLayout>
-          </FinancialYearProvider>
-        </PermissionProvider>
-      </CompanyProvider>
-    </UserProvider>
+    <DashboardHydrationGate>
+      <UserProvider><CompanyProvider><PermissionProvider><FinancialYearProvider>
+        <DashboardLayout>{children}</DashboardLayout>
+      </FinancialYearProvider></PermissionProvider></CompanyProvider></UserProvider>
+    </DashboardHydrationGate>
   );
-}
+}

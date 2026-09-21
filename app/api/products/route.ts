@@ -53,7 +53,7 @@ export async function GET(req: Request) {
     const batchObj = {
       batchNo: b.BATCH || b.BATCHNO || "DEFAULT",
       expiry: b.EXPIRY || "",
-      stock: Number(b.CLBAL || b.STOCK || 0),
+      stock: Number(b.BALANCE ?? 0),
       mrp: Number(b.MRP || 0),
       ratef: Number(b.RATEF || 0),
     };
@@ -81,7 +81,7 @@ export async function GET(req: Request) {
             {
               batchNo: p.BATCH,
               expiry: p.EXPIRY || "",
-              stock: Number(p.CLBAL || p.STOCK || 0),
+              stock: Number(p.BALANCE ?? 0),
               mrp: Number(p.MRP || 0),
               ratef: Number(p.RATEF || 0),
             },
@@ -90,8 +90,12 @@ export async function GET(req: Request) {
 
     const exactProductName = String(p.PRODUCT || p.NAME || p.DESCRIPT || "Unnamed Product").trim();
 
+    // Marg rule: Product.BALANCE is the authoritative current product stock.
+    const currentStock = Number(p.BALANCE ?? 0);
+
     return {
       ...p,
+      currentStock: currentStock,
       NAME: exactProductName,
       PRODUCT: exactProductName,
       companyName: companyMap.get(gcodeStr) || (p.COMPANY && p.COMPANY !== "ZZZZZZ 144" ? p.COMPANY : "N/A"),

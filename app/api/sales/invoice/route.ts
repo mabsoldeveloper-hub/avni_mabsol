@@ -1,16 +1,19 @@
 import { NextResponse } from "next/server";
+import { getCurrentUser } from "@/lib/auth";
+import { applyStockMovement, getAvailableStock } from "@/lib/stockService";
 import connectDB from "@/lib/mongodb";
 import SalesMdis from "@/models/SalesMdis";
 import SalesDis from "@/models/SalesDis";
 import Order from "@/models/Order";
 import Customer from "@/models/Customer";
-import Product from "@/models/Product";
-import ProductBatch from "@/models/ProductBatch";
 import GLedger from "@/models/GLedger";
 import { getMrTerritoryRestriction } from "@/lib/mrTerritoryHelper";
 import { consumeNextVoucherNumber } from "@/lib/voucherSeriesHelper";
 
 import { getFYDateRange, buildFYDateQuery } from "@/lib/financialYearHelper";
+import FinancialYear from "@/models/FinancialYear";
+
+const escapeRegex = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 function formatInvoiceDate(rawDate: any): string {
   if (!rawDate) return "";
@@ -41,11 +44,25 @@ function formatInvoiceDate(rawDate: any): string {
 
 import { getCompanyVfpFilter, combineFilters } from "@/lib/companyVfpHelper";
 
+export const dynamic = "force-dynamic";
+
 export async function GET(req: Request) {
   try {
     await connectDB();
 
     const { searchParams } = new URL(req.url);
+
+    // Active company is normally supplied by the frontend CompanyContext.
+    // If the page is opened without companyId, safely fall back to the
+    // logged-in user's company instead of querying all companies.
+    if (!searchParams.get("companyId")) {
+      const currentUser: any = await getCurrentUser();
+      const fallbackCompanyId = currentUser?.companyId?._id || currentUser?.companyId;
+      if (fallbackCompanyId) {
+        searchParams.set("companyId", String(fallbackCompanyId));
+      }
+    }
+
     const fyRange = await getFYDateRange(searchParams);
     const { startDate, endDate } = fyRange;
 
@@ -87,29 +104,71 @@ export async function GET(req: Request) {
       }
     }
 
-    // Invoice Header
-    const invoices = await SalesMdis.find(
-      invoiceFilter,
-      {
-        VCN: 1,
-        DATE: 1,
-        TYPE: 1,
-        CODEP: 1,
-        COMPANY: 1,
-        FINAL: 1,
-        AMOUNTT: 1,
-        TAXAMO: 1,
-        CGSTAMO: 1,
-        STAXAMO: 1,
-        ROUND: 1,
-        IS_CONVERTED: 1,
-        CONVERTED_TO: 1,
-        CONVERTED_FROM: 1,
-        STATUS: 1,
-      }
-    )
+    const invoiceProjection = {
+      VCN: 1,
+      VOUCHER: 1,
+      DATE: 1,
+      TYPE: 1,
+      CODEP: 1,
+      COMPANY: 1,
+      companyId: 1,
+      companyCode: 1,
+      fyId: 1,
+      fyCode: 1,
+      FINAL: 1,
+      AMOUNTT: 1,
+      TAXAMO: 1,
+      CGSTAMO: 1,
+      STAXAMO: 1,
+      ROUND: 1,
+      IS_CONVERTED: 1,
+      CONVERTED_TO: 1,
+      CONVERTED_FROM: 1,
+      STATUS: 1,
+    };
+
+    // Primary query: active Company + selected FY + selected date range.
+    const scopedInvoices = await SalesMdis.find(invoiceFilter, invoiceProjection)
       .sort({ DATE: -1 })
       .lean();
+
+    // Marg import compatibility:
+    // Imported F18/K21/etc files are already company/FY-specific at the DBF-file
+    // level and often do not contain companyId/companyCode/fyCode fields.
+    // If a selected FY has a fyCode, include the legacy rows whose VFP table
+    // belongs to that FY. This prevents the Invoice List from becoming empty
+    // merely because a legacy MDIS_F18 row has no CRM companyId.
+    let legacyInvoices: any[] = [];
+    const selectedFyId = searchParams.get("fyId");
+    if (selectedFyId && selectedFyId !== "ALL") {
+      try {
+        const fyDoc: any = await FinancialYear.findById(selectedFyId).lean();
+        const legacyFyCode = String(fyDoc?.fyCode || "").trim();
+        if (legacyFyCode) {
+          const legacyTableFilter = {
+            _vfpTable: new RegExp(`_${escapeRegex(legacyFyCode)}$`, "i"),
+          };
+          legacyInvoices = await SalesMdis.find(
+            combineFilters(typeFilter, legacyTableFilter),
+            invoiceProjection
+          )
+            .sort({ DATE: -1 })
+            .lean();
+        }
+      } catch (e) {
+        console.error("Legacy FY invoice lookup failed:", e);
+      }
+    }
+
+    // Merge and de-duplicate by VCN/_id.
+    const invoiceMap = new Map<string, any>();
+    for (const bill of [...scopedInvoices, ...legacyInvoices]) {
+      const key = String(bill.VCN || bill.VOUCHER || bill._id);
+      if (!invoiceMap.has(key)) invoiceMap.set(key, bill);
+    }
+    const invoices = Array.from(invoiceMap.values()).sort(
+      (a: any, b: any) => String(b.DATE || "").localeCompare(String(a.DATE || ""))
+    );
 
     // Customer / Order Master
     const [orders, customers] = await Promise.all([
@@ -201,6 +260,25 @@ export async function POST(req: Request) {
     await connectDB();
     const body = await req.json();
 
+    const currentUser: any = await getCurrentUser();
+    if (!currentUser) {
+      return NextResponse.json({ success: false, message: "Unauthorized" }, { status: 401 });
+    }
+
+    const companyId = String(
+      body.companyId || currentUser.companyId?._id || currentUser.companyId || ""
+    ).trim();
+    const companyCode = String(body.companyCode || "").trim();
+    const fyId = String(body.fyId || "").trim();
+    const fyCode = String(body.fyCode || "").trim();
+
+    if (!companyId || !fyId) {
+      return NextResponse.json(
+        { success: false, message: "Active Company and Financial Year are required." },
+        { status: 400 }
+      );
+    }
+
     const customerCode = String(body.CODEP || body.code || "").trim();
     if (!customerCode) {
       return NextResponse.json(
@@ -268,6 +346,41 @@ export async function POST(req: Request) {
       );
     }
 
+    // FINAL SALE STOCK PREFLIGHT
+    // Do this before creating SalesMdis/SalesDis so an insufficient-stock
+    // error cannot leave a half-created invoice behind.
+    if (effectiveType === "S") {
+      for (const item of items) {
+        const qty = Number(item.QTY || item.qty || 0);
+        const freeQty = Number(item.FREEQTY || item.freeQty || 0);
+        const requiredQty = Math.max(0, qty + freeQty);
+
+        const productCode = String(item.PRODUCT || item.productCode || item.code || "").trim();
+        const productName = String(item.NAME || item.name || "").trim();
+        const batchNo = String(item.BATCH || item.batch || "DEFAULT").trim();
+
+        if (!productCode || requiredQty <= 0) continue;
+
+        const available = await getAvailableStock({
+          companyId,
+          fyId,
+          productCode,
+          productName,
+          batchNo,
+        });
+
+        if (available < requiredQty) {
+          return NextResponse.json(
+            {
+              success: false,
+              message: `Insufficient stock for ${productName || productCode}${batchNo ? ` (Batch ${batchNo})` : ""}. Available: ${available}, Required: ${requiredQty}`,
+            },
+            { status: 400 }
+          );
+        }
+      }
+    }
+
     let totalTaxable = 0;
     let totalCgst = 0;
     let totalSgst = 0;
@@ -322,6 +435,10 @@ export async function POST(req: Request) {
         CODE: prodCode,
         NAME: prodName,
         COMPANY: customerCompany,
+        companyId,
+        companyCode,
+        fyId,
+        fyCode,
         PACK: String(item.PACK || item.pack || ""),
         UNIT: String(item.UNIT || item.unit || ""),
         HSN: String(item.HSN || item.hsn || ""),
@@ -349,21 +466,32 @@ export async function POST(req: Request) {
         _vfpSourceKey: `MANUAL_DIS_${vcn}_${prodCode}_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
       });
 
-      // Deduct stock from Product Master (Total Deduct = Qty + Free Qty)
-      const totalDeductQty = qty + freeQty;
-      if (prodCode) {
-        await Product.updateOne(
-          { $or: [{ PRODUCT: prodCode }, { CODE: prodCode }, { NAME: prodCode }, { NAME: prodName }] },
-          { $inc: { CLBAL: -totalDeductQty, STOCK: -totalDeductQty } }
-        );
+      // Final Tax Invoice consumes stock. Proforma does NOT.
+      if (effectiveType === "S" && prodCode) {
+        const totalDeductQty = qty + freeQty;
+        const batchNo = String(item.BATCH || item.batch || "DEFAULT").trim();
 
-        if (item.BATCH || item.batch) {
-          const batchNo = item.BATCH || item.batch;
-          await ProductBatch.updateOne(
-            { BATCH: batchNo },
-            { $inc: { CLBAL: -totalDeductQty, STOCK: -totalDeductQty } }
-          );
-        }
+        await applyStockMovement({
+          companyId,
+          companyCode,
+          fyId,
+          fyCode,
+          productId: String(item.productId || ""),
+          productCode: prodCode,
+          productName: prodName,
+          batchNo,
+          expiry: String(item.EXPIRY || item.expiry || ""),
+          mfgDate: String(item.MFG || item.mfg || ""),
+          quantity: totalDeductQty,
+          type: "SALE",
+          referenceType: "SALE_INVOICE",
+          referenceNo: vcn,
+          referenceKey: `SALE:${vcn}:${lineItemDocs.length}`,
+          rate,
+          mrp,
+          remarks: "Sale invoice stock deduction",
+          createdBy: String(currentUser._id || ""),
+        });
       }
     }
 
@@ -379,6 +507,10 @@ export async function POST(req: Request) {
       DATE: invoiceDate,
       CODEP: customerCode,
       COMPANY: customerCompany,
+      companyId,
+      companyCode,
+      fyId,
+      fyCode,
       TYPE: effectiveType,
       TRANSFER: effectiveType === "PROFORMA" ? "PROFORMA" : "S",
       STATUS: effectiveType === "PROFORMA" ? "Proforma" : "Final",
@@ -445,6 +577,9 @@ export async function POST(req: Request) {
       },
       { status: 201 }
     );
+
+
+    
   } catch (error: any) {
     console.error("Sale Invoice Save Error:", error);
     return NextResponse.json(

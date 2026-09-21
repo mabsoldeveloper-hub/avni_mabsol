@@ -12,6 +12,8 @@ import Pendings from "@/models/Pendings";
 import { combineFilters, getCompanyVfpFilter } from "@/lib/companyVfpHelper";
 import { getMrTerritoryRestriction } from "@/lib/mrTerritoryHelper";
 import { consumeNextVoucherNumber, peekNextVoucherNumber } from "@/lib/voucherSeriesHelper";
+import { getCurrentUser } from "@/lib/auth";
+import { applyStockMovement } from "@/lib/stockService";
 
 export const dynamic = "force-dynamic";
 
@@ -345,6 +347,10 @@ export async function POST(req: NextRequest) {
             remarks = "",
             reason = "Sales Return",
             restockToInventory = true,
+            companyId = "",
+            companyCode = "",
+            fyId = "",
+            fyCode = "",
         } = body;
 
         if (!partyCode) {
@@ -418,39 +424,33 @@ export async function POST(req: NextRequest) {
                 _vfpSourceKey: itemUniqueKey,
             });
 
-            // Restock Batch & Product Inventory only if restockToInventory is true
+            // Restock through the central stock ledger so Sale Return is always
+            // reflected in company + financial-year stock and in Stock Ledger.
             if (restockToInventory && item.code) {
-                const prodCodeConds: any[] = [
-                    { CODE: item.code },
-                    { CODEP: item.code },
-                ];
-                if (!isNaN(Number(item.code))) {
-                    prodCodeConds.push({ CODE: Number(item.code) });
-                    prodCodeConds.push({ CODEP: Number(item.code) });
+                const currentUser: any = await getCurrentUser();
+                if (!companyId || !fyId) {
+                    return NextResponse.json({ success: false, error: "Company and Financial Year are required for stock return" }, { status: 400 });
                 }
-
-                if (item.batchNo) {
-                    await ProductBatch.updateOne(
-                        {
-                            $and: [
-                                { $or: prodCodeConds },
-                                {
-                                    $or: [
-                                        { BATCHNO: item.batchNo },
-                                        { BATCH: item.batchNo },
-                                        { BNO: item.batchNo },
-                                    ],
-                                },
-                            ],
-                        },
-                        { $inc: { BALANCE: qty } }
-                    ).catch(() => {});
-                }
-
-                await Product.updateOne(
-                    { $or: prodCodeConds },
-                    { $inc: { BALANCE: qty } }
-                ).catch(() => {});
+                await applyStockMovement({
+                    companyId: String(companyId),
+                    companyCode: String(companyCode || ""),
+                    fyId: String(fyId),
+                    fyCode: String(fyCode || ""),
+                    productId: String(item.productId || ""),
+                    productCode: String(item.code),
+                    productName: String(item.product || ""),
+                    batchNo: String(item.batchNo || ""),
+                    expiry: String(item.exp || ""),
+                    quantity: qty,
+                    type: "SALE_RETURN",
+                    referenceType: "SALES_RETURN",
+                    referenceNo: String(vcn),
+                    referenceKey: `SALES_RETURN:${vcn}:${idx}`,
+                    rate,
+                    mrp: Number(item.mrp || 0),
+                    remarks: `Sales Return ${vcn}`,
+                    createdBy: String(currentUser?._id || ""),
+                });
             }
         }
 

@@ -3,6 +3,8 @@
 import { useEffect, useState, useMemo, useRef } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { useCompany } from "@/context/CompanyContext";
+import { useFinancialYear } from "@/context/FinancialYearContext";
 import {
   FaArrowLeft,
   FaPlus,
@@ -10,6 +12,8 @@ import {
   FaSpinner,
   FaRupeeSign,
   FaFileInvoiceDollar,
+  FaFileInvoice,
+  FaTruck,
   FaUserCheck,
   FaBoxOpen,
   FaExclamationTriangle,
@@ -137,6 +141,7 @@ interface ProductOption {
   RATEG?: number;
   CLBAL?: number;
   STOCK?: number;
+  currentStock?: number;
   CGST?: number;
   IGST?: number;
   BATCH?: string;
@@ -176,6 +181,8 @@ interface InvoiceItem {
 
 export default function CreateSaleInvoicePage() {
   const router = useRouter();
+  const { selectedCompany } = useCompany();
+  const { selectedFY } = useFinancialYear();
 
   // Data Sources
   const [customers, setCustomers] = useState<CustomerOption[]>([]);
@@ -203,15 +210,15 @@ export default function CreateSaleInvoicePage() {
 
   // Checkbox field options for product entry form & invoice table (19 Available Fields)
   const [visibleFields, setVisibleFields] = useState<VisibleFields>({
-    code: true,
-    pack: true,
-    unit: true,
+    code: false,
+    pack: false,
+    unit: false,
     hsn: false,
-    batch: true,
-    expiry: true,
+    batch: false,
+    expiry: false,
     mfg: false,
     qty: true,
-    freeQty: true,
+    freeQty: false,
     mrp: true,
     prate: false,
     rate: true,
@@ -360,7 +367,13 @@ export default function CreateSaleInvoicePage() {
       try {
         setLoadingHistory(true);
         const codep = selectedCustomer?.CODEP || selectedCustomer?.ORDNO || selectedCustomerCode;
-        const res = await fetch(`/api/sales/customer-history?code=${encodeURIComponent(codep)}`);
+        const historyParams = new URLSearchParams();
+        historyParams.set("code", codep);
+        if (selectedCompany?._id) historyParams.set("companyId", String(selectedCompany._id));
+        if (selectedFY?._id) historyParams.set("fyId", String(selectedFY._id));
+        const res = await fetch(`/api/sales/customer-history?${historyParams.toString()}`, {
+          cache: "no-store",
+        });
         if (res.ok) {
           const json = await res.json();
           if (json.success) {
@@ -376,7 +389,7 @@ export default function CreateSaleInvoicePage() {
     };
 
     fetchHistory();
-  }, [selectedCustomerCode, selectedCustomer]);
+  }, [selectedCustomerCode, selectedCustomer, selectedCompany?._id, selectedFY?._id]);
 
   // Filtered History by Search Query
   const filteredHistory = useMemo(() => {
@@ -418,15 +431,21 @@ export default function CreateSaleInvoicePage() {
     };
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
+  }, [selectedCompany?._id, selectedFY?._id]);
 
   useEffect(() => {
     fetchNextVcn(billType);
-  }, [billType]);
+  }, [billType, selectedCompany?._id, selectedFY?._id]);
 
   const fetchNextVcn = async (typeMode: "S" | "PROFORMA") => {
     try {
-      const res = await fetch(`/api/sales/invoice/next-number?type=${typeMode}`);
+      const numberParams = new URLSearchParams();
+      numberParams.set("type", typeMode);
+      if (selectedCompany?._id) numberParams.set("companyId", String(selectedCompany._id));
+      if (selectedFY?._id) numberParams.set("fyId", String(selectedFY._id));
+      const res = await fetch(`/api/sales/invoice/next-number?${numberParams.toString()}`, {
+        cache: "no-store",
+      });
       const json = await res.json();
       if (json.success && json.vcn) {
         setInvoiceVcn(json.vcn);
@@ -511,10 +530,16 @@ export default function CreateSaleInvoicePage() {
   const loadData = async () => {
     try {
       setLoadingInitial(true);
+
+      const params = new URLSearchParams();
+      if (selectedCompany?._id) params.set("companyId", String(selectedCompany._id));
+      if (selectedFY?._id) params.set("fyId", String(selectedFY._id));
+
+      const qs = params.toString();
       const [resCust, resProd, resComp] = await Promise.all([
-        fetch("/api/customers"),
-        fetch("/api/products"),
-        fetch("/api/company-settings"),
+        fetch(`/api/customers${qs ? `?${qs}` : ""}`, { cache: "no-store" }),
+        fetch(`/api/products${qs ? `?${qs}` : ""}`, { cache: "no-store" }),
+        fetch(`/api/company-settings${qs ? `?${qs}` : ""}`, { cache: "no-store" }),
       ]);
 
       if (resCust.ok) {
@@ -530,6 +555,11 @@ export default function CreateSaleInvoicePage() {
       if (resComp.ok) {
         const jsonComp = await resComp.json();
         if (jsonComp && typeof jsonComp === "object") setCompany(jsonComp);
+      }
+
+      // CompanyContext is the source of truth for the currently active company.
+      if (selectedCompany?._id) {
+        setCompany(selectedCompany);
       }
     } catch (err) {
       console.error("Failed to load invoice initial data", err);
@@ -740,6 +770,10 @@ export default function CreateSaleInvoicePage() {
         VCN: invoiceVcn,
         DATE: invoiceDate,
         CODEP: codepToUse,
+        companyId: selectedCompany?._id,
+        companyCode: selectedCompany?.companyCode,
+        fyId: selectedFY?._id,
+        fyCode: selectedFY?.fyCode,
         billType: billType,
         convertFromVcn: convertFromVcn,
         items: items.map((item) => ({
@@ -791,30 +825,103 @@ export default function CreateSaleInvoicePage() {
   };
 
   return (
-    <div className="space-y-6 pb-12">
-      {/* Top Header Navigation */}
-      <div className="flex flex-wrap items-center justify-between gap-4">
+    <div className="container-fluid p-4 md:p-6 space-y-6 pb-12 text-slate-800">
+      {/* Top Header - Purchase Bill Style */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div className="flex items-center gap-3">
           <Link
             href="/dashboard/sales/invoice"
-            className="flex items-center justify-center h-9 w-9 rounded-xl bg-white/70 backdrop-blur-md border border-white/70 shadow-sm text-slate-600 hover:text-slate-900 transition"
+            className="w-10 h-10 rounded-2xl bg-white border border-slate-200 flex items-center justify-center text-slate-600 hover:bg-slate-50 transition shadow-sm"
           >
-            <FaArrowLeft size={14} />
+            <FaArrowLeft />
           </Link>
           <div>
-            <h2 className="text-xl sm:text-2xl font-bold text-slate-800 flex items-center gap-2">
-              <FaFileInvoiceDollar className="text-indigo-600" /> Generate New Sale Invoice
-            </h2>
+            <h1 className="text-2xl font-black text-slate-900 flex items-center gap-2">
+              <FaFileInvoiceDollar className="text-orange-600" /> Create Sale Bill / Invoice
+            </h1>
             <p className="text-xs text-slate-500">
-              Live Billing with Company GST State ({companyStateCode || "24"}) vs Customer GST Matching
+              New sales invoice, customer billing & stock-out entry
             </p>
           </div>
         </div>
 
-        <div className="flex items-center gap-3">
-          <span className="px-3 py-1.5 rounded-xl bg-indigo-50 border border-indigo-200 text-indigo-700 text-xs font-semibold">
-            VCN: #{invoiceVcn || "INV-..."}
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setIsProdDropdownOpen(true)}
+            className="flex items-center gap-1.5 px-3.5 py-2 rounded-2xl bg-orange-50 hover:bg-orange-100 text-orange-900 text-xs font-bold transition shadow-sm"
+          >
+            <FaPlus /> Quick Add Products
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setIsFieldControlOpen((prev) => !prev)}
+            className="flex items-center gap-1.5 px-3.5 py-2 rounded-2xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition"
+          >
+            <FaSlidersH /> Customize Columns
+          </button>
+
+          <span className="flex items-center gap-1.5 px-4 py-2 rounded-2xl bg-gradient-to-r from-orange-500 to-red-600 text-white text-xs font-extrabold shadow-md">
+            <FaFileInvoiceDollar /> VCN: {invoiceVcn || "INV-..."}
           </span>
+        </div>
+      </div>
+
+      {/* Interlinking Navigation Pills - Purchase Bill Style */}
+      <div className="flex flex-wrap items-center gap-2 bg-slate-100 p-2 rounded-2xl border border-slate-200 text-xs font-semibold">
+        <Link
+          href="/dashboard/sales/dashboard"
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-slate-600 hover:bg-white transition"
+        >
+          <FaChartLine className="text-orange-500" /> Dashboard
+        </Link>
+        <Link
+          href="/dashboard/sales/invoice"
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-slate-600 hover:bg-white transition"
+        >
+          <FaFileInvoice className="text-orange-500" /> Invoices List
+        </Link>
+        <Link
+          href="/dashboard/sales/invoice/create"
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-orange-600 text-white shadow-sm font-bold"
+        >
+          <FaPlus /> Create Bill
+        </Link>
+        <Link
+          href="/dashboard/sales/orders"
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-slate-600 hover:bg-white transition"
+        >
+          <FaTruck className="text-indigo-500" /> Orders
+        </Link>
+        <Link
+          href="/dashboard/sales/outstanding"
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-slate-600 hover:bg-white transition"
+        >
+          <FaFileInvoiceDollar className="text-rose-500" /> Outstanding
+        </Link>
+        <Link
+          href="/dashboard/sales/receipt"
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-slate-600 hover:bg-white transition"
+        >
+          <FaReceipt className="text-emerald-500" /> Receipt Entry
+        </Link>
+      </div>
+
+      {/* Active Company + GST Banner */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 px-4 py-2.5 rounded-2xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-semibold">
+        <div className="flex items-center gap-2">
+          <FaBuilding className="text-emerald-600" />
+          <span>
+            Active Company: <strong>{selectedCompany?.companyName || company?.companyName || company?.name || "Current Company"}</strong>
+            {selectedCompany?.companyCode ? <> &nbsp;•&nbsp; Code: <strong>{selectedCompany.companyCode}</strong></> : null}
+            &nbsp;•&nbsp; GST State: <strong>{companyStateCode || "—"}</strong>
+            {selectedFY?.fyCode ? <> &nbsp;•&nbsp; FY: <strong>{selectedFY.fyCode}</strong></> : null}
+          </span>
+        </div>
+        <div className="flex items-center gap-1.5 font-bold">
+          <FaCheckCircle className="text-emerald-600" />
+          <span>{isLocalParty ? "CGST + SGST (Intrastate)" : "IGST (Interstate)"}</span>
         </div>
       </div>
 
@@ -839,18 +946,18 @@ export default function CreateSaleInvoicePage() {
       )}
 
       {/* Form Container - Liquid Glass */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 gap-6">
         
         {/* Left 2-Columns: Invoice Header & Product Entry Form */}
-        <div className="lg:col-span-2 space-y-6">
+        <div className="space-y-6">
           
           {/* Card 1: Customer & Invoice Info */}
-          <div className="relative isolate overflow-hidden rounded-2xl bg-white/60 backdrop-blur-xl border border-white/60 shadow-[0_8px_32px_rgba(52,56,114,0.08)] p-5 space-y-4">
+          <div className="relative isolate overflow-hidden bg-white rounded-3xl p-6 border border-slate-100 shadow-sm space-y-4">
             <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-white/40 via-white/5 to-transparent" />
             
             <h3 className="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center justify-between">
               <span className="flex items-center gap-2">
-                <FaUserCheck className="text-indigo-600" /> Customer & Billing Info
+                <FaUserCheck className="text-orange-600" /> Customer & Billing Info
               </span>
               {companyGst ? (
                 <span className="text-[11px] font-medium text-slate-500 flex items-center gap-1">
@@ -912,7 +1019,7 @@ export default function CreateSaleInvoicePage() {
               </div>
             )}
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
               
               {/* SEARCHABLE CUSTOMER COMBOBOX */}
               <div className="relative" ref={custDropdownRef}>
@@ -937,7 +1044,8 @@ export default function CreateSaleInvoicePage() {
 
                     {/* Customer Search Dropdown Menu */}
                     {isCustDropdownOpen && (
-                      <div className="absolute left-0 right-0 top-full mt-1.5 z-40 rounded-2xl bg-white shadow-2xl border border-slate-200 overflow-hidden animate-in fade-in zoom-in duration-150">
+                      <div className="left-0 right-0 top-full mt-1.5 z-999 rounded-2xl bg-white shadow-2xl border  animate-in fade-in zoom-in duration-150">
+                      
                         <div className="p-2 border-b border-slate-100 bg-slate-50/70 flex items-center gap-2">
                           <FaSearch size={11} className="text-slate-400 ml-1" />
                           <input
@@ -997,14 +1105,25 @@ export default function CreateSaleInvoicePage() {
                   type="date"
                   value={invoiceDate}
                   onChange={(e) => setInvoiceDate(e.target.value)}
-                  className="w-full px-3 py-2 text-xs rounded-xl border border-slate-300 focus:ring-2 focus:ring-indigo-600 outline-none bg-white/80 font-medium"
+                  className="w-full px-3 py-2.5 text-xs rounded-xl border border-slate-300 focus:ring-2 focus:ring-orange-500 outline-none bg-slate-50 font-medium"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">Invoice / VCN Number</label>
+                <input
+                  type="text"
+                  value={invoiceVcn}
+                  onChange={(e) => setInvoiceVcn(e.target.value)}
+                  placeholder="INV-1001"
+                  className="w-full px-3 py-2.5 text-xs rounded-xl border border-slate-300 focus:ring-2 focus:ring-orange-500 outline-none bg-slate-50 font-extrabold text-orange-700"
                 />
               </div>
             </div>
 
             {/* Selected Customer Details & Local vs Central Tax Category Banner */}
             {selectedCustomer && (
-              <div className="mt-3 p-3 rounded-xl bg-indigo-50/70 border border-indigo-100 flex flex-wrap items-center justify-between gap-3 text-xs">
+              <div className="mt-3 p-3 rounded-xl bg-orange-50 border border-orange-100 flex flex-wrap items-center justify-between gap-3 text-xs">
                 <div>
                   <span className="font-bold text-indigo-900">{selectedCustomer.PARNAM}</span>
                   {selectedCustomer.CITY ? <span className="text-slate-600 ml-2">📍 {selectedCustomer.CITY}</span> : null}
@@ -1032,14 +1151,14 @@ export default function CreateSaleInvoicePage() {
             )}
           </div>
 
-          {/* Customer Purchase & Invoice History Section */}
+          {/* Customer Sales & Invoice History Section */}
           {selectedCustomer && (
-            <div className="relative isolate overflow-hidden rounded-2xl bg-white/60 backdrop-blur-xl border border-white/60 shadow-[0_8px_32px_rgba(52,56,114,0.08)] p-5 space-y-4">
+            <div className="relative isolate overflow-hidden rounded-3xl bg-white border border-slate-100 shadow-sm p-6 space-y-4">
               <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-white/40 via-white/5 to-transparent" />
 
               <div className="flex items-center justify-between gap-3">
                 <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wider flex items-center gap-2">
-                  <FaHistory className="text-indigo-600" /> Customer Purchase & Invoice History
+                  <FaHistory className="text-indigo-600" /> Customer Sales & Invoice History
                 </h3>
 
                 <div className="flex items-center gap-2">
@@ -1333,12 +1452,12 @@ export default function CreateSaleInvoicePage() {
           )}
 
           {/* Card 2: Product Line Item Add Form */}
-          <div className="relative isolate rounded-2xl bg-white/60 backdrop-blur-xl border border-white/60 shadow-[0_8px_32px_rgba(52,56,114,0.08)] p-5 space-y-4 z-20">
+          <div id="sale-product-entry" className="relative isolate rounded-3xl bg-white border border-slate-100 shadow-sm p-6 space-y-4 z-20">
             <div className="pointer-events-none absolute inset-0 rounded-2xl bg-gradient-to-br from-white/40 via-white/5 to-transparent overflow-hidden" />
 
             <div className="flex items-center justify-between gap-3">
               <h3 className="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center gap-2">
-                <FaBoxOpen className="text-emerald-600" /> Add Product Item ({isLocalParty ? "Local CGST+SGST" : "Central IGST"})
+                <FaBoxOpen className="text-orange-600" /> Add Product Item ({isLocalParty ? "Local CGST+SGST" : "Central IGST"})
               </h3>
 
               {/* FIELD CONTROL CHECKBOX POPOVER TOGGLE */}
@@ -1346,7 +1465,7 @@ export default function CreateSaleInvoicePage() {
                 <button
                   type="button"
                   onClick={() => setIsFieldControlOpen((prev) => !prev)}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white/90 border border-slate-300 shadow-sm text-xs font-semibold text-slate-700 hover:text-indigo-600 hover:border-indigo-300 transition cursor-pointer"
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white/90 border border-slate-300 shadow-sm text-xs font-semibold text-slate-700 hover:text-orange-600 hover:border-orange-300 transition cursor-pointer"
                 >
                   <FaSlidersH className="text-indigo-600" size={12} />
                   <span>Customize Fields ({Object.values(visibleFields).filter(Boolean).length}/19)</span>
@@ -1543,7 +1662,7 @@ export default function CreateSaleInvoicePage() {
                       >
                         <span className={selectedProduct ? "font-bold text-slate-800" : "text-slate-400"}>
                           {selectedProduct
-                            ? `${selectedProduct.NAME} ${selectedProduct.PACK ? `(${selectedProduct.PACK})` : ""} [Stock: ${selectedProduct.CLBAL || selectedProduct.STOCK || 0}]`
+                            ? `${selectedProduct.NAME} ${selectedProduct.PACK ? `(${selectedProduct.PACK})` : ""} [Stock: ${Number(selectedProduct.currentStock ?? selectedProduct.CLBAL ?? selectedProduct.STOCK ?? 0)}]`
                             : "-- Search & Select Medicine Product --"}
                         </span>
                         <FaChevronDown className="text-slate-400 text-[10px]" />
@@ -1551,7 +1670,7 @@ export default function CreateSaleInvoicePage() {
 
                       {/* Product Search Dropdown Menu */}
                       {isProdDropdownOpen && (
-                        <div className="absolute left-0 right-0 top-full mt-1.5 z-40 rounded-2xl bg-white shadow-2xl border border-slate-200 overflow-hidden animate-in fade-in zoom-in duration-150">
+                        <div className="absolute left-0 right-0 top-full mt-1.5 z-999 rounded-2xl bg-white shadow-2xl border border-slate-200 overflow-hidden animate-in fade-in zoom-in duration-150">
                           <div className="p-2 border-b border-slate-100 bg-slate-50/70 flex items-center gap-2">
                             <FaSearch size={11} className="text-slate-400 ml-1" />
                             <input
@@ -1575,7 +1694,7 @@ export default function CreateSaleInvoicePage() {
                             ) : (
                               filteredProducts.map((p, idx) => {
                                 const code = p.PRODUCT || p.CODE || p.NAME || "";
-                                const stock = Number(p.CLBAL || p.STOCK || 0);
+                                const stock = Number(p.currentStock ?? p.CLBAL ?? p.STOCK ?? 0);
                                 const isSelected = draftProdCode === code;
                                 return (
                                   <div
@@ -1909,10 +2028,10 @@ export default function CreateSaleInvoicePage() {
               )}
 
               {/* Stock Warning Banner if (Qty + FreeQty) > Stock */}
-              {selectedProduct && (Number(draftQty || 0) + Number(draftFreeQty || 0)) > Number(selectedProduct.CLBAL || selectedProduct.STOCK || 0) && (
+              {billType === "S" && selectedProduct && (Number(draftQty || 0) + Number(draftFreeQty || 0)) > Number(Number(selectedProduct.currentStock ?? selectedProduct.CLBAL ?? selectedProduct.STOCK ?? 0)) && (
                 <div className="p-2.5 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 text-[11px] font-semibold flex items-center gap-2">
                   <FaExclamationTriangle className="text-amber-600 flex-shrink-0" />
-                  <span>Warning: Total Qty (Billing: {draftQty} + Free: {draftFreeQty}) exceeds Available Stock ({selectedProduct.CLBAL || selectedProduct.STOCK || 0}).</span>
+                  <span>Warning: Total Qty (Billing: {draftQty} + Free: {draftFreeQty}) exceeds Available Stock ({Number(selectedProduct.currentStock ?? selectedProduct.CLBAL ?? selectedProduct.STOCK ?? 0)}).</span>
                 </div>
               )}
 
@@ -1920,7 +2039,7 @@ export default function CreateSaleInvoicePage() {
                 <button
                   type="submit"
                   disabled={!selectedProduct}
-                  className="flex items-center gap-2 px-5 py-2 text-xs font-semibold text-white bg-gradient-to-r from-emerald-600 to-teal-600 rounded-xl shadow-md hover:from-emerald-700 hover:to-teal-700 transition disabled:opacity-50 cursor-pointer"
+                  className="flex items-center gap-2 px-5 py-2 text-xs font-semibold text-white bg-gradient-to-r from-orange-500 to-red-600 rounded-xl shadow-md hover:from-orange-600 hover:to-red-700 transition disabled:opacity-50 cursor-pointer"
                 >
                   <FaPlus size={11} /> Add to Invoice Table
                 </button>
@@ -1931,7 +2050,7 @@ export default function CreateSaleInvoicePage() {
           {/* Card 3: Added Items Table */}
           <div className="relative isolate overflow-hidden rounded-2xl bg-white/60 backdrop-blur-xl border border-white/60 shadow-[0_8px_32px_rgba(52,56,114,0.08)] p-5 space-y-4">
             <h3 className="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center justify-between">
-              <span>Invoice Items List ({items.length})</span>
+              <span className="flex items-center gap-2"><FaBoxOpen className="text-orange-600" /> Saleable Products ({items.length})</span>
             </h3>
 
             {items.length === 0 ? (
@@ -2012,12 +2131,13 @@ export default function CreateSaleInvoicePage() {
           </div>
         </div>
 
-        {/* Right 1-Column: Invoice Summary & Submit Action */}
+        {/* Financial Summary & Submit Action - Purchase Bill Style */}
         <div className="space-y-6">
-          <div className="relative isolate overflow-hidden rounded-2xl bg-white/70 backdrop-blur-xl border border-white/70 shadow-[0_8px_32px_rgba(52,56,114,0.08)] p-6 space-y-5 sticky top-6">
+          {/* <div className="bg-gradient-to-br from-orange-600 via-red-600 to-orange-700 p-6 rounded-3xl text-white shadow-xl space-y-5 border border-orange-500"> */}
+          <div className="bg-#dfe1e2 from-orange-600 via-red-600 to-orange-700 p-6 rounded-3xl shadow-xl space-y-5 border border-orange-500">
             <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-indigo-50/50 via-white/5 to-transparent" />
             
-            <h3 className="text-sm font-bold text-slate-800 border-b border-slate-200 pb-3 m-0 flex items-center justify-between">
+            <h3 className="text-sm font-bold border-b border-orange-400/40 pb-3 m-0 flex items-center justify-between">
               <span>Invoice Summary</span>
               <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${
                 isLocalParty ? "bg-emerald-100 text-emerald-800" : "bg-blue-100 text-blue-800"
@@ -2026,7 +2146,7 @@ export default function CreateSaleInvoicePage() {
               </span>
             </h3>
 
-            <div className="space-y-3 text-xs">
+            <div className="space-y-2.5 text-xs">
               <div className="flex items-center justify-between text-slate-600">
                 <span>Subtotal (Taxable):</span>
                 <span className="font-semibold text-slate-800">₹{invoiceSummary.totalTaxable.toFixed(2)}</span>
@@ -2074,7 +2194,7 @@ export default function CreateSaleInvoicePage() {
                 type="button"
                 onClick={handleSubmitInvoice}
                 disabled={submitting || items.length === 0 || !selectedCustomerCode}
-                className="w-full flex items-center justify-center gap-2 py-3 px-4 rounded-xl text-xs font-bold text-white bg-gradient-to-r from-[#343872] to-indigo-700 shadow-lg hover:from-[#2a2d5c] hover:to-indigo-800 transition outline-none disabled:opacity-50 cursor-pointer"
+                className="w-full flex items-center justify-center gap-2 py-3 px-4 rounded-2xl text-xs font-black text-orange-950 bg-white hover:bg-orange-50 shadow-lg transition outline-none disabled:opacity-50 cursor-pointer"
               >
                 {submitting ? (
                   <>
@@ -2091,7 +2211,7 @@ export default function CreateSaleInvoicePage() {
 
               <Link
                 href="/dashboard/sales/invoice"
-                className="block text-center py-2 px-4 rounded-xl text-xs font-semibold text-slate-600 bg-white border border-slate-300 hover:bg-slate-50 transition"
+                className="block text-center py-2 px-4 rounded-2xl text-xs font-bold text-white/90 bg-white/10 border border-white/30 hover:bg-white/20 transition"
               >
                 Cancel
               </Link>

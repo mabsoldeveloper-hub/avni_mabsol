@@ -17,12 +17,12 @@ const DetailingFunnelChart = dynamic(() => import("@/components/NextGenDashboard
 });
 
 import KPICards from "@/components/KPICards";
-import DashboardCharts, { PurchaseDashboardCharts, CreditDashboardCharts } from "@/components/DashboardCharts";
+import DashboardCharts, { PurchaseDashboardCharts, CreditDashboardCharts } from "@/components/dashboard/DashboardCharts";
 import AnalyticsCards from "@/components/AnalyticsCards";
 import LiquidMeters from "@/components/LiquidMeters";
 import FinancialSimulatorWidget from "@/components/FinancialSimulatorWidget";
 import SmartInsightsWidget from "@/components/SmartInsightsWidget";
-import DashboardLiveClock from "@/components/DashboardLiveClock";
+import DashboardLiveClock from "@/components/dashboard/DashboardLiveClock";
 import { Sparkles } from "lucide-react";
 import {
     FaBuilding,

@@ -2,10 +2,10 @@
 
 import { useEffect, useState, useCallback, useRef } from "react";
 import KPICards from "@/components/KPICards";
-import DashboardCharts, { PurchaseDashboardCharts, CreditDashboardCharts } from "@/components/DashboardCharts";
+import DashboardCharts, { PurchaseDashboardCharts, CreditDashboardCharts } from "@/components/dashboard/DashboardCharts";
 import AnalyticsCards from "@/components/AnalyticsCards";
 import LiquidMeters from "@/components/LiquidMeters";
-import DashboardLiveClock from "@/components/DashboardLiveClock";
+import DashboardLiveClock from "@/components/dashboard/DashboardLiveClock";
 import {
     FaBuilding,
     FaMapMarkerAlt,

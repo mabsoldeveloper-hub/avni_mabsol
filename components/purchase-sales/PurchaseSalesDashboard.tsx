@@ -64,7 +64,7 @@ export default function PurchaseSalesDashboard() {
       }
 
 
-      
+
       params.set("fyId", filters.fyId || "ALL");
       params.set("paymentStatus", filters.paymentStatus || "ALL");
       params.set("category", filters.category || "ALL");
@@ -102,7 +102,7 @@ export default function PurchaseSalesDashboard() {
               <FaChartLine className="text-sky-400" />
               <span>Purchase vs Sale Visual Analytics</span>
             </div>
-            <h1 className="text-xl sm:text-3xl md:text-4xl font-black tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-white via-slate-100 to-indigo-200 leading-tight">
+            <h1 className="text-xl text-white sm:text-3xl md:text-4xl font-black tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-white via-slate-100 to-indigo-200 leading-tight">
               Purchase & Sale Analytics Dashboard
             </h1>
             <p className="text-xs sm:text-sm text-slate-300 max-w-2xl mt-1 leading-relaxed">

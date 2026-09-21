@@ -132,23 +132,23 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
   }, [loadUser]);
 
   // Periodically verify session in background & on window focus/visibility change
-  useEffect(() => {
-    const checkSession = () => {
-      if (typeof window !== "undefined" && window.location.pathname.startsWith("/dashboard")) {
-        loadUser(true);
-      }
-    };
+  // useEffect(() => {
+  //   const checkSession = () => {
+  //     if (typeof window !== "undefined" && window.location.pathname.startsWith("/dashboard")) {
+  //       loadUser(true);
+  //     }
+  //   };
 
-    const interval = setInterval(checkSession, SESSION_CHECK_INTERVAL_MS);
-    window.addEventListener("focus", checkSession);
-    document.addEventListener("visibilitychange", checkSession);
+  //   const interval = setInterval(checkSession, SESSION_CHECK_INTERVAL_MS);
+  //   window.addEventListener("focus", checkSession);
+  //   document.addEventListener("visibilitychange", checkSession);
 
-    return () => {
-      clearInterval(interval);
-      window.removeEventListener("focus", checkSession);
-      document.removeEventListener("visibilitychange", checkSession);
-    };
-  }, [loadUser]);
+  //   return () => {
+  //     clearInterval(interval);
+  //     window.removeEventListener("focus", checkSession);
+  //     document.removeEventListener("visibilitychange", checkSession);
+  //   };
+  // }, [loadUser]);
 
   return (
     <UserContext.Provider

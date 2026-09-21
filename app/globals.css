@@ -237,13 +237,11 @@ a {
   scrollbar-width: none;
 }
 
-/* Ensure Topbar Buttons and Controls are strictly rounded-full */
+/* Ensure Topbar Buttons, Search Bar and Clips are strictly rounded-full */
 .topbar-pill-btn,
 .topbar-circle-btn,
-.topbar-search-bar {
+.topbar-search-bar,
+.search-clip-btn {
   border-radius: 9999px !important;
 }
 
-.topbar-circle-btn {
-  border-radius: 9999px !important;
-}

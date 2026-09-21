@@ -26,7 +26,7 @@ export async function POST() {
     const dataDir: string =
       config?.consoleSyncDir || config?.sourceDir || config?.dataDir || process.env.VFP_DATA_DIR || "";
     const sanitizedEmail = user.email.replace(/[^a-zA-Z0-9_-]/g, "_");
-    const uploadDir = path.join(process.cwd(), "data", "vfp_uploads", sanitizedEmail);
+    const uploadDir = path.join(/*turbopackIgnore: true*/ process.cwd(), "data", "vfp_uploads", sanitizedEmail);
 
     const hasUploadedDbfs =
       fs.existsSync(uploadDir) &&

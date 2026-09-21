@@ -17,57 +17,6 @@ function escapeRegex(text: string) {
   return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
-// Spoken Voice Search Cleaner - removes spoken filler words and dynamic assistant names across English, Hindi, Urdu & Hinglish
-function cleanSpokenQuery(input: string, assistantName: string = "AI Assistant"): string {
-  if (!input) return "";
-  let text = input.trim();
-
-  // Escaped assistant name for regex
-  const nameEscaped = (assistantName || "AI Assistant").trim().replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-
-  // Dynamic regex pattern to match greetings + assistant name
-  const greetingAndNamePatterns = [
-    new RegExp(`\\b(hi|hey|hello|suno|listen|ok|okay|aaye|namaste|haaye)\\s+(${nameEscaped}|jarvis|alexa|siri|crm|ai)\\b`, "gi"),
-    new RegExp(`\\b(${nameEscaped})(\\s+bhai|\\s+ji)?\\b`, "gi"),
-    /\b(hi|hey|hello|suno|listen)\b/gi,
-  ];
-
-  greetingAndNamePatterns.forEach((pattern) => {
-    text = text.replace(pattern, "");
-  });
-
-  const spokenFillers = [
-    /\b(dikhao|dikhaao|dikhaye|dikhayen)\b/gi,
-    /\b(kholo|kholiye|open|open page|nav|navigate to)\b/gi,
-    /\b(batao|bataiye|show me|show|find me|find|search for|tell me)\b/gi,
-    /\b(mujhe|mujhko|mujhe batao|please|plz|bhai)\b/gi,
-    /\b(search karo|search karain|check karo|check karain)\b/gi,
-    /\b(ka ledger|ki ledger|ka bill|ke bill|parchi|hisaab)\b/gi,
-    /\b(ka stock|ki stock|ka report|ki report|ka balance|ki balance)\b/gi,
-    /\b(list all|where is|par jao|jana hai)\b/gi,
-    /\b(kitna hai|kitni hai|kitne hain|kitna|kitni|kitne|bhi|kya|hai|hain|kiska|kiske|konsi|konse|konsa)\b/gi,
-  ];
-
-  spokenFillers.forEach((pattern) => {
-    text = text.replace(pattern, "");
-  });
-
-  // Strip emojis from query string for clean regex searching
-  text = text.replace(/[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}]/gu, "");
-
-  text = text.replace(/\s+/g, " ").trim();
-
-  // Fallback if cleaning removed all text
-  if (text.length === 0) {
-    let fallback = input.trim();
-    greetingAndNamePatterns.forEach((pattern) => {
-      fallback = fallback.replace(pattern, "");
-    });
-    return fallback.replace(/\s+/g, " ").trim();
-  }
-
-  return text;
-}
 
 // Typo correction dictionary for common pharma terms & reports
 const TYPO_MAP: Record<string, string> = {
@@ -95,123 +44,121 @@ const TYPO_MAP: Record<string, string> = {
 
 // Navigation & Sidebar Links & Component File Registry
 const APP_PAGES = [
-  // Core Dashboards & Sidebar Components
-  { title: "Dashboard Overview", category: "Navigation", path: "/dashboard", fileName: "app/dashboard/page.tsx", keywords: ["home", "analytics", "dashboard", "kpi", "summary", "main", "sidebar", "sidebar links", "topbar", "file name", "filename"], icon: "layout-dashboard" },
-  { title: "Executive AI Dashboard 🤖", category: "Navigation", path: "/dashboard/executive-ai", fileName: "app/dashboard/executive-ai/page.tsx", keywords: ["executive ai", "executive-ai", "ai dashboard", "cfo dashboard", "sales purchase ai", "ai insights", "executive overview", "widgets", "visualization"], icon: "sparkles" },
-  { title: "Purchase & Sales Combined Analytics 📈", category: "Navigation", path: "/dashboard/purchase-sales-analytics", fileName: "app/dashboard/purchase-sales-analytics/page.tsx", keywords: ["purchase sales analytics", "purchase-sales-analytics", "combined analytics", "growth matrix", "sales vs purchase", "purchase comparison", "purchase and sales"], icon: "trending-up" },
-  { title: "Vouchers & Accounting Log 📄", category: "Navigation", path: "/dashboard/voucher", fileName: "app/dashboard/voucher/page.tsx", keywords: ["voucher", "vouchers", "accounting voucher", "journal entry", "journal", "receipt voucher", "payment voucher"], icon: "file-text" },
-  { title: "Custom Analytics & Report Builder 📊", category: "Navigation", path: "/dashboard/report", fileName: "app/dashboard/report/page.tsx", keywords: ["report", "analytics report", "sales report", "custom report", "data report"], icon: "bar-chart" },
-  { title: "Sidebar Navigation Component", category: "Sidebar Link", path: "/dashboard", fileName: "components/Sidebar.tsx", keywords: ["sidebar", "side bar", "sidebar links", "navigation bar", "menu", "nav", "file name", "filename"], icon: "compass" },
-  { title: "Topbar Header Component", category: "Sidebar Link", path: "/dashboard", fileName: "components/Topbar.tsx", keywords: ["topbar", "top bar", "header", "search bar", "global search", "file name", "filename"], icon: "compass" },
-  { title: "Global Search Modal Component", category: "Sidebar Link", path: "/dashboard", fileName: "components/GlobalSearchModal.tsx", keywords: ["global search", "search modal", "command palette", "file name", "filename"], icon: "search" },
+  // Core Dashboards
+  { title: "Dashboard Overview", category: "Navigation", path: "/dashboard", permission: "dashboard.view", keywords: ["home", "analytics", "dashboard", "kpi", "summary", "main"], icon: "layout-dashboard" },
+  { title: "Executive AI Dashboard", category: "Navigation", path: "/dashboard/executive-ai", permission: "dashboard.view", keywords: ["executive ai", "executive-ai", "ai dashboard", "cfo dashboard", "sales purchase ai", "ai insights", "executive overview", "widgets", "visualization"], icon: "sparkles" },
+  { title: "AI Smart Alerts", category: "Navigation", path: "/dashboard/ai-notifications", permission: "dashboard.view", keywords: ["ai alerts", "notifications", "smart alerts", "bell"], icon: "bell" },
+  { title: "Purchase & Sales Combined Analytics", category: "Navigation", path: "/dashboard/purchase-sales-analytics", permission: "dashboard.view", keywords: ["purchase sales analytics", "purchase-sales-analytics", "combined analytics", "growth matrix", "sales vs purchase", "purchase comparison", "purchase and sales"], icon: "trending-up" },
+  { title: "Vouchers & Accounting Log", category: "Navigation", path: "/dashboard/voucher", permission: "sales.view", keywords: ["voucher", "vouchers", "accounting voucher", "journal entry", "journal", "receipt voucher", "payment voucher"], icon: "file-text" },
+  { title: "Custom Analytics & Report Builder", category: "Navigation", path: "/dashboard/report", permission: "reports.view", keywords: ["report", "analytics report", "sales report", "custom report", "data report"], icon: "bar-chart" },
+  { title: "Email Campaign", category: "Navigation", path: "/dashboard/email-campaign", permission: "dashboard.view", keywords: ["email", "campaign", "marketing", "broadcast"], icon: "paper-plane" },
+  { title: "WhatsApp Campaign", category: "Navigation", path: "/dashboard/whatsapp-campaign", permission: "dashboard.view", keywords: ["whatsapp", "campaign", "broadcast", "messages"], icon: "whatsapp" },
+  { title: "Lead Management Hub", category: "Navigation", path: "/dashboard/leads", permission: "dashboard.view", keywords: ["leads", "prospects", "funnel", "crm"], icon: "bullhorn" },
+  { title: "Custom Forms Studio", category: "Navigation", path: "/dashboard/custom-forms", permission: "dashboard.view", keywords: ["forms", "form builder", "custom forms"], icon: "sliders" },
 
   // Targets
-  { title: "Targets & Achievements", category: "Navigation", path: "/dashboard/targets", fileName: "app/dashboard/targets/page.tsx", keywords: ["target", "actual", "achievement", "mr target", "kpi", "monthly target", "quarterly target", "quota", "targets"], icon: "target" },
+  { title: "Targets & Achievements", category: "Navigation", path: "/dashboard/targets", permission: "targets.view", keywords: ["target", "actual", "achievement", "mr target", "kpi", "monthly target", "quarterly target", "quota", "targets"], icon: "target" },
 
   // Master Section
-  { title: "Master Dashboard", category: "Navigation", path: "/dashboard/master", fileName: "app/dashboard/master/page.tsx", keywords: ["master", "master dashboard", "masters", "configuration"], icon: "cog" },
-  { title: "Accounting Group Master", category: "Navigation", path: "/dashboard/master/accounting-group-master", fileName: "app/dashboard/master/accounting-group-master/page.tsx", keywords: ["accounting group", "accounting-group-master", "group master", "chart of accounts", "ledger group", "accounts"], icon: "layers" },
-  { title: "Ledger Master / Customer Master", category: "Navigation", path: "/dashboard/master/customer-master", fileName: "app/dashboard/master/customer-master/page.tsx", keywords: ["customer master", "customer-master", "ledger master", "party master", "dealers", "clients", "customers"], icon: "users" },
-  { title: "Area Master", category: "Navigation", path: "/dashboard/master/area-master", fileName: "app/dashboard/master/area-master/page.tsx", keywords: ["area master", "area-master", "city master", "location", "territory", "area"], icon: "building" },
-  { title: "Product Master", category: "Navigation", path: "/dashboard/master/product-master", fileName: "app/dashboard/master/product-master/page.tsx", keywords: ["product master", "product-master", "items master", "medicine master", "products", "mrp", "rate"], icon: "package" },
-  { title: "HSN Master", category: "Navigation", path: "/dashboard/master/hsn-master", fileName: "app/dashboard/master/hsn-master/page.tsx", keywords: ["hsn master", "hsn-master", "hsn code", "gst hsn", "tax rate", "sac code"], icon: "list-ul" },
-  { title: "Division Master", category: "Navigation", path: "/dashboard/master/division-master", fileName: "app/dashboard/master/division-master/page.tsx", keywords: ["division master", "division-master", "pharma division", "divisions", "brand division"], icon: "layers" },
-  { title: "Sub-Division Master", category: "Navigation", path: "/dashboard/sub-division-master", fileName: "app/dashboard/sub-division-master/page.tsx", keywords: ["sub division master", "sub-division-master", "subdivision", "brand line"], icon: "git-branch" },
-  { title: "Category Master", category: "Navigation", path: "/dashboard/category-master", fileName: "app/dashboard/category-master/page.tsx", keywords: ["category master", "category-master", "product category", "group"], icon: "tag" },
-  { title: "Target & Gift Master", category: "Navigation", path: "/dashboard/master/targets", fileName: "app/dashboard/master/targets/page.tsx", keywords: ["target & gift master", "target master", "gift master", "incentive", "reward"], icon: "trophy" },
-  { title: "MR Customer Master", category: "Navigation", path: "/dashboard/master/mr-customer", fileName: "app/dashboard/master/mr-customer/page.tsx", keywords: ["mr customer master", "mr-customer", "mr assignment", "assign party"], icon: "user-check" },
-  { title: "Bill Series / Voucher Series Master", category: "Navigation", path: "/dashboard/master/voucher-series", fileName: "app/dashboard/master/voucher-series/page.tsx", keywords: ["bill series master", "voucher series", "voucher-series", "invoice prefix", "numbering"], icon: "sliders" },
-  { title: "Sales Hierarchy & Organization", category: "Navigation", path: "/dashboard/master/sales-hierarchy", fileName: "app/dashboard/master/sales-hierarchy/page.tsx", keywords: ["sales hierarchy", "sales-hierarchy", "organization", "mr asm rsm zsm", "structure"], icon: "network" },
-  { title: "Company Master", category: "Navigation", path: "/dashboard/company-master", fileName: "app/dashboard/company-master/page.tsx", keywords: ["company master", "company-master", "manufacturers", "company list"], icon: "factory" },
+  { title: "Master Dashboard", category: "Navigation", path: "/dashboard/master", permission: "master.view", keywords: ["master", "master dashboard", "masters", "configuration"], icon: "cog" },
+  { title: "Accounting Group Master", category: "Navigation", path: "/dashboard/master/accounting-group-master", permission: "master.view", keywords: ["accounting group", "accounting-group-master", "group master", "chart of accounts", "ledger group", "accounts"], icon: "layers" },
+  { title: "Ledger Master / Customer Master", category: "Navigation", path: "/dashboard/master/customer-master", permission: "master.view", keywords: ["customer master", "customer-master", "ledger master", "party master", "dealers", "clients", "customers"], icon: "users" },
+  { title: "Area Master", category: "Navigation", path: "/dashboard/master/area-master", permission: "master.view", keywords: ["area master", "area-master", "city master", "location", "territory", "area"], icon: "building" },
+  { title: "Product Master", category: "Navigation", path: "/dashboard/master/product-master", permission: "master.view", keywords: ["product master", "product-master", "items master", "medicine master", "products", "mrp", "rate"], icon: "package" },
+  { title: "HSN Master", category: "Navigation", path: "/dashboard/master/hsn-master", permission: "master.view", keywords: ["hsn master", "hsn-master", "hsn code", "gst hsn", "tax rate", "sac code"], icon: "list-ul" },
+  { title: "Division Master", category: "Navigation", path: "/dashboard/master/division-master", permission: "master.view", keywords: ["division master", "division-master", "pharma division", "divisions", "brand division"], icon: "layers" },
+  { title: "Sub-Division Master", category: "Navigation", path: "/dashboard/sub-division-master", permission: "master.view", keywords: ["sub division master", "sub-division-master", "subdivision", "brand line"], icon: "git-branch" },
+  { title: "Category Master", category: "Navigation", path: "/dashboard/category-master", permission: "master.view", keywords: ["category master", "category-master", "product category", "group"], icon: "tag" },
+  { title: "Target & Gift Master", category: "Navigation", path: "/dashboard/master/targets", permission: "master.view", keywords: ["target & gift master", "target master", "gift master", "incentive", "reward"], icon: "trophy" },
+  { title: "MR Customer Master", category: "Navigation", path: "/dashboard/master/mr-customer", permission: "master.view", keywords: ["mr customer master", "mr-customer", "mr assignment", "assign party"], icon: "user-check" },
+  { title: "Bill Series / Voucher Series Master", category: "Navigation", path: "/dashboard/master/voucher-series", permission: "master.view", keywords: ["bill series master", "voucher series", "voucher-series", "invoice prefix", "numbering"], icon: "sliders" },
+  { title: "Sales Hierarchy & Organization", category: "Navigation", path: "/dashboard/master/sales-hierarchy", permission: "master.view", keywords: ["sales hierarchy", "sales-hierarchy", "organization", "mr asm rsm zsm", "structure"], icon: "network" },
+  { title: "Company Master", category: "Navigation", path: "/dashboard/company-master", permission: "master.view", keywords: ["company master", "company-master", "manufacturers", "company list"], icon: "factory" },
 
   // Area & Comparison
-  { title: "Area Management", category: "Navigation", path: "/dashboard/area", fileName: "app/dashboard/area/page.tsx", keywords: ["area", "locations", "zones", "stations"], icon: "building" },
-  { title: "Comparison Tool & Analytics", category: "Navigation", path: "/dashboard/compare", fileName: "app/dashboard/compare/page.tsx", keywords: ["comparison", "compare", "sales comparison", "period comparison", "analytics"], icon: "boxes" },
-  { title: "Financial Year Wise Comparison", category: "Navigation", path: "/dashboard/compare/fy-wise", fileName: "app/dashboard/compare/fy-wise/page.tsx", keywords: ["fy wise comparison", "fy compare", "financial year comparison"], icon: "calendar" },
-  { title: "FY Area Wise Comparison Map", category: "Navigation", path: "/dashboard/compare/fy-area-wise", fileName: "app/dashboard/compare/fy-area-wise/page.tsx", keywords: ["fy area map", "area comparison map", "territory compare"], icon: "map-pin" },
+  { title: "Area Management", category: "Navigation", path: "/dashboard/area", permission: "area.view", keywords: ["area", "locations", "zones", "stations"], icon: "building" },
+  { title: "Comparison Tool & Analytics", category: "Navigation", path: "/dashboard/compare", permission: "compare.view", keywords: ["comparison", "compare", "sales comparison", "period comparison", "analytics"], icon: "boxes" },
+  { title: "Financial Year Wise Comparison", category: "Navigation", path: "/dashboard/compare/fy-wise", permission: "compare.view", keywords: ["fy wise comparison", "fy compare", "financial year comparison"], icon: "calendar" },
+  { title: "FY Area Wise Comparison Map", category: "Navigation", path: "/dashboard/compare/fy-area-wise", permission: "compare.view", keywords: ["fy area map", "area comparison map", "territory compare"], icon: "map-pin" },
 
   // Users & Permissions
-  { title: "User Management", category: "Navigation", path: "/dashboard/users", fileName: "app/dashboard/users/page.tsx", keywords: ["user management", "users", "employee list", "staff", "create user"], icon: "users" },
-  { title: "Create New User", category: "Navigation", path: "/dashboard/users/create", fileName: "app/dashboard/users/create/page.tsx", keywords: ["create user", "add user", "new employee", "staff entry"], icon: "user-plus" },
-  { title: "Permission Management", category: "Navigation", path: "/dashboard/permissions", fileName: "app/dashboard/permissions/page.tsx", keywords: ["permission", "permissions", "access control", "privileges", "module access"], icon: "shield-check" },
-  { title: "Roles & Role Permissions", category: "Navigation", path: "/dashboard/roles", fileName: "app/dashboard/roles/page.tsx", keywords: ["roles", "role permissions", "role-permissions", "admin role", "manager role"], icon: "lock" },
-  { title: "Create Role & Permissions", category: "Navigation", path: "/dashboard/roles/create", fileName: "app/dashboard/roles/create/page.tsx", keywords: ["create role", "add role", "new role"], icon: "lock" },
-  { title: "User Permissions Matrix", category: "Navigation", path: "/dashboard/user-permissions", fileName: "app/dashboard/user-permissions/page.tsx", keywords: ["user permissions", "user-permissions", "rights", "access matrix"], icon: "user-check" },
+  { title: "User Management", category: "Navigation", path: "/dashboard/users", permission: "users.view", keywords: ["user management", "users", "employee list", "staff", "create user"], icon: "users" },
+  { title: "Create New User", category: "Navigation", path: "/dashboard/users/create", permission: "users.view", keywords: ["create user", "add user", "new employee", "staff entry"], icon: "user-plus" },
+  { title: "Permission Management", category: "Navigation", path: "/dashboard/permissions", permission: "users.view", keywords: ["permission", "permissions", "access control", "privileges", "module access"], icon: "shield-check" },
+  { title: "Roles & Role Permissions", category: "Navigation", path: "/dashboard/roles", permission: "users.view", keywords: ["roles", "role permissions", "role-permissions", "admin role", "manager role"], icon: "lock" },
+  { title: "Create Role & Permissions", category: "Navigation", path: "/dashboard/roles/create", permission: "users.view", keywords: ["create role", "add role", "new role"], icon: "lock" },
+  { title: "User Permissions Matrix", category: "Navigation", path: "/dashboard/user-permissions", permission: "users.view", keywords: ["user permissions", "user-permissions", "rights", "access matrix"], icon: "user-check" },
 
   // Inventory
-  { title: "Inventory Dashboard", category: "Navigation", path: "/dashboard/inventory/dashboard", fileName: "app/dashboard/inventory/dashboard/page.tsx", keywords: ["inventory dashboard", "stock overview", "inventory analytics"], icon: "layout-dashboard" },
-  { title: "Inventory Products List", category: "Navigation", path: "/dashboard/inventory/products", fileName: "app/dashboard/inventory/products/page.tsx", keywords: ["inventory products", "stock items", "products list"], icon: "package" },
-  { title: "Current Stock & Warehouse", category: "Navigation", path: "/dashboard/stock", fileName: "app/dashboard/stock/page.tsx", keywords: ["stock", "current stock", "warehouse", "godown", "batch stock"], icon: "warehouse" },
-  { title: "Batch Expiry Liquidator", category: "Navigation", path: "/dashboard/stock/expiry-liquidator", fileName: "app/dashboard/stock/expiry-liquidator/page.tsx", keywords: ["expiry liquidator", "batch expiry liquidator", "clearance stock", "expiry discount", "expiry alert"], icon: "warehouse" },
-  { title: "Current Stock Inventory Report", category: "Navigation", path: "/dashboard/reports/product?view=stock", fileName: "app/dashboard/reports/product/page.tsx", keywords: ["current stock inventory", "available stock", "godown", "warehouse stock"], icon: "boxes" },
+  { title: "Inventory Dashboard", category: "Navigation", path: "/dashboard/inventory/dashboard", permission: "inventory.view", keywords: ["inventory dashboard", "stock overview", "inventory analytics"], icon: "layout-dashboard" },
+  { title: "Inventory Products List", category: "Navigation", path: "/dashboard/inventory/products", permission: "inventory.view", keywords: ["inventory products", "stock items", "products list"], icon: "package" },
+  { title: "Current Stock & Warehouse", category: "Navigation", path: "/dashboard/stock", permission: "inventory.view", keywords: ["stock", "current stock", "warehouse", "godown", "batch stock"], icon: "warehouse" },
+  { title: "Batch Expiry Liquidator", category: "Navigation", path: "/dashboard/stock/expiry-liquidator", permission: "inventory.view", keywords: ["expiry liquidator", "batch expiry liquidator", "clearance stock", "expiry discount", "expiry alert"], icon: "warehouse" },
+  { title: "Current Stock Inventory Report", category: "Navigation", path: "/dashboard/reports/product?view=stock", permission: "inventory.view", keywords: ["current stock inventory", "available stock", "godown", "warehouse stock"], icon: "boxes" },
 
   // Sales Module
-  { title: "Sales Dashboard", category: "Navigation", path: "/dashboard/sales/dashboard", fileName: "app/dashboard/sales/dashboard/page.tsx", keywords: ["sales dashboard", "sales analytics", "revenue dashboard"], icon: "layout-dashboard" },
-  { title: "Sales Invoices List", category: "Navigation", path: "/dashboard/sales/invoice", fileName: "app/dashboard/sales/invoice/page.tsx", keywords: ["invoices list", "sales invoice", "bills", "invoice history"], icon: "file-invoice" },
-  { title: "Sales Outstanding Balances", category: "Navigation", path: "/dashboard/sales/outstanding", fileName: "app/dashboard/sales/outstanding/page.tsx", keywords: ["sales outstanding", "due payment", "pending bill", "receivables"], icon: "clock" },
-  { title: "Bad Debt & Credit Risk", category: "Navigation", path: "/dashboard/credit-risk/bad-debts", fileName: "app/dashboard/credit-risk/bad-debts/page.tsx", keywords: ["bad debt", "credit risk", "risk management", "npa", "defaulters"], icon: "user-shield" },
-  { title: "Create Sale Invoice", category: "Navigation", path: "/dashboard/sales/invoice/create", fileName: "app/dashboard/sales/invoice/create/page.tsx", keywords: ["create sale invoice", "new bill", "billing entry", "billing"], icon: "plus-circle" },
-  { title: "Sales Return Entry & Report", category: "Navigation", path: "/dashboard/sales/sale-return", fileName: "app/dashboard/sales/sale-return/page.tsx", keywords: ["sales return", "sale-return", "credit note", "return entry", "refund"], icon: "undo" },
-  { title: "Receipt Entry & Collection", category: "Navigation", path: "/dashboard/sales/receipt", fileName: "app/dashboard/sales/receipt/page.tsx", keywords: ["receipt entry", "receipt", "payment collection", "voucher receipt"], icon: "receipt" },
-  { title: "Orders List & Processing", category: "Navigation", path: "/dashboard/orders", fileName: "app/dashboard/orders/page.tsx", keywords: ["orders", "sales order", "pending orders"], icon: "clipboard-list" },
+  { title: "Sales Dashboard", category: "Navigation", path: "/dashboard/sales/dashboard", permission: "sales.view", keywords: ["sales dashboard", "sales analytics", "revenue dashboard"], icon: "layout-dashboard" },
+  { title: "Sales Invoices List", category: "Navigation", path: "/dashboard/sales/invoice", permission: "sales.view", keywords: ["invoices list", "sales invoice", "bills", "invoice history"], icon: "file-invoice" },
+  { title: "Sales Outstanding Balances", category: "Navigation", path: "/dashboard/sales/outstanding", permission: "sales.view", keywords: ["sales outstanding", "due payment", "pending bill", "receivables"], icon: "clock" },
+  { title: "Bad Debt & Credit Risk", category: "Navigation", path: "/dashboard/credit-risk/bad-debts", permission: "sales.view", keywords: ["bad debt", "credit risk", "risk management", "npa", "defaulters"], icon: "user-shield" },
+  { title: "Create Sale Invoice", category: "Navigation", path: "/dashboard/sales/invoice/create", permission: "sales.view", keywords: ["create sale invoice", "new bill", "billing entry", "billing"], icon: "plus-circle" },
+  { title: "Sales Return Entry & Report", category: "Navigation", path: "/dashboard/sales/sale-return", permission: "sales.view", keywords: ["sales return", "sale-return", "credit note", "return entry", "refund"], icon: "undo" },
+  { title: "Receipt Entry & Collection", category: "Navigation", path: "/dashboard/sales/receipt", permission: "sales.view", keywords: ["receipt entry", "receipt", "payment collection", "voucher receipt"], icon: "receipt" },
+  { title: "Orders List & Processing", category: "Navigation", path: "/dashboard/orders", permission: "sales.view", keywords: ["orders", "sales order", "pending orders"], icon: "clipboard-list" },
+  { title: "Sales vs Collection", category: "Navigation", path: "/dashboard/sales-vs-collection", permission: "sales.view", keywords: ["sales vs collection", "collection comparison"], icon: "handshake" },
 
   // Purchase Module
-  { title: "Purchase Dashboard", category: "Navigation", path: "/dashboard/purchase/dashboard", fileName: "app/dashboard/purchase/dashboard/page.tsx", keywords: ["purchase dashboard", "vendor analytics", "purchase summary"], icon: "layout-dashboard" },
-  { title: "Purchase Invoices List", category: "Navigation", path: "/dashboard/purchase/invoice", fileName: "app/dashboard/purchase/invoice/page.tsx", keywords: ["purchase invoices", "vendor bills", "purchase list"], icon: "file-invoice" },
-  { title: "Purchase Outstanding", category: "Navigation", path: "/dashboard/purchase/outstanding", fileName: "app/dashboard/purchase/outstanding/page.tsx", keywords: ["purchase outstanding", "vendor dues", "payables"], icon: "clock" },
-  { title: "Create Purchase Bill", category: "Navigation", path: "/dashboard/purchase/invoice/create", fileName: "app/dashboard/purchase/invoice/create/page.tsx", keywords: ["create purchase bill", "new purchase bill", "vendor invoice entry"], icon: "plus-circle" },
-  { title: "Create Purchase Order", category: "Navigation", path: "/dashboard/purchase/orders/create", fileName: "app/dashboard/purchase/orders/create/page.tsx", keywords: ["create purchase order", "new po", "create po"], icon: "plus-circle" },
-  { title: "AI Bill Entry (Photo/PDF)", category: "Navigation", path: "/dashboard/purchase/ai-entry", fileName: "app/dashboard/purchase/ai-entry/page.tsx", keywords: ["ai bill entry", "photo bill", "pdf bill OCR", "smart bill scanner"], icon: "camera" },
-  { title: "Purchase Return Entry & Report", category: "Navigation", path: "/dashboard/purchase/purchase-return", fileName: "app/dashboard/purchase/purchase-return/page.tsx", keywords: ["purchase return", "debit note", "vendor return"], icon: "undo" },
-  { title: "Payment Entry", category: "Navigation", path: "/dashboard/purchase/payment", fileName: "app/dashboard/purchase/payment/page.tsx", keywords: ["payment entry", "vendor payment", "paid voucher"], icon: "receipt" },
-  { title: "Purchase Orders", category: "Navigation", path: "/dashboard/purchase/orders", fileName: "app/dashboard/purchase/orders/page.tsx", keywords: ["purchase orders", "po", "vendor orders"], icon: "clipboard-list" },
-  { title: "Purchase Reports Hub", category: "Navigation", path: "/dashboard/purchase/reports", fileName: "app/dashboard/purchase/reports/page.tsx", keywords: ["purchase reports", "vendor reports"], icon: "chart-bar" },
-  { title: "Purchase Returns Report", category: "Navigation", path: "/dashboard/purchase/reports/returns", fileName: "app/dashboard/purchase/reports/returns/page.tsx", keywords: ["purchase returns report", "vendor return log"], icon: "undo" },
-  { title: "Purchase Payments Report", category: "Navigation", path: "/dashboard/purchase/reports/payments", fileName: "app/dashboard/purchase/reports/payments/page.tsx", keywords: ["purchase payments report", "vendor payment log"], icon: "receipt" },
-  { title: "Purchase Orders Report", category: "Navigation", path: "/dashboard/purchase/reports/orders", fileName: "app/dashboard/purchase/reports/orders/page.tsx", keywords: ["purchase orders report", "vendor po log"], icon: "clipboard-list" },
-  { title: "Purchase Invoices Log Report", category: "Navigation", path: "/dashboard/purchase/reports/invoices", fileName: "app/dashboard/purchase/reports/invoices/page.tsx", keywords: ["purchase invoices report", "vendor bills log"], icon: "file-invoice" },
+  { title: "Purchase Dashboard", category: "Navigation", path: "/dashboard/purchase/dashboard", permission: "purchase.view", keywords: ["purchase dashboard", "vendor analytics", "purchase summary"], icon: "layout-dashboard" },
+  { title: "Purchase Invoices List", category: "Navigation", path: "/dashboard/purchase/invoice", permission: "purchase.view", keywords: ["purchase invoices", "vendor bills", "purchase list"], icon: "file-invoice" },
+  { title: "Purchase Outstanding", category: "Navigation", path: "/dashboard/purchase/outstanding", permission: "purchase.view", keywords: ["purchase outstanding", "vendor dues", "payables"], icon: "clock" },
+  { title: "Create Purchase Bill", category: "Navigation", path: "/dashboard/purchase/invoice/create", permission: "purchase.view", keywords: ["create purchase bill", "new purchase bill", "vendor invoice entry"], icon: "plus-circle" },
+  { title: "Create Purchase Order", category: "Navigation", path: "/dashboard/purchase/orders/create", permission: "purchase.view", keywords: ["create purchase order", "new po", "create po"], icon: "plus-circle" },
+  { title: "AI Bill Entry (Photo/PDF)", category: "Navigation", path: "/dashboard/purchase/ai-entry", permission: "purchase.view", keywords: ["ai bill entry", "photo bill", "pdf bill OCR", "smart bill scanner"], icon: "camera" },
+  { title: "Purchase Return Entry & Report", category: "Navigation", path: "/dashboard/purchase/purchase-return", permission: "purchase.view", keywords: ["purchase return", "debit note", "vendor return"], icon: "undo" },
+  { title: "Payment Entry", category: "Navigation", path: "/dashboard/purchase/payment", permission: "purchase.view", keywords: ["payment entry", "vendor payment", "paid voucher"], icon: "receipt" },
+  { title: "Purchase Orders", category: "Navigation", path: "/dashboard/purchase/orders", permission: "purchase.view", keywords: ["purchase orders", "po", "vendor orders"], icon: "clipboard-list" },
+  { title: "Purchase Reports Hub", category: "Navigation", path: "/dashboard/purchase/reports", permission: "purchase.view", keywords: ["purchase reports", "vendor reports"], icon: "chart-bar" },
+  { title: "Purchase vs Payment", category: "Navigation", path: "/dashboard/purchase-vs-payment", permission: "purchase.view", keywords: ["purchase vs payment", "vendor payment comparison"], icon: "handshake" },
 
   // Customers
-  { title: "Customer Master & Ledgers", category: "Navigation", path: "/dashboard/customers", fileName: "app/dashboard/customers/page.tsx", keywords: ["customers", "list customers", "customer list", "parties", "ledger", "dealers", "clients"], icon: "users" },
+  { title: "Customer Master & Ledgers", category: "Navigation", path: "/dashboard/customers", permission: "customer.view", keywords: ["customers", "list customers", "customer list", "parties", "ledger", "dealers", "clients"], icon: "users" },
 
   // Company Management
-  { title: "Create Company", category: "Navigation", path: "/dashboard/company/create", fileName: "app/dashboard/company/create/page.tsx", keywords: ["create company", "add company", "new firm"], icon: "plus-circle" },
-  { title: "List Companies", category: "Navigation", path: "/dashboard/company/list", fileName: "app/dashboard/company/list/page.tsx", keywords: ["list company", "company list", "companies"], icon: "building" },
-  { title: "Company Profile & Settings", category: "Navigation", path: "/dashboard/company-settings", fileName: "app/dashboard/company-settings/page.tsx", keywords: ["company settings", "company-settings", "profile", "gstin", "address", "settings"], icon: "building" },
+  { title: "Create Company", category: "Navigation", path: "/dashboard/company/create", permission: "company.view", keywords: ["create company", "add company", "new firm"], icon: "plus-circle" },
+  { title: "List Companies", category: "Navigation", path: "/dashboard/company/list", permission: "company.view", keywords: ["list company", "company list", "companies"], icon: "building" },
+  { title: "Company Profile & Settings", category: "Navigation", path: "/dashboard/company-settings", permission: "settings.view", keywords: ["company settings", "company-settings", "profile", "gstin", "address", "settings"], icon: "building" },
 
   // Financial Year
-  { title: "Create Financial Year", category: "Navigation", path: "/dashboard/financial-year/create", fileName: "app/dashboard/financial-year/create/page.tsx", keywords: ["create fy", "create financial year", "add fy"], icon: "calendar" },
-  { title: "List Financial Years", category: "Navigation", path: "/dashboard/financial-year/list", fileName: "app/dashboard/financial-year/list/page.tsx", keywords: ["list fy", "financial year list", "fy list", "financial-year"], icon: "calendar" },
+  { title: "Create Financial Year", category: "Navigation", path: "/dashboard/financial-year/create", permission: "financial-year.view", keywords: ["create fy", "create financial year", "add fy"], icon: "calendar" },
+  { title: "List Financial Years", category: "Navigation", path: "/dashboard/financial-year/list", permission: "financial-year.view", keywords: ["list fy", "financial year list", "fy list", "financial-year"], icon: "calendar" },
 
   // Migration & Sync
-  { title: "Sync Console (MabsolCRM Sync)", category: "Navigation", path: "/dashboard/mabsolcrmsync", fileName: "app/dashboard/mabsolcrmsync/page.tsx", keywords: ["mabsolcrmsync", "sync console", "mabsolcrm sync", "dbf import", "migration"], icon: "sync" },
-  { title: "Sync Settings & DB Configuration", category: "Navigation", path: "/dashboard/mabsolcrmsync/settings", fileName: "app/dashboard/mabsolcrmsync/settings/page.tsx", keywords: ["sync settings", "mabsolcrmsync settings", "mabsolcrm config", "db path"], icon: "sliders" },
-  { title: "MabsolCRM Config Wizard", category: "Navigation", path: "/dashboard/vfp-config", fileName: "app/dashboard/vfp-config/page.tsx", keywords: ["mabsolcrm config", "mabsolcrm wizard", "sync setup"], icon: "refresh-cw" },
+  { title: "Sync Console (MabsolCRM Sync)", category: "Navigation", path: "/dashboard/mabsolcrmsync", permission: "settings.view", keywords: ["mabsolcrmsync", "sync console", "mabsolcrm sync", "dbf import", "migration"], icon: "sync" },
+  { title: "Sync Settings & DB Configuration", category: "Navigation", path: "/dashboard/mabsolcrmsync/settings", permission: "settings.view", keywords: ["sync settings", "mabsolcrmsync settings", "mabsolcrm config", "db path"], icon: "sliders" },
 
   // Reports
-  { title: "Dashboard Reports Overview", category: "Navigation", path: "/dashboard/reports", fileName: "app/dashboard/reports/page.tsx", keywords: ["reports", "dash reports", "all reports", "analytics reports"], icon: "chart-bar" },
-  { title: "Product Master & Stock Report", category: "Navigation", path: "/dashboard/reports/product", fileName: "app/dashboard/reports/product/page.tsx", keywords: ["products report", "stock report", "inventory report", "mrp", "batches"], icon: "package" },
-  { title: "Customer Ledger Report", category: "Navigation", path: "/dashboard/reports/customer", fileName: "app/dashboard/reports/customer/page.tsx", keywords: ["customer ledger report", "party ledger", "customer report"], icon: "users" },
-  { title: "Outstanding Receivables Report", category: "Navigation", path: "/dashboard/reports/outstanding", fileName: "app/dashboard/reports/outstanding/page.tsx", keywords: ["outstanding report", "pending payment report", "due report"], icon: "clock" },
-  { title: "Sales Receipt Collection Report", category: "Navigation", path: "/dashboard/reports/sales-receipt", fileName: "app/dashboard/reports/sales-receipt/page.tsx", keywords: ["sales receipt report", "collection report", "payment report"], icon: "receipt" },
-  { title: "Sales Return Credit Note Report", category: "Navigation", path: "/dashboard/reports/sales-return", fileName: "app/dashboard/reports/sales-return/page.tsx", keywords: ["sales return report", "credit note report"], icon: "undo" },
-  { title: "Purchase Return Debit Notes Report", category: "Navigation", path: "/dashboard/reports/purchase-return", fileName: "app/dashboard/reports/purchase-return/page.tsx", keywords: ["purchase return report", "debit note report"], icon: "undo" },
-  { title: "Target vs Actual Sales Report", category: "Navigation", path: "/dashboard/reports/target-vs-actual", fileName: "app/dashboard/reports/target-vs-actual/page.tsx", keywords: ["target vs actual", "achievement report", "mr performance"], icon: "target" },
-  { title: "Batch & Expiry Detailed Report", category: "Navigation", path: "/dashboard/reports/batch", fileName: "app/dashboard/reports/batch/page.tsx", keywords: ["batch report", "batch expiry report", "batch stock", "medicine batch"], icon: "package" },
-  { title: "GST Reports Overview", category: "Navigation", path: "/dashboard/gst-reports", fileName: "app/dashboard/gst-reports/page.tsx", keywords: ["gst reports", "gst", "gstr", "tax overview"], icon: "chart-bar" },
-  { title: "GSTR-1 GST Tax Report", category: "Navigation", path: "/dashboard/gst-reports/gstr1", fileName: "app/dashboard/gst-reports/gstr1/page.tsx", keywords: ["gst", "gstr1", "gstr-1", "tax report", "b2b", "hsn", "gst-reports"], icon: "file-spreadsheet" },
-  { title: "GST Detailed Tax Report", category: "Navigation", path: "/dashboard/reports/gst", fileName: "app/dashboard/reports/gst/page.tsx", keywords: ["gst report", "tax breakdown", "gst summary"], icon: "file-spreadsheet" },
-  { title: "MR Territory Field Report", category: "Navigation", path: "/dashboard/reports/mr-territory-report", fileName: "app/dashboard/reports/mr-territory-report/page.tsx", keywords: ["mr territory report", "field visit report", "territory coverage"], icon: "map-pin" },
+  { title: "Dashboard Reports Overview", category: "Navigation", path: "/dashboard/reports", permission: "reports.view", keywords: ["reports", "dash reports", "all reports", "analytics reports"], icon: "chart-bar" },
+  { title: "Product Master & Stock Report", category: "Navigation", path: "/dashboard/reports/product", permission: "reports.view", keywords: ["products report", "stock report", "inventory report", "mrp", "batches"], icon: "package" },
+  { title: "Customer Ledger Report", category: "Navigation", path: "/dashboard/reports/customer", permission: "reports.view", keywords: ["customer ledger report", "party ledger", "customer report"], icon: "users" },
+  { title: "Outstanding Receivables Report", category: "Navigation", path: "/dashboard/reports/outstanding", permission: "reports.view", keywords: ["outstanding report", "pending payment report", "due report"], icon: "clock" },
+  { title: "Sales Receipt Collection Report", category: "Navigation", path: "/dashboard/reports/sales-receipt", permission: "reports.view", keywords: ["sales receipt report", "collection report", "payment report"], icon: "receipt" },
+  { title: "Sales Return Credit Note Report", category: "Navigation", path: "/dashboard/reports/sales-return", permission: "reports.view", keywords: ["sales return report", "credit note report"], icon: "undo" },
+  { title: "Purchase Return Debit Notes Report", category: "Navigation", path: "/dashboard/reports/purchase-return", permission: "reports.view", keywords: ["purchase return report", "debit note report"], icon: "undo" },
+  { title: "Target vs Actual Sales Report", category: "Navigation", path: "/dashboard/reports/target-vs-actual", permission: "reports.view", keywords: ["target vs actual", "achievement report", "mr performance"], icon: "target" },
+  { title: "Batch & Expiry Detailed Report", category: "Navigation", path: "/dashboard/reports/batch", permission: "reports.view", keywords: ["batch report", "batch expiry report", "batch stock", "medicine batch"], icon: "package" },
+  { title: "GST Reports Overview", category: "Navigation", path: "/dashboard/gst-reports", permission: "reports.view", keywords: ["gst reports", "gst", "gstr", "tax overview"], icon: "chart-bar" },
+  { title: "GSTR-1 GST Tax Report", category: "Navigation", path: "/dashboard/gst-reports/gstr1", permission: "reports.view", keywords: ["gst", "gstr1", "gstr-1", "tax report", "b2b", "hsn", "gst-reports"], icon: "file-spreadsheet" },
+  { title: "GST Detailed Tax Report", category: "Navigation", path: "/dashboard/reports/gst", permission: "reports.view", keywords: ["gst report", "tax breakdown", "gst summary"], icon: "file-spreadsheet" },
+  { title: "MR Territory Field Report", category: "Navigation", path: "/dashboard/reports/mr-territory-report", permission: "reports.view", keywords: ["mr territory report", "field visit report", "territory coverage"], icon: "map-pin" },
 
   // MR Field Force
-  { title: "MR Customer Assignment", category: "Navigation", path: "/dashboard/mr-customer-assignment", fileName: "app/dashboard/mr-customer-assignment/page.tsx", keywords: ["mr assignment", "assign customer", "territory mapping", "mr-customer-assignment"], icon: "user-plus" },
-  { title: "MR Reporting (DCR / Call Logs)", category: "Navigation", path: "/dashboard/mr-reporting", fileName: "app/dashboard/mr-reporting/page.tsx", keywords: ["dcr", "daily call report", "mr log", "field visit", "mr-reporting"], icon: "clipboard-list" },
-  { title: "MR Territory Management", category: "Navigation", path: "/dashboard/mr-territory", fileName: "app/dashboard/mr-territory/page.tsx", keywords: ["territory", "hq", "headquarter", "zone", "region", "mr-territory"], icon: "map-pin" },
+  { title: "MR Customer Assignment", category: "Navigation", path: "/dashboard/mr-customer-assignment", permission: "mr.view", keywords: ["mr assignment", "assign customer", "territory mapping", "mr-customer-assignment"], icon: "user-plus" },
+  { title: "MR Reporting (DCR / Call Logs)", category: "Navigation", path: "/dashboard/mr-reporting", permission: "mr.view", keywords: ["dcr", "daily call report", "mr log", "field visit", "mr-reporting"], icon: "clipboard-list" },
+  { title: "MR Territory Management", category: "Navigation", path: "/dashboard/mr-territory", permission: "mr.view", keywords: ["territory", "hq", "headquarter", "zone", "region", "mr-territory"], icon: "map-pin" },
 
   // General Settings & Profile
-  { title: "System & Company Settings", category: "Navigation", path: "/dashboard/settings", fileName: "app/dashboard/settings/page.tsx", keywords: ["settings", "general settings", "config", "system settings"], icon: "cog" },
-  { title: "AI Voice Assistant Settings 🎙️", category: "Navigation", path: "/dashboard/voice-settings", fileName: "app/dashboard/voice-settings/page.tsx", keywords: ["voice settings", "ai voice", "assistant settings", "voice assistant", "wake word", "voice-settings"], icon: "mic" },
-  { title: "User Profile & Account", category: "Navigation", path: "/dashboard/profile", fileName: "app/dashboard/profile/page.tsx", keywords: ["profile", "my profile", "account settings", "user profile"], icon: "user" },
+  { title: "System & Company Settings", category: "Navigation", path: "/dashboard/settings", permission: "settings.view", keywords: ["settings", "general settings", "config", "system settings"], icon: "cog" },
+  { title: "User Profile & Account", category: "Navigation", path: "/dashboard/profile", permission: "dashboard.view", keywords: ["profile", "my profile", "account settings", "user profile"], icon: "user" },
 ];
 
 // Dashboard KPI Cards Definitions
@@ -474,179 +421,7 @@ async function getLiveKPIMetrics(db: any) {
   }
 }
 
-function parseVoiceActionCommand(query: string): { command: string; index?: number; targetTitle?: string; payload?: any } | null {
-  if (!query) return null;
-  const q = query.toLowerCase().trim();
 
-  // Spoken Ordinal Index Commands
-  if (
-    q === "1" ||
-    q === "open 1" ||
-    q === "open item 1" ||
-    q === "open number 1" ||
-    q.includes("pehla kholo") ||
-    q.includes("first result") ||
-    q.includes("pehla result") ||
-    q === "pehla" ||
-    q === "first"
-  ) {
-    return { command: "OPEN_RESULT_INDEX", index: 0 };
-  }
-
-  if (
-    q === "2" ||
-    q === "open 2" ||
-    q === "open item 2" ||
-    q === "open number 2" ||
-    q.includes("dusra kholo") ||
-    q.includes("second result") ||
-    q.includes("dusra result") ||
-    q === "dusra" ||
-    q === "second"
-  ) {
-    return { command: "OPEN_RESULT_INDEX", index: 1 };
-  }
-
-  if (
-    q === "3" ||
-    q === "open 3" ||
-    q === "open item 3" ||
-    q === "open number 3" ||
-    q.includes("teesra kholo") ||
-    q.includes("third result") ||
-    q.includes("teesra result") ||
-    q === "teesra" ||
-    q === "third"
-  ) {
-    return { command: "OPEN_RESULT_INDEX", index: 2 };
-  }
-
-  if (
-    q === "4" ||
-    q === "open 4" ||
-    q === "open item 4" ||
-    q === "open number 4" ||
-    q.includes("chautha kholo") ||
-    q.includes("fourth result") ||
-    q.includes("chautha result") ||
-    q === "chautha" ||
-    q === "fourth"
-  ) {
-    return { command: "OPEN_RESULT_INDEX", index: 3 };
-  }
-
-  if (
-    q === "5" ||
-    q === "open 5" ||
-    q === "open item 5" ||
-    q === "open number 5" ||
-    q.includes("paanchwa kholo") ||
-    q.includes("fifth result") ||
-    q.includes("paanchwa result") ||
-    q === "paanchwa" ||
-    q === "fifth"
-  ) {
-    return { command: "OPEN_RESULT_INDEX", index: 4 };
-  }
-
-  // Spoken Direct Title Open ("open Paracetamol", "kholo Sharma Medical")
-  if (q.startsWith("open ") || q.startsWith("kholo ")) {
-    const targetTitle = q.replace(/^open\s+|^kholo\s+/, "").trim();
-    if (targetTitle.length > 1) {
-      return { command: "OPEN_RESULT_TITLE", targetTitle };
-    }
-  }
-
-  // Excel Export action
-  if (q.includes("export") || q.includes("download excel") || q.includes("excel export") || q.includes("report download")) {
-    return { command: "EXPORT_EXCEL" };
-  }
-
-  // Create Bill / Invoice action
-  if (q.includes("create bill") || q.includes("new bill") || q.includes("bill banao") || q.includes("invoice banao") || q.includes("create invoice")) {
-    return { command: "NAVIGATE_CREATE_BILL" };
-  }
-
-  // Toggle In-Stock filter
-  if (q.includes("in stock only") || q.includes("available stock only") || q.includes("stock me jo hai")) {
-    return { command: "TOGGLE_IN_STOCK" };
-  }
-
-  // Toggle Near Expiry filter
-  if (q.includes("near expiry") || q.includes("expiring soon") || q.includes("expire hone wali")) {
-    return { command: "TOGGLE_NEAR_EXPIRY" };
-  }
-
-  return null;
-}
-
-function generateVocalSummary(query: string, results: any, actionCmd: any): string | null {
-  if (!query) return null;
-  const q = query.toLowerCase();
-
-  if (actionCmd) {
-    if (actionCmd.command === "OPEN_RESULT_INDEX") {
-      return `Result number ${actionCmd.index + 1} open kar raha hu.`;
-    }
-    if (actionCmd.command === "OPEN_RESULT_TITLE") {
-      return `${actionCmd.targetTitle} open kar raha hu.`;
-    }
-    if (actionCmd.command === "EXPORT_EXCEL") {
-      return "Report data Excel me export kar raha hu.";
-    }
-    if (actionCmd.command === "NAVIGATE_CREATE_BILL") {
-      return "Naya Sales Invoice creation page open kar raha hu.";
-    }
-    if (actionCmd.command === "TOGGLE_IN_STOCK") {
-      return "In-stock items filter apply kar diya hai.";
-    }
-    if (actionCmd.command === "TOGGLE_NEAR_EXPIRY") {
-      return "Near expiry batches filter apply kar diya hai.";
-    }
-  }
-
-  // KPI Card match
-  const navResults = results.navigation || [];
-  const kpiMatch = navResults.find((r: any) => r.type === "kpi");
-  if (kpiMatch) {
-    const metricTitle = kpiMatch.raw?.kpi?.title || kpiMatch.details?.metricName || kpiMatch.title;
-    const val = kpiMatch.details?.liveValue || "";
-    return `${metricTitle} ${val} hai. Details dekhne ke liye click karein.`;
-  }
-
-  // Intent: Top Dues / Outstanding
-  if (q.includes("who owes") || q.includes("highest outstanding") || q.includes("top outstanding") || q.includes("sabse jyada baaki") || q.includes("jyada baaki")) {
-    const topCust = (results.customers || [])[0];
-    if (topCust) {
-      return `Sabse jyada outstanding ${topCust.title} ka hai, total balance ${topCust.details.outstandingBalance} hai.`;
-    }
-  }
-
-  // Products result
-  if (results.products && results.products.length > 0) {
-    const topProd = results.products[0];
-    return `${results.products.length} products mil gaye hain. Sabse pehla result ${topProd.title} hai, available stock ${topProd.details.currentStock} units hai.`;
-  }
-
-  // Customers result
-  if (results.customers && results.customers.length > 0) {
-    const topCust = results.customers[0];
-    return `${results.customers.length} customer parties mil gayi hain. Top match ${topCust.title} hai.`;
-  }
-
-  // Invoices / Vouchers result
-  if (results.vouchers && results.vouchers.length > 0) {
-    const topV = results.vouchers[0];
-    return `${results.vouchers.length} vouchers mil gaye hain. Top result ${topV.title} amount ${topV.details.netAmount || topV.details.debitAmount || ""} hai.`;
-  }
-
-  // Navigation page match
-  if (navResults.length > 0) {
-    return `${navResults[0].title} page open kar raha hu.`;
-  }
-
-  return `${query} ke liye koi matching record nahi mila.`;
-}
 
 export async function GET(req: NextRequest) {
   try {
@@ -679,7 +454,7 @@ export async function GET(req: NextRequest) {
         (topPro || []).forEach((p: any) => {
           dynamicTrending.push({
             label: p.PRODUCT || p.BILLNAME || `Product ${p.CODE}`,
-            category: "Database Product 📦",
+            category: "Product",
             query: p.PRODUCT || String(p.CODE),
             actionUrl: `/dashboard/reports/product?search=${encodeURIComponent(p.PRODUCT || p.CODE || "")}`,
             type: "product",
@@ -690,7 +465,7 @@ export async function GET(req: NextRequest) {
         (topCust || []).forEach((c: any) => {
           dynamicTrending.push({
             label: c.PARNAM || c.MAILNAM || `Customer ${c.CODEP}`,
-            category: c.CITY ? `Party (${c.CITY}) 👥` : "Customer Party 👥",
+            category: c.CITY ? `Customer (${c.CITY})` : "Customer",
             query: c.PARNAM || String(c.CODEP),
             actionUrl: `/dashboard/reports/customer?search=${encodeURIComponent(c.PARNAM || c.CODEP || "")}`,
             type: "customer",
@@ -699,20 +474,17 @@ export async function GET(req: NextRequest) {
 
         // Add core report pages
         dynamicTrending.push(
-          { label: "GSTR-1 GST Report", category: "Tax Report 📄", query: "GSTR-1", actionUrl: "/dashboard/gst-reports/gstr1", type: "navigation" },
-          { label: "Current Stock Inventory", category: "Stock Report 📦", query: "Current Stock", actionUrl: "/dashboard/reports/product?view=stock", type: "navigation" },
-          { label: "Outstanding Receivables", category: "Finance Report 💰", query: "Outstanding", actionUrl: "/dashboard/reports/outstanding", type: "navigation" },
-          { label: "Target vs Actual Sales", category: "MR Performance 🎯", query: "Target", actionUrl: "/dashboard/reports/target-vs-actual", type: "navigation" }
+          { label: "GSTR-1 GST Report", category: "Tax Report", query: "GSTR-1", actionUrl: "/dashboard/gst-reports/gstr1", type: "navigation" },
+          { label: "Current Stock Inventory", category: "Stock Report", query: "Current Stock", actionUrl: "/dashboard/reports/product?view=stock", type: "navigation" },
+          { label: "Outstanding Receivables", category: "Finance Report", query: "Outstanding", actionUrl: "/dashboard/reports/outstanding", type: "navigation" },
+          { label: "Target vs Actual Sales", category: "MR Performance", query: "Target", actionUrl: "/dashboard/reports/target-vs-actual", type: "navigation" }
         );
-
-        const assistantNameParam = searchParams.get("assistantName") || searchParams.get("assistant") || "AI Assistant";
 
         return NextResponse.json({
           success: true,
           query: "",
           didYouMean: null,
           totalResults: 0,
-          vocalSummary: `Welcome to ${assistantNameParam} Voice Search. Speak or type to search products, customers, stock, and vouchers.`,
           trending: dynamicTrending,
           results: {
             products: [],
@@ -733,20 +505,14 @@ export async function GET(req: NextRequest) {
     const highBalanceOnly = searchParams.get("highBalance") === "true";
     const sortBy = searchParams.get("sortBy") || "relevance";
 
-    const assistantName = searchParams.get("assistantName") || searchParams.get("assistant") || "AI Assistant";
-
-    // Spoken query cleaning & Typo check ("Did You Mean?")
-    const cleanedQuery = cleanSpokenQuery(rawQuery, assistantName);
-    const lowerQuery = cleanedQuery.toLowerCase();
+    // Typo check ("Did You Mean?")
+    const lowerQuery = rawQuery.toLowerCase();
     const suggestedQuery = TYPO_MAP[lowerQuery] || null;
-    const query = suggestedQuery || cleanedQuery;
+    const query = suggestedQuery || rawQuery;
 
     const regex = new RegExp(escapeRegex(query), "i");
     const isNumeric = !isNaN(Number(query));
     const queryNumber = isNumeric ? Number(query) : null;
-
-    // Detect Voice Action Command
-    const actionCmd = parseVoiceActionCommand(query);
 
     // Run parallel searches across database
     const [productsRes, customersRes, vouchersRes, usersRes, navRes] = await Promise.all([
@@ -1350,29 +1116,56 @@ export async function GET(req: NextRequest) {
           }
 
           // 2. Search Page & Navigation Items
+          const qLower = query.toLowerCase().trim();
+          const qTokens = qLower.split(/\s+/).filter(Boolean);
+
           const matches = APP_PAGES.filter((page) => {
-            const inTitle = page.title.toLowerCase().replace(/[\s\-_.]/g, "").includes(cleanQuery);
-            const inPath = page.path.toLowerCase().replace(/[\s\-_.]/g, "").includes(cleanQuery);
-            const inFileName = (page.fileName || "").toLowerCase().replace(/[\s\-_.]/g, "").includes(cleanQuery);
-            const inKeywords = page.keywords.some((k) => k.toLowerCase().replace(/[\s\-_.]/g, "").includes(cleanQuery));
-            return inTitle || inPath || inFileName || inKeywords;
+            const pTitle = page.title.toLowerCase();
+            const pPath = page.path.toLowerCase();
+            const pCategory = (page.category || "").toLowerCase();
+            const pFileName = ((page as any).fileName || "").toLowerCase();
+            const pKeywords = page.keywords.map((k) => k.toLowerCase());
+
+            // Direct substring match
+            if (pTitle.includes(qLower) || pPath.includes(qLower) || pCategory.includes(qLower) || (pFileName && pFileName.includes(qLower))) return true;
+            if (pKeywords.some((k) => k.includes(qLower))) return true;
+
+            // Clean match without punctuation/spaces
+            if (pTitle.replace(/[\s\-_.]/g, "").includes(cleanQuery)) return true;
+            if (pPath.replace(/[\s\-_.]/g, "").includes(cleanQuery)) return true;
+            if (pFileName && pFileName.replace(/[\s\-_.]/g, "").includes(cleanQuery)) return true;
+            if (pKeywords.some((k) => k.replace(/[\s\-_.]/g, "").includes(cleanQuery))) return true;
+
+            // Token matching: all tokens match something in title, path, category, or keywords
+            if (qTokens.length > 1) {
+              const allTokensMatch = qTokens.every((token) =>
+                pTitle.includes(token) ||
+                pPath.includes(token) ||
+                pCategory.includes(token) ||
+                pKeywords.some((k) => k.includes(token))
+              );
+              if (allTokensMatch) return true;
+            }
+
+            return false;
           });
 
           const navResults = matches.map((p, idx) => ({
             id: `nav_${idx}_${p.path}`,
             type: "navigation",
-            category: p.category || "Navigation & Pages",
+            category: p.category || "Navigation",
             title: p.title,
-            subtitle: `Route: ${p.path} • File: ${p.fileName || "Page Link"}`,
+            subtitle: p.path,
+            permission: p.permission || null,
             details: {
               title: p.title,
               route: p.path,
-              fileName: p.fileName || "N/A",
-              keywords: p.keywords.join(", "),
+              category: p.category || "Navigation",
+              permission: p.permission || null,
             },
             badges: [
-              { label: "Page Link", color: "cyan" },
-              p.fileName ? { label: p.fileName.split("/").pop() || p.fileName, color: "indigo" } : null,
+              { label: "Page", color: "indigo" },
+              p.category ? { label: p.category, color: "slate" } : null,
             ].filter(Boolean),
             actionUrl: p.path,
             raw: p,
@@ -1390,22 +1183,12 @@ export async function GET(req: NextRequest) {
       usersRes.length +
       navRes.length;
 
-    const vocalSummary = generateVocalSummary(query, {
-      products: productsRes,
-      customers: customersRes,
-      vouchers: vouchersRes,
-      users: usersRes,
-      navigation: navRes,
-    }, actionCmd);
-
     return NextResponse.json({
       success: true,
       query: rawQuery,
       didYouMean: suggestedQuery ? suggestedQuery : null,
       category,
       totalResults: totalCount,
-      vocalSummary,
-      actionCommand: actionCmd,
       results: {
         products: productsRes,
         customers: customersRes,

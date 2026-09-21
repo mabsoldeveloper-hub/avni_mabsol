@@ -96,7 +96,6 @@ export async function GET(req: NextRequest) {
                     0
                 );
 
-                data.criticalOverdueRows = undefined;
                 data.criticalOverdueAmount = filteredRows.reduce((sum: number, r: any) => {
                     const overdueDays = Number(r.DUEDAYS || 0);
                     return overdueDays > 90 ? sum + Number(r.FINAL || 0) : sum;

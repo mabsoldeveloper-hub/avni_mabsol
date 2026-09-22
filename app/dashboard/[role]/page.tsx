@@ -1,9 +1,9 @@
+import DashboardContent from "@/components/dashboard/DashboardContent";
 import ProtectedPage from "@/components/ProtectedPage";
 import jwt from "jsonwebtoken";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 
-import DashboardContent from "@/components/DashboardContent";
 
 export default async function RoleDashboardPage() {
   const cookieStore = await cookies();
@@ -21,7 +21,7 @@ export default async function RoleDashboardPage() {
 
   return (
     <ProtectedPage permission="dashboard.view">
-      <DashboardContent />
+      <DashboardContent/>
     </ProtectedPage>
   );
 }

@@ -7,6 +7,9 @@ const otpStep = document.getElementById("otpStep");
 // DOM Elements - Forms & Inputs
 const loginForm = document.getElementById("loginForm");
 const cloudUrlInput = document.getElementById("cloudUrlInput");
+const btnSetCloudMbh = document.getElementById("btnSetCloudMbh");
+const btnSetCloudPhcrm = document.getElementById("btnSetCloudPhcrm");
+const btnSetCloudLocal = document.getElementById("btnSetCloudLocal");
 const emailInput = document.getElementById("emailInput");
 const passwordInput = document.getElementById("passwordInput");
 const loginBtn = document.getElementById("loginBtn");
@@ -79,6 +82,18 @@ document.addEventListener("DOMContentLoaded", async () => {
   setupEventListeners();
   setupIpcListeners();
 
+  // 1. Preload config immediately so cloudUrlInput and emailInput are populated
+  try {
+    const cfg = await window.electronAPI.getConfig();
+    if (cfg) {
+      if (cfg.cloudUrl) cloudUrlInput.value = cfg.cloudUrl;
+      if (cfg.userEmail && !emailInput.value) emailInput.value = cfg.userEmail;
+    }
+  } catch (err) {
+    console.warn("Could not pre-load config:", err);
+  }
+
+  // 2. Check current session
   try {
     const sessionRes = await window.electronAPI.checkSession();
     if (sessionRes && sessionRes.authenticated && sessionRes.session) {
@@ -181,6 +196,26 @@ function setupEventListeners() {
   // Disable right-click inspect context menu
   document.addEventListener("contextmenu", (e) => e.preventDefault());
 
+  // Cloud URL quick toggles
+  if (btnSetCloudMbh) {
+    btnSetCloudMbh.addEventListener("click", () => {
+      cloudUrlInput.value = "https://mbh.crm.mabsolinfotech.cloud";
+      cloudUrlInput.focus();
+    });
+  }
+  if (btnSetCloudPhcrm) {
+    btnSetCloudPhcrm.addEventListener("click", () => {
+      cloudUrlInput.value = "https://phcrm.mabsolinfotech.cloud";
+      cloudUrlInput.focus();
+    });
+  }
+  if (btnSetCloudLocal) {
+    btnSetCloudLocal.addEventListener("click", () => {
+      cloudUrlInput.value = "http://localhost:3000";
+      cloudUrlInput.focus();
+    });
+  }
+
   // Login Form Submit (Step 1)
   loginForm.addEventListener("submit", async (e) => {
     e.preventDefault();
@@ -197,8 +232,7 @@ function setupEventListeners() {
 
       if (res.success && res.directLogin) {
         currentAuthEmail = res.email || email;
-        currentSession = res.session;
-        showSyncDashboard(res.user);
+        showDashboard(res.session);
         return;
       }
 

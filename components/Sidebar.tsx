@@ -11,6 +11,8 @@ import {
   MenuItemConfig,
   SubMenuItemConfig,
   renderMenuIcon,
+  getRoleBasedHref,
+  isPathActive,
 } from "@/lib/defaultMenuData";
 import Link from "next/link";
 import {
@@ -207,26 +209,6 @@ export default function Sidebar({ collapsed, setCollapsed, mobile }: SidebarProp
     };
   }, [loadMenuAdjustments]);
 
-  // Automatically expand group containing the active pathname
-  useEffect(() => {
-    menuItems.forEach((group) => {
-      if (group.isGroup && group.subItems) {
-        const hasActiveChild = group.subItems.some((sub) => {
-          if (!sub.href) return false;
-          if (sub.href === "/dashboard") return pathname === "/dashboard";
-          return (
-            pathname === sub.href ||
-            pathname.startsWith(sub.href + "/") ||
-            (sub.href.endsWith("/") && pathname.startsWith(sub.href))
-          );
-        });
-        if (hasActiveChild) {
-          setOpenGroups((prev) => (prev[group.id] ? prev : { ...prev, [group.id]: true }));
-        }
-      }
-    });
-  }, [pathname, menuItems]);
-
   // Fetch company settings & current user profile
   useEffect(() => {
     fetch("/api/company-settings")
@@ -245,6 +227,38 @@ export default function Sidebar({ collapsed, setCollapsed, mobile }: SidebarProp
   const { user: ctxUser } = useUser();
   const currentUser = ctxUser || user;
   const isSuperAdmin = checkIsSuperAdmin(currentUser);
+
+  // Determine active role dynamically from URL or logged-in user
+  const activeRole = useMemo(() => {
+    const segments = pathname ? pathname.split("/").filter(Boolean) : [];
+    if (segments[0] === "dashboard" && segments[1]) {
+      const candidate = segments[1].toLowerCase().trim();
+      return candidate.replace(/[\s_]+/g, "-");
+    }
+
+    if (isSuperAdmin) return "super-admin";
+
+    const userRole = (currentUser as any)?.role || (currentUser as any)?.roleType;
+    if (typeof userRole === "string" && userRole.trim()) {
+      return userRole.toLowerCase().trim().replace(/[\s_]+/g, "-");
+    }
+
+    return "admin";
+  }, [pathname, isSuperAdmin, currentUser]);
+
+  // Automatically expand group containing the active pathname
+  useEffect(() => {
+    menuItems.forEach((group) => {
+      if (group.isGroup && group.subItems) {
+        const hasActiveChild = group.subItems.some((sub) => {
+          return isPathActive(sub.href, pathname, activeRole);
+        });
+        if (hasActiveChild) {
+          setOpenGroups((prev) => (prev[group.id] ? prev : { ...prev, [group.id]: true }));
+        }
+      }
+    });
+  }, [pathname, menuItems, activeRole]);
 
   const toggleGroup = useCallback((groupId: string) => {
     setOpenGroups((prev) => ({
@@ -555,15 +569,9 @@ export default function Sidebar({ collapsed, setCollapsed, mobile }: SidebarProp
                         const color = item.color || "indigo";
 
                         if (item.isGroup && item.subItems && item.subItems.length > 0) {
-                          const isGroupActive = item.subItems.some((sub) => {
-                            if (!sub.href) return false;
-                            if (sub.href === "/dashboard") return pathname === "/dashboard";
-                            return (
-                              pathname === sub.href ||
-                              pathname.startsWith(sub.href + "/") ||
-                              (sub.href.endsWith("/") && pathname.startsWith(sub.href))
-                            );
-                          });
+                          const isGroupActive = item.subItems.some((sub) =>
+                            isPathActive(sub.href, pathname, activeRole)
+                          );
 
                           return (
                             <SidebarGroup
@@ -579,6 +587,7 @@ export default function Sidebar({ collapsed, setCollapsed, mobile }: SidebarProp
                               pathname={pathname}
                               currentVisuals={currentVisuals}
                               can={can}
+                              role={activeRole}
                               onToggle={() => toggleGroup(item.id)}
                               onNavigate={handleMobileNavigate}
                             />
@@ -586,16 +595,13 @@ export default function Sidebar({ collapsed, setCollapsed, mobile }: SidebarProp
                         }
 
                         // Single link item
-                        const href = item.href || "#";
-                        const isSingleActive =
-                          href === "/dashboard"
-                            ? pathname === "/dashboard"
-                            : pathname === href || pathname.startsWith(href + "/");
+                        const resolvedHref = getRoleBasedHref(item.href, activeRole);
+                        const isSingleActive = isPathActive(item.href, pathname, activeRole);
 
                         return (
                           <li key={item.id}>
                             <SidebarNavLink
-                              href={href}
+                              href={resolvedHref}
                               icon={renderMenuIcon(item.icon)}
                               label={item.label}
                               active={isSingleActive}

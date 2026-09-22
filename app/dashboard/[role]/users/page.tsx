@@ -18,15 +18,6 @@ type UsersApiResponse = {
 
 async function getUsers() {
   try {
-    /*
-     * IMPORTANT:
-     * This page is a Server Component.
-     * When the server calls /api/users internally, the browser's
-     * authentication cookie is NOT automatically forwarded.
-     *
-     * /api/users uses getCurrentUser(), which reads the "token" cookie.
-     * Therefore we explicitly forward the token cookie here.
-     */
     const cookieStore = await cookies();
     const token = cookieStore.get("token")?.value || "";
 
@@ -69,6 +60,14 @@ async function getUsers() {
 export default async function UsersPage() {
   const { users, hierarchy } = await getUsers();
 
+  // Current logged-in user's role
+  const currentRole = hierarchy?.currentRole;
+
+  // Dynamic users/create URL
+  const createUserHref = currentRole
+    ? `/dashboard/${currentRole}/users/create`
+    : "/dashboard";
+
   return (
     <ProtectedPage permission="users.view">
       <div
@@ -87,7 +86,9 @@ export default async function UsersPage() {
                   <span className="fw-semibold">
                     {hierarchy.currentRole || "User"}
                   </span>
+
                   {" • "}
+
                   {hierarchy.isAdmin
                     ? "All users"
                     : `${hierarchy.totalAccessibleUsers || 0} users in your hierarchy`}
@@ -97,7 +98,7 @@ export default async function UsersPage() {
 
             <PermissionButton permission="users.create">
               <Link
-                href="/dashboard/users/create"
+                href={createUserHref}
                 className="inline-flex items-center gap-1.5 px-5 py-2 rounded-full text-xs font-bold text-white bg-[#343872] hover:bg-[#282b57] transition-all shadow-xs cursor-pointer"
               >
                 + Create User

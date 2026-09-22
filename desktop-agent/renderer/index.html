@@ -35,7 +35,14 @@
 
           <form id="loginForm">
             <div class="form-group">
-              <label for="cloudUrlInput">Cloud Server URL</label>
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                <label for="cloudUrlInput" style="margin-bottom: 0;">Cloud Server URL</label>
+                <div style="display: flex; gap: 4px; flex-wrap: wrap;">
+                  <button type="button" id="btnSetCloudPhcrm" class="btn-preset" title="Switch to PHCRM Cloud">PHCRM Cloud</button>
+                  <button type="button" id="btnSetCloudMbh" class="btn-preset" title="Switch to MBH Cloud">MBH Cloud</button>
+                  <button type="button" id="btnSetCloudLocal" class="btn-preset" title="Switch to Local Dev">Local Dev</button>
+                </div>
+              </div>
               <input type="url" id="cloudUrlInput" value="https://phcrm.mabsolinfotech.cloud" required placeholder="https://phcrm.mabsolinfotech.cloud">
             </div>
 
@@ -52,7 +59,7 @@
             <div id="loginError" class="error-msg hidden"></div>
 
             <button type="submit" id="loginBtn" class="btn-primary">
-              <span class="btn-text">Sign In & Send OTP</span>
+              <span class="btn-text">Sign In</span>
               <span class="spinner hidden"></span>
             </button>
           </form>

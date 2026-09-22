@@ -25,11 +25,59 @@ const ENGINE_DIR = app.isPackaged
   : path.join(__dirname, "engine");
 
 // ---------------------------------------------------------------------------
-// Helpers: Config & Storage
+// Helpers: Config & Storage & Environment
 // ---------------------------------------------------------------------------
+function loadProjectEnv() {
+  const envPaths = [
+    path.join(__dirname, "..", ".env"),
+    path.join(__dirname, ".env"),
+    path.join(process.cwd(), ".env"),
+    path.join(USER_DATA_DIR, ".env")
+  ];
+  for (const p of envPaths) {
+    if (fs.existsSync(p)) {
+      try {
+        const content = fs.readFileSync(p, "utf8");
+        const lines = content.split("\n");
+        const envObj = {};
+        for (const line of lines) {
+          const trimmed = line.trim();
+          if (!trimmed || trimmed.startsWith("#")) continue;
+          const eqIdx = trimmed.indexOf("=");
+          if (eqIdx > 0) {
+            const key = trimmed.substring(0, eqIdx).trim();
+            let val = trimmed.substring(eqIdx + 1).trim();
+            val = val.replace(/^["']|["']$/g, "");
+            envObj[key] = val;
+          }
+        }
+        return envObj;
+      } catch {}
+    }
+  }
+  return {};
+}
+
+function getDefaultCloudUrl() {
+  const env = loadProjectEnv();
+  if (env.CLOUD_URL) return env.CLOUD_URL.replace(/\/+$/, "");
+  if (env.NEXT_PUBLIC_APP_URL) return env.NEXT_PUBLIC_APP_URL.replace(/\/+$/, "");
+  if (!app.isPackaged) return "http://localhost:3000";
+  return "https://phcrm.mabsolinfotech.cloud";
+}
+
+function resolveCloudUrl(candidateUrl) {
+  let url = (candidateUrl || "").trim().replace(/\/+$/, "");
+  if (!url) {
+    return getDefaultCloudUrl();
+  }
+  return url;
+}
+
 function loadConfig() {
+  const defaultUrl = getDefaultCloudUrl();
   const defaults = {
-    cloudUrl: "https://phcrm.mabsolinfotech.cloud",
+    cloudUrl: defaultUrl,
     companyName: "",
     companyCode: "E10",
     sourceDir: "",
@@ -41,7 +89,9 @@ function loadConfig() {
   if (!fs.existsSync(CONFIG_PATH)) return defaults;
   try {
     const raw = fs.readFileSync(CONFIG_PATH, "utf8");
-    return { ...defaults, ...JSON.parse(raw) };
+    const parsed = JSON.parse(raw);
+    parsed.cloudUrl = resolveCloudUrl(parsed.cloudUrl);
+    return { ...defaults, ...parsed };
   } catch {
     return defaults;
   }
@@ -49,6 +99,9 @@ function loadConfig() {
 
 function saveConfig(cfg) {
   try {
+    if (cfg && cfg.cloudUrl) {
+      cfg.cloudUrl = resolveCloudUrl(cfg.cloudUrl);
+    }
     fs.mkdirSync(USER_DATA_DIR, { recursive: true });
     fs.writeFileSync(CONFIG_PATH, JSON.stringify(cfg, null, 2), "utf8");
     return { success: true };
@@ -60,7 +113,11 @@ function saveConfig(cfg) {
 function loadSession() {
   if (!fs.existsSync(SESSION_PATH)) return null;
   try {
-    return JSON.parse(fs.readFileSync(SESSION_PATH, "utf8"));
+    const session = JSON.parse(fs.readFileSync(SESSION_PATH, "utf8"));
+    if (session) {
+      session.cloudUrl = resolveCloudUrl(session.cloudUrl);
+    }
+    return session;
   } catch {
     return null;
   }
@@ -252,10 +309,10 @@ app.on("window-all-closed", () => {
 // IPC Handlers: Authentication
 // ---------------------------------------------------------------------------
 ipcMain.handle("auth:login", async (_event, { cloudUrl, email, password }) => {
+  const cleanUrl = resolveCloudUrl(cloudUrl);
   try {
-    emitLog("info", `Authenticating with cloud server (${cloudUrl})...`);
-    const cleanUrl = cloudUrl.replace(/\/+$/, "");
-    const res = await axios.post(`${cleanUrl}/api/auth/login`, { email, password }, { timeout: 15000 });
+    emitLog("info", `Authenticating with cloud server (${cleanUrl})...`);
+    const res = await axios.post(`${cleanUrl}/api/auth/login`, { email, password, isDesktopAgent: true }, { timeout: 15000 });
 
     if (res.data && res.data.success) {
       if (res.data.directLogin || res.data.token) {
@@ -303,8 +360,9 @@ ipcMain.handle("auth:login", async (_event, { cloudUrl, email, password }) => {
     }
   } catch (err) {
     const errorMsg = err.response?.data?.message || err.message;
-    emitLog("error", `Login network error: ${errorMsg}`);
-    return { success: false, message: errorMsg };
+    const isSuspended = err.response?.status === 403 || err.response?.data?.suspended;
+    emitLog("error", `Login error (${err.response?.status || "network"}): ${errorMsg}`);
+    return { success: false, message: errorMsg, accountSuspended: isSuspended };
   }
 });
 
@@ -324,7 +382,7 @@ function isTokenExpired(token) {
 ipcMain.handle("auth:verify-otp", async (_event, { cloudUrl, email, otp }) => {
   try {
     emitLog("info", "Verifying 6-digit OTP code...");
-    const cleanUrl = cloudUrl.replace(/\/+$/, "");
+    const cleanUrl = resolveCloudUrl(cloudUrl);
     const res = await axios.post(`${cleanUrl}/api/auth/verify-otp`, { email, otp, isDesktopAgent: true }, { timeout: 15000 });
 
     if (res.data && res.data.success) {
@@ -386,7 +444,7 @@ ipcMain.handle("auth:check-session", async () => {
   }
 
   // Live verify account status with cloud server
-  const cloudUrl = (session.cloudUrl || "https://phcrm.mabsolinfotech.cloud").replace(/\/+$/, "");
+  const cloudUrl = resolveCloudUrl(session.cloudUrl);
   try {
     const res = await axios.get(`${cloudUrl}/api/auth/me`, {
       headers: {
@@ -435,7 +493,7 @@ ipcMain.handle("auth:logout", async () => {
 ipcMain.handle("auth:send-edit-otp", async (_event, data) => {
   const session = loadSession();
   const config = loadConfig();
-  const cloudUrl = (data?.cloudUrl || session?.cloudUrl || config.cloudUrl || "https://phcrm.mabsolinfotech.cloud").replace(/\/+$/, "");
+  const cloudUrl = resolveCloudUrl(data?.cloudUrl || session?.cloudUrl || config.cloudUrl);
   const email = (data?.email || session?.email || session?.user?.email || config.userEmail || "").trim();
   const token = session?.token || "";
 
@@ -481,7 +539,7 @@ ipcMain.handle("auth:verify-edit-otp", async (_event, data) => {
   const session = loadSession();
   const config = loadConfig();
   const otp = String(data?.otp || "").trim();
-  const cloudUrl = (data?.cloudUrl || session?.cloudUrl || config.cloudUrl || "https://phcrm.mabsolinfotech.cloud").replace(/\/+$/, "");
+  const cloudUrl = resolveCloudUrl(data?.cloudUrl || session?.cloudUrl || config.cloudUrl);
   const email = (data?.email || session?.email || session?.user?.email || config.userEmail || "").trim();
   const token = session?.token || "";
 
@@ -615,7 +673,7 @@ async function executeDecryptionAndSync(triggerReason = "manual") {
     return { success: false, message: msg };
   }
 
-  const cloudUrl = (session?.cloudUrl || config.cloudUrl || "https://phcrm.mabsolinfotech.cloud").replace(/\/+$/, "");
+  const cloudUrl = resolveCloudUrl(session?.cloudUrl || config.cloudUrl);
   const authToken = session?.token || "";
   const userEmail = session?.email || config.userEmail || "";
   const licenseKey = config.licenseKey || "";
@@ -965,7 +1023,7 @@ function startNetworkWatcher() {
   heartbeatTimer = setInterval(async () => {
     const config = loadConfig();
     const session = loadSession();
-    const cloudUrl = (session?.cloudUrl || config.cloudUrl || "https://phcrm.mabsolinfotech.cloud").replace(/\/+$/, "");
+    const cloudUrl = resolveCloudUrl(session?.cloudUrl || config.cloudUrl);
 
     const online = await checkConnectivity(cloudUrl);
     const wasOffline = !isOnlineState;

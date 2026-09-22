@@ -134,7 +134,7 @@ export default function AnalyticsCards({ analytics }: { analytics: any }) {
                         style={{ background: `radial-gradient(circle, ${card.color}66, transparent 70%)` }}
                     />
 
-                    {/* razor-thin top edge catch-light */}
+                    {/* razor-thin top edge */}
                     <div className="pointer-events-none absolute inset-x-3 top-0 h-px bg-gradient-to-r from-transparent via-white/90 to-transparent" />
 
                     <div className="relative flex items-start justify-between gap-2">

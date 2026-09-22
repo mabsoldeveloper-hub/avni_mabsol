@@ -196,6 +196,7 @@ export default function EditCompanyPage() {
       if (data.success || data._id) {
         showToast("Company updated successfully", "success");
         await refreshCompanies();
+        await loadCompany();
         router.push("/dashboard/company/list");
       } else {
         showToast(data.error || "Update Failed", "error");

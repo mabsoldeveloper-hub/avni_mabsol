@@ -36,5 +36,10 @@ contextBridge.exposeInMainWorld("electronAPI", {
     const handler = (_event, data) => callback(data);
     ipcRenderer.on("network:status-changed", handler);
     return () => ipcRenderer.removeListener("network:status-changed", handler);
+  },
+  onSessionRevoked: (callback) => {
+    const handler = (_event, data) => callback(data);
+    ipcRenderer.on("auth:session-revoked", handler);
+    return () => ipcRenderer.removeListener("auth:session-revoked", handler);
   }
 });

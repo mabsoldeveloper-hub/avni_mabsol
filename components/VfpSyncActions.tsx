@@ -61,10 +61,7 @@ function formatIntervalSummary(mins: number): string {
 }
 
 function maskFileName(fileName: string): string {
-  if (!fileName) return "••••••••.DBF";
-  const parts = fileName.split(".");
-  const ext = parts.length > 1 ? `.${parts.pop()}` : ".DBF";
-  return "••••••••" + ext.toUpperCase();
+  return "••••••••";
 }
 
 function formatCountdown(totalSec: number): string {
@@ -126,6 +123,8 @@ export default function VfpSyncActions({
   });
 
   const [busyAction, setBusyAction] = useState<string | null>(null);
+  const [directSyncCompleted, setDirectSyncCompleted] = useState<boolean>(false);
+  const [directSyncSummary, setDirectSyncSummary] = useState<{ tables: number; rows: number } | null>(null);
 
   // User email & File Name Protection state
   const { toast } = useToast();
@@ -155,6 +154,24 @@ export default function VfpSyncActions({
       }
     }
   }, [userEmail]);
+
+  // Sync unlock state with external components (e.g. SyncActivityLogs)
+  useEffect(() => {
+    const handleSync = (e: Event) => {
+      const customEvt = e as CustomEvent<{ unlocked: boolean; expiresAt?: number }>;
+      if (customEvt.detail?.unlocked) {
+        setIsFilesUnlocked(true);
+        if (customEvt.detail.expiresAt) {
+          setUnlockedRemainingSec(Math.max(0, Math.ceil((customEvt.detail.expiresAt - Date.now()) / 1000)));
+        }
+      } else {
+        setIsFilesUnlocked(false);
+        setUnlockedRemainingSec(0);
+      }
+    };
+    window.addEventListener("vfp_files_unlock_sync", handleSync);
+    return () => window.removeEventListener("vfp_files_unlock_sync", handleSync);
+  }, []);
 
   // Live 1s Countdown timer for 5-minute auto-hide
   useEffect(() => {
@@ -318,7 +335,8 @@ export default function VfpSyncActions({
         setIsFilesUnlocked(true);
         setUnlockedRemainingSec(300);
         setShowOtpModal(false);
-        const succMsg = "🔓 Email verified! DBF table file names unlocked for 5 minutes.";
+        window.dispatchEvent(new CustomEvent("vfp_files_unlock_sync", { detail: { unlocked: true, expiresAt } }));
+        const succMsg = "🔓 Email verified! Table names unlocked for 5 minutes.";
         setMessage({
           type: "success",
           text: succMsg,
@@ -343,6 +361,7 @@ export default function VfpSyncActions({
     setUnlockedRemainingSec(0);
     const storageKey = `vfp_files_unlocked_until_${userEmail || "user"}`;
     sessionStorage.removeItem(storageKey);
+    window.dispatchEvent(new CustomEvent("vfp_files_unlock_sync", { detail: { unlocked: false } }));
     toast.info("🔒 Table file names hidden.");
     setMessage({ type: "info", text: "🔒 Table file names are now locked and hidden." });
   };
@@ -365,22 +384,45 @@ export default function VfpSyncActions({
   const [folderDbfFiles, setFolderDbfFiles] = useState<string[]>([]);
   const [scanningFolder, setScanningFolder] = useState(false);
 
-  // Direct DBF Upload & Worker Setup Modal State
+  // Direct Upload & Multi-File Progress Tracker State
+  interface UploadQueueItem {
+    id: string;
+    name: string;
+    cleanName: string;
+    sizeFormatted: string;
+    status: "pending" | "uploading" | "syncing" | "success" | "error";
+    error?: string;
+    importedRows?: number;
+  }
+
+  const [uploadQueue, setUploadQueue] = useState<UploadQueueItem[]>([]);
+  const [showUploadTracker, setShowUploadTracker] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [showWorkerModal, setShowWorkerModal] = useState(false);
   const [copiedCmd, setCopiedCmd] = useState(false);
   const directDbfInputRef = useRef<HTMLInputElement>(null);
 
-  // Direct Browser Upload Handler for AWS Linux Cloud
+  // Direct Browser Upload Handler with per-file tracking
   const handleDirectDbfUpload = async (files: FileList | File[] | null) => {
     if (!files || files.length === 0) return;
     const dbfFiles = Array.from(files).filter((f) => f.name.toLowerCase().endsWith(".dbf"));
     if (dbfFiles.length === 0) {
-      setMessage({ type: "error", text: "Please select valid .DBF files to upload." });
+      setMessage({ type: "error", text: "Please select valid data files to upload." });
       return;
     }
 
+    const initialQueue: UploadQueueItem[] = dbfFiles.map((f, idx) => ({
+      id: `${f.name}_${idx}_${Date.now()}`,
+      name: f.name,
+      cleanName: f.name.replace(/\.dbf$/i, ""),
+      sizeFormatted: `${(f.size / (1024 * 1024)).toFixed(1)} MB`,
+      status: "pending",
+    }));
+
+    setUploadQueue(initialQueue);
+    setShowUploadTracker(true);
     setUploading(true);
+
     let successCount = 0;
     let totalImportedRows = 0;
     const allUploadedNames: string[] = [];
@@ -389,9 +431,14 @@ export default function VfpSyncActions({
       for (let i = 0; i < dbfFiles.length; i++) {
         const file = dbfFiles[i];
         const mbSize = (file.size / (1024 * 1024)).toFixed(1);
+
+        setUploadQueue((prev) =>
+          prev.map((item, idx) => (idx === i ? { ...item, status: "uploading" } : item))
+        );
+
         setMessage({
           type: "info",
-          text: `[${i + 1}/${dbfFiles.length}] Uploading & syncing ${file.name} (${mbSize} MB)... Please wait.`,
+          text: `[${i + 1}/${dbfFiles.length}] Uploading & syncing ${file.name.replace(/\.dbf$/i, "")} (${mbSize} MB)...`,
         });
 
         const formData = new FormData();
@@ -404,11 +451,15 @@ export default function VfpSyncActions({
         });
 
         if (!res.ok) {
-          if (res.status === 413) {
-            throw new Error(`File ${file.name} (${mbSize} MB) exceeds server upload limit. Run: sudo sed -i 's/client_max_body_size .*/client_max_body_size 500M;/' /etc/nginx/sites-available/* && sudo systemctl reload nginx on server.`);
-          }
           const errText = await res.text().catch(() => "");
-          throw new Error(errText || `Server returned HTTP status ${res.status}`);
+          const errMsg = res.status === 413
+            ? `File ${file.name} (${mbSize} MB) exceeds server upload limit.`
+            : errText || `Server returned HTTP status ${res.status}`;
+          
+          setUploadQueue((prev) =>
+            prev.map((item, idx) => (idx === i ? { ...item, status: "error", error: errMsg } : item))
+          );
+          continue;
         }
 
         const data = await res.json();
@@ -419,18 +470,32 @@ export default function VfpSyncActions({
           if (data.uploadedFileNames) {
             allUploadedNames.push(...data.uploadedFileNames);
           }
+
+          setUploadQueue((prev) =>
+            prev.map((item, idx) =>
+              idx === i ? { ...item, status: "success", importedRows: rows } : item
+            )
+          );
+
           setMessage({
             type: "info",
-            text: `[${i + 1}/${dbfFiles.length}] Synced ${file.name} (${rows.toLocaleString()} rows). Moving to next...`,
+            text: `[${i + 1}/${dbfFiles.length}] Synced ${file.name.replace(/\.dbf$/i, "")} (${rows.toLocaleString()} rows).`,
           });
         } else {
-          throw new Error(data.error || `Failed to sync ${file.name}`);
+          const errMsg = data.error || `Failed to sync ${file.name}`;
+          setUploadQueue((prev) =>
+            prev.map((item, idx) => (idx === i ? { ...item, status: "error", error: errMsg } : item))
+          );
         }
       }
 
+      if (successCount > 0) {
+        setDirectSyncCompleted(true);
+        setDirectSyncSummary({ tables: successCount, rows: totalImportedRows });
+      }
       setMessage({
         type: "success",
-        text: `Successfully synced ${successCount} DBF table(s) (${totalImportedRows.toLocaleString()} rows) directly into database! Server temporary files cleaned up.`,
+        text: `Successfully synced ${successCount} table(s) (${totalImportedRows.toLocaleString()} rows) directly into database! Server disk storage is clean.`,
       });
       if (allUploadedNames.length > 0) {
         setSelectedFiles((prev) => Array.from(new Set([...prev, ...allUploadedNames])));
@@ -439,7 +504,7 @@ export default function VfpSyncActions({
     } catch (err: any) {
       setMessage({
         type: "error",
-        text: err?.message || "Error occurred while uploading DBF files.",
+        text: err?.message || "Error occurred while uploading files.",
       });
     } finally {
       setUploading(false);
@@ -531,10 +596,10 @@ export default function VfpSyncActions({
     e.target.value = "";
   };
 
-  // Directly trigger native file picker for DBF tables
+  // Directly trigger native file picker for tables
   const handleOpenNativeFilePicker = () => {
     if (autoSync) {
-      setMessage({ type: "info", text: "Please turn off Auto-sync below to add DBF tables." });
+      setMessage({ type: "info", text: "Please turn off Auto-sync below to add tables." });
       return;
     }
     nativeFileInputRef.current?.click();
@@ -789,12 +854,12 @@ export default function VfpSyncActions({
 
   // Trigger manual or auto sync now
   async function triggerSyncNow(isAuto: boolean = false) {
-    if (selectedFiles.length === 0) return;
+    if (selectedFiles.length === 0 && !directSyncCompleted) return;
     setBusyAction("sync");
     setSyncProgress(null);
     setMessage({ 
       type: "info", 
-      text: isAuto ? "Running scheduled background auto-sync..." : "Starting DBF sync in background..." 
+      text: isAuto ? "Running scheduled background auto-sync..." : "Checking sync status with database..." 
     });
 
     try {
@@ -804,6 +869,15 @@ export default function VfpSyncActions({
       const data = await response.json();
 
       if (data.success) {
+        if (data.result?.alreadySynced) {
+          setMessage({
+            type: "success",
+            text: data.message || "All company data is already synced and up to date in the database.",
+          });
+          setDirectSyncCompleted(true);
+          setBusyAction(null);
+          return;
+        }
         if (data.result?.background) {
           // Background sync started — begin polling for live progress
           setMessage({ 
@@ -976,16 +1050,145 @@ export default function VfpSyncActions({
                               <span className="font-bold text-slate-900 underline">Click to choose files</span>
                             </div>
                             <span className="text-slate-400 hidden sm:inline">|</span>
-                            <span className="text-slate-500 text-[11px]">or drag & drop files here (.DBF)</span>
+                            <span className="text-slate-500 text-[11px]">or drag & drop data files here</span>
                           </div>
                         )}
                       </div>
                     </div>
 
+                    {/* Live Multi-File Upload & Sync Tracker */}
+                    {showUploadTracker && uploadQueue.length > 0 && (
+                      <div className="p-3.5 sm:p-4 bg-white border border-slate-200 rounded-2xl shadow-2xs space-y-3">
+                        {/* Tracker Header */}
+                        <div className="flex items-center justify-between gap-3 flex-wrap">
+                          <div className="flex items-center gap-2.5 min-w-0">
+                            <div className="w-8 h-8 rounded-xl bg-slate-900 text-white flex items-center justify-center shrink-0 shadow-2xs">
+                              {uploading ? (
+                                <Loader2 size={15} className="animate-spin text-white" />
+                              ) : (
+                                <CheckCircle2 size={15} className="text-emerald-400" />
+                              )}
+                            </div>
+                            <div className="min-w-0">
+                              <div className="text-xs sm:text-sm font-bold text-slate-900 flex items-center gap-2">
+                                <span>
+                                  {uploading
+                                    ? `Syncing Files (${uploadQueue.filter((q) => q.status === "success").length} of ${uploadQueue.length} completed)`
+                                    : `Sync Completed (${uploadQueue.filter((q) => q.status === "success").length} of ${uploadQueue.length} files synced)`}
+                                </span>
+                                <span className="text-[10px] font-mono font-bold text-slate-600 bg-slate-100 px-2 py-0.5 rounded-full border border-slate-200">
+                                  {Math.round(
+                                    (uploadQueue.filter((q) => q.status === "success" || q.status === "error").length /
+                                      uploadQueue.length) *
+                                      100
+                                  )}%
+                                </span>
+                              </div>
+                              <div className="text-[11px] text-slate-500 mt-0.5">
+                                Total: <strong className="text-slate-800">{uploadQueue.length} files</strong> · Synced:{" "}
+                                <strong className="text-emerald-700">
+                                  {uploadQueue.filter((q) => q.status === "success").length}
+                                </strong>{" "}
+                                · Total rows:{" "}
+                                <strong className="text-slate-900 font-mono">
+                                  {uploadQueue
+                                    .reduce((acc, q) => acc + (q.importedRows || 0), 0)
+                                    .toLocaleString()}
+                                </strong>
+                              </div>
+                            </div>
+                          </div>
+
+                          {!uploading && (
+                            <button
+                              type="button"
+                              onClick={() => setShowUploadTracker(false)}
+                              className="text-xs font-semibold text-slate-500 hover:text-slate-800 px-3 py-1 rounded-full border border-slate-200 hover:bg-slate-50 cursor-pointer transition-colors"
+                            >
+                              Dismiss
+                            </button>
+                          )}
+                        </div>
+
+                        {/* Animated Progress Bar */}
+                        <div className="w-full bg-slate-100 h-1.5 rounded-full overflow-hidden">
+                          <div
+                            className={`h-full transition-all duration-300 rounded-full ${
+                              uploading ? "bg-slate-900" : "bg-emerald-600"
+                            }`}
+                            style={{
+                              width: `${Math.round(
+                                (uploadQueue.filter((q) => q.status === "success" || q.status === "error").length /
+                                  uploadQueue.length) *
+                                  100
+                              )}%`,
+                            }}
+                          />
+                        </div>
+
+                        {/* File by File Tracking List */}
+                        <div className="max-h-48 overflow-y-auto divide-y divide-slate-100 border border-slate-100 rounded-xl">
+                          {uploadQueue.map((item) => {
+                            const isDone = item.status === "success";
+                            const isErr = item.status === "error";
+                            const isRunning = item.status === "uploading" || item.status === "syncing";
+                            const displayName = isFilesUnlocked ? item.cleanName : "••••••••";
+
+                            return (
+                              <div
+                                key={item.id}
+                                className="flex items-center justify-between p-2.5 bg-white hover:bg-slate-50/60 gap-2 text-xs transition-colors"
+                              >
+                                <div className="flex items-center gap-2 min-w-0 flex-1">
+                                  <div className="w-5 h-5 rounded flex items-center justify-center shrink-0 bg-slate-100 text-slate-600 text-[10px] font-mono font-bold">
+                                    📄
+                                  </div>
+                                  <div className="min-w-0 flex-1 truncate">
+                                    <span className="font-mono font-bold text-slate-800">
+                                      {displayName}
+                                    </span>
+                                    <span className="text-[10px] text-slate-400 ml-2 font-mono">
+                                      {item.sizeFormatted}
+                                    </span>
+                                  </div>
+                                </div>
+
+                                <div className="shrink-0">
+                                  {isDone && (
+                                    <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-0.5 rounded-full">
+                                      <CheckCircle2 size={11} className="text-emerald-600" />
+                                      <span>Synced ({item.importedRows?.toLocaleString()} rows) • Storage Cleaned</span>
+                                    </span>
+                                  )}
+                                  {isErr && (
+                                    <span className="inline-flex items-center gap-1 text-[10px] font-bold text-red-700 bg-red-50 border border-red-200 px-2.5 py-0.5 rounded-full" title={item.error}>
+                                      <X size={11} className="text-red-600" />
+                                      <span>Failed</span>
+                                    </span>
+                                  )}
+                                  {isRunning && (
+                                    <span className="inline-flex items-center gap-1 text-[10px] font-bold text-sky-700 bg-sky-50 border border-sky-200 px-2.5 py-0.5 rounded-full">
+                                      <Loader2 size={11} className="animate-spin text-sky-600" />
+                                      <span>Syncing...</span>
+                                    </span>
+                                  )}
+                                  {item.status === "pending" && (
+                                    <span className="inline-flex items-center gap-1 text-[10px] font-bold text-slate-500 bg-slate-100 px-2.5 py-0.5 rounded-full">
+                                      <span>Pending</span>
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+
                     <div className="flex items-center justify-between gap-3 flex-wrap">
                       <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider flex items-center gap-1.5 shrink-0">
                         <Database size={13} className="text-teal-600" />
-                        <span>SELECT DBF TABLES TO SYNC</span>
+                        <span>SELECT TABLES TO SYNC</span>
                         {selectedFiles.length > 0 && (
                           <span className="text-teal-600 font-bold font-mono">({selectedFiles.length} active)</span>
                         )}
@@ -1003,10 +1206,10 @@ export default function VfpSyncActions({
                             autoSync ? "opacity-50 cursor-not-allowed" : "hover:bg-slate-100 cursor-pointer"
                           }`}
                           style={{ borderRadius: "9999px" }}
-                          title={autoSync ? "Turn off Auto-sync to add DBF tables" : "Open Windows Explorer to select DBF table(s)"}
+                          title={autoSync ? "Turn off Auto-sync to add tables" : "Open file picker to select table(s)"}
                         >
                           <Plus size={12} className="text-slate-600" />
-                          <span>Add DBF table(s)</span>
+                          <span>Add table(s)</span>
                         </button>
 
                         <button 
@@ -1060,7 +1263,7 @@ export default function VfpSyncActions({
                             </div>
                             <div className="min-w-0">
                               <div className="text-xs sm:text-sm font-bold text-slate-800 leading-snug flex items-center gap-2 flex-wrap">
-                                <span>DBF Table Names Hidden</span>
+                                <span>Table Names Hidden</span>
                                 <span className="text-[10px] font-mono font-semibold text-teal-700 bg-teal-50 px-2 py-0.5 rounded-full border border-teal-200/80">
                                   {selectedFiles.length} active
                                 </span>
@@ -1099,7 +1302,7 @@ export default function VfpSyncActions({
                             </button>
                           </div>
 
-                          {/* DBF Chips - Only visible when unlocked */}
+                          {/* Chips - Only visible when unlocked */}
                           {allClipsList.length > 0 ? (
                             <div className="flex items-center gap-2 flex-wrap pt-1">
                               {allClipsList.map((file) => {
@@ -1144,7 +1347,7 @@ export default function VfpSyncActions({
                             </div>
                           ) : (
                             <div className="text-xs text-slate-500 font-mono italic">
-                              No DBF tables selected. Click "Add DBF table(s)" to select files.
+                              No tables selected. Click "Add table(s)" to select files.
                             </div>
                           )}
                         </div>
@@ -1160,7 +1363,7 @@ export default function VfpSyncActions({
               const isAutoSyncDisabled = isNoFilesSelected;
 
               const disabledReason = isNoFilesSelected
-                ? "Please select at least 1 DBF table before enabling Auto-sync."
+                ? "Please select at least 1 table before enabling Auto-sync."
                 : "";
 
               return (
@@ -1173,7 +1376,7 @@ export default function VfpSyncActions({
                     <div className="text-[11px] text-slate-400 leading-tight mt-0.5">Run background synchronization on a schedule</div>
                     {isAutoSyncDisabled && (
                       <span className="text-[11px] font-bold text-amber-600 block mt-1">
-                        ⚠️ Select at least 1 DBF table to enable auto-sync
+                        ⚠️ Select at least 1 table to enable auto-sync
                       </span>
                     )}
                   </div>
@@ -1388,6 +1591,8 @@ export default function VfpSyncActions({
                   className={`w-full inline-flex items-center justify-center gap-2 py-2.5 px-4 text-xs sm:text-sm font-bold transition-all btn-pill ${
                     autoSync 
                       ? "bg-slate-900 text-white opacity-90 cursor-not-allowed" 
+                      : directSyncCompleted
+                      ? "bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300/90 shadow-2xs cursor-pointer active:scale-[0.99]"
                       : uploading || selectedFiles.length === 0
                       ? "bg-slate-100 text-slate-400 border border-slate-200 cursor-not-allowed shadow-none"
                       : "bg-black hover:bg-slate-900 text-white shadow-xs cursor-pointer active:scale-[0.99]"
@@ -1395,13 +1600,15 @@ export default function VfpSyncActions({
                   style={{ borderRadius: "9999px" }}
                   id="sync-btn" 
                   onClick={() => triggerSyncNow(false)}
-                  disabled={uploading || selectedFiles.length === 0 || Boolean(busyAction) || autoSync}
+                  disabled={uploading || (selectedFiles.length === 0 && !directSyncCompleted) || Boolean(busyAction) || autoSync}
                   type="button"
                   title={
                     uploading
                       ? "Files are currently uploading... Please wait."
                       : autoSync 
                       ? "Auto-sync is running on a schedule. Click 'Cancel sync' below to stop." 
+                      : directSyncCompleted
+                      ? "All uploaded files are already synced directly into database. Server disk storage is clean. Click to verify status."
                       : selectedFiles.length === 0 
                       ? "No files uploaded. Please upload files directly to enable sync." 
                       : "Click to trigger immediate manual sync"
@@ -1410,12 +1617,12 @@ export default function VfpSyncActions({
                   {uploading ? (
                     <>
                       <Loader2 size={14} className="animate-spin text-slate-500" />
-                      <span>Uploading files...</span>
+                      <span>Uploading & syncing files...</span>
                     </>
                   ) : busyAction === "sync" ? (
                     <>
-                      <RefreshCw size={14} className="animate-spin text-white" />
-                      <span>Syncing data...</span>
+                      <RefreshCw size={14} className="animate-spin text-slate-700" />
+                      <span>Checking database...</span>
                     </>
                   ) : autoSync ? (
                     <>
@@ -1424,6 +1631,11 @@ export default function VfpSyncActions({
                         <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse shrink-0" />
                       </span>
                       <span>Auto-sync active</span>
+                    </>
+                  ) : directSyncCompleted ? (
+                    <>
+                      <CheckCircle2 size={14} className="text-emerald-600" />
+                      <span>All Synced to DB ({directSyncSummary?.tables || selectedFiles.length} tables)</span>
                     </>
                   ) : (
                     <>
@@ -1450,66 +1662,11 @@ export default function VfpSyncActions({
               </div>
 
               <p className="text-[11px] text-slate-400 leading-relaxed text-center max-w-xs mx-auto m-0 pt-0.5">
-                Pushes DBF changes to CRM tables immediately and manages worker background tasks.
+                Synchronizes changes to CRM tables immediately and manages worker background tasks.
               </p>
             </div>
 
-            {/* DIRECT CLOUD DBF UPLOAD CARD */}
-            <div
-              className="border border-slate-200 p-4 sm:p-5 bg-white space-y-3 shadow-2xs"
-              style={{ borderRadius: "20px" }}
-            >
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <div className="w-7 h-7 rounded-lg bg-slate-100 text-slate-700 flex items-center justify-center font-bold">
-                    <UploadCloud size={16} />
-                  </div>
-                  <div>
-                    <span className="text-xs font-bold text-slate-900 block leading-snug">Upload Files Directly</span>
-                    <span className="text-[10px] text-slate-500 block">Browser upload directly into database</span>
-                  </div>
-                </div>
-              </div>
 
-              {/* Drag and drop / select area */}
-              <div
-                onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); }}
-                onDrop={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-                    handleDirectDbfUpload(e.dataTransfer.files);
-                  }
-                }}
-                onClick={() => directDbfInputRef.current?.click()}
-                className="border-2 border-dashed border-slate-200 hover:border-slate-400 bg-slate-50/50 p-4 rounded-xl text-center cursor-pointer transition-all hover:bg-slate-50 group"
-              >
-                <input
-                  type="file"
-                  ref={directDbfInputRef}
-                  accept=".dbf"
-                  multiple
-                  style={{ display: "none" }}
-                  onChange={(e) => handleDirectDbfUpload(e.target.files)}
-                />
-                {uploading ? (
-                  <div className="flex items-center justify-center gap-2 text-xs font-bold text-slate-700 py-1">
-                    <Loader2 size={16} className="animate-spin text-slate-900" />
-                    <span>Uploading files & syncing...</span>
-                  </div>
-                ) : (
-                  <div className="space-y-1">
-                    <UploadCloud size={22} className="mx-auto text-slate-600 group-hover:scale-110 transition-transform" />
-                    <div className="text-xs font-bold text-slate-800">
-                      Drop <span className="text-slate-900 font-mono">.DBF</span> files here, or <span className="underline">browse</span>
-                    </div>
-                    <div className="text-[10px] text-slate-400">
-                      Supports multiple DBF tables (e.g. CUST.DBF, ITEM.DBF)
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
 
             {/* Live Sync Progress Panel */}
             {syncProgress && (

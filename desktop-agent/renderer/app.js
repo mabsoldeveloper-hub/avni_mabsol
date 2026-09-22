@@ -85,7 +85,11 @@ document.addEventListener("DOMContentLoaded", async () => {
       currentAuthEmail = sessionRes.session.email || "";
       showDashboard(sessionRes.session);
     } else {
-      if (sessionRes?.sessionExpired) {
+      if (sessionRes?.accountSuspended) {
+        if (sessionRes.email) emailInput.value = sessionRes.email;
+        loginError.textContent = sessionRes.message || "Your account has been deactivated or suspended. Please contact administrator.";
+        loginError.classList.remove("hidden");
+      } else if (sessionRes?.sessionExpired) {
         if (sessionRes.email) emailInput.value = sessionRes.email;
         loginError.textContent = "Your cloud session has expired. Please sign in to verify identity and unlock sync.";
         loginError.classList.remove("hidden");
@@ -509,6 +513,15 @@ function setupIpcListeners() {
   window.electronAPI.onNetworkChange(({ isOnline }) => {
     updateNetworkBadge(isOnline);
   });
+
+  // Real-time access revocation (account suspended/deactivated)
+  if (window.electronAPI.onSessionRevoked) {
+    window.electronAPI.onSessionRevoked(({ message }) => {
+      showLogin();
+      loginError.textContent = message || "Your account has been deactivated or suspended. Please contact administrator.";
+      loginError.classList.remove("hidden");
+    });
+  }
 }
 
 // ---------------------------------------------------------------------------

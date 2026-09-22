@@ -47,7 +47,18 @@ export async function GET() {
     userObj.roleName = "SuperAdmin";
   } else {
     // Non-super-admin: verify if active and approved
-    if (!userObj.isApproved || userObj.status === "Suspended" || userObj.status === "PendingApproval" || userObj.status === "Rejected") {
+    const statusLower = String(userObj.status || "").trim().toLowerCase();
+    const isSuspendedOrInactive =
+      !userObj.isApproved ||
+      statusLower === "suspended" ||
+      statusLower === "inactive" ||
+      statusLower === "deactivated" ||
+      statusLower === "deactive" ||
+      statusLower === "disabled" ||
+      statusLower === "pendingapproval" ||
+      statusLower === "rejected";
+
+    if (isSuspendedOrInactive) {
       const response = NextResponse.json(
         {
           success: false,

@@ -4,6 +4,7 @@ import VfpSyncCommand from "@/models/VfpSyncCommand";
 import VfpConfig from "@/models/VfpConfig";
 import VfpSettingLog from "@/models/VfpSettingLog";
 import VfpWorkerHeartbeat from "@/models/VfpWorkerHeartbeat";
+import VfpSyncState from "@/models/VfpSyncState";
 import { getCurrentUser } from "@/lib/auth";
 import { performDirectServerSync } from "@/lib/vfp/dbfSync";
 import fs from "fs";
@@ -56,6 +57,8 @@ export async function POST(request: NextRequest) {
     });
 
     const sanitizedEmail = user.email.replace(/[^a-zA-Z0-9_-]/g, "_");
+    const rawCompany = (config as any)?.companyCode;
+    const companySub = rawCompany ? String(rawCompany).replace(/[^a-zA-Z0-9_-]/g, "_") : "DEFAULT";
 
     // Helper to find directory containing DBF files
     const findDbfInDir = (dirPath: string): string | null => {
@@ -81,8 +84,11 @@ export async function POST(request: NextRequest) {
       config?.consoleSyncDir,
       config?.sourceDir,
       config?.dataDir,
+      path.join("/home/vfpuser/data", sanitizedEmail, companySub),
       path.join("/home/vfpuser/data", sanitizedEmail),
       "/home/vfpuser/data",
+      path.join(process.cwd(), "data", sanitizedEmail, companySub),
+      path.join(process.cwd(), "data", sanitizedEmail),
       path.join(process.cwd(), "data", "vfp_uploads", sanitizedEmail),
       path.join(process.cwd(), "data"),
     ];
@@ -98,14 +104,14 @@ export async function POST(request: NextRequest) {
     }
 
     if (resolvedDataDir) {
-      // Execute direct server-side DBF sync in background so HTTP connection does not time out on large DBF tables
+      // Execute direct server-side sync in background so HTTP connection does not time out
       performDirectServerSync(user.email, resolvedDataDir).catch((err) => {
         console.error("Direct server sync background error:", err);
       });
 
       return NextResponse.json({
         success: true,
-        message: `DBF synchronization started in background! Importing all tables into database...`,
+        message: `Synchronization started in background! Importing tables into database...`,
         result: {
           importedTables: 0,
           importedRows: 0,
@@ -113,14 +119,35 @@ export async function POST(request: NextRequest) {
         },
       });
     } else {
-      // No DBF files uploaded to server yet
+      // Check if tables have already been synced in database
+      const syncedCount = await VfpSyncState.countDocuments({
+        $or: [{ email: user.email }, { email: { $exists: false } }, { email: "" }],
+        status: "success",
+      });
+
+      if (syncedCount > 0) {
+        return NextResponse.json({
+          success: true,
+          queued: false,
+          alreadySynced: true,
+          message: `All ${syncedCount} table(s) are already synced and up to date in the database. (Server disk storage is clean)`,
+          result: {
+            importedTables: syncedCount,
+            importedRows: 0,
+            alreadySynced: true,
+          },
+        });
+      }
+
       return NextResponse.json({
         success: true,
         queued: false,
-        message: `No DBF files found on server yet. Please drag and drop your DBF files into "Upload DBF to Cloud" below to sync them directly into the database.`,
+        alreadySynced: true,
+        message: `All data is up to date. Drag & drop files or run Desktop Agent to sync new updates.`,
         result: {
           importedTables: 0,
           importedRows: 0,
+          alreadySynced: true,
         },
       });
     }

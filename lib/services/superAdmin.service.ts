@@ -143,8 +143,26 @@ export async function validateUserLoginAccess(user: any): Promise<AccessCheckRes
     return { allowed: true };
   }
 
-  // 1. Check if user is approved
-  if (!user.isApproved || user.status === USER_APPROVAL_STATUS.PENDING) {
+  const rawStatus = String(user.status || "").trim().toLowerCase();
+
+  // 1. Check if suspended, inactive, or deactivated
+  if (
+    rawStatus === "suspended" ||
+    rawStatus === "inactive" ||
+    rawStatus === "deactivated" ||
+    rawStatus === "deactive" ||
+    rawStatus === "disabled" ||
+    user.status === USER_APPROVAL_STATUS.SUSPENDED
+  ) {
+    return {
+      allowed: false,
+      message: "Your account has been deactivated or suspended. Please contact administrator.",
+      statusCode: 403,
+    };
+  }
+
+  // 2. Check if user is approved
+  if (!user.isApproved || rawStatus === "pendingapproval" || user.status === USER_APPROVAL_STATUS.PENDING) {
     return {
       allowed: false,
       message:
@@ -154,22 +172,13 @@ export async function validateUserLoginAccess(user: any): Promise<AccessCheckRes
     };
   }
 
-  // 2. Check if rejected
-  if (user.status === USER_APPROVAL_STATUS.REJECTED) {
+  // 3. Check if rejected
+  if (rawStatus === "rejected" || user.status === USER_APPROVAL_STATUS.REJECTED) {
     return {
       allowed: false,
       message:
         "Your account registration was rejected. Please contact administrator at " +
         SUPER_ADMIN_CREDENTIALS.EMAIL,
-      statusCode: 403,
-    };
-  }
-
-  // 3. Check if suspended
-  if (user.status === USER_APPROVAL_STATUS.SUSPENDED) {
-    return {
-      allowed: false,
-      message: "Your account has been suspended. Please contact administrator.",
       statusCode: 403,
     };
   }

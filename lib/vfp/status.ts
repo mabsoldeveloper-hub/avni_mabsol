@@ -279,7 +279,25 @@ export async function getVfpStatus(filter: VfpStatusFilter = {}, email?: string)
     recentFiles,
     lastSyncedAt: lastSyncedDates,
     states,
-    recentLogs,
+    recentLogs: (() => {
+      const completedKeys = new Set<string>();
+      for (const log of recentLogs) {
+        if (log.status === "success" || log.status === "failed") {
+          const key = `${log.runId || ""}_${log.tableName || log.action || ""}`;
+          completedKeys.add(key);
+        }
+      }
+      return recentLogs.filter((log) => {
+        if (log.status === "running") {
+          const key = `${log.runId || ""}_${log.tableName || log.action || ""}`;
+          if (completedKeys.has(key)) return false;
+          if (log.createdAt && Date.now() - new Date(log.createdAt).getTime() > 15 * 60 * 1000) {
+            return false;
+          }
+        }
+        return true;
+      });
+    })(),
     range,
     rangeFrom,
     startDate,

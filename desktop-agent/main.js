@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, dialog } = require("electron");
+const { app, BrowserWindow, ipcMain, dialog, Tray, Menu } = require("electron");
 const path = require("path");
 const fs = require("fs");
 const { spawn } = require("child_process");
@@ -6,6 +6,8 @@ const axios = require("axios");
 const FormData = require("form-data");
 
 let mainWindow = null;
+let tray = null;
+let isQuitting = false;
 let syncIntervalTimer = null;
 let heartbeatTimer = null;
 let isSyncing = false;
@@ -116,8 +118,55 @@ function emitNetwork(isOnline) {
 }
 
 // ---------------------------------------------------------------------------
-// Window Creation
+// Window Creation & System Tray
 // ---------------------------------------------------------------------------
+function createTray() {
+  if (tray) return;
+  const iconPath = path.join(__dirname, "mabsol_logo.ico");
+  if (!fs.existsSync(iconPath)) return;
+
+  try {
+    tray = new Tray(iconPath);
+    tray.setToolTip("Mabsol CRM Desktop Sync Agent (Running in background)");
+
+    const contextMenu = Menu.buildFromTemplate([
+      {
+        label: "Open Console",
+        click: () => {
+          if (mainWindow) {
+            mainWindow.show();
+            mainWindow.focus();
+          }
+        }
+      },
+      {
+        label: "Sync Now",
+        click: () => {
+          executeDecryptionAndSync("tray_manual").catch(() => {});
+        }
+      },
+      { type: "separator" },
+      {
+        label: "Exit Agent",
+        click: () => {
+          isQuitting = true;
+          app.quit();
+        }
+      }
+    ]);
+
+    tray.setContextMenu(contextMenu);
+    tray.on("double-click", () => {
+      if (mainWindow) {
+        mainWindow.show();
+        mainWindow.focus();
+      }
+    });
+  } catch (err) {
+    console.error("Failed to initialize system tray:", err);
+  }
+}
+
 function createWindow() {
   const iconPath = path.join(__dirname, "mabsol_logo.ico");
 
@@ -155,11 +204,20 @@ function createWindow() {
     }
   });
 
+  // Minimize to tray on close instead of exiting
+  mainWindow.on("close", (event) => {
+    if (!isQuitting) {
+      event.preventDefault();
+      mainWindow.hide();
+    }
+  });
+
   mainWindow.loadFile(path.join(__dirname, "renderer", "index.html"));
 }
 
 app.whenReady().then(() => {
   createWindow();
+  createTray();
 
   // Start background network heartbeat & queue sync watcher
   startNetworkWatcher();
@@ -171,12 +229,23 @@ app.whenReady().then(() => {
   }
 
   app.on("activate", () => {
-    if (BrowserWindow.getAllWindows().length === 0) createWindow();
+    if (BrowserWindow.getAllWindows().length === 0) {
+      createWindow();
+    } else if (mainWindow) {
+      mainWindow.show();
+      mainWindow.focus();
+    }
   });
 });
 
+app.on("before-quit", () => {
+  isQuitting = true;
+});
+
 app.on("window-all-closed", () => {
-  if (process.platform !== "darwin") app.quit();
+  if (isQuitting || process.platform === "darwin") {
+    app.quit();
+  }
 });
 
 // ---------------------------------------------------------------------------
@@ -315,6 +384,45 @@ ipcMain.handle("auth:check-session", async () => {
       email: session.email || session.user?.email || ""
     };
   }
+
+  // Live verify account status with cloud server
+  const cloudUrl = (session.cloudUrl || "https://phcrm.mabsolinfotech.cloud").replace(/\/+$/, "");
+  try {
+    const res = await axios.get(`${cloudUrl}/api/auth/me`, {
+      headers: {
+        Authorization: `Bearer ${session.token}`,
+        "Cache-Control": "no-cache"
+      },
+      timeout: 5000
+    });
+    if (!res.data || !res.data.success) {
+      if (res.data?.suspended) {
+        const suspMsg = res.data.message || "Your account has been deactivated or suspended. Please contact administrator.";
+        emitLog("error", `Access Denied: ${suspMsg}`);
+        saveSession(null);
+        return {
+          authenticated: false,
+          accountSuspended: true,
+          message: suspMsg,
+          email: session.email || ""
+        };
+      }
+    }
+  } catch (err) {
+    if (err.response?.status === 403 || err.response?.data?.suspended) {
+      const suspMsg = err.response?.data?.message || "Your account has been deactivated or suspended. Please contact administrator.";
+      emitLog("error", `Access Denied: ${suspMsg}`);
+      saveSession(null);
+      return {
+        authenticated: false,
+        accountSuspended: true,
+        message: suspMsg,
+        email: session.email || ""
+      };
+    }
+    // If offline or network timeout, allow offline queueing to proceed
+  }
+
   return { authenticated: true, session };
 });
 
@@ -823,6 +931,16 @@ async function uploadDbfBatch(cloudUrl, destDir, dbfFiles, token, email, license
       data: lastSuccessData
     };
   } catch (err) {
+    if (err.response?.status === 403 && err.response?.data?.accountSuspended) {
+      const suspMsg = err.response?.data?.error || "Account has been deactivated or suspended. Access denied.";
+      emitLog("error", `Access Revoked: ${suspMsg}`);
+      saveSession(null);
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send("auth:session-revoked", { message: suspMsg });
+      }
+      clearInterval(syncIntervalTimer);
+      return { success: false, error: suspMsg, accountSuspended: true };
+    }
     const msg = err.response?.data?.error || err.message;
     return { success: false, error: msg };
   }
@@ -861,31 +979,64 @@ function startNetworkWatcher() {
           status: isSyncing ? "syncing" : "online",
           dataDir: config.destDir,
           email: session?.email || config.userEmail || ""
-        }, { timeout: 5000 });
-      } catch {}
+        }, {
+          headers: session?.token ? { Authorization: `Bearer ${session.token}` } : {},
+          timeout: 5000
+        });
+      } catch (hbErr) {
+        if (hbErr.response?.status === 403 && hbErr.response?.data?.accountSuspended) {
+          const suspMsg = hbErr.response?.data?.error || "Account has been deactivated or suspended.";
+          emitLog("error", `Access Revoked: ${suspMsg}`);
+          saveSession(null);
+          if (mainWindow && !mainWindow.isDestroyed()) {
+            mainWindow.webContents.send("auth:session-revoked", { message: suspMsg });
+          }
+          clearInterval(syncIntervalTimer);
+          return;
+        }
+      }
 
-      // If internet was just restored and we have queued files, auto-sync now!
+      // If internet was just restored and we have queued files, auto-sync all batches!
       if (wasOffline && !isSyncing) {
         const queue = loadQueue();
         if (queue.length > 0) {
-          emitLog("success", "Internet restored! Automatically syncing queued offline files to Cloud Database...");
-          const latestBatch = queue[queue.length - 1];
-          uploadDbfBatch(
-            cloudUrl,
-            latestBatch.destDir,
-            latestBatch.dbfFiles,
-            session?.token || "",
-            session?.email || "",
-            config.licenseKey || "",
-            latestBatch.companyCode || config.companyCode || "",
-            config.companyName || ""
-          ).then((res) => {
-            if (res.success) {
-              emitLog("success", `Restored Sync Complete! ${res.message}`);
-              saveQueue([]);
-              emitStatus({ isOnline: true, lastStatus: "synced", message: res.message });
+          emitLog("success", `Internet restored! Automatically syncing ${queue.length} queued offline batch(es) to Cloud Database...`);
+          (async () => {
+            isSyncing = true;
+            let currentQueue = [...queue];
+            while (currentQueue.length > 0) {
+              const batch = currentQueue[0];
+              try {
+                const res = await uploadDbfBatch(
+                  cloudUrl,
+                  batch.destDir,
+                  batch.dbfFiles,
+                  session?.token || "",
+                  session?.email || "",
+                  config.licenseKey || "",
+                  batch.companyCode || config.companyCode || "",
+                  config.companyName || ""
+                );
+                if (res.success) {
+                  emitLog("success", `Offline Batch Synced: [${batch.companyCode || "DEFAULT"}] (${batch.dbfFiles?.length || 0} tables).`);
+                  currentQueue.shift();
+                  saveQueue(currentQueue);
+                } else {
+                  emitLog("warn", `Offline batch sync paused: ${res.error}. Will retry on next check.`);
+                  break;
+                }
+              } catch (batchErr) {
+                emitLog("error", `Offline batch upload error: ${batchErr.message}`);
+                break;
+              }
             }
-          });
+            if (currentQueue.length === 0) {
+              emitLog("success", "All offline batches synced to server successfully!");
+              saveQueue([]);
+              emitStatus({ isOnline: true, lastStatus: "synced", message: "All queued offline files synchronized." });
+            }
+            isSyncing = false;
+          })();
         }
       }
     }

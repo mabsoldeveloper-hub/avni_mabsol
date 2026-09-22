@@ -136,6 +136,17 @@ export async function PUT(
       delete body.password;
     }
 
+    if (body.status) {
+      const s = String(body.status).trim().toLowerCase();
+      if (s === "inactive" || s === "suspended" || s === "deactivated" || s === "deactive" || s === "disabled") {
+        body.isApproved = false;
+        body.status = "Inactive";
+      } else if (s === "active") {
+        body.isApproved = true;
+        body.status = "Active";
+      }
+    }
+
     const user =
       await User.findByIdAndUpdate(
         id,

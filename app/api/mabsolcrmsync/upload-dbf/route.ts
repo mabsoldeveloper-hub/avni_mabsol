@@ -8,6 +8,7 @@ import path from "path";
 
 import jwt from "jsonwebtoken";
 import User from "@/models/User";
+import { validateUserLoginAccess } from "@/lib/services/superAdmin.service";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -46,6 +47,19 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: "Unauthorized. Please login or provide a valid agent token." }, { status: 401 });
     }
 
+    // Verify user account is active, approved, and not suspended or deactivated
+    const accessCheck = await validateUserLoginAccess(user);
+    if (!accessCheck.allowed) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: accessCheck.message || "Account is suspended or deactivated. Access denied.",
+          accountSuspended: true,
+        },
+        { status: 403 }
+      );
+    }
+
     const formData = await request.formData();
     const files = formData.getAll("files") as File[];
 
@@ -62,17 +76,21 @@ export async function POST(request: NextRequest) {
       ? "/home/vfpuser/data"
       : path.join(process.cwd(), "data");
 
+    // Clean up any legacy migration directory to prevent disk bloat
+    const legacyMigrationDir = path.join(baseDataDir, "migration");
+    if (fs.existsSync(legacyMigrationDir)) {
+      try {
+        fs.rmSync(legacyMigrationDir, { recursive: true, force: true });
+      } catch {}
+    }
+
     const userFolder = (user.email || "default").replace(/[^a-zA-Z0-9_-]/g, "_");
 
-    // Company-specific folder: <baseDataDir>/<userEmail>/<companyCode>/
+    // Company-specific folder: <baseDataDir>/<userFolder>/<companyCode>/
     const uploadDir = path.join(baseDataDir, userFolder, companyCode);
-    const migrationDir = path.join(baseDataDir, "migration", userFolder, companyCode);
 
     if (!fs.existsSync(uploadDir)) {
       fs.mkdirSync(uploadDir, { recursive: true });
-    }
-    if (!fs.existsSync(migrationDir)) {
-      fs.mkdirSync(migrationDir, { recursive: true });
     }
 
     const uploadedFileNames: string[] = [];
@@ -83,12 +101,8 @@ export async function POST(request: NextRequest) {
         const buffer = Buffer.from(arrayBuffer);
         const fileName = path.basename(file.name);
         
-        // Write to both user directory and migration directory
+        // Write file to temporary upload directory for immediate parsing and sync
         fs.writeFileSync(path.join(uploadDir, fileName), buffer);
-        try {
-          fs.writeFileSync(path.join(migrationDir, fileName), buffer);
-        } catch {}
-
         uploadedFileNames.push(fileName);
       }
     }
@@ -140,37 +154,19 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    // Always execute direct DBF sync into database upon upload
+    // Always execute direct sync into database upon upload
     const syncResult = await performDirectServerSync(user.email, uploadDir);
-
-    // Auto-delete processed DBF files from the server folder immediately after sync
-    const dirsToClean = [uploadDir, migrationDir];
-    for (const dir of dirsToClean) {
-      if (dir && fs.existsSync(dir)) {
-        try {
-          const filesInDir = fs.readdirSync(dir);
-          for (const f of filesInDir) {
-            const ext = path.extname(f).toLowerCase();
-            if (ext === ".dbf" || ext === ".fpt" || ext === ".cdx") {
-              try { fs.unlinkSync(path.join(dir, f)); } catch {}
-            }
-          }
-        } catch (cleanErr) {
-          console.error("[upload-dbf] Error cleaning up synced files:", cleanErr);
-        }
-      }
-    }
 
     return NextResponse.json({
       success: true,
       companyCode,
-      message: `Uploaded and synced ${syncResult.importedTables} table(s) (${syncResult.importedRows} rows) directly into database! Server temporary files cleaned up.`,
+      message: `Uploaded and synced ${syncResult.importedTables} table(s) (${syncResult.importedRows} rows) directly into database!`,
       result: syncResult,
       uploadedFileNames,
     });
   } catch (error: any) {
     return NextResponse.json(
-      { success: false, error: error.message || "Failed to process DBF upload" },
+      { success: false, error: error.message || "Failed to process file upload" },
       { status: 500 }
     );
   }

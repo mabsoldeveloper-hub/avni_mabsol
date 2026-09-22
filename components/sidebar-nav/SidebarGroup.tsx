@@ -5,7 +5,7 @@ import { FaChevronDown } from "react-icons/fa";
 import { SidebarGroupProps } from "./types";
 import { COLOR_MAP } from "./constants";
 import SidebarSubLink from "./SidebarSubLink";
-import { renderMenuIcon } from "@/lib/defaultMenuData";
+import { renderMenuIcon, getRoleBasedHref, isPathActive } from "@/lib/defaultMenuData";
 
 export default React.memo(function SidebarGroup({
   id,
@@ -19,6 +19,7 @@ export default React.memo(function SidebarGroup({
   pathname,
   currentVisuals,
   can,
+  role,
   onToggle,
   onNavigate,
 }: SidebarGroupProps) {
@@ -87,15 +88,13 @@ export default React.memo(function SidebarGroup({
   if (visibleSubs.length === 0) return null;
 
   const renderedSubs = visibleSubs.map((sub) => {
-    const isSubActive =
-      sub.href === "/dashboard"
-        ? pathname === "/dashboard"
-        : pathname === sub.href || pathname.startsWith(sub.href + "/");
+    const targetHref = getRoleBasedHref(sub.href, role);
+    const isSubActive = isPathActive(sub.href, pathname, role);
 
     return (
       <li key={sub.id || sub.href}>
         <SidebarSubLink
-          href={sub.href}
+          href={targetHref}
           icon={renderMenuIcon(sub.icon)}
           label={sub.label}
           active={isSubActive}

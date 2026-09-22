@@ -50,104 +50,114 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
-  const loadUser = useCallback(async (isBackground = false) => {
+  // const loadUser = useCallback(async (isBackground = false) => {
+  //   try {
+  //     const res = await fetch(`/api/auth/me?_t=${Date.now()}`, {
+  //       cache: "no-store",
+  //       headers: {
+  //         "Cache-Control": "no-cache",
+  //       },
+  //     });
+
+  //     if (res.status === 401 || res.status === 403) {
+  //       let isSuspended = false;
+  //       try {
+  //         const errData = await res.json();
+  //         if (errData.suspended || errData.expired) isSuspended = true;
+  //       } catch {}
+
+  //       setUser(null);
+  //       if (typeof window !== "undefined" && window.location.pathname.startsWith("/dashboard")) {
+  //         await logoutAndRedirect(isSuspended);
+  //       }
+  //       return;
+  //     }
+
+  //     if (!res.ok) {
+  //       // Transient network or server error: do not force logout during background check
+  //       return;
+  //     }
+
+  //     const data = await res.json();
+
+  //     if (res.ok && data.success && data.user) {
+  //       setUser((prev: any) => {
+  //         // Compare essential fields to prevent unnecessary reference re-renders
+  //         if (
+  //           prev &&
+  //           prev._id === data.user._id &&
+  //           prev.email === data.user.email &&
+  //           prev.role === data.user.role &&
+  //           prev.roleType === data.user.roleType &&
+  //           prev.name === data.user.name &&
+  //           String(prev.companyId) === String(data.user.companyId) &&
+  //           prev.updatedAt === data.user.updatedAt
+  //         ) {
+  //           return prev; // Same reference -> NO re-render!
+  //         }
+  //         if (typeof window !== "undefined") {
+  //           try {
+  //             localStorage.setItem("mabsol_user", JSON.stringify(data.user));
+  //           } catch {}
+  //         }
+  //         return data.user;
+  //       });
+  //     } else {
+  //       if (!isBackground) {
+  //         setUser(null);
+  //         if (typeof window !== "undefined" && window.location.pathname.startsWith("/dashboard")) {
+  //           await logoutAndRedirect();
+  //         }
+  //       }
+  //     }
+  //   } catch (err) {
+  //     console.error("Failed to load user:", err);
+  //     if (!isBackground && !userRef.current) {
+  //       setUser(null);
+  //       if (typeof window !== "undefined" && window.location.pathname.startsWith("/dashboard")) {
+  //         await logoutAndRedirect();
+  //       }
+  //     }
+  //   } finally {
+  //     if (!isBackground) {
+  //       setLoading(false);
+  //     }
+  //   }
+  // }, [logoutAndRedirect]);
+
+  const loadUser = useCallback(async () => {
     try {
-      const res = await fetch(`/api/auth/me?_t=${Date.now()}`, {
+      const res = await fetch("/api/auth/me", {
+        credentials: "include",
         cache: "no-store",
-        headers: {
-          "Cache-Control": "no-cache",
-        },
       });
-
-      if (res.status === 401 || res.status === 403) {
-        let isSuspended = false;
-        try {
-          const errData = await res.json();
-          if (errData.suspended || errData.expired) isSuspended = true;
-        } catch {}
-
-        setUser(null);
-        if (typeof window !== "undefined" && window.location.pathname.startsWith("/dashboard")) {
-          await logoutAndRedirect(isSuspended);
-        }
-        return;
-      }
-
       if (!res.ok) {
-        // Transient network or server error: do not force logout during background check
+        setUser(null);
         return;
       }
-
       const data = await res.json();
-
-      if (res.ok && data.success && data.user) {
-        setUser((prev: any) => {
-          // Compare essential fields to prevent unnecessary reference re-renders
-          if (
-            prev &&
-            prev._id === data.user._id &&
-            prev.email === data.user.email &&
-            prev.role === data.user.role &&
-            prev.roleType === data.user.roleType &&
-            prev.name === data.user.name &&
-            String(prev.companyId) === String(data.user.companyId) &&
-            prev.updatedAt === data.user.updatedAt
-          ) {
-            return prev; // Same reference -> NO re-render!
-          }
-          if (typeof window !== "undefined") {
-            try {
-              localStorage.setItem("mabsol_user", JSON.stringify(data.user));
-            } catch {}
-          }
-          return data.user;
-        });
+      console.log("me api",data);
+      
+      if (data.success && data.user) {
+        setUser(data.user);
+        localStorage.setItem("mabsol_user", JSON.stringify(data.user));
       } else {
-        if (!isBackground) {
-          setUser(null);
-          if (typeof window !== "undefined" && window.location.pathname.startsWith("/dashboard")) {
-            await logoutAndRedirect();
-          }
-        }
-      }
-    } catch (err) {
-      console.error("Failed to load user:", err);
-      if (!isBackground && !userRef.current) {
         setUser(null);
-        if (typeof window !== "undefined" && window.location.pathname.startsWith("/dashboard")) {
-          await logoutAndRedirect();
-        }
       }
+    } catch (error) {
+      console.error("Failed to load user:", error);
+      setUser(null);
     } finally {
-      if (!isBackground) {
-        setLoading(false);
-      }
+      setLoading(false);
     }
-  }, [logoutAndRedirect]);
+  }, []);
+
+
 
   useEffect(() => {
-    if (loadStarted.current) return;
-    loadStarted.current = true;
-    loadUser(false);
-  }, [loadUser]);
-
-  // Periodically verify session in background & on window focus/visibility change
-  useEffect(() => {
-    const checkSession = () => {
-      if (typeof window !== "undefined" && window.location.pathname.startsWith("/dashboard")) {
-        loadUser(true);
-      }
-    };
-
-    const interval = setInterval(checkSession, SESSION_CHECK_INTERVAL_MS);
-    window.addEventListener("focus", checkSession);
-    document.addEventListener("visibilitychange", checkSession);
-
-    return () => {
-      clearInterval(interval);
-      window.removeEventListener("focus", checkSession);
-      document.removeEventListener("visibilitychange", checkSession);
-    };
+    // if (loadStarted.current) return;
+    // loadStarted.current = true;
+    loadUser();
   }, [loadUser]);
 
   return (
@@ -155,7 +165,7 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
       value={{
         user,
         loading,
-        reload: () => loadUser(false),
+        reload: () => loadUser(),
         logout: logoutAndRedirect,
       }}
     >

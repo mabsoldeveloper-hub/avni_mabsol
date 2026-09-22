@@ -6,6 +6,7 @@ import Link from "next/link";
 import { Plus_Jakarta_Sans, Inter, IBM_Plex_Mono } from "next/font/google";
 import { useToast } from "@/context/ToastContext";
 import "./register.css";
+import { API } from "@/lib/api";
 
 const displayFont = Plus_Jakarta_Sans({
   subsets: ["latin"],
@@ -261,7 +262,7 @@ export default function RegisterPage() {
 
     // Check against Database
     try {
-      const res = await fetch("/api/auth/check-exists", {
+      const res = await fetch(API.CHECK_EXISTS, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email: cleanBrEmail }),
@@ -305,7 +306,7 @@ export default function RegisterPage() {
 
     try {
       // 1. Check if email exists in system
-      const checkRes = await fetch("/api/auth/check-exists", {
+      const checkRes = await fetch(API.CHECK_EXISTS, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email: cleanBrEmail }),
@@ -320,7 +321,7 @@ export default function RegisterPage() {
       }
 
       // 2. Send OTP
-      const res = await fetch("/api/auth/send-email-otp", {
+      const res = await fetch(API.SEND_EMAIL_OTP, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email: cleanBrEmail }),
@@ -356,7 +357,7 @@ export default function RegisterPage() {
     setAdditionalGsts(updated);
 
     try {
-      const res = await fetch("/api/auth/verify-email-otp", {
+      const res = await fetch(API.VERIFY_EMAIL_OTP, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email: cleanBrEmail, otp: br.emailOtp.trim() }),
@@ -483,7 +484,7 @@ export default function RegisterPage() {
     setGstVerifyMessage(null);
 
     try {
-      const res = await fetch("/api/auth/verify-gst", {
+      const res = await fetch(API.VERIFY_GST, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ gstin: cleanGst }),
@@ -534,7 +535,7 @@ export default function RegisterPage() {
   async function handlePincodeBlur() {
     if (!pincode || pincode.trim().length !== 6) return;
     try {
-      const res = await fetch("/api/auth/verify-gst", {
+      const res = await fetch(API.VERIFY_GST, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ pincode: pincode.trim() }),
@@ -564,7 +565,7 @@ export default function RegisterPage() {
     setAdditionalGsts(updated);
 
     try {
-      const res = await fetch("/api/auth/verify-gst", {
+      const res = await fetch(API.VERIFY_GST, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ gstin: cleanGst }),
@@ -610,7 +611,7 @@ export default function RegisterPage() {
     if (!cleanEmail.includes("@")) return;
 
     try {
-      const res = await fetch("/api/auth/check-exists", {
+      const res = await fetch(API.CHECK_EXISTS, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email: cleanEmail }),
@@ -630,7 +631,7 @@ export default function RegisterPage() {
     if (cleanMobile.length !== 10) return;
 
     try {
-      const res = await fetch("/api/auth/check-exists", {
+      const res = await fetch(API.CHECK_EXISTS, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ mobile: cleanMobile }),
@@ -658,7 +659,7 @@ export default function RegisterPage() {
     setEmailSending(true);
     try {
       // 1. Check if email is already registered in the system
-      const checkRes = await fetch("/api/auth/check-exists", {
+      const checkRes = await fetch(API.CHECK_EXISTS, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email: cleanEmail }),
@@ -670,7 +671,7 @@ export default function RegisterPage() {
       }
 
       // 2. Send OTP only if email does not exist
-      const res = await fetch("/api/auth/send-email-otp", {
+      const res = await fetch(API.SEND_EMAIL_OTP, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email: cleanEmail }),
@@ -694,7 +695,7 @@ export default function RegisterPage() {
     if (emailVerifying || !emailOtp) return;
     setEmailVerifying(true);
     try {
-      const res = await fetch("/api/auth/verify-email-otp", {
+      const res = await fetch(API.VERIFY_EMAIL_OTP, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email: email.trim().toLowerCase(), otp: emailOtp.trim() }),
@@ -726,7 +727,7 @@ export default function RegisterPage() {
     setMobileSending(true);
     try {
       // 1. Check if mobile number is already registered
-      const checkRes = await fetch("/api/auth/check-exists", {
+      const checkRes = await fetch(API.CHECK_EXISTS, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ mobile: cleanMobile }),
@@ -738,7 +739,7 @@ export default function RegisterPage() {
       }
 
       // 2. Send Mobile OTP only if mobile does not exist
-      const res = await fetch("/api/auth/send-mobile-otp", {
+      const res = await fetch(API.SEND_MOBILE_OTP , {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ mobile: cleanMobile }),
@@ -762,7 +763,7 @@ export default function RegisterPage() {
     if (mobileVerifying || !mobileOtp) return;
     setMobileVerifying(true);
     try {
-      const res = await fetch("/api/auth/verify-mobile-otp", {
+      const res = await fetch(API.VERIFY_MOBILE_OTP, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ mobile: mobile.trim(), otp: mobileOtp.trim() }),
@@ -958,7 +959,7 @@ export default function RegisterPage() {
         termsAccepted: true,
       };
 
-      const res = await fetch("/api/auth/register", {
+      const res = await fetch(API.REGISTER, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),

@@ -1,4 +1,3 @@
-import ProtectedPage from "@/components/ProtectedPage";
 import jwt from "jsonwebtoken";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
@@ -9,19 +8,21 @@ export default async function DashboardPage() {
   const cookieStore = await cookies();
   const token = cookieStore.get("token")?.value;
 
-  if (!token) {
-    redirect("/login");
-  }
+  if (!token) {
+    redirect("/login");
+  }
 
+  let targetRole = "admin";
   try {
-    jwt.verify(token, process.env.JWT_SECRET as string);
+    const decoded = jwt.verify(token, process.env.JWT_SECRET as string) as any;
+    if (decoded?.isSuperAdmin || decoded?.roleType === "SuperAdmin") {
+      targetRole = "super-admin";
+    } else if (decoded?.roleType) {
+      targetRole = String(decoded.roleType).toLowerCase().trim().replace(/[\s_]+/g, "-");
+    }
   } catch {
     redirect("/login");
   }
 
-  return (
-    <ProtectedPage permission="dashboard.view">
-      <DashboardContent />
-    </ProtectedPage>
-  );
+  redirect(`/dashboard/${targetRole}`);
 }

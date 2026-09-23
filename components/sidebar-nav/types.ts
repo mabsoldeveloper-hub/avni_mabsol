@@ -86,6 +86,7 @@ export interface SidebarGroupProps {
   pathname: string;
   currentVisuals: SidebarVisuals;
   can: (key: string) => boolean;
+  role?: string;
   onToggle: () => void;
   onNavigate?: () => void;
 }

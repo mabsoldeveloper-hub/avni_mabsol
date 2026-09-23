@@ -3,6 +3,7 @@ const { contextBridge, ipcRenderer } = require("electron");
 contextBridge.exposeInMainWorld("electronAPI", {
   // Auth
   login: (payload) => ipcRenderer.invoke("auth:login", payload),
+  register: (payload) => ipcRenderer.invoke("auth:register", payload),
   verifyOtp: (payload) => ipcRenderer.invoke("auth:verify-otp", payload),
   resendOtp: (payload) => ipcRenderer.invoke("auth:resend-otp", payload),
   checkSession: () => ipcRenderer.invoke("auth:check-session"),
@@ -13,12 +14,15 @@ contextBridge.exposeInMainWorld("electronAPI", {
   // Config
   getConfig: () => ipcRenderer.invoke("config:get"),
   saveConfig: (cfg) => ipcRenderer.invoke("config:save", cfg),
+  getLicenseDetails: () => ipcRenderer.invoke("license:get-details"),
 
   // File dialogs
   selectFolder: (title) => ipcRenderer.invoke("dialog:select-folder", title),
 
   // Sync operations
   startSync: () => ipcRenderer.invoke("sync:start"),
+  stopSync: () => ipcRenderer.invoke("sync:stop"),
+  resumeSync: () => ipcRenderer.invoke("sync:resume"),
   getSyncStatus: () => ipcRenderer.invoke("sync:status"),
 
   // Event listeners from main process

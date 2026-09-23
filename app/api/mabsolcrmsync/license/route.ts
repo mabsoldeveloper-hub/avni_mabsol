@@ -4,6 +4,8 @@ import dbConnect from "@/lib/mongodb";
 import VfpConfig from "@/models/VfpConfig";
 import { getCurrentUser } from "@/lib/auth";
 
+import jwt from "jsonwebtoken";
+
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
@@ -15,16 +17,43 @@ function generateFormattedKey(): string {
   return `MAB-${segment1}-${segment2}-${segment3}-${segment4}`;
 }
 
-export async function GET(_request: NextRequest) {
+export async function GET(request: NextRequest) {
   try {
     await dbConnect();
     const user = await getCurrentUser();
-    if (!user) {
-      return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
+    
+    let userEmail = user?.email || "";
+    if (!userEmail) {
+      const authHeader = request.headers.get("authorization");
+      if (authHeader?.startsWith("Bearer ")) {
+        try {
+          const token = authHeader.substring(7).trim();
+          const payload = jwt.verify(token, process.env.JWT_SECRET!) as any;
+          if (payload?.email) {
+            userEmail = payload.email;
+          }
+        } catch {
+          // invalid or expired token
+        }
+      }
     }
 
-    const config = (await VfpConfig.findOne({ email: user.email })) ||
-      (await VfpConfig.findOne({ key: "vfp_sync_config" }));
+    const licenseHeader = request.headers.get("x-license-key") || request.nextUrl.searchParams.get("licenseKey") || "";
+
+    let config: any = null;
+    if (userEmail) {
+      config = await VfpConfig.findOne({ email: userEmail });
+    }
+    if (!config && licenseHeader) {
+      config = await VfpConfig.findOne({ license: licenseHeader.trim() });
+    }
+    if (!config) {
+      config = await VfpConfig.findOne({ key: "vfp_sync_config" });
+    }
+
+    if (!user && !userEmail && !licenseHeader && !config) {
+      return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
+    }
 
     const license = config?.license || "";
     const licenseExpiresAt = config?.licenseExpiresAt ? new Date(config.licenseExpiresAt) : null;

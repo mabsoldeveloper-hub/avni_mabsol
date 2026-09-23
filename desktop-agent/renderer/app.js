@@ -7,8 +7,9 @@ const otpStep = document.getElementById("otpStep");
 // DOM Elements - Forms & Inputs
 const loginForm = document.getElementById("loginForm");
 const cloudUrlInput = document.getElementById("cloudUrlInput");
-const btnSetCloudLive = document.getElementById("btnSetCloudLive");
-const btnSetCloudLocal = document.getElementById("btnSetCloudLocal");
+const btnServerPhcrm = document.getElementById("btnServerPhcrm");
+const btnServerMbh = document.getElementById("btnServerMbh");
+const btnServerLocal = document.getElementById("btnServerLocal");
 const emailInput = document.getElementById("emailInput");
 const passwordInput = document.getElementById("passwordInput");
 const loginBtn = document.getElementById("loginBtn");
@@ -20,6 +21,27 @@ const otpTargetEmail = document.getElementById("otpTargetEmail");
 const verifyOtpBtn = document.getElementById("verifyOtpBtn");
 const backToLoginBtn = document.getElementById("backToLoginBtn");
 const otpError = document.getElementById("otpError");
+
+// DOM Elements - Auth & Registration Tabs
+const authTabs = document.getElementById("authTabs");
+const tabSignIn = document.getElementById("tabSignIn");
+const tabSignUp = document.getElementById("tabSignUp");
+const signupStep = document.getElementById("signupStep");
+const signupForm = document.getElementById("signupForm");
+const signupCompanyName = document.getElementById("signupCompanyName");
+const signupFullName = document.getElementById("signupFullName");
+const signupEmail = document.getElementById("signupEmail");
+const signupMobile = document.getElementById("signupMobile");
+const signupPassword = document.getElementById("signupPassword");
+const signupConfirmPassword = document.getElementById("signupConfirmPassword");
+const signupBtn = document.getElementById("signupBtn");
+const signupError = document.getElementById("signupError");
+const linkToSignup = document.getElementById("linkToSignup");
+const linkToSignin = document.getElementById("linkToSignin");
+const pendingApprovalStep = document.getElementById("pendingApprovalStep");
+const pendingCompanyNameText = document.getElementById("pendingCompanyNameText");
+const pendingEmailText = document.getElementById("pendingEmailText");
+const pendingBackToLoginBtn = document.getElementById("pendingBackToLoginBtn");
 
 // DOM Elements - Top Nav & Status
 const netStatusBadge = document.getElementById("netStatusBadge");
@@ -34,6 +56,10 @@ const companyCodeInput = document.getElementById("companyCodeInput");
 const sourceDirInput = document.getElementById("sourceDirInput");
 const destDirInput = document.getElementById("destDirInput");
 const licenseKeyInput = document.getElementById("licenseKeyInput");
+const licenseCountdownBadge = document.getElementById("licenseCountdownBadge");
+const licenseCountdownText = document.getElementById("licenseCountdownText");
+const licenseCountdownDetail = document.getElementById("licenseCountdownDetail");
+const licenseExpiryNotice = document.getElementById("licenseExpiryNotice");
 const intervalSelect = document.getElementById("intervalSelect");
 const browseSourceBtn = document.getElementById("browseSourceBtn");
 const browseDestBtn = document.getElementById("browseDestBtn");
@@ -41,8 +67,20 @@ const editConfigBtn = document.getElementById("editConfigBtn");
 const saveConfigBtn = document.getElementById("saveConfigBtn");
 const cancelEditBtn = document.getElementById("cancelEditBtn");
 const saveNotice = document.getElementById("saveNotice");
+const syncTargetSelect = document.getElementById("syncTargetSelect");
+const autoSyncCheckbox = document.getElementById("autoSyncCheckbox");
+const autoSyncLabelText = document.getElementById("autoSyncLabelText");
+const toggleAutoSyncBtn = document.getElementById("toggleAutoSyncBtn");
+const toggleSyncIcon = document.getElementById("toggleSyncIcon");
+const toggleSyncText = document.getElementById("toggleSyncText");
 
-// DOM Elements - // DOM Elements - Unlock Modal
+// DOM Elements - Sync Target Dropdown in Top Nav
+const syncTargetDropdown = document.getElementById("syncTargetDropdown");
+const syncTargetBtn = document.getElementById("syncTargetBtn");
+const syncTargetMenu = document.getElementById("syncTargetMenu");
+const currentSyncTargetName = document.getElementById("currentSyncTargetName");
+
+// DOM Elements - Unlock Modal
 const unlockModal = document.getElementById("unlockModal");
 const unlockOtpSection = document.getElementById("unlockOtpSection");
 const unlockPasswordSection = document.getElementById("unlockPasswordSection");
@@ -61,8 +99,6 @@ const verifyPasswordUnlockBtn = document.getElementById("verifyPasswordUnlockBtn
 const closeUnlockPasswordModalBtn = document.getElementById("closeUnlockPasswordModalBtn");
 const switchToPasswordBtn = document.getElementById("switchToPasswordBtn");
 const switchToOtpBtn = document.getElementById("switchToOtpBtn");
-const unlockDirectBtn = document.getElementById("unlockDirectBtn");
-const unlockDirectPasswordBtn = document.getElementById("unlockDirectPasswordBtn");
 
 // DOM Elements - Action & Stats & Terminal
 const syncNowBtn = document.getElementById("syncNowBtn");
@@ -73,6 +109,24 @@ const terminalBody = document.getElementById("terminalBody");
 const clearLogBtn = document.getElementById("clearLogBtn");
 
 let currentAuthEmail = "";
+
+function updateActiveServerButtons(url) {
+  const normalized = (url || "").trim().toLowerCase().replace(/\/+$/, "");
+  const buttons = [
+    { btn: btnServerPhcrm, url: "https://phcrm.mabsolinfotech.cloud" },
+    { btn: btnServerMbh, url: "https://mbh.crm.mabsolinfotech.cloud" },
+    { btn: btnServerLocal, url: "http://localhost:3000" }
+  ];
+
+  buttons.forEach(({ btn, url: targetUrl }) => {
+    if (!btn) return;
+    if (normalized === targetUrl.toLowerCase()) {
+      btn.classList.add("active");
+    } else {
+      btn.classList.remove("active");
+    }
+  });
+}
 
 // ---------------------------------------------------------------------------
 // Initialization
@@ -91,6 +145,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   } catch (err) {
     console.warn("Could not pre-load config:", err);
   }
+  updateActiveServerButtons(cloudUrlInput.value);
 
   // 2. Check current session
   try {
@@ -153,15 +208,105 @@ async function loadAndDisplayConfig() {
       sourceDirInput.value = cfg.sourceDir || "";
       destDirInput.value = cfg.destDir || "";
       licenseKeyInput.value = cfg.licenseKey || "";
-      intervalSelect.value = String(cfg.intervalMins || 10);
+      const isAutoSyncOn = cfg.autoSync !== false && String(cfg.intervalMins) !== "0";
+      if (autoSyncCheckbox) {
+        autoSyncCheckbox.checked = isAutoSyncOn;
+        if (autoSyncLabelText) autoSyncLabelText.textContent = isAutoSyncOn ? "Auto-Sync ON" : "Auto-Sync OFF";
+      }
+      intervalSelect.value = String(cfg.intervalMins !== undefined ? cfg.intervalMins : "realtime");
+      if (syncTargetSelect) syncTargetSelect.value = cfg.syncTarget || "mabsolcrm";
 
       // Always lock the form by default when on dashboard
       setFormLocked(true);
+
+      // Fetch active license validity & start live countdown timer
+      fetchAndShowLicenseDetails();
     }
   } catch (err) {
     console.error("Failed to load config:", err);
   } finally {
     setFormLocked(true);
+  }
+}
+
+let licenseCountdownInterval = null;
+
+function updateLicenseCountdown(expiresAtStr) {
+  if (licenseCountdownInterval) {
+    clearInterval(licenseCountdownInterval);
+    licenseCountdownInterval = null;
+  }
+
+  if (!expiresAtStr) {
+    if (licenseCountdownBadge) licenseCountdownBadge.classList.add("hidden");
+    if (licenseCountdownDetail) licenseCountdownDetail.classList.add("hidden");
+    return;
+  }
+
+  const target = new Date(expiresAtStr).getTime();
+
+  function tick() {
+    const now = Date.now();
+    const diff = target - now;
+
+    if (diff <= 0) {
+      if (licenseCountdownBadge) {
+        licenseCountdownBadge.classList.remove("hidden", "warning");
+        licenseCountdownBadge.classList.add("expired");
+        if (licenseCountdownText) licenseCountdownText.textContent = "Expired";
+      }
+      if (licenseCountdownDetail) {
+        licenseCountdownDetail.classList.remove("hidden");
+        if (licenseExpiryNotice) licenseExpiryNotice.textContent = "License key expired. Please renew from Web Settings.";
+      }
+      if (licenseCountdownInterval) {
+        clearInterval(licenseCountdownInterval);
+        licenseCountdownInterval = null;
+      }
+      return;
+    }
+
+    const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+    const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+    const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+    const seconds = Math.floor((diff % (1000 * 60)) / 1000);
+
+    const pad = (n) => String(n).padStart(2, "0");
+    const formatted = `${days}d ${pad(hours)}h ${pad(minutes)}m ${pad(seconds)}s`;
+
+    if (licenseCountdownBadge) {
+      licenseCountdownBadge.classList.remove("hidden", "expired");
+      if (days < 3) {
+        licenseCountdownBadge.classList.add("warning");
+      } else {
+        licenseCountdownBadge.classList.remove("warning");
+      }
+      if (licenseCountdownText) licenseCountdownText.textContent = formatted;
+    }
+
+    if (licenseCountdownDetail) {
+      licenseCountdownDetail.classList.remove("hidden");
+      if (licenseExpiryNotice) {
+        licenseExpiryNotice.textContent = `${days} days remaining in 30-day term`;
+      }
+    }
+  }
+
+  tick();
+  licenseCountdownInterval = setInterval(tick, 1000);
+}
+
+async function fetchAndShowLicenseDetails() {
+  try {
+    if (!window.electronAPI?.getLicenseDetails) return;
+    const res = await window.electronAPI.getLicenseDetails();
+    if (res && res.success && res.licenseExpiresAt) {
+      updateLicenseCountdown(res.licenseExpiresAt);
+    } else {
+      updateLicenseCountdown(null);
+    }
+  } catch (err) {
+    console.error("Failed to query license details:", err);
   }
 }
 
@@ -174,8 +319,10 @@ function setFormLocked(isLocked) {
   sourceDirInput.readOnly = isLocked;
   licenseKeyInput.disabled = isLocked;
   licenseKeyInput.readOnly = isLocked;
-  intervalSelect.disabled = isLocked;
+  if (autoSyncCheckbox) autoSyncCheckbox.disabled = isLocked;
+  intervalSelect.disabled = isLocked || (autoSyncCheckbox && !autoSyncCheckbox.checked);
   browseSourceBtn.disabled = isLocked;
+  if (syncTargetSelect) syncTargetSelect.disabled = isLocked;
 
   // Mask sensitive folder paths and license key when locked
   if (isLocked) {
@@ -200,17 +347,23 @@ function setupEventListeners() {
   // Disable right-click inspect context menu
   document.addEventListener("contextmenu", (e) => e.preventDefault());
 
-  // Cloud URL quick toggles
-  if (btnSetCloudLive) {
-    btnSetCloudLive.addEventListener("click", () => {
-      cloudUrlInput.value = "https://mbh.crm.mabsolinfotech.cloud";
+  // Cloud URL quick toggles & presets
+  const bindServerBtn = (btn, url) => {
+    if (!btn) return;
+    btn.addEventListener("click", () => {
+      cloudUrlInput.value = url;
+      updateActiveServerButtons(url);
       cloudUrlInput.focus();
     });
-  }
-  if (btnSetCloudLocal) {
-    btnSetCloudLocal.addEventListener("click", () => {
-      cloudUrlInput.value = "http://localhost:3000";
-      cloudUrlInput.focus();
+  };
+
+  bindServerBtn(btnServerPhcrm, "https://phcrm.mabsolinfotech.cloud");
+  bindServerBtn(btnServerMbh, "https://mbh.crm.mabsolinfotech.cloud");
+  bindServerBtn(btnServerLocal, "http://localhost:3000");
+
+  if (cloudUrlInput) {
+    cloudUrlInput.addEventListener("input", () => {
+      updateActiveServerButtons(cloudUrlInput.value);
     });
   }
 
@@ -241,16 +394,119 @@ function setupEventListeners() {
         otpStep.classList.remove("hidden");
         otpCodeInput.value = "";
         otpCodeInput.focus();
-      } else {
-        loginError.textContent = res.message || "Invalid credentials.";
-        loginError.classList.remove("hidden");
+        return;
       }
+
+      if (res.pendingApproval) {
+        showPendingApprovalView({
+          email: email,
+          companyName: "Your Organization"
+        });
+        return;
+      }
+
+      loginError.textContent = sanitizeMessage(res.message || "Invalid credentials.");
+      loginError.classList.remove("hidden");
     } catch (err) {
       setButtonLoading(loginBtn, false);
-      loginError.textContent = err.message || "Connection error.";
+      loginError.textContent = sanitizeMessage(err.message || "Connection error.");
       loginError.classList.remove("hidden");
     }
   });
+
+  // Switch between Sign In and Sign Up tabs
+  const switchToSignIn = () => {
+    tabSignIn?.classList.add("active");
+    tabSignUp?.classList.remove("active");
+    loginStep?.classList.remove("hidden");
+    signupStep?.classList.add("hidden");
+    pendingApprovalStep?.classList.add("hidden");
+    otpStep?.classList.add("hidden");
+    loginError?.classList.add("hidden");
+    authTabs?.classList.remove("hidden");
+  };
+
+  const switchToSignUp = () => {
+    tabSignUp?.classList.add("active");
+    tabSignIn?.classList.remove("active");
+    signupStep?.classList.remove("hidden");
+    loginStep?.classList.add("hidden");
+    pendingApprovalStep?.classList.add("hidden");
+    otpStep?.classList.add("hidden");
+    signupError?.classList.add("hidden");
+    authTabs?.classList.remove("hidden");
+  };
+
+  const showPendingApprovalView = (data) => {
+    authTabs?.classList.add("hidden");
+    loginStep?.classList.add("hidden");
+    signupStep?.classList.add("hidden");
+    otpStep?.classList.add("hidden");
+    pendingApprovalStep?.classList.remove("hidden");
+    if (pendingCompanyNameText) pendingCompanyNameText.textContent = data.companyName || "Your Organization";
+    if (pendingEmailText) pendingEmailText.textContent = data.email || "";
+  };
+
+  tabSignIn?.addEventListener("click", switchToSignIn);
+  tabSignUp?.addEventListener("click", switchToSignUp);
+  linkToSignup?.addEventListener("click", switchToSignUp);
+  linkToSignin?.addEventListener("click", switchToSignIn);
+  pendingBackToLoginBtn?.addEventListener("click", switchToSignIn);
+
+  // Sign Up Form Submit (Pending Superadmin Approval)
+  if (signupForm) {
+    signupForm.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      signupError.classList.add("hidden");
+
+      const password = signupPassword.value;
+      const confirmPassword = signupConfirmPassword.value;
+
+      if (password !== confirmPassword) {
+        signupError.textContent = "Passwords do not match. Please verify.";
+        signupError.classList.remove("hidden");
+        return;
+      }
+
+      if (password.length < 6) {
+        signupError.textContent = "Password must be at least 6 characters long.";
+        signupError.classList.remove("hidden");
+        return;
+      }
+
+      setButtonLoading(signupBtn, true);
+
+      const cloudUrl = cloudUrlInput.value.trim();
+      const payload = {
+        cloudUrl,
+        companyName: signupCompanyName.value.trim(),
+        name: signupFullName.value.trim(),
+        email: signupEmail.value.trim().toLowerCase(),
+        mobile: signupMobile ? signupMobile.value.trim() : "",
+        password
+      };
+
+      try {
+        const res = await window.electronAPI.register(payload);
+        setButtonLoading(signupBtn, false);
+
+        if (res && res.success && res.pendingApproval) {
+          showPendingApprovalView({
+            companyName: payload.companyName,
+            email: payload.email
+          });
+          signupForm.reset();
+        } else {
+          signupError.textContent = sanitizeMessage(res?.message || "Failed to create account.");
+          signupError.classList.remove("hidden");
+        }
+      } catch (err) {
+        setButtonLoading(signupBtn, false);
+        signupError.textContent = sanitizeMessage(err.message || "Network error while creating account.");
+        signupError.classList.remove("hidden");
+      }
+    });
+  }
 
   // Back Button (from OTP step to Login step)
   backToLoginBtn.addEventListener("click", () => {
@@ -323,9 +579,41 @@ function setupEventListeners() {
     }
   }
 
-  function unlockDirectly() {
-    unlockModal.classList.add("hidden");
-    setFormLocked(false);
+  // Sync Target Dropdown Trigger & Selection
+  if (syncTargetBtn && syncTargetMenu) {
+    syncTargetBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      syncTargetMenu.classList.toggle("hidden");
+      syncTargetDropdown.classList.toggle("open");
+    });
+
+    document.addEventListener("click", (e) => {
+      if (syncTargetDropdown && !syncTargetDropdown.contains(e.target)) {
+        syncTargetMenu.classList.add("hidden");
+        syncTargetDropdown.classList.remove("open");
+      }
+    });
+
+    const targetItems = syncTargetMenu.querySelectorAll(".sync-target-item");
+    targetItems.forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const targetId = btn.getAttribute("data-id");
+        if (targetId !== "mabsolcrm") {
+          const name = btn.querySelector(".item-name")?.textContent || "Target ERP";
+          appendLogEntry("info", `[Sync Target] ${name} is coming soon. MabsolCRM sync remains active.`);
+          alert(`${name} integration is coming soon!\nMabsolCRM native database sync is currently active.`);
+          return;
+        }
+
+        // Activate MabsolCRM
+        targetItems.forEach((b) => b.classList.remove("active"));
+        btn.classList.add("active");
+        if (currentSyncTargetName) currentSyncTargetName.textContent = "Sync MabsolCRM";
+        if (syncTargetSelect) syncTargetSelect.value = "mabsolcrm";
+        syncTargetMenu.classList.add("hidden");
+        syncTargetDropdown.classList.remove("open");
+      });
+    });
   }
 
   // Click "Edit Configuration" -> Triggers OTP verification or Password verification to unlock!
@@ -375,17 +663,6 @@ function setupEventListeners() {
     showUnlockView("otp");
   });
 
-  // Direct Unlock buttons (for offline or immediate local setup)
-  unlockDirectBtn.addEventListener("click", (e) => {
-    e.preventDefault();
-    unlockDirectly();
-  });
-
-  unlockDirectPasswordBtn.addEventListener("click", (e) => {
-    e.preventDefault();
-    unlockDirectly();
-  });
-
   // Close Unlock Modal Buttons
   closeUnlockModalBtn.addEventListener("click", () => {
     unlockModal.classList.add("hidden");
@@ -418,12 +695,8 @@ function setupEventListeners() {
       } else {
         const isUnauth = res?.unauthorized || (typeof res?.message === "string" && res.message.toLowerCase().includes("unauthorized"));
         if (isUnauth) {
-          unlockOtpError.innerHTML = `Cloud session expired. <a href="#" id="inlineDirectUnlock" style="color: #38bdf8; text-decoration: underline; font-weight: bold;">Unlock Directly</a> or <a href="#" id="inlinePasswordUnlock" style="color: #38bdf8; text-decoration: underline; font-weight: bold;">Use Password</a>`;
+          unlockOtpError.innerHTML = `Cloud session expired. <a href="#" id="inlinePasswordUnlock" style="color: #38bdf8; text-decoration: underline; font-weight: bold;">Use Account Password</a>`;
           unlockOtpError.classList.remove("hidden");
-          document.getElementById("inlineDirectUnlock")?.addEventListener("click", (ev) => {
-            ev.preventDefault();
-            unlockDirectly();
-          });
           document.getElementById("inlinePasswordUnlock")?.addEventListener("click", (ev) => {
             ev.preventDefault();
             showUnlockView("password");
@@ -466,12 +739,12 @@ function setupEventListeners() {
           setFormLocked(false); // Unlocks form fields!
         }
       } else {
-        unlockPasswordError.textContent = res?.message || "Invalid account password.";
+        unlockPasswordError.textContent = sanitizeMessage(res?.message || "Invalid account password.");
         unlockPasswordError.classList.remove("hidden");
       }
     } catch (err) {
       setButtonLoading(verifyPasswordUnlockBtn, false);
-      unlockPasswordError.textContent = err.message || "Authentication error.";
+      unlockPasswordError.textContent = sanitizeMessage(err.message || "Authentication error.");
       unlockPasswordError.classList.remove("hidden");
     }
   });
@@ -485,25 +758,110 @@ function setupEventListeners() {
   // Save Config
   configForm.addEventListener("submit", async (e) => {
     e.preventDefault();
+    setButtonLoading(saveConfigBtn, true);
+    saveNotice.classList.add("hidden");
+
+    const isAutoSync = autoSyncCheckbox ? (autoSyncCheckbox.checked && intervalSelect.value !== "0") : (intervalSelect.value !== "0");
     const newCfg = {
       companyName: companyNameInput.value.trim(),
       companyCode: companyCodeInput.value.trim().toUpperCase(),
       sourceDir: sourceDirInput.value.trim(),
       destDir: destDirInput ? destDirInput.value.trim() : "",
       licenseKey: licenseKeyInput.value.trim(),
-      autoSync: intervalSelect.value !== "0",
-      intervalMins: Number(intervalSelect.value) || 10,
+      syncTarget: syncTargetSelect ? syncTargetSelect.value : "mabsolcrm",
+      autoSync: isAutoSync,
+      intervalMins: isAutoSync ? (intervalSelect.value === "realtime" ? "realtime" : (Number(intervalSelect.value) || 10)) : 0,
       cloudUrl: cloudUrlInput.value.trim(),
       userEmail: currentAuthEmail || emailInput.value.trim()
     };
 
-    const res = await window.electronAPI.saveConfig(newCfg);
-    if (res.success) {
+    try {
+      const res = await window.electronAPI.saveConfig(newCfg);
+      setButtonLoading(saveConfigBtn, false);
+
+      if (res && res.success) {
+        saveNotice.textContent = "Saved & Verified on this machine!";
+        saveNotice.className = "save-notice";
+        saveNotice.classList.remove("hidden");
+        setTimeout(() => saveNotice.classList.add("hidden"), 3500);
+        setFormLocked(true); // Re-locks after successful save!
+        fetchAndShowLicenseDetails();
+      } else {
+        const errorText = sanitizeMessage(res?.error || "Failed to verify/save license key.");
+        saveNotice.textContent = errorText;
+        saveNotice.className = "save-notice error";
+        saveNotice.classList.remove("hidden");
+        appendLogEntry("error", `[Config Error] ${errorText}`);
+      }
+    } catch (err) {
+      setButtonLoading(saveConfigBtn, false);
+      const errorText = sanitizeMessage(err.message || "Failed to save configuration.");
+      saveNotice.textContent = errorText;
+      saveNotice.className = "save-notice error";
       saveNotice.classList.remove("hidden");
-      setTimeout(() => saveNotice.classList.add("hidden"), 3000);
-      setFormLocked(true); // Re-locks after save!
+      appendLogEntry("error", `[Config Error] ${errorText}`);
     }
   });
+
+  // Auto-Sync Enable/Disable Checkbox
+  if (autoSyncCheckbox) {
+    autoSyncCheckbox.addEventListener("change", () => {
+      const isChecked = autoSyncCheckbox.checked;
+      if (autoSyncLabelText) autoSyncLabelText.textContent = isChecked ? "Auto-Sync ON" : "Auto-Sync OFF";
+      intervalSelect.disabled = !isChecked;
+      if (!isChecked) {
+        intervalSelect.value = "0";
+      } else if (intervalSelect.value === "0") {
+        intervalSelect.value = "realtime";
+      }
+    });
+  }
+
+  // Interval Select change
+  if (intervalSelect) {
+    intervalSelect.addEventListener("change", () => {
+      const isOff = intervalSelect.value === "0";
+      if (autoSyncCheckbox) {
+        autoSyncCheckbox.checked = !isOff;
+        if (autoSyncLabelText) autoSyncLabelText.textContent = isOff ? "Auto-Sync OFF" : "Auto-Sync ON";
+      }
+    });
+  }
+
+  // Stop / Resume Auto-Sync Button
+  let isAutoSyncPausedState = false;
+  if (toggleAutoSyncBtn) {
+    toggleAutoSyncBtn.addEventListener("click", async () => {
+      toggleAutoSyncBtn.disabled = true;
+      try {
+        if (!isAutoSyncPausedState) {
+          const res = await window.electronAPI.stopSync();
+          if (res && res.success) {
+            isAutoSyncPausedState = true;
+            toggleAutoSyncBtn.classList.add("resumed");
+            if (toggleSyncIcon) toggleSyncIcon.textContent = "▶️";
+            if (toggleSyncText) toggleSyncText.textContent = "Resume Sync";
+            statLastStatus.textContent = "Sync Paused";
+            statLastStatus.style.color = "#f59e0b";
+          }
+        } else {
+          const res = await window.electronAPI.resumeSync();
+          if (res && res.success) {
+            isAutoSyncPausedState = false;
+            toggleAutoSyncBtn.classList.remove("resumed");
+            if (toggleSyncIcon) toggleSyncIcon.textContent = "🛑";
+            if (toggleSyncText) toggleSyncText.textContent = "Stop Sync";
+            statLastStatus.textContent = "Sync Active";
+            statLastStatus.style.color = "#34d399";
+          }
+        }
+      } catch (err) {
+        console.error("Failed to toggle auto sync:", err);
+      } finally {
+        toggleAutoSyncBtn.disabled = false;
+      }
+    });
+  }
 
   // Decrypt & Sync Now Action
   syncNowBtn.addEventListener("click", async () => {
@@ -556,15 +914,61 @@ function setupIpcListeners() {
   }
 }
 
+// Universal sanitizer to ensure internal file names (efwin11, prg, vfp, fxp, fpw, fll, MabsolCRM.EXE)
+// and raw paths are never exposed in user logs, terminal display, or error dialogs.
+function sanitizeMessage(msg) {
+  if (!msg) return "";
+  let text = typeof msg === "string" ? msg : (msg.message || msg.error || JSON.stringify(msg));
+
+  // 1. Scrub Windows absolute file paths pointing to engine or internal files
+  text = text.replace(/[A-Za-z]:\\(?:[^'"\n\r\t<>\\\/]+\\)*([^'"\n\r\t<>\\\/]+)/g, (match, filename) => {
+    if (/efwin11|mabsol_core|mabsolcrm|vfp|\.fll|\.prg|\.fpw|\.fxp/i.test(match)) {
+      return "[System Module]";
+    }
+    return filename;
+  });
+
+  // 2. Scrub Unix-style paths containing engine files
+  text = text.replace(/(?:\/[^'"\n\r\t<>\/]+)+\/(?:efwin11|mabsol_core|mabsolcrm|vfp)[^'"\n\r\t<>\/]*/gi, "[System Module]");
+
+  // 3. Clean up node fs copyfile / lock / EBUSY error leaks
+  text = text.replace(/(?:EBUSY:\s*)?copyfile\s+['"][^'"]+['"]\s*->\s*['"][^'"]+['"]/gi, "system module initialization");
+  text = text.replace(/EBUSY:\s*resource busy or locked[^\n\r]*/gi, "Resource temporarily in use by background process.");
+
+  // 4. Scrub specific internal names & extensions
+  text = text.replace(/efwin11(?:\.fll)?/gi, "security module");
+  text = text.replace(/mabsol_core\.(?:prg|fpw|fxp|bak)/gi, "data processing routine");
+  text = text.replace(/mabsolcrm\.exe/gi, "data service");
+  text = text.replace(/vfp9[a-z0-9]*\.dll/gi, "database driver");
+  text = text.replace(/\bvfp9?\b/gi, "database engine");
+  text = text.replace(/\bfoxpro\b/gi, "database engine");
+  text = text.replace(/\b[a-zA-Z0-9_-]+\.fll\b/gi, "security library");
+  text = text.replace(/\b[a-zA-Z0-9_-]+\.prg\b/gi, "processing task");
+  text = text.replace(/\b[a-zA-Z0-9_-]+\.fpw\b/gi, "system config");
+  text = text.replace(/\b[a-zA-Z0-9_-]+\.fxp\b/gi, "compiled routine");
+  text = text.replace(/\.prg\b/gi, " routine");
+  text = text.replace(/\.fll\b/gi, " module");
+  text = text.replace(/\.fpw\b/gi, " config");
+  text = text.replace(/\.fxp\b/gi, " binary");
+
+  return text;
+}
+
 // ---------------------------------------------------------------------------
 // UI Helpers
 // ---------------------------------------------------------------------------
 function appendLog(timestamp, level, message) {
+  const cleanMessage = sanitizeMessage(message);
   const entry = document.createElement("div");
   entry.className = `log-entry ${level}`;
-  entry.innerHTML = `<span class="time">[${timestamp}]</span> ${escapeHtml(message)}`;
+  entry.innerHTML = `<span class="time">[${timestamp}]</span> ${escapeHtml(cleanMessage)}`;
   terminalBody.appendChild(entry);
   terminalBody.scrollTop = terminalBody.scrollHeight;
+}
+
+function appendLogEntry(level, message) {
+  const timestamp = new Date().toLocaleTimeString();
+  appendLog(timestamp, level, message);
 }
 
 function updateStatusDisplay(status) {
@@ -584,7 +988,7 @@ function updateStatusDisplay(status) {
     statLastStatus.textContent = "Stored (Cloud)";
     statLastStatus.style.color = "#34d399";
   } else if (status.lastStatus === "offline_queued") {
-    statLastStatus.textContent = "Offline (Queued)";
+    statLastStatus.textContent = "Offline (Saved Locally)";
     statLastStatus.style.color = "#fbbf24";
   } else if (status.error) {
     statLastStatus.textContent = "Failed";

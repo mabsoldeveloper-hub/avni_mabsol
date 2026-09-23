@@ -30,6 +30,12 @@
           <p class="subtitle">Desktop Data Synchronization Agent</p>
         </div>
 
+        <!-- Auth Navigation Tabs: Sign In / Create Account -->
+        <div class="auth-tabs" id="authTabs">
+          <button type="button" id="tabSignIn" class="auth-tab active">Sign In</button>
+          <button type="button" id="tabSignUp" class="auth-tab">Create Account</button>
+        </div>
+
         <!-- Login Step 1: Email & Password -->
         <div id="loginStep" class="auth-step">
           <div class="notice-banner">
@@ -38,18 +44,24 @@
           </div>
 
           <form id="loginForm">
-            <div class="form-group">
-              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
-                <label for="cloudUrlInput" style="margin-bottom: 0;">Cloud Server URL</label>
-                <div style="display: flex; gap: 6px;">
-                  <button type="button" id="btnSetCloudLive" class="btn-preset" title="Switch to Live Cloud">Live
-                    Cloud</button>
-                  <button type="button" id="btnSetCloudLocal" class="btn-preset" title="Switch to Local Dev">Local
-                    Dev</button>
-                </div>
+            <div class="form-group server-select-group">
+              <label style="margin-bottom: 6px; display: block;">Select Cloud CRM Server</label>
+              <div class="server-picker-grid">
+                <button type="button" class="server-choice-btn active" id="btnServerPhcrm" data-url="https://phcrm.mabsolinfotech.cloud">
+                  <span class="server-choice-title">phcrm.mabsolinfotech.cloud</span>
+                  <span class="server-choice-sub">Primary Production Cloud</span>
+                </button>
+                <button type="button" class="server-choice-btn" id="btnServerMbh" data-url="https://mbh.crm.mabsolinfotech.cloud">
+                  <span class="server-choice-title">mbh.crm.mabsolinfotech.cloud</span>
+                  <span class="server-choice-sub">MBH Pharma CRM Cloud</span>
+                </button>
+                <button type="button" class="server-choice-btn local-btn" id="btnServerLocal" data-url="http://localhost:3000">
+                  <span class="server-choice-title">Local Dev Server</span>
+                  <span class="server-choice-sub">http://localhost:3000</span>
+                </button>
               </div>
-              <input type="url" id="cloudUrlInput" value="https://mbh.crm.mabsolinfotech.cloud" required
-                placeholder="https://mbh.crm.mabsolinfotech.cloud">
+              <input type="url" id="cloudUrlInput" value="https://phcrm.mabsolinfotech.cloud" required
+                placeholder="https://phcrm.mabsolinfotech.cloud" style="margin-top: 6px;">
             </div>
 
             <div class="form-group">
@@ -68,7 +80,89 @@
               <span class="btn-text">Sign In</span>
               <span class="spinner hidden"></span>
             </button>
+
+            <div class="auth-footer-link">
+              <span>New company or operator?</span>
+              <button type="button" id="linkToSignup" class="btn-text-link">Create an Account</button>
+            </div>
           </form>
+        </div>
+
+        <!-- Sign Up Step: Create Account (Pending Superadmin Approval) -->
+        <div id="signupStep" class="auth-step hidden">
+          <div class="notice-banner" style="background: rgba(14, 165, 233, 0.1); border-color: rgba(14, 165, 233, 0.25);">
+            <span class="icon">ℹ️</span>
+            <span>New accounts require Superadmin approval before login access is granted.</span>
+          </div>
+
+          <form id="signupForm">
+            <div class="form-group">
+              <label for="signupCompanyName">Company / Firm Name *</label>
+              <input type="text" id="signupCompanyName" required placeholder="e.g. Acme Pharmaceuticals">
+            </div>
+
+            <div class="form-group">
+              <label for="signupFullName">Full Name *</label>
+              <input type="text" id="signupFullName" required placeholder="e.g. John Doe">
+            </div>
+
+            <div class="form-group">
+              <label for="signupEmail">Work Email Address *</label>
+              <input type="email" id="signupEmail" required placeholder="operator@acmepharma.com">
+            </div>
+
+            <div class="form-group">
+              <label for="signupMobile">Mobile Number</label>
+              <input type="tel" id="signupMobile" placeholder="e.g. 9876543210">
+            </div>
+
+            <div class="form-group">
+              <label for="signupPassword">Password * (min 6 characters)</label>
+              <input type="password" id="signupPassword" minlength="6" required placeholder="••••••••">
+            </div>
+
+            <div class="form-group">
+              <label for="signupConfirmPassword">Confirm Password *</label>
+              <input type="password" id="signupConfirmPassword" minlength="6" required placeholder="••••••••">
+            </div>
+
+            <div id="signupError" class="error-msg hidden"></div>
+
+            <button type="submit" id="signupBtn" class="btn-primary">
+              <span class="btn-text">Submit for Superadmin Approval</span>
+              <span class="spinner hidden"></span>
+            </button>
+
+            <div class="auth-footer-link">
+              <span>Already registered?</span>
+              <button type="button" id="linkToSignin" class="btn-text-link">Back to Sign In</button>
+            </div>
+          </form>
+        </div>
+
+        <!-- Pending Approval Step (Shown after registration or upon pending login) -->
+        <div id="pendingApprovalStep" class="auth-step hidden">
+          <div class="pending-approval-card">
+            <div class="pending-icon">⏳</div>
+            <h3>Account Awaiting Superadmin Approval</h3>
+            <div class="pending-status-pill">
+              <span class="dot-amber"></span>
+              <span>Status: Pending Review</span>
+            </div>
+            <p class="pending-desc">
+              Your account for <strong id="pendingCompanyNameText">Your Company</strong> (<span id="pendingEmailText"></span>) has been created successfully!
+            </p>
+            <div class="pending-instruction-box">
+              <p>
+                🛡️ <strong>Security Protocol:</strong> Direct login is not permitted until approved by the Superadmin. Please contact your Superadmin or wait for account activation. Once approved, you can log in right here.
+              </p>
+            </div>
+            <div class="auth-actions" style="margin-top: 20px;">
+              <button type="button" id="pendingBackToLoginBtn" class="btn-primary">
+                <span>Back to Sign In</span>
+              </button>
+            </div>
+          </div>
         </div>
 
         <!-- Login Step 2: 6-Digit OTP Verification -->
@@ -113,6 +207,45 @@
           <div id="netStatusBadge" class="status-pill online">
             <span class="dot"></span>
             <span class="label">Online</span>
+          </div>
+        </div>
+
+        <div class="nav-center">
+          <div class="sync-target-dropdown" id="syncTargetDropdown">
+            <button type="button" class="btn-sync-target" id="syncTargetBtn">
+              <span class="sync-prefix">Sync:</span>
+              <span class="sync-current" id="currentSyncTargetName">Sync MabsolCRM</span>
+              <svg class="dropdown-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                <polyline points="6 9 12 15 18 9"></polyline>
+              </svg>
+            </button>
+            <div class="sync-target-menu hidden" id="syncTargetMenu">
+              <div class="sync-target-header">SELECT SYNC TARGET</div>
+              <button type="button" class="sync-target-item active" data-id="mabsolcrm">
+                <span class="item-name">Sync MabsolCRM</span>
+                <span class="item-check">✓</span>
+              </button>
+              <button type="button" class="sync-target-item disabled" data-id="busy">
+                <span class="item-name">Sync Busy ERP</span>
+                <span class="badge-soon">Coming Soon</span>
+              </button>
+              <button type="button" class="sync-target-item disabled" data-id="tally">
+                <span class="item-name">Sync Tally ERP</span>
+                <span class="badge-soon">Coming Soon</span>
+              </button>
+              <button type="button" class="sync-target-item disabled" data-id="marg">
+                <span class="item-name">Sync Marg ERP</span>
+                <span class="badge-soon">Coming Soon</span>
+              </button>
+              <button type="button" class="sync-target-item disabled" data-id="easysol">
+                <span class="item-name">Sync EasySol</span>
+                <span class="badge-soon">Coming Soon</span>
+              </button>
+              <button type="button" class="sync-target-item disabled" data-id="logic">
+                <span class="item-name">Sync Logic ERP</span>
+                <span class="badge-soon">Coming Soon</span>
+              </button>
+            </div>
           </div>
         </div>
 
@@ -183,19 +316,47 @@
 
               <div class="form-row">
                 <div class="form-group flex-1">
-                  <label for="licenseKeyInput">License Key</label>
-                  <input type="password" id="licenseKeyInput" placeholder="MAB-XXXX-XXXX-XXXX" disabled readonly>
+                  <label for="syncTargetSelect">Sync Target ERP System</label>
+                  <select id="syncTargetSelect" disabled>
+                    <option value="mabsolcrm" selected>Sync MabsolCRM (Active)</option>
+                    <option value="busy" disabled>Sync Busy ERP (Coming Soon)</option>
+                    <option value="tally" disabled>Sync Tally ERP (Coming Soon)</option>
+                    <option value="marg" disabled>Sync Marg ERP (Coming Soon)</option>
+                    <option value="easysol" disabled>Sync EasySol (Coming Soon)</option>
+                    <option value="logic" disabled>Sync Logic ERP (Coming Soon)</option>
+                  </select>
                 </div>
                 <div class="form-group flex-1">
-                  <label for="intervalSelect">Auto-Sync Schedule</label>
+                  <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                    <label for="intervalSelect" style="margin-bottom: 0;">Auto-Sync Schedule</label>
+                    <label style="margin-bottom: 0; font-size: 11px; display: flex; align-items: center; gap: 5px; cursor: pointer; color: var(--text-secondary);">
+                      <input type="checkbox" id="autoSyncCheckbox" checked disabled>
+                      <span id="autoSyncLabelText">Auto-Sync ON</span>
+                    </label>
+                  </div>
                   <select id="intervalSelect" disabled>
-                    <option value="0">Disabled (Manual Only)</option>
+                    <option value="realtime" selected>⚡ Real-Time (Continuous Live Watcher)</option>
                     <option value="5">Every 5 Minutes</option>
-                    <option value="10" selected>Every 10 Minutes</option>
+                    <option value="10">Every 10 Minutes</option>
                     <option value="15">Every 15 Minutes</option>
                     <option value="30">Every 30 Minutes</option>
                     <option value="60">Every 1 Hour</option>
+                    <option value="0">Disabled (Manual Only)</option>
                   </select>
+                </div>
+              </div>
+
+              <div class="form-group">
+                <div class="license-header-row">
+                  <label for="licenseKeyInput">License Key</label>
+                  <span id="licenseCountdownBadge" class="license-countdown-badge hidden">
+                    <span class="countdown-pulse-dot"></span>
+                    <span id="licenseCountdownText">--</span>
+                  </span>
+                </div>
+                <input type="password" id="licenseKeyInput" placeholder="MAB-XXXX-XXXX-XXXX" disabled readonly>
+                <div id="licenseCountdownDetail" class="license-countdown-detail hidden">
+                  <span id="licenseExpiryNotice">--</span>
                 </div>
               </div>
 
@@ -226,18 +387,25 @@
 
             <!-- Sync Action Block -->
             <div class="action-block">
-              <button id="syncNowBtn" class="btn-sync-action">
-                <div class="sync-btn-content">
-                  <svg class="sync-icon" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                    stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-                    <polyline points="23 4 23 10 17 10"></polyline>
-                    <polyline points="1 20 1 14 7 14"></polyline>
-                    <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
-                  </svg>
-                  <span class="sync-text">Extract & Sync Now</span>
-                </div>
-                <span class="spinner-large hidden"></span>
-              </button>
+              <div class="sync-actions-group">
+                <button id="syncNowBtn" class="btn-sync-action">
+                  <div class="sync-btn-content">
+                    <svg class="sync-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                      stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                      <polyline points="23 4 23 10 17 10"></polyline>
+                      <polyline points="1 20 1 14 7 14"></polyline>
+                      <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+                    </svg>
+                    <span class="sync-text">Extract & Sync Now</span>
+                  </div>
+                  <span class="spinner-large hidden"></span>
+                </button>
+
+                <button id="toggleAutoSyncBtn" type="button" class="btn-toggle-sync" title="Pause or Resume Automatic Synchronization">
+                  <span class="toggle-sync-icon" id="toggleSyncIcon">🛑</span>
+                  <span class="toggle-sync-text" id="toggleSyncText">Stop Sync</span>
+                </button>
+              </div>
 
               <div class="stat-boxes">
                 <div class="stat-box">
@@ -298,10 +466,7 @@
               <button type="button" id="closeUnlockModalBtn" class="btn-secondary">Cancel</button>
             </div>
             <div style="margin-top: 14px; display: flex; justify-content: center; gap: 14px; font-size: 11.5px;">
-              <a href="#" id="switchToPasswordBtn" style="color: #38bdf8; text-decoration: none;">🔑 Use Account
-                Password</a>
-              <span style="color: #475569;">|</span>
-              <a href="#" id="unlockDirectBtn" style="color: #94a3b8; text-decoration: none;">⚡ Direct Unlock</a>
+              <a href="#" id="switchToPasswordBtn" style="color: #38bdf8; text-decoration: none;">🔑 Use Account Password</a>
             </div>
           </form>
         </div>
@@ -331,9 +496,6 @@
             </div>
             <div style="margin-top: 14px; display: flex; justify-content: center; gap: 14px; font-size: 11.5px;">
               <a href="#" id="switchToOtpBtn" style="color: #38bdf8; text-decoration: none;">📲 Use OTP Code</a>
-              <span style="color: #475569;">|</span>
-              <a href="#" id="unlockDirectPasswordBtn" style="color: #94a3b8; text-decoration: none;">⚡ Direct
-                Unlock</a>
             </div>
           </form>
         </div>

@@ -231,25 +231,32 @@ export async function POST(request: NextRequest) {
     );
 
     const isFinalBatch = formData.get("isFinalBatch") !== "false";
+    const storeOnly = formData.get("storeOnly") === "true";
+    const skipDirectSync = formData.get("skipDirectSync") === "true";
 
-    if (!isFinalBatch) {
+    if (!isFinalBatch || storeOnly || skipDirectSync) {
       return NextResponse.json({
         success: true,
         batchComplete: true,
         companyCode,
         uploadedCount: uploadedFileNames.length,
-        message: `Staged ${uploadedFileNames.length} table(s) in company [${companyCode}] folder.`,
+        message: `Uploaded and stored ${uploadedFileNames.length} table(s) in company [${companyCode}] folder.`,
+        uploadedFileNames,
       });
     }
 
-    // Always execute direct sync into database upon upload
-    const syncResult = await performDirectServerSync(user.email, uploadDir);
+    // Decouple direct server database sync to run asynchronously in background
+    // so HTTP response returns in <500ms and NEVER triggers Nginx 504 Gateway Timeout
+    setImmediate(() => {
+      performDirectServerSync(user.email, uploadDir).catch((syncErr) => {
+        console.error(`[Background DB Sync Error - ${companyCode}]:`, syncErr.message);
+      });
+    });
 
     return NextResponse.json({
       success: true,
       companyCode,
-      message: `Uploaded and synced ${syncResult.importedTables} table(s) (${syncResult.importedRows} rows) directly into database!`,
-      result: syncResult,
+      message: `Uploaded and stored ${uploadedFileNames.length} table(s) for company [${companyCode}]. Background DB synchronization initiated.`,
       uploadedFileNames,
     });
   } catch (error: any) {

@@ -1,49 +1,45 @@
 import { NextResponse } from "next/server";
 import { createEncryptedBackup } from "@/lib/backup-service";
-import { promises as fs } from "fs";
 
 export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
-export async function GET() {
-  let tempDir: string | undefined;
-
+export async function GET(request: Request) {
   try {
-    // IMPORTANT:
-    // Yahan admin authentication check lagana hai.
+    const { searchParams } = new URL(request.url);
 
-    const backup = await createEncryptedBackup();
+    const isAll = searchParams.get("all") === "true";
+    const fyId = searchParams.get("fyId");
+    const fyName = searchParams.get("fyName");
+    const startDate = searchParams.get("startDate");
+    const endDate = searchParams.get("endDate");
 
-    tempDir = backup.tempDir;
+    const backup = await createEncryptedBackup({
+      isAll,
+      fyId,
+      fyName,
+      startDate,
+      endDate,
+    });
 
-    const response = new NextResponse(
-      new Uint8Array(backup.buffer),
-      {
-        status: 200,
-        headers: {
-          "Content-Type": "application/octet-stream",
-          "Content-Disposition": `attachment; filename="${backup.fileName}"`,
-          "Content-Length": backup.buffer.length.toString(),
-          "Cache-Control": "no-store",
-        },
-      }
-    );
-
-    setTimeout(async () => {
-      if (tempDir) {
-        await fs.rm(tempDir, {
-          recursive: true,
-          force: true,
-        });
-      }
-    }, 1000);
-
-    return response;
+    return new NextResponse(new Uint8Array(backup.buffer), {
+      status: 200,
+      headers: {
+        "Content-Type": "application/octet-stream",
+        "Content-Disposition": `attachment; filename="${backup.fileName}"`,
+        "Content-Length": backup.buffer.length.toString(),
+        "Cache-Control": "no-store",
+        "X-Backup-Year": backup.manifest.fyName,
+        "X-Backup-Documents": backup.manifest.totalDocuments.toString(),
+      },
+    });
   } catch (error) {
     console.error("Backup download error:", error);
 
     return NextResponse.json(
       {
-        message: "Failed to create backup",
+        message:
+          error instanceof Error ? error.message : "Failed to create backup",
       },
       {
         status: 500,

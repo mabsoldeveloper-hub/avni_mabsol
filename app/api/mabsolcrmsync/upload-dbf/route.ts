@@ -60,6 +60,94 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Validate License Key, Expiry, and Single-Device Binding
+    const licenseKey = request.headers.get("x-license-key");
+    const deviceId = request.headers.get("x-device-id") || "";
+    const deviceName = request.headers.get("x-device-name") || "";
+
+    if (licenseKey) {
+      const config =
+        (await VfpConfig.findOne({ email: user.email })) ||
+        (await VfpConfig.findOne({ key: "vfp_sync_config" }));
+
+      if (config) {
+        // 1. Check if key is in retired/expired history
+        const isReusedOrRetired = (config.usedLicenses || []).some((u: any) => u.key === licenseKey);
+        if (isReusedOrRetired) {
+          return NextResponse.json(
+            {
+              success: false,
+              licenseExpired: true,
+              error: "This license key has expired or was regenerated. Expired keys cannot be reused. Please generate a new key from Sync Settings.",
+            },
+            { status: 403 }
+          );
+        }
+
+        // 2. Check if current key is expired by date
+        if (config.licenseExpiresAt && new Date() > new Date(config.licenseExpiresAt)) {
+          await VfpConfig.updateOne(
+            { _id: config._id },
+            {
+              $addToSet: {
+                usedLicenses: {
+                  key: config.license,
+                  issuedAt: config.licenseIssuedAt,
+                  expiredAt: config.licenseExpiresAt,
+                  boundDeviceId: config.boundDeviceId,
+                  status: "expired",
+                },
+              },
+              $set: { licenseStatus: "expired" },
+            }
+          );
+          return NextResponse.json(
+            {
+              success: false,
+              licenseExpired: true,
+              error: "Your license key has expired (30-day validity ended). Please generate a new key from Cloud Dashboard > Sync Settings.",
+            },
+            { status: 403 }
+          );
+        }
+
+        // 3. Verify key matches active config
+        if (config.license && config.license !== licenseKey) {
+          return NextResponse.json(
+            { success: false, licenseInvalid: true, error: "Invalid license key." },
+            { status: 403 }
+          );
+        }
+
+        // 4. Single-Device Binding: 1 key can only be used on 1 machine!
+        if (deviceId) {
+          if (!config.boundDeviceId) {
+            // First device to use this key -> Bind it!
+            await VfpConfig.updateOne(
+              { _id: config._id },
+              {
+                $set: {
+                  boundDeviceId: deviceId,
+                  boundDeviceName: deviceName || "Operator Machine",
+                  boundAt: new Date(),
+                },
+              }
+            );
+          } else if (config.boundDeviceId !== deviceId) {
+            // Another device trying to use the same key!
+            return NextResponse.json(
+              {
+                success: false,
+                deviceMismatch: true,
+                error: `This license key is already bound to another machine (${config.boundDeviceName || "First Device"}). Each license key can only be activated on 1 device. Please generate a separate license key.`,
+              },
+              { status: 403 }
+            );
+          }
+        }
+      }
+    }
+
     const formData = await request.formData();
     const files = formData.getAll("files") as File[];
 

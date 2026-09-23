@@ -70,6 +70,46 @@ const VfpConfigSchema = new mongoose.Schema(
       required: false,
       default: "",
     },
+    licenseExpiresAt: {
+      type: Date,
+      required: false,
+    },
+    licenseIssuedAt: {
+      type: Date,
+      required: false,
+    },
+    licenseStatus: {
+      type: String,
+      required: false,
+      default: "active",
+    },
+    boundDeviceId: {
+      type: String,
+      required: false,
+      default: "",
+    },
+    boundDeviceName: {
+      type: String,
+      required: false,
+      default: "",
+    },
+    boundAt: {
+      type: Date,
+      required: false,
+    },
+    usedLicenses: {
+      type: [
+        {
+          key: { type: String, required: true },
+          issuedAt: { type: Date },
+          expiredAt: { type: Date },
+          boundDeviceId: { type: String, default: "" },
+          status: { type: String, default: "retired" },
+        },
+      ],
+      required: false,
+      default: [],
+    },
     startupCommand: {
       type: String,
       required: false,

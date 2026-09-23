@@ -7,8 +7,7 @@ const otpStep = document.getElementById("otpStep");
 // DOM Elements - Forms & Inputs
 const loginForm = document.getElementById("loginForm");
 const cloudUrlInput = document.getElementById("cloudUrlInput");
-const btnSetCloudMbh = document.getElementById("btnSetCloudMbh");
-const btnSetCloudPhcrm = document.getElementById("btnSetCloudPhcrm");
+const btnSetCloudLive = document.getElementById("btnSetCloudLive");
 const btnSetCloudLocal = document.getElementById("btnSetCloudLocal");
 const emailInput = document.getElementById("emailInput");
 const passwordInput = document.getElementById("passwordInput");
@@ -140,7 +139,7 @@ async function showDashboard(session) {
   try {
     const status = await window.electronAPI.getSyncStatus();
     updateStatusDisplay(status);
-  } catch {}
+  } catch { }
 }
 
 async function loadAndDisplayConfig() {
@@ -156,20 +155,25 @@ async function loadAndDisplayConfig() {
       licenseKeyInput.value = cfg.licenseKey || "";
       intervalSelect.value = String(cfg.intervalMins || 10);
 
-      // If configuration already has data saved, lock the form by default
-      const hasConfig = Boolean(cfg.companyName || cfg.sourceDir || cfg.licenseKey);
-      setFormLocked(hasConfig);
+      // Always lock the form by default when on dashboard
+      setFormLocked(true);
     }
   } catch (err) {
     console.error("Failed to load config:", err);
+  } finally {
+    setFormLocked(true);
   }
 }
 
 function setFormLocked(isLocked) {
   companyNameInput.disabled = isLocked;
+  companyNameInput.readOnly = isLocked;
   companyCodeInput.disabled = isLocked;
+  companyCodeInput.readOnly = isLocked;
   sourceDirInput.disabled = isLocked;
+  sourceDirInput.readOnly = isLocked;
   licenseKeyInput.disabled = isLocked;
+  licenseKeyInput.readOnly = isLocked;
   intervalSelect.disabled = isLocked;
   browseSourceBtn.disabled = isLocked;
 
@@ -197,15 +201,9 @@ function setupEventListeners() {
   document.addEventListener("contextmenu", (e) => e.preventDefault());
 
   // Cloud URL quick toggles
-  if (btnSetCloudMbh) {
-    btnSetCloudMbh.addEventListener("click", () => {
+  if (btnSetCloudLive) {
+    btnSetCloudLive.addEventListener("click", () => {
       cloudUrlInput.value = "https://mbh.crm.mabsolinfotech.cloud";
-      cloudUrlInput.focus();
-    });
-  }
-  if (btnSetCloudPhcrm) {
-    btnSetCloudPhcrm.addEventListener("click", () => {
-      cloudUrlInput.value = "https://phcrm.mabsolinfotech.cloud";
       cloudUrlInput.focus();
     });
   }

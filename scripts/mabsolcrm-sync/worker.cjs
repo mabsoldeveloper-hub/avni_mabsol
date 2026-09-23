@@ -55,7 +55,7 @@ if (fs.existsSync(configJsonPath)) {
 const CLOUD_URL = (
   process.env.CLOUD_URL ||
   workerConfigFile.cloudUrl ||
-  "https://phcrm.mabsolinfotech.cloud"
+  "https://mbh.crm.mabsolinfotech.cloud"
 ).replace(/\/+$/, "");
 
 // VFP_DATA_DIR starts from config but MUST be dynamically updated from cloud dashboard heartbeat
@@ -328,7 +328,7 @@ function setupWatcher(dirPath) {
   // Close old watchers that are no longer needed
   for (const [watchedPath, watcher] of activeWatchers.entries()) {
     if (watchedPath !== dirPath) {
-      try { watcher.close(); } catch {}
+      try { watcher.close(); } catch { }
       activeWatchers.delete(watchedPath);
       console.log(`[vfp-worker] Stopped watching old path: ${watchedPath}`);
     }

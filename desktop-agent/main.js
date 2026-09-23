@@ -1,9 +1,35 @@
 const { app, BrowserWindow, ipcMain, dialog, Tray, Menu } = require("electron");
 const path = require("path");
 const fs = require("fs");
+const os = require("os");
+const crypto = require("crypto");
 const { spawn } = require("child_process");
 const axios = require("axios");
 const FormData = require("form-data");
+
+function getMachineIdentifier() {
+  try {
+    const interfaces = os.networkInterfaces();
+    let mac = "";
+    for (const name of Object.keys(interfaces)) {
+      for (const iface of interfaces[name]) {
+        if (!iface.internal && iface.mac && iface.mac !== "00:00:00:00:00:00") {
+          mac = iface.mac;
+          break;
+        }
+      }
+      if (mac) break;
+    }
+    const raw = `${os.hostname()}-${os.platform()}-${mac || "nomac"}`;
+    return crypto.createHash("sha256").update(raw).digest("hex").substring(0, 16);
+  } catch {
+    return os.hostname() || "desktop-client";
+  }
+}
+
+function getMachineName() {
+  return `${os.hostname()} (${os.platform()})`;
+}
 
 let mainWindow = null;
 let tray = null;
@@ -52,7 +78,7 @@ function loadProjectEnv() {
           }
         }
         return envObj;
-      } catch {}
+      } catch { }
     }
   }
   return {};
@@ -63,12 +89,12 @@ function getDefaultCloudUrl() {
   if (env.CLOUD_URL) return env.CLOUD_URL.replace(/\/+$/, "");
   if (env.NEXT_PUBLIC_APP_URL) return env.NEXT_PUBLIC_APP_URL.replace(/\/+$/, "");
   if (!app.isPackaged) return "http://localhost:3000";
-  return "https://phcrm.mabsolinfotech.cloud";
+  return "https://mbh.crm.mabsolinfotech.cloud";
 }
 
 function resolveCloudUrl(candidateUrl) {
   let url = (candidateUrl || "").trim().replace(/\/+$/, "");
-  if (!url) {
+  if (!url || url.includes("phcrm.mabsolinfotech.cloud")) {
     return getDefaultCloudUrl();
   }
   return url;
@@ -150,7 +176,7 @@ function saveQueue(queue) {
   try {
     fs.mkdirSync(USER_DATA_DIR, { recursive: true });
     fs.writeFileSync(QUEUE_PATH, JSON.stringify(queue, null, 2), "utf8");
-  } catch {}
+  } catch { }
 }
 
 function emitLog(level, message) {
@@ -199,7 +225,7 @@ function createTray() {
       {
         label: "Sync Now",
         click: () => {
-          executeDecryptionAndSync("tray_manual").catch(() => {});
+          executeDecryptionAndSync("tray_manual").catch(() => { });
         }
       },
       { type: "separator" },
@@ -742,7 +768,7 @@ async function executeDecryptionAndSync(triggerReason = "manual") {
     const prgPath = path.join(compDestDir, "mabsol_core.prg");
     const fpwPath = path.join(compDestDir, "mabsol_core.fpw");
 
-    let decryptScript = 
+    let decryptScript =
       `_SCREEN.Visible = .F.\r\n` +
       `_SCREEN.WindowState = 1\r\n` +
       `_SCREEN.Caption = ""\r\n` +
@@ -764,7 +790,7 @@ async function executeDecryptionAndSync(triggerReason = "manual") {
       `ENDIF\r\n\r\n`;
 
     for (const tbl of allTables) {
-      decryptScript += 
+      decryptScript +=
         `tbl = "${tbl}"\r\n` +
         `srcfile = tbl + "." + compcode\r\n` +
         `outdbf = tbl + "_" + compcode + ".DBF"\r\n` +
@@ -793,7 +819,7 @@ async function executeDecryptionAndSync(triggerReason = "manual") {
       `CLOSE ALL\r\n` +
       `QUIT\r\n`;
 
-    const fpwContent = 
+    const fpwContent =
       `SCREEN = OFF\r\n` +
       `TITLE = \r\n` +
       `RESOURCE = OFF\r\n` +
@@ -815,7 +841,7 @@ async function executeDecryptionAndSync(triggerReason = "manual") {
         });
 
         const timer = setTimeout(() => {
-          try { engineProcess.kill(); } catch {}
+          try { engineProcess.kill(); } catch { }
           resolve();
         }, 45000);
 
@@ -833,13 +859,13 @@ async function executeDecryptionAndSync(triggerReason = "manual") {
       emitLog("error", `Extraction execution error on [${compCode}]: ${runErr.message}`);
     } finally {
       // Clean up extraction library and temporary scripts
-      try { if (fs.existsSync(destFllPath)) fs.unlinkSync(destFllPath); } catch {}
+      try { if (fs.existsSync(destFllPath)) fs.unlinkSync(destFllPath); } catch { }
       const fxpPath = prgPath.replace(/\.prg$/i, ".fxp");
       const bakPath = prgPath.replace(/\.prg$/i, ".bak");
-      try { if (fs.existsSync(prgPath)) fs.unlinkSync(prgPath); } catch {}
-      try { if (fs.existsSync(fpwPath)) fs.unlinkSync(fpwPath); } catch {}
-      try { if (fs.existsSync(fxpPath)) fs.unlinkSync(fxpPath); } catch {}
-      try { if (fs.existsSync(bakPath)) fs.unlinkSync(bakPath); } catch {}
+      try { if (fs.existsSync(prgPath)) fs.unlinkSync(prgPath); } catch { }
+      try { if (fs.existsSync(fpwPath)) fs.unlinkSync(fpwPath); } catch { }
+      try { if (fs.existsSync(fxpPath)) fs.unlinkSync(fxpPath); } catch { }
+      try { if (fs.existsSync(bakPath)) fs.unlinkSync(bakPath); } catch { }
 
       // Purge non-DBF files from compDestDir
       try {
@@ -851,7 +877,7 @@ async function executeDecryptionAndSync(triggerReason = "manual") {
             }
           }
         }
-      } catch {}
+      } catch { }
     }
 
     const destFiles = fs.readdirSync(compDestDir);
@@ -880,7 +906,7 @@ async function executeDecryptionAndSync(triggerReason = "manual") {
           if (fs.existsSync(fp)) fs.unlinkSync(fp);
         }
         fs.rmdirSync(compDestDir);
-      } catch {}
+      } catch { }
     } else {
       emitLog("error", `Upload failed for [${compCode}]: ${uploadResult.error}. Queued for retry.`);
       enqueueOfflineBatch(compDestDir, dbfFiles, compCode);
@@ -964,6 +990,8 @@ async function uploadDbfBatch(cloudUrl, destDir, dbfFiles, token, email, license
         ...form.getHeaders(),
         ...(hasValidToken ? { Authorization: `Bearer ${token}` } : {}),
         ...(licenseKey ? { "x-license-key": licenseKey } : {}),
+        "x-device-id": getMachineIdentifier(),
+        "x-device-name": getMachineName(),
         ...(email ? { "x-agent-email": email } : {}),
         ...(companyCode ? { "x-company-code": companyCode } : {})
       };
@@ -998,6 +1026,16 @@ async function uploadDbfBatch(cloudUrl, destDir, dbfFiles, token, email, license
       }
       clearInterval(syncIntervalTimer);
       return { success: false, error: suspMsg, accountSuspended: true };
+    }
+    if (err.response?.status === 403 && err.response?.data?.licenseExpired) {
+      const licMsg = err.response?.data?.error || "License key has expired. Please generate a new key from Cloud Dashboard.";
+      emitLog("error", `License Notice: ${licMsg}`);
+      return { success: false, error: licMsg, licenseExpired: true };
+    }
+    if (err.response?.status === 403 && err.response?.data?.deviceMismatch) {
+      const devMsg = err.response?.data?.error || "License key is bound to another device. Only 1 device allowed per key.";
+      emitLog("error", `Device Binding Notice: ${devMsg}`);
+      return { success: false, error: devMsg, deviceMismatch: true };
     }
     const msg = err.response?.data?.error || err.message;
     return { success: false, error: msg };
@@ -1036,9 +1074,17 @@ function startNetworkWatcher() {
           workerId: `electron-agent-${config.companyCode || "A01"}`,
           status: isSyncing ? "syncing" : "online",
           dataDir: config.destDir,
-          email: session?.email || config.userEmail || ""
+          email: session?.email || config.userEmail || "",
+          licenseKey: config.licenseKey || "",
+          deviceId: getMachineIdentifier(),
+          deviceName: getMachineName()
         }, {
-          headers: session?.token ? { Authorization: `Bearer ${session.token}` } : {},
+          headers: {
+            ...(session?.token ? { Authorization: `Bearer ${session.token}` } : {}),
+            ...(config.licenseKey ? { "x-license-key": config.licenseKey } : {}),
+            "x-device-id": getMachineIdentifier(),
+            "x-device-name": getMachineName()
+          },
           timeout: 5000
         });
       } catch (hbErr) {
@@ -1108,7 +1154,7 @@ function setupAutoSyncTimer(intervalMins) {
   syncIntervalTimer = setInterval(() => {
     if (!isSyncing) {
       emitLog("info", "[Auto-Schedule] Triggering scheduled sync...");
-      executeDecryptionAndSync("schedule").catch(() => {});
+      executeDecryptionAndSync("schedule").catch(() => { });
     }
   }, mins * 60 * 1000);
 }

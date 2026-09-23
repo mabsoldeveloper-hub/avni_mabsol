@@ -16,7 +16,7 @@ import {
 } from "react-icons/fa";
 import { useFinancialYear } from "@/context/FinancialYearContext";
 import { useCompany } from "@/context/CompanyContext";
-import { INDIA_LOCATIONS, INDIA_VIEWBOX, type StatePath } from "@/app/dashboard/area/india-map-data";
+import { INDIA_LOCATIONS, INDIA_VIEWBOX, type StatePath } from "@/app/dashboard/[role]/area/india-map-data";
 import {
     BarChart, Bar, LineChart, Line, PieChart, Pie, Cell,
     RadarChart, Radar, PolarGrid, PolarAngleAxis, PolarRadiusAxis,

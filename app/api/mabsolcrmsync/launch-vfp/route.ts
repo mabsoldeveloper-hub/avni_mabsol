@@ -31,8 +31,8 @@ export async function POST() {
         fileNameOrPath,
         path.join("/home/vfpuser/MabsolEXE", baseName),
         path.join("/home/vfpuser/MabsolPRG", baseName),
-        path.join(process.cwd(), "VfpNew", baseName),
-        path.join(process.cwd(), baseName),
+        path.join(/*turbopackIgnore: true*/ process.cwd(), "VfpNew", baseName),
+        path.join(/*turbopackIgnore: true*/ process.cwd(), baseName),
         path.join("/home/vfpuser/Mabsol_pharma_crm/VfpNew", baseName),
         path.join("/home/vfpuser/VfpNew", baseName),
         path.join("/home/vfpuser", baseName),
@@ -64,8 +64,8 @@ export async function POST() {
       );
     }
 
-    const prgPath = path.join(process.cwd(), "vfp_launch_startup.prg");
-    const fpwPath = path.join(process.cwd(), "vfp_launch_config.fpw");
+    const prgPath = path.join(/*turbopackIgnore: true*/ process.cwd(), "vfp_launch_startup.prg");
+    const fpwPath = path.join(/*turbopackIgnore: true*/ process.cwd(), "vfp_launch_config.fpw");
     let tempAutomatedPrgPath = "";
 
     // Write VFP startup file and configuration mapping
@@ -74,7 +74,7 @@ export async function POST() {
       const isLinuxServer = process.platform !== "win32";
       const companyCode = config && (config as any).companyName ? (config as any).companyName : "E10";
       const sourceDir = config && (config as any).sourceDir ? (config as any).sourceDir : (isLinuxServer ? "/home/vfpuser/MabsolData" : "Backup");
-      const dataDir = config && (config as any).dataDir ? (config as any).dataDir : (isLinuxServer ? "/home/vfpuser/MabsolSyncData" : path.join(process.cwd(), "data", "vfp_uploads"));
+      const dataDir = config && (config as any).dataDir ? (config as any).dataDir : (isLinuxServer ? "/home/vfpuser/MabsolSyncData" : path.join(/*turbopackIgnore: true*/ process.cwd(), "data", "vfp_uploads"));
       
       // Read target script and replace built-in interactive commands with our custom UDF prefixes
       if (fs.existsSync(configPrgPath)) {

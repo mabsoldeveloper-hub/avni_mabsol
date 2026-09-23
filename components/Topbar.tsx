@@ -8,6 +8,7 @@ import { useCompany } from "@/context/CompanyContext";
 import { useFinancialYear } from "@/context/FinancialYearContext";
 import LogoutButton from "./LogoutButton";
 import GlobalSearchModal from "./GlobalSearchModal";
+import { checkIsSuperAdmin } from "@/lib/constants/superAdmin.constant";
 
 export default function Topbar({
   collapsed,
@@ -28,6 +29,28 @@ export default function Topbar({
   const [companyName, setCompanyName] = useState<string>("");
   const [profileImgError, setProfileImgError] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [formattedTime, setFormattedTime] = useState<string>("");
+
+  useEffect(() => {
+    const updateTime = () => {
+      const now = new Date();
+      const dateStr = now.toLocaleDateString("en-US", {
+        month: "short",
+        day: "numeric",
+        year: "numeric",
+      });
+      const weekday = now.toLocaleDateString("en-US", { weekday: "long" });
+      const timeStr = now.toLocaleTimeString("en-US", {
+        hour: "2-digit",
+        minute: "2-digit",
+        hour12: true,
+      });
+      setFormattedTime(`${dateStr} · ${weekday} | ${timeStr}`);
+    };
+    updateTime();
+    const timer = setInterval(updateTime, 1000);
+    return () => clearInterval(timer);
+  }, []);
 
   useEffect(() => {
     const handleFullscreenChange = () => {
@@ -265,8 +288,14 @@ export default function Topbar({
           </button>
         )}
 
-        {/* DESKTOP COMPANY & FY SELECTORS */}
-        {!mobile ? (
+        {/* SUPER ADMIN BADGE OR COMPANY & FY SELECTORS */}
+        {checkIsSuperAdmin(user) ? (
+          <div className="flex items-center gap-2">
+            <div className="w-8.5 h-8.5 rounded-xl bg-amber-50 border border-amber-200/80 text-amber-700 flex items-center justify-center shrink-0 shadow-2xs">
+              <Building size={15} />
+            </div>
+          </div>
+        ) : !mobile ? (
           <div className="flex items-center gap-2 min-w-0">
             {/* COMPANY SELECTOR DROPDOWN */}
             <div className="relative inline-flex items-center">
@@ -499,6 +528,14 @@ export default function Topbar({
           )}
         </button>
 
+        {/* LIVE DATE & TIME (Matching Screenshot) */}
+        {checkIsSuperAdmin(user) && formattedTime && (
+          <div className="hidden lg:flex items-center gap-2 px-3 py-1.5 rounded-xl bg-slate-50 border border-slate-200/90 text-slate-600 text-xs font-semibold shadow-2xs select-none">
+            <CalendarEvent size={12} className="text-indigo-600" />
+            <span>{formattedTime}</span>
+          </div>
+        )}
+
         {/* NOTIFICATIONS */}
         <div className="relative" ref={notifRef}>
           <button
@@ -665,11 +702,11 @@ export default function Topbar({
 
             {!mobile && (
               <span className="flex flex-col items-start leading-tight text-left">
-                <span className="text-[13px] font-semibold">
-                  {user?.name || "User"}
+                <span className="text-[12.5px] font-bold text-slate-800 dark:text-white">
+                  {checkIsSuperAdmin(user) ? "System Owner" : user?.name || "User"}
                 </span>
-                <span className="text-[11px] text-gray-500">
-                  {user?.roleId?.roleName || "—"}
+                <span className="text-[10px] text-slate-400 font-medium">
+                  {checkIsSuperAdmin(user) ? "Super Admin" : user?.roleId?.roleName || "—"}
                 </span>
               </span>
             )}
@@ -694,7 +731,9 @@ export default function Topbar({
                 </span>
                 <div className="min-w-0 flex-1">
                   <p className="text-xs font-bold text-slate-800 dark:text-slate-200 truncate">{user?.name || "User"}</p>
-                  <p className="text-[10.5px] text-slate-500 dark:text-slate-400 truncate">{user?.roleId?.roleName || user?.email || "Manager"}</p>
+                  <p className="text-[10.5px] text-slate-500 dark:text-slate-400 truncate">
+                    {checkIsSuperAdmin(user) ? "Super Administrator" : user?.roleId?.roleName || user?.email || "Manager"}
+                  </p>
                 </div>
               </div>
 

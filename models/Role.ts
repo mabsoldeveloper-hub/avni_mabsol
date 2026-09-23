@@ -43,53 +43,74 @@ import mongoose, {
   Document,
 } from "mongoose";
 
-export interface IRole
-  extends Document {
-
+export interface IRole extends Document {
   tenantId: string;
-
   roleName: string;
-
   description: string;
-
+  dashboardType: "salesman" | "manager" | "admin" | "customer" | "custom";
+  permissions: string[];
+  assignedAreaIds?: string[];
+  assignedAreaNames?: string[];
+  colorTag?: string;
   status: string;
-
+  createdAt: Date;
+  updatedAt: Date;
 }
 
-const RoleSchema =
-new Schema(
-{
-  tenantId:{
-    type:String,
-    required:true,
-  },
+const RoleSchema = new Schema<IRole>(
+  {
+    tenantId: {
+      type: String,
+      default: "TENANT001",
+    },
 
-  roleName:{
-    type:String,
-    required:true,
-    unique:true,
-  },
+    roleName: {
+      type: String,
+      required: true,
+    },
 
-  description:{
-    type:String,
-    default:"",
-  },
+    description: {
+      type: String,
+      default: "",
+    },
 
-  status:{
-    type:String,
-    default:"Active",
+    dashboardType: {
+      type: String,
+      enum: ["salesman", "manager", "admin", "customer", "custom"],
+      default: "salesman",
+    },
+
+    permissions: {
+      type: [String],
+      default: [],
+    },
+
+    assignedAreaIds: {
+      type: [String],
+      default: [],
+    },
+
+    assignedAreaNames: {
+      type: [String],
+      default: [],
+    },
+
+    colorTag: {
+      type: String,
+      default: "indigo",
+    },
+
+    status: {
+      type: String,
+      default: "Active",
+    },
   },
-},
-{
-  timestamps:true,
-}
+  {
+    timestamps: true,
+  }
 );
 
-export default
-mongoose.models.Role ||
-mongoose.model<IRole>(
-"Role",
-RoleSchema
-);
+export default mongoose.models.Role ||
+  mongoose.model<IRole>("Role", RoleSchema);
 
 

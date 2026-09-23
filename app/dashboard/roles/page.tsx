@@ -66,6 +66,30 @@ export default function RolesPage() {
           <span className="text-gray-600">{info.getValue() || "—"}</span>
         ),
       }),
+      columnHelper.display({
+        id: "territoryScope",
+        header: "Territory / Areas",
+        cell: (info) => {
+          const areas: string[] = (info.row.original as any).assignedAreaNames || [];
+          if (areas.length === 0) {
+            return <span className="text-xs text-gray-400 italic">All Areas / Unrestricted</span>;
+          }
+          return (
+            <div className="flex flex-wrap gap-1 max-w-xs">
+              {areas.slice(0, 2).map((a, i) => (
+                <span key={i} className="px-2 py-0.5 rounded bg-indigo-50 text-indigo-700 text-[10px] font-semibold">
+                  📍 {a}
+                </span>
+              ))}
+              {areas.length > 2 && (
+                <span className="px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 text-[10px] font-bold">
+                  +{areas.length - 2}
+                </span>
+              )}
+            </div>
+          );
+        },
+      }),
       columnHelper.accessor("status", {
         header: "Status",
         cell: (info) =>

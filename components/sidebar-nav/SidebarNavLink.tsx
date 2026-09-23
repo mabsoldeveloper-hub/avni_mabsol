@@ -12,9 +12,48 @@ export default React.memo(function SidebarNavLink({
   active,
   color = "indigo",
   iconOnly,
+  badge,
+  customActiveStyle,
   onNavigate,
 }: SidebarNavLinkProps) {
   const c = COLOR_MAP[color] || COLOR_MAP.indigo;
+
+  if (customActiveStyle) {
+    return (
+      <Link
+        href={href}
+        title={iconOnly ? label : undefined}
+        onClick={onNavigate}
+        className={`relative flex items-center h-[42px] w-full rounded-xl transition-all duration-200 group no-underline select-none px-3 ${
+          active
+            ? "bg-blue-600 text-white font-semibold shadow-md shadow-blue-600/25"
+            : "text-white hover:text-white hover:bg-white/10 font-medium"
+        }`}
+      >
+        <span
+          className="flex items-center justify-center w-7 h-7 shrink-0 text-[14px] text-white"
+        >
+          {icon}
+        </span>
+        <span
+          className="whitespace-nowrap overflow-hidden transition-all duration-200 flex-1 text-left text-xs font-medium text-white"
+          style={{
+            opacity: iconOnly ? 0 : 1,
+            maxWidth: iconOnly ? 0 : "180px",
+            marginLeft: iconOnly ? 0 : "8px",
+            display: iconOnly ? "none" : "block",
+          }}
+        >
+          {label}
+        </span>
+        {badge && !iconOnly && (
+          <span className="ml-auto text-[9.5px] font-bold px-1.5 py-0.5 rounded-md bg-white/15 text-white border border-white/20">
+            {badge}
+          </span>
+        )}
+      </Link>
+    );
+  }
 
   return (
     <Link
@@ -24,7 +63,7 @@ export default React.memo(function SidebarNavLink({
       className={`glass-nav-item relative flex items-center h-[40px] w-full rounded-xl transition-all duration-300 ease-out group no-underline select-none overflow-hidden px-2.5 ${
         active
           ? "glass-nav-item-active font-semibold text-slate-900 dark:text-white"
-          : "text-slate-700 dark:text-slate-200 hover:text-slate-900 dark:hover:text-white font-medium"
+          : "text-slate-700 dark:text-white hover:text-slate-900 dark:hover:text-white font-medium"
       }`}
     >
       {active && (
@@ -64,6 +103,11 @@ export default React.memo(function SidebarNavLink({
       >
         {label}
       </span>
+      {badge && !iconOnly && (
+        <span className="ml-auto text-[9.5px] font-bold px-1.5 py-0.5 rounded-md bg-slate-800 text-slate-400 border border-slate-700/60">
+          {badge}
+        </span>
+      )}
     </Link>
   );
 });

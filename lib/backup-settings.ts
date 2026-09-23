@@ -9,33 +9,30 @@ export type BackupFrequency =
   | "daily"
   | "weekly";
 
+export type BackupScope = "current_fy" | "all" | "custom";
+
 export interface BackupSettings {
   _id: string;
-
   receiverEmail: string;
-
   frequency: BackupFrequency;
-
   enabled: boolean;
-
+  scope?: BackupScope;
+  financialYearId?: string | null;
+  financialYearName?: string | null;
+  customStartDate?: string | null;
+  customEndDate?: string | null;
   nextBackupAt?: Date | null;
-
   lastBackupAt?: Date | null;
-
   createdAt?: Date;
-
   updatedAt?: Date;
 }
 
 async function getDatabase(): Promise<Db> {
   await dbConnect();
-
   const db = mongoose.connection.db;
 
   if (!db) {
-    throw new Error(
-      "MongoDB database connection is not available",
-    );
+    throw new Error("MongoDB database connection is not available");
   }
 
   return db;
@@ -57,6 +54,11 @@ export async function saveBackupSettings(data: {
   receiverEmail: string;
   frequency: BackupFrequency;
   enabled: boolean;
+  scope?: BackupScope;
+  financialYearId?: string | null;
+  financialYearName?: string | null;
+  customStartDate?: string | null;
+  customEndDate?: string | null;
 }): Promise<BackupSettings | null> {
   const db = await getDatabase();
 
@@ -64,35 +66,38 @@ export async function saveBackupSettings(data: {
     ? getNextBackupDate(data.frequency)
     : null;
 
-  await db
-    .collection<BackupSettings>("backup_settings")
-    .updateOne(
-      {
-        _id: "main",
+  await db.collection<BackupSettings>("backup_settings").updateOne(
+    {
+      _id: "main",
+    },
+    {
+      $set: {
+        receiverEmail: data.receiverEmail,
+        frequency: data.frequency,
+        enabled: data.enabled,
+        scope: data.scope || "current_fy",
+        financialYearId: data.financialYearId || null,
+        financialYearName: data.financialYearName || null,
+        customStartDate: data.customStartDate || null,
+        customEndDate: data.customEndDate || null,
+        nextBackupAt,
+        updatedAt: new Date(),
       },
-      {
-        $set: {
-          receiverEmail: data.receiverEmail,
-          frequency: data.frequency,
-          enabled: data.enabled,
-          nextBackupAt,
-          updatedAt: new Date(),
-        },
-        $setOnInsert: {
-          createdAt: new Date(),
-        },
+      $setOnInsert: {
+        createdAt: new Date(),
       },
-      {
-        upsert: true,
-      },
-    );
+    },
+    {
+      upsert: true,
+    }
+  );
 
   return getBackupSettings();
 }
 
 export function getNextBackupDate(
   frequency: BackupFrequency,
-  from = new Date(),
+  from = new Date()
 ): Date {
   const next = new Date(from);
 

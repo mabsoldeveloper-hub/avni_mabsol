@@ -6,4 +6,10 @@ export const API = {
   VERIFY_EMAIL_OTP: "/api/auth/verify-email-otp",
   CHECK_EXISTS: "/api/auth/check-exists",
   VERIFY_GST: "/api/auth/verify-gst",
+  FINANCIAL_YEAR: "/api/financial-year",
+  BACKUP_SETTINGS: "/api/admin/backup/settings",
+  BACKUP_SEND: "/api/admin/backup/send",
+  BACKUP_EXPORT: "/api/admin/backup/export",
+  BACKUP_INSPECT: "/api/admin/backup/inspect",
+  BACKUP_IMPORT: "/api/admin/backup/import",
 };

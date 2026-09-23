@@ -11,6 +11,7 @@ import {
   flexRender,
   createColumnHelper,
 } from "@tanstack/react-table";
+import { useUser } from "@/context/UserContext";
 
 type FY = {
   _id: string;
@@ -46,6 +47,7 @@ export default function FYListPage() {
   const [years, setYears] = useState<FY[]>([]);
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
+  const { user } = useUser();
 
   const loadData = async () => {
     try {
@@ -237,7 +239,7 @@ export default function FYListPage() {
         </div>
 
         <Link
-          href="/dashboard/financial-year/create"
+          href={`/dashboard/${user.role}/financial-year/create`}
           className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-indigo-600 bg-white/90 hover:bg-white transition-colors"
         >
           <FaPlus size={10} />

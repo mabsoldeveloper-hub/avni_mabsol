@@ -24,6 +24,7 @@ async function checkAndRunBackup() {
     console.log("[backup] Settings:", {
       enabled: settings.enabled,
       frequency: settings.frequency,
+      scope: settings.scope || "current_fy",
       nextBackupAt: settings.nextBackupAt,
       now: new Date().toISOString(),
     });
@@ -41,9 +42,11 @@ async function checkAndRunBackup() {
       return;
     }
 
-    console.log("[backup] Starting scheduled backup...");
+    console.log(
+      `[backup] Starting scheduled backup for scope: ${settings.scope || "current_fy"}...`
+    );
 
-    await sendScheduledBackup();
+    const result = await sendScheduledBackup();
 
     const nextBackupAt = getNextBackupDate(settings.frequency, new Date());
 
@@ -65,11 +68,11 @@ async function checkAndRunBackup() {
           lastBackupAt: new Date(),
           updatedAt: new Date(),
         },
-      },
+      }
     );
 
     console.log(
-      `[backup] Backup sent successfully. Next backup: ${nextBackupAt.toISOString()}`,
+      `[backup] Backup sent successfully (${result.manifest.fyName}, ${result.manifest.totalDocuments} docs). Next backup: ${nextBackupAt.toISOString()}`
     );
   } catch (error) {
     console.error("[backup] Scheduled backup failed:", error);

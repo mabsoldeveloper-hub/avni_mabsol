@@ -98,12 +98,7 @@ export default async function UsersPage() {
             <PermissionButton permission="users.create">
               <Link
                 href="/dashboard/users/create"
-                className="btn"
-                style={{
-                  background: "#343872",
-                  color: "#fff",
-                  border: "none",
-                }}
+                className="inline-flex items-center gap-1.5 px-5 py-2 rounded-full text-xs font-bold text-white bg-[#343872] hover:bg-[#282b57] transition-all shadow-xs cursor-pointer"
               >
                 + Create User
               </Link>

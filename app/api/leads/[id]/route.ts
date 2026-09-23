@@ -50,10 +50,11 @@ function checkIsAdmin(user: any) {
 
   return (
     roleType === "ADMIN" ||
+    roleType === "Admin" ||
     roleName.includes("admin") ||
     roleName.includes("superadmin") ||
     user.isAdmin === true ||
-    user.email === "admin@mabsol.com" ||
+    user.isSuperAdmin === true ||
     !user.roleType
   );
 }

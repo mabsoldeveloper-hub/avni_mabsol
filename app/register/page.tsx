@@ -1,13 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { Space_Grotesk, Inter, IBM_Plex_Mono } from "next/font/google";
+import Link from "next/link";
+import { Plus_Jakarta_Sans, Inter, IBM_Plex_Mono } from "next/font/google";
+import { useToast } from "@/context/ToastContext";
 import "./register.css";
-import { validateName, validateEmail, validateMobile, validatePassword } from "@/lib/constants/validation.constant";
 
-
-const displayFont = Space_Grotesk({
+const displayFont = Plus_Jakarta_Sans({
   subsets: ["latin"],
   weight: ["500", "600", "700"],
   variable: "--font-display",
@@ -23,10 +23,9 @@ const monoFont = IBM_Plex_Mono({
   variable: "--font-mono",
 });
 
-
-
 interface AdditionalGstItem {
   id: string;
+  branchName: string;
   gstNo: string;
   state: string;
   stateCode: string;
@@ -34,39 +33,123 @@ interface AdditionalGstItem {
   address: string;
   city: string;
   pincode: string;
+  email: string;
+  mobile: string;
+  password?: string;
+  confirmPassword?: string;
+  showPassword?: boolean;
+  showConfirm?: boolean;
   isVerifying?: boolean;
+  emailVerified?: boolean;
+  emailOtpSent?: boolean;
+  emailOtp?: string;
+  emailSending?: boolean;
+  emailVerifying?: boolean;
+  emailCountdown?: number;
 }
 
-interface ToastMessage {
-  id: string;
-  message: string;
-  type: "success" | "error" | "info";
+function SquareOtpInput({
+  idPrefix,
+  value,
+  onChange,
+  disabled,
+}: {
+  idPrefix: string;
+  value: string;
+  onChange: (val: string) => void;
+  disabled?: boolean;
+}) {
+  const digits = Array.from({ length: 6 }, (_, i) => value[i] || "");
+
+  const handleChange = (index: number, char: string) => {
+    const clean = char.replace(/\D/g, "");
+    if (!clean) {
+      const nextArr = [...digits];
+      nextArr[index] = "";
+      onChange(nextArr.join(""));
+      return;
+    }
+
+    const lastDigit = clean.slice(-1);
+    const nextArr = [...digits];
+    nextArr[index] = lastDigit;
+    const combined = nextArr.join("");
+    onChange(combined);
+
+    if (index < 5 && lastDigit) {
+      const nextInput = document.getElementById(`${idPrefix}-digit-${index + 1}`) as HTMLInputElement;
+      nextInput?.focus();
+    }
+  };
+
+  const handleKeyDown = (index: number, e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Backspace") {
+      if (!digits[index] && index > 0) {
+        const prevInput = document.getElementById(`${idPrefix}-digit-${index - 1}`) as HTMLInputElement;
+        prevInput?.focus();
+      }
+    } else if (e.key === "ArrowLeft" && index > 0) {
+      const prevInput = document.getElementById(`${idPrefix}-digit-${index - 1}`) as HTMLInputElement;
+      prevInput?.focus();
+    } else if (e.key === "ArrowRight" && index < 5) {
+      const nextInput = document.getElementById(`${idPrefix}-digit-${index + 1}`) as HTMLInputElement;
+      nextInput?.focus();
+    }
+  };
+
+  const handlePaste = (e: React.ClipboardEvent<HTMLInputElement>) => {
+    e.preventDefault();
+    const pasted = e.clipboardData.getData("text").replace(/\D/g, "").slice(0, 6);
+    if (!pasted) return;
+    onChange(pasted);
+    const targetIdx = Math.min(5, pasted.length - 1);
+    const targetInput = document.getElementById(`${idPrefix}-digit-${targetIdx}`) as HTMLInputElement;
+    targetInput?.focus();
+  };
+
+  return (
+    <div className="otp-square-grid">
+      {digits.map((digit, i) => (
+        <input
+          key={i}
+          id={`${idPrefix}-digit-${i}`}
+          type="text"
+          inputMode="numeric"
+          maxLength={1}
+          value={digit}
+          disabled={disabled}
+          className={`otp-square-input ${digit ? "filled" : ""}`}
+          onChange={(e) => handleChange(i, e.target.value)}
+          onKeyDown={(e) => handleKeyDown(i, e)}
+          onPaste={handlePaste}
+          autoComplete="one-time-code"
+        />
+      ))}
+    </div>
+  );
 }
 
 export default function RegisterPage() {
   const router = useRouter();
+  const { toast } = useToast();
 
-  // Wizard Steps: 1 = Company & GST, 2 = Admin Profile & OTPs, 3 = Review & Launch
-  const [currentStep, setCurrentStep] = useState<1 | 2 | 3>(1);
-
-  // Modern Toast State
-  const [toasts, setToasts] = useState<ToastMessage[]>([]);
+  // Wizard Step: 1 = Head Office & Account, 2 = Branch Details (if branches >= 1) or Review (if 0 branches), 3 = Review
+  const [currentStep, setCurrentStep] = useState<number>(1);
 
   function showToast(message: string, type: "success" | "error" | "info" = "info") {
-    const id = `toast_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`;
-    setToasts((prev) => [...prev, { id, message, type }]);
-
-    setTimeout(() => {
-      setToasts((prev) => prev.filter((t) => t.id !== id));
-    }, 4000);
+    if (type === "success") {
+      toast.success(message);
+    } else if (type === "error") {
+      toast.error(message);
+    } else {
+      toast.info(message);
+    }
   }
 
-  function removeToast(id: string) {
-    setToasts((prev) => prev.filter((t) => t.id !== id));
-  }
-
-  // ---------- STEP 1: Company & GST Master ----------
+  // ---------- STEP 1: Head Office & Account Setup ----------
   const [companyName, setCompanyName] = useState("");
+  const [branchCount, setBranchCount] = useState<number>(0);
+
   const [primaryGst, setPrimaryGst] = useState("");
   const [isPrimaryGstVerified, setIsPrimaryGstVerified] = useState(false);
   const [isVerifyingPrimaryGst, setIsVerifyingPrimaryGst] = useState(false);
@@ -78,12 +161,13 @@ export default function RegisterPage() {
   const [pincode, setPincode] = useState("");
   const [drugLicenseNo, setDrugLicenseNo] = useState("");
 
-  // Multi-GST branch additions
-  const [additionalGsts, setAdditionalGsts] = useState<AdditionalGstItem[]>([]);
-
-  // ---------- STEP 2: User Profile & Security ----------
   const [name, setName] = useState("");
-  const [designation, setDesignation] = useState("Managing Director");
+  const [mobile, setMobile] = useState("");
+  const [mobileOtp, setMobileOtp] = useState("");
+  const [mobileOtpSent, setMobileOtpSent] = useState(false);
+  const [mobileVerified, setMobileVerified] = useState(false);
+  const [mobileSending, setMobileSending] = useState(false);
+  const [mobileVerifying, setMobileVerifying] = useState(false);
 
   const [email, setEmail] = useState("");
   const [emailOtp, setEmailOtp] = useState("");
@@ -92,29 +176,306 @@ export default function RegisterPage() {
   const [emailSending, setEmailSending] = useState(false);
   const [emailVerifying, setEmailVerifying] = useState(false);
 
-  const [mobile, setMobile] = useState("");
-  const [mobileOtp, setMobileOtp] = useState("");
-  const [mobileOtpSent, setMobileOtpSent] = useState(false);
-  const [mobileVerified, setMobileVerified] = useState(false);
-  const [mobileSending, setMobileSending] = useState(false);
-  const [mobileVerifying, setMobileVerifying] = useState(false);
-
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
 
+  // 60-Second Countdown Timers for OTP
+  const [mobileCountdown, setMobileCountdown] = useState<number>(0);
+  const [emailCountdown, setEmailCountdown] = useState<number>(0);
+
+  // Terms and Conditions
+  const [termsAccepted, setTermsAccepted] = useState<boolean>(false);
+
+  // ---------- STEP 2: Dedicated Branch Details ----------
+  const [additionalGsts, setAdditionalGsts] = useState<AdditionalGstItem[]>([]);
+  const [activeBranchIndex, setActiveBranchIndex] = useState<number>(0);
+
+  // Timer Effect for 60s Countdowns
+  useEffect(() => {
+    let timer: NodeJS.Timeout;
+    const hasBranchCountdown = additionalGsts.some((b) => (b.emailCountdown || 0) > 0);
+    if (mobileCountdown > 0 || emailCountdown > 0 || hasBranchCountdown) {
+      timer = setInterval(() => {
+        setMobileCountdown((prev) => (prev > 0 ? prev - 1 : 0));
+        setEmailCountdown((prev) => (prev > 0 ? prev - 1 : 0));
+        setAdditionalGsts((prev) => {
+          let changed = false;
+          const next = prev.map((b) => {
+            if ((b.emailCountdown || 0) > 0) {
+              changed = true;
+              return { ...b, emailCountdown: (b.emailCountdown || 0) - 1 };
+            }
+            return b;
+          });
+          return changed ? next : prev;
+        });
+      }, 1000);
+    }
+    return () => clearInterval(timer);
+  }, [mobileCountdown, emailCountdown, additionalGsts]);
+
+  function handleCopyHeadOfficeGst(idx: number) {
+    const list = [...additionalGsts];
+    if (!list[idx]) return;
+    list[idx].gstNo = primaryGst;
+    list[idx].state = state;
+    list[idx].city = city;
+    list[idx].address = address;
+    list[idx].pincode = pincode;
+    list[idx].verified = isPrimaryGstVerified;
+    setAdditionalGsts(list);
+    showToast(`Copied Head Office GST & Address to Branch #${idx + 1}`, "info");
+  }
+
+  function handleCopyHeadOfficePhone(idx: number) {
+    const list = [...additionalGsts];
+    if (!list[idx]) return;
+    list[idx].mobile = mobile;
+    setAdditionalGsts(list);
+    showToast(`Copied Head Office Phone (+91 ${mobile}) to Branch #${idx + 1}`, "info");
+  }
+
+  // Branch email duplicate check on blur
+  async function handleBranchEmailBlur(idx: number) {
+    const br = additionalGsts[idx];
+    if (!br || !br.email) return;
+    const cleanBrEmail = br.email.trim().toLowerCase();
+    if (!cleanBrEmail.includes("@")) return;
+
+    // Check against Head Office Email
+    const cleanHoEmail = email.trim().toLowerCase();
+    if (cleanBrEmail === cleanHoEmail) {
+      showToast(`Branch #${idx + 1} email cannot be the same as Head Office email (${cleanHoEmail}).`, "error");
+      return;
+    }
+
+    // Check against other branches
+    for (let i = 0; i < additionalGsts.length; i++) {
+      if (i !== idx && (additionalGsts[i].email || "").trim().toLowerCase() === cleanBrEmail) {
+        showToast(`Branch #${idx + 1} email is already used for Branch #${i + 1}. Each branch must have a unique email.`, "error");
+        return;
+      }
+    }
+
+    // Check against Database
+    try {
+      const res = await fetch("/api/auth/check-exists", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: cleanBrEmail }),
+      });
+      const json = await res.json();
+      if (json.exists) {
+        showToast(`Branch #${idx + 1} email "${cleanBrEmail}" is already registered in the database.`, "error");
+      }
+    } catch {
+      // Ignore
+    }
+  }
+
+  // Send Email OTP for Branch
+  async function handleSendBranchEmailOtp(idx: number) {
+    const br = additionalGsts[idx];
+    if (!br || br.emailSending || (br.emailCountdown || 0) > 0) return;
+    const cleanBrEmail = (br.email || "").trim().toLowerCase();
+    if (!cleanBrEmail || !cleanBrEmail.includes("@")) {
+      showToast("Please enter a valid email address for this branch", "error");
+      return;
+    }
+
+    // Check against Head Office Email
+    if (cleanBrEmail === email.trim().toLowerCase()) {
+      showToast(`Branch #${idx + 1} email cannot be the same as Head Office email`, "error");
+      return;
+    }
+
+    // Check against other branches
+    for (let i = 0; i < additionalGsts.length; i++) {
+      if (i !== idx && (additionalGsts[i].email || "").trim().toLowerCase() === cleanBrEmail) {
+        showToast(`Branch #${idx + 1} email is already used for Branch #${i + 1}`, "error");
+        return;
+      }
+    }
+
+    const updated = [...additionalGsts];
+    updated[idx].emailSending = true;
+    setAdditionalGsts(updated);
+
+    try {
+      // 1. Check if email exists in system
+      const checkRes = await fetch("/api/auth/check-exists", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: cleanBrEmail }),
+      });
+      const checkJson = await checkRes.json();
+      if (checkJson.exists) {
+        showToast(checkJson.message || `Branch email "${cleanBrEmail}" is already registered in the system.`, "error");
+        const list = [...additionalGsts];
+        list[idx].emailSending = false;
+        setAdditionalGsts(list);
+        return;
+      }
+
+      // 2. Send OTP
+      const res = await fetch("/api/auth/send-email-otp", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: cleanBrEmail }),
+      });
+      const json = await res.json();
+      const nextList = [...additionalGsts];
+      nextList[idx].emailSending = false;
+      if (json.success) {
+        nextList[idx].emailOtpSent = true;
+        nextList[idx].emailCountdown = 60;
+        setAdditionalGsts(nextList);
+        showToast(`Verification code sent to Branch #${idx + 1} email (${cleanBrEmail})!`, "success");
+      } else {
+        setAdditionalGsts(nextList);
+        showToast(json.message || "Failed to send branch email OTP", "error");
+      }
+    } catch {
+      const nextList = [...additionalGsts];
+      nextList[idx].emailSending = false;
+      setAdditionalGsts(nextList);
+      showToast("Network error sending OTP to branch email", "error");
+    }
+  }
+
+  // Verify Email OTP for Branch
+  async function handleVerifyBranchEmailOtp(idx: number) {
+    const br = additionalGsts[idx];
+    if (!br || br.emailVerifying || !br.emailOtp) return;
+    const cleanBrEmail = (br.email || "").trim().toLowerCase();
+
+    const updated = [...additionalGsts];
+    updated[idx].emailVerifying = true;
+    setAdditionalGsts(updated);
+
+    try {
+      const res = await fetch("/api/auth/verify-email-otp", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: cleanBrEmail, otp: br.emailOtp.trim() }),
+      });
+      const json = await res.json();
+      const nextList = [...additionalGsts];
+      nextList[idx].emailVerifying = false;
+      if (json.success) {
+        nextList[idx].emailVerified = true;
+        nextList[idx].emailOtpSent = false;
+        nextList[idx].emailCountdown = 0;
+        setAdditionalGsts(nextList);
+        showToast(`Branch #${idx + 1} email verified successfully!`, "success");
+      } else {
+        setAdditionalGsts(nextList);
+        showToast(json.message || "Incorrect branch email verification code", "error");
+      }
+    } catch {
+      const nextList = [...additionalGsts];
+      nextList[idx].emailVerifying = false;
+      setAdditionalGsts(nextList);
+      showToast("Branch verification failed. Please try again.", "error");
+    }
+  }
+
   // ---------- GENERAL STATE ----------
   const [loading, setLoading] = useState(false);
   const [errorBanner, setErrorBanner] = useState<string | null>(null);
 
+  // Dynamic Step Configuration
+  const totalSteps = branchCount > 0 ? 3 : 2;
+  const reviewStepNumber = totalSteps;
+  const branchStepNumber = 2;
+
+  // Validation States for Enabling Next/Submit Buttons
+  const cleanMobileDigits = mobile.replace(/\D/g, "");
+  const isStep1Valid = Boolean(
+    companyName.trim() &&
+    name.trim() &&
+    primaryGst.trim() &&
+    address.trim() &&
+    city.trim() &&
+    state.trim() &&
+    pincode.trim().length === 6 &&
+    cleanMobileDigits.length === 10 &&
+    mobileVerified &&
+    email.trim().includes("@") &&
+    emailVerified &&
+    password &&
+    password.length >= 6 &&
+    confirmPassword &&
+    password === confirmPassword
+  );
+
+  const isStep2Valid =
+    branchCount === 0 ||
+    (additionalGsts.length >= branchCount &&
+      additionalGsts.slice(0, branchCount).every(
+        (br) =>
+          br.branchName.trim() &&
+          (br.mobile || "").replace(/\D/g, "").length === 10 &&
+          (br.email || "").trim().includes("@") &&
+          (br.email || "").trim().toLowerCase() !== email.trim().toLowerCase() &&
+          Boolean(br.emailVerified) &&
+          br.password &&
+          br.password.length >= 6 &&
+          br.confirmPassword &&
+          br.password === br.confirmPassword
+      ));
+
+  // Handle Branch Count Change
+  function handleBranchCountChange(count: number) {
+    const validCount = Math.max(0, count);
+    setBranchCount(validCount);
+
+    if (validCount === 0) {
+      setAdditionalGsts([]);
+      return;
+    }
+
+    if (validCount > additionalGsts.length) {
+      const diff = validCount - additionalGsts.length;
+      const newItems: AdditionalGstItem[] = [];
+      for (let i = 0; i < diff; i++) {
+        const itemIdx = additionalGsts.length + i + 1;
+        newItems.push({
+          id: `gst_${Date.now()}_${Math.random().toString(36).substr(2, 4)}_${itemIdx}`,
+          branchName: "",
+          gstNo: "",
+          state: "",
+          stateCode: "",
+          verified: false,
+          address: "",
+          city: "",
+          pincode: "",
+          email: "",
+          mobile: "",
+          password: "",
+          confirmPassword: "",
+          showPassword: false,
+          showConfirm: false,
+          emailVerified: false,
+          emailOtpSent: false,
+          emailOtp: "",
+        });
+      }
+      setAdditionalGsts([...additionalGsts, ...newItems]);
+    } else if (validCount < additionalGsts.length) {
+      setAdditionalGsts(additionalGsts.slice(0, validCount));
+    }
+  }
+
   // ==========================================
-  // REAL GST VERIFICATION HANDLER (VIA API)
+  // REAL GST VERIFICATION HANDLER
   // ==========================================
   async function handleVerifyPrimaryGst() {
     const cleanGst = primaryGst.trim().toUpperCase();
     if (!cleanGst || cleanGst.length !== 15) {
-      showToast("Please enter a 15-character GSTIN (e.g. 06AALCM8009M1Z1)", "error");
+      showToast("Please enter a 15-character GSTIN", "error");
       return;
     }
 
@@ -135,12 +496,10 @@ export default function RegisterPage() {
         setIsPrimaryGstVerified(true);
         setPrimaryGst(d.gstin || cleanGst);
 
-        // Auto-fill real company name from live GST API
-        if (d.businessName || d.legalName || d.tradeName) {
+        if (!companyName && (d.businessName || d.legalName || d.tradeName)) {
           setCompanyName(d.businessName || d.legalName || d.tradeName);
         }
 
-        // Auto-fill state, city, address, PIN
         const resolvedState = d.state || d.stateName || "";
         if (resolvedState) setState(resolvedState);
         if (d.city) setCity(d.city);
@@ -171,7 +530,7 @@ export default function RegisterPage() {
     }
   }
 
-  // Auto Postal PIN lookup for City/State
+  // Auto Postal PIN lookup
   async function handlePincodeBlur() {
     if (!pincode || pincode.trim().length !== 6) return;
     try {
@@ -191,32 +550,10 @@ export default function RegisterPage() {
     }
   }
 
-  // Multi-GST Handlers
-  function handleAddAdditionalGst() {
-    const newId = `gst_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`;
-    setAdditionalGsts([
-      ...additionalGsts,
-      {
-        id: newId,
-        gstNo: "",
-        state: "",
-        stateCode: "",
-        verified: false,
-        address: "",
-        city: "",
-        pincode: "",
-      },
-    ]);
-    showToast("Added new GST branch row", "info");
-  }
-
-  function handleRemoveAdditionalGst(id: string) {
-    setAdditionalGsts(additionalGsts.filter((item) => item.id !== id));
-  }
-
-  async function handleVerifyAdditionalGst(index: number) {
+  // Branch GST verification
+  async function handleVerifyBranchGst(index: number) {
     const item = additionalGsts[index];
-    const cleanGst = item.gstNo.trim().toUpperCase();
+    const cleanGst = (item.gstNo || "").trim().toUpperCase();
     if (!cleanGst || cleanGst.length !== 15) {
       showToast("Please enter a 15-character GSTIN", "error");
       return;
@@ -246,6 +583,12 @@ export default function RegisterPage() {
         nextList[index].city = d.city || "";
         nextList[index].address = d.address || "";
         nextList[index].pincode = d.pincode || "";
+
+        const autoName = d.tradeName || d.legalName || d.businessName || "";
+        if (autoName && (!nextList[index].branchName || nextList[index].branchName.startsWith("Branch #"))) {
+          nextList[index].branchName = autoName;
+        }
+
         setAdditionalGsts(nextList);
         showToast(branchState ? `✓ Branch GST verified for ${branchState}!` : "✓ Branch GST verified!", "success");
       } else {
@@ -260,27 +603,82 @@ export default function RegisterPage() {
     }
   }
 
+  // Real-time duplicate check
+  async function handleEmailBlur() {
+    if (!email || emailVerified) return;
+    const cleanEmail = email.trim().toLowerCase();
+    if (!cleanEmail.includes("@")) return;
+
+    try {
+      const res = await fetch("/api/auth/check-exists", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: cleanEmail }),
+      });
+      const json = await res.json();
+      if (json.exists) {
+        showToast(json.message || "This email address is already registered.", "error");
+      }
+    } catch {
+      // Ignore
+    }
+  }
+
+  async function handleMobileBlur() {
+    if (!mobile || mobileVerified) return;
+    const cleanMobile = mobile.replace(/\D/g, "");
+    if (cleanMobile.length !== 10) return;
+
+    try {
+      const res = await fetch("/api/auth/check-exists", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ mobile: cleanMobile }),
+      });
+      const json = await res.json();
+      if (json.exists) {
+        showToast(json.message || "This mobile number is already registered.", "error");
+      }
+    } catch {
+      // Ignore
+    }
+  }
+
   // ==========================================
   // OTP SEND & VERIFY HANDLERS
   // ==========================================
   async function handleSendEmailOtp() {
     if (emailSending) return;
-    const emailErr = validateEmail(email);
-    if (emailErr) {
-      showToast(emailErr, "error");
+    const cleanEmail = email.trim().toLowerCase();
+    if (!cleanEmail || !cleanEmail.includes("@")) {
+      showToast("Please enter a valid email address", "error");
       return;
     }
 
     setEmailSending(true);
     try {
+      // 1. Check if email is already registered in the system
+      const checkRes = await fetch("/api/auth/check-exists", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: cleanEmail }),
+      });
+      const checkJson = await checkRes.json();
+      if (checkJson.exists) {
+        showToast(checkJson.message || "This email address is already registered in the system.", "error");
+        return;
+      }
+
+      // 2. Send OTP only if email does not exist
       const res = await fetch("/api/auth/send-email-otp", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: email.trim().toLowerCase() }),
+        body: JSON.stringify({ email: cleanEmail }),
       });
       const json = await res.json();
       if (json.success) {
         setEmailOtpSent(true);
+        setEmailCountdown(60);
         showToast("Verification code sent to your email!", "success");
       } else {
         showToast(json.message || "Failed to send email OTP", "error");
@@ -305,6 +703,7 @@ export default function RegisterPage() {
       if (json.success) {
         setEmailVerified(true);
         setEmailOtpSent(false);
+        setEmailCountdown(0);
         showToast("Email verified successfully!", "success");
       } else {
         showToast(json.message || "Incorrect email verification code", "error");
@@ -317,16 +716,28 @@ export default function RegisterPage() {
   }
 
   async function handleSendMobileOtp() {
-    if (mobileSending) return;
-    const mobileErr = validateMobile(mobile);
-    if (mobileErr) {
-      showToast(mobileErr, "error");
+    if (mobileSending || mobileCountdown > 0) return;
+    const cleanMobile = mobile.replace(/\D/g, "");
+    if (cleanMobile.length !== 10) {
+      showToast("Please enter a valid 10-digit mobile number", "error");
       return;
     }
-    const cleanMobile = mobile.replace(/\D/g, "");
 
     setMobileSending(true);
     try {
+      // 1. Check if mobile number is already registered
+      const checkRes = await fetch("/api/auth/check-exists", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ mobile: cleanMobile }),
+      });
+      const checkJson = await checkRes.json();
+      if (checkJson.exists) {
+        showToast(checkJson.message || "This mobile number is already registered in the system.", "error");
+        return;
+      }
+
+      // 2. Send Mobile OTP only if mobile does not exist
       const res = await fetch("/api/auth/send-mobile-otp", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -335,14 +746,8 @@ export default function RegisterPage() {
       const json = await res.json();
       if (json.success) {
         setMobileOtpSent(true);
-        if (json.deliveredLive) {
-          showToast(`Verification code sent to +91 ${cleanMobile}`, "success");
-        } else if (json.otp) {
-          setMobileOtp(json.otp);
-          showToast(`OTP: ${json.otp} (Auto-filled for instant testing)`, "info");
-        } else {
-          showToast(`Verification code sent to +91 ${cleanMobile}`, "success");
-        }
+        setMobileCountdown(60);
+        showToast(`Verification code sent to WhatsApp (+91 ${cleanMobile})`, "success");
       } else {
         showToast(json.message || "Failed to send WhatsApp OTP", "error");
       }
@@ -366,6 +771,7 @@ export default function RegisterPage() {
       if (json.success) {
         setMobileVerified(true);
         setMobileOtpSent(false);
+        setMobileCountdown(0);
         showToast("Mobile verified successfully!", "success");
       } else {
         showToast(json.message || "Incorrect verification code", "error");
@@ -384,33 +790,41 @@ export default function RegisterPage() {
     setErrorBanner(null);
 
     if (currentStep === 1) {
+      // Validate Company Name
       if (!companyName.trim()) {
-        const msg = "Company / Legal enterprise name is required";
+        const msg = "Company name is required";
         setErrorBanner(msg);
         showToast(msg, "error");
         return;
       }
-      if (companyName.trim().length > 120) {
-        const msg = "Company name is too long (max 120 characters)";
+
+      // Validate Address, City, State
+      if (!address.trim()) {
+        const msg = "Full address is required";
         setErrorBanner(msg);
         showToast(msg, "error");
         return;
       }
-      setCurrentStep(2);
-      showToast("Company details saved. Now enter admin details.", "info");
-    } else if (currentStep === 2) {
-      // Validate full name
-      const nameErr = validateName(name);
-      if (nameErr) {
-        setErrorBanner(nameErr);
-        showToast(nameErr, "error");
+
+      // Validate Mobile & Email
+      const cleanMobile = mobile.replace(/\D/g, "");
+      if (cleanMobile.length !== 10) {
+        const msg = "Please enter a valid 10-digit phone number";
+        setErrorBanner(msg);
+        showToast(msg, "error");
         return;
       }
-      // Validate email before checking verified
-      const emailErr = validateEmail(email);
-      if (emailErr) {
-        setErrorBanner(emailErr);
-        showToast(emailErr, "error");
+      if (!mobileVerified) {
+        const msg = "Please verify your phone number with the OTP before continuing";
+        setErrorBanner(msg);
+        showToast(msg, "error");
+        return;
+      }
+
+      if (!email.trim() || !email.includes("@")) {
+        const msg = "Please enter a valid email address";
+        setErrorBanner(msg);
+        showToast(msg, "error");
         return;
       }
       if (!emailVerified) {
@@ -419,24 +833,12 @@ export default function RegisterPage() {
         showToast(msg, "error");
         return;
       }
-      // Validate mobile
-      const mobileErr = validateMobile(mobile);
-      if (mobileErr) {
-        setErrorBanner(mobileErr);
-        showToast(mobileErr, "error");
-        return;
-      }
-      if (!mobileVerified) {
-        const msg = "Please verify your mobile number with the OTP before continuing";
+
+      // Validate Password
+      if (!password || password.length < 6) {
+        const msg = "Password must be at least 6 characters";
         setErrorBanner(msg);
         showToast(msg, "error");
-        return;
-      }
-      // Validate password
-      const passwordErr = validatePassword(password);
-      if (passwordErr) {
-        setErrorBanner(passwordErr);
-        showToast(passwordErr, "error");
         return;
       }
       if (password !== confirmPassword) {
@@ -445,8 +847,90 @@ export default function RegisterPage() {
         showToast(msg, "error");
         return;
       }
-      setCurrentStep(3);
-      showToast("Security verified! Please review your details.", "info");
+
+      // Next Step Routing
+      if (branchCount > 0) {
+        setCurrentStep(branchStepNumber);
+        showToast(`Proceeding to fill details for ${branchCount} branch(es)`, "info");
+      } else {
+        setCurrentStep(reviewStepNumber);
+        showToast("Head office details verified! Please review.", "info");
+      }
+    } else if (currentStep === branchStepNumber && branchCount > 0) {
+      // Validate branches
+      for (let i = 0; i < additionalGsts.length; i++) {
+        const br = additionalGsts[i];
+        if (!br.branchName.trim()) {
+          const msg = `Please enter the branch company name for Branch #${i + 1}`;
+          setErrorBanner(msg);
+          showToast(msg, "error");
+          setActiveBranchIndex(i);
+          return;
+        }
+        const cleanBrMob = (br.mobile || "").replace(/\D/g, "");
+        if (cleanBrMob.length !== 10) {
+          const msg = `Please enter a valid 10-digit phone number for Branch #${i + 1}`;
+          setErrorBanner(msg);
+          showToast(msg, "error");
+          setActiveBranchIndex(i);
+          return;
+        }
+        const cleanBrEmail = (br.email || "").trim().toLowerCase();
+        if (!cleanBrEmail || !cleanBrEmail.includes("@")) {
+          const msg = `Please enter a valid email address for Branch #${i + 1}`;
+          setErrorBanner(msg);
+          showToast(msg, "error");
+          setActiveBranchIndex(i);
+          return;
+        }
+
+        // Must not match Head Office email
+        const cleanHoEmail = email.trim().toLowerCase();
+        if (cleanBrEmail === cleanHoEmail) {
+          const msg = `Branch #${i + 1} email cannot be the same as Head Office email (${cleanHoEmail}). Please enter a unique email for this branch.`;
+          setErrorBanner(msg);
+          showToast(msg, "error");
+          setActiveBranchIndex(i);
+          return;
+        }
+
+        // Must not duplicate other branches
+        for (let j = 0; j < i; j++) {
+          if ((additionalGsts[j].email || "").trim().toLowerCase() === cleanBrEmail) {
+            const msg = `Branch #${i + 1} email is already used for Branch #${j + 1}. Each branch must have a unique email.`;
+            setErrorBanner(msg);
+            showToast(msg, "error");
+            setActiveBranchIndex(i);
+            return;
+          }
+        }
+
+        if (!br.emailVerified) {
+          const msg = `Please verify the email OTP for Branch #${i + 1} (${br.email})`;
+          setErrorBanner(msg);
+          showToast(msg, "error");
+          setActiveBranchIndex(i);
+          return;
+        }
+
+        if (!br.password || br.password.length < 6) {
+          const msg = `Please enter a password of at least 6 characters for Branch #${i + 1}`;
+          setErrorBanner(msg);
+          showToast(msg, "error");
+          setActiveBranchIndex(i);
+          return;
+        }
+
+        if (br.password !== br.confirmPassword) {
+          const msg = `Passwords do not match for Branch #${i + 1}. Please re-enter.`;
+          setErrorBanner(msg);
+          showToast(msg, "error");
+          setActiveBranchIndex(i);
+          return;
+        }
+      }
+      setCurrentStep(reviewStepNumber);
+      showToast("Branch details verified! Please review your submission.", "info");
     }
   }
 
@@ -457,23 +941,21 @@ export default function RegisterPage() {
     setErrorBanner(null);
 
     try {
+      const adminName = name.trim() || companyName.trim();
       const payload = {
-        name: name.trim(),
+        name: adminName,
         email: email.trim().toLowerCase(),
-        mobile: mobile.replace(/\D/g, ""), // digits only
+        mobile: mobile.replace(/\D/g, ""),
         password,
-        designation,
         role: "Admin",
         companyName: companyName.trim(),
         gstNo: primaryGst.trim().toUpperCase(),
         drugLicenseNo: drugLicenseNo.trim(),
         address: address.trim(),
         city: city.trim(),
-        state: state.trim(),
         pincode: pincode.trim(),
-        additionalGstins: additionalGsts.filter((g) => g.gstNo.trim().length === 15),
-        businessType: "pharma_enterprise",
-        financialYearName: "2025-26",
+        additionalGstins: branchCount > 0 ? additionalGsts.slice(0, branchCount) : [],
+        termsAccepted: true,
       };
 
       const res = await fetch("/api/auth/register", {
@@ -503,33 +985,13 @@ export default function RegisterPage() {
 
   return (
     <div className={`clean-signup-page ${displayFont.variable} ${bodyFont.variable} ${monoFont.variable}`}>
-      {/* Floating Modern Toast Container */}
-      <div className="toast-container">
-        {toasts.map((t) => (
-          <div key={t.id} className={`toast-item toast-${t.type}`}>
-            <span className="toast-icon-circle">
-              {t.type === "success" ? "✓" : t.type === "error" ? "✕" : "ℹ"}
-            </span>
-            <span className="toast-message">{t.message}</span>
-            <button
-              type="button"
-              className="toast-close-btn"
-              onClick={() => removeToast(t.id)}
-            >
-              ✕
-            </button>
-          </div>
-        ))}
-      </div>
 
       {/* Background Soft Glow Ambience */}
       <div className="bg-glow bg-glow-top" />
       <div className="bg-glow bg-glow-bottom" />
 
       <div className="clean-signup-container">
-        {/* ========================================================
-            MAIN CLEAN ONBOARDING WIZARD CARD (SPACIOUS 900PX PC WIDTH)
-           ======================================================== */}
+   
         <div className="clean-wizard-card">
           {/* Brand Header */}
           <div className="brand-header">
@@ -568,7 +1030,7 @@ export default function RegisterPage() {
             </p>
           </div>
 
-          {/* Streamlined Step Progress Bar */}
+          {/* Dynamic Step Progress Bar */}
           <div className="clean-step-tracker">
             <button
               type="button"
@@ -576,43 +1038,105 @@ export default function RegisterPage() {
               onClick={() => setCurrentStep(1)}
             >
               <span className="step-num">{currentStep > 1 ? "✓" : "1"}</span>
-              <span className="step-txt">Company &amp; GST</span>
+              <span className="step-txt">Head Office &amp; Account</span>
             </button>
             <div className={`step-line ${currentStep > 1 ? "filled" : ""}`} />
 
-            <button
-              type="button"
-              className={`step-btn ${currentStep === 2 ? "active" : currentStep > 2 ? "completed" : ""}`}
-              onClick={() => { if (companyName) setCurrentStep(2); }}
-            >
-              <span className="step-num">{currentStep > 2 ? "✓" : "2"}</span>
-              <span className="step-txt">Admin Profile &amp; OTP</span>
-            </button>
-            <div className={`step-line ${currentStep > 2 ? "filled" : ""}`} />
+            {branchCount > 0 && (
+              <>
+                <button
+                  type="button"
+                  className={`step-btn ${currentStep === 2 ? "active" : currentStep > 2 ? "completed" : ""}`}
+                  onClick={() => { if (companyName) setCurrentStep(2); }}
+                >
+                  <span className="step-num">{currentStep > 2 ? "✓" : "2"}</span>
+                  <span className="step-txt">Branch Details ({branchCount})</span>
+                </button>
+                <div className={`step-line ${currentStep > 2 ? "filled" : ""}`} />
+              </>
+            )}
 
             <button
               type="button"
-              className={`step-btn ${currentStep === 3 ? "active" : ""}`}
-              onClick={() => { if (emailVerified && mobileVerified) setCurrentStep(3); }}
+              className={`step-btn ${currentStep === reviewStepNumber ? "active" : ""}`}
+              onClick={() => { if (emailVerified && mobileVerified) setCurrentStep(reviewStepNumber); }}
             >
-              <span className="step-num">3</span>
+              <span className="step-num">{totalSteps}</span>
               <span className="step-txt">Review &amp; Launch</span>
             </button>
           </div>
 
           {errorBanner && <div className="clean-error-banner">{errorBanner}</div>}
 
-          {/* ========================================================
-              STEP 1: COMPANY & GST MASTER
-             ======================================================== */}
+     
           {currentStep === 1 && (
             <div className="clean-form-module">
-              {/* Primary GSTIN Verification */}
+              {/* Row 1: Company Name & How many main branches select */}
+              <div className="clean-grid-2">
+                <div className="clean-field">
+                  <label>
+                    <span className="req-star">*</span> Company Name
+                  </label>
+                  <div className="clean-input-row">
+                    <input
+                      type="text"
+                      placeholder="Enter company name"
+                      value={companyName}
+                      onChange={(e) => setCompanyName(e.target.value)}
+                      required
+                    />
+                  </div>
+                </div>
+
+                <div className="clean-field">
+                  <label>
+                    <span className="req-star">*</span> How many main branches do you want to add?
+                  </label>
+                  <div className="clean-input-row">
+                    <select
+                      className="clean-select"
+                      value={branchCount}
+                      onChange={(e) => handleBranchCountChange(Number(e.target.value))}
+                    >
+                      <option value={0}>0 Main Branch (Head Office Only)</option>
+                      <option value={1}>1 Main Branch</option>
+                      <option value={2}>2 Main Branches</option>
+                      <option value={3}>3 Main Branches</option>
+                      <option value={4}>4 Main Branches</option>
+                      <option value={5}>5 Main Branches</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+
+              {/* Row 1.5: Administrator / Owner Full Name */}
               <div className="clean-field">
                 <label>
-                  <span>Primary GSTIN (Goods &amp; Services Tax)</span>
-                  <span className="field-hint">Validates Indian GSTIN &amp; Auto-fills Data</span>
+                  <span className="req-star">*</span> Administrator / Owner Full Name
                 </label>
+                <div className="clean-input-row">
+                  <svg className="clean-input-icon" width="18" height="18" viewBox="0 0 24 24" fill="none">
+                    <circle cx="12" cy="8" r="4" stroke="currentColor" strokeWidth="1.8" />
+                    <path d="M6 21v-2a4 4 0 0 1 4-4h4a4 4 0 0 1 4 4v2" stroke="currentColor" strokeWidth="1.8" />
+                  </svg>
+                  <input
+                    type="text"
+                    placeholder="Enter full name of administrator"
+                    value={name}
+                    onChange={(e) => setName(e.target.value.replace(/[^a-zA-Z\s.\-']/g, ""))}
+                    required
+                  />
+                </div>
+              </div>
+
+              {/* Row 2: GST Number + Verify Button */}
+              <div className="clean-field">
+                <div className="clean-label-row">
+                  <label>
+                    <span className="req-star">*</span> GST Number
+                  </label>
+                  <span className="field-hint">Auto-fills Address, City, State &amp; PIN</span>
+                </div>
                 <div className="clean-input-row">
                   <svg className="clean-input-icon" width="18" height="18" viewBox="0 0 24 24" fill="none">
                     <rect x="3" y="4" width="18" height="16" rx="3" stroke="currentColor" strokeWidth="1.8" />
@@ -620,7 +1144,7 @@ export default function RegisterPage() {
                   </svg>
                   <input
                     type="text"
-                    placeholder="e.g. 06AALCM8009M1Z1"
+                    placeholder="ENTER GSTIN (E.G. 22AAAAA0000A1Z5)"
                     maxLength={15}
                     value={primaryGst}
                     onChange={(e) => {
@@ -639,222 +1163,146 @@ export default function RegisterPage() {
                   </button>
                 </div>
                 {gstVerifyMessage && (
-                  <div className={`clean-verified-box ${!isPrimaryGstVerified ? "clean-error-box" : ""}`}>
-                    <span className="verified-icon">{isPrimaryGstVerified ? "✓" : "!"}</span>
-                    <span className="verified-text">
-                      <strong>GSTIN Status:</strong> {gstVerifyMessage}
-                    </span>
+                  <div className={`gst-verified-pill ${isPrimaryGstVerified ? "is-verified" : "is-error"}`}>
+                    {gstVerifyMessage}
                   </div>
                 )}
               </div>
 
-              {/* Company Name */}
+              {/* Row 3: Full Address */}
               <div className="clean-field">
                 <label>
-                  <span>Company / Legal Enterprise Name <span className="req-star">*</span></span>
+                  <span className="req-star">*</span> Full Address
                 </label>
                 <div className="clean-input-row">
-                  <svg className="clean-input-icon" width="18" height="18" viewBox="0 0 24 24" fill="none">
-                    <path d="M3 21h18M5 21V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16" stroke="currentColor" strokeWidth="1.8" />
-                    <path d="M9 9h1M14 9h1M9 13h1M14 13h1M9 17h1M14 17h1" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-                  </svg>
                   <input
                     type="text"
-                    placeholder="e.g. Mabsol Infotech Pvt Ltd"
-                    value={companyName}
-                    onChange={(e) => setCompanyName(e.target.value)}
+                    placeholder="Enter complete address"
+                    value={address}
+                    onChange={(e) => setAddress(e.target.value)}
                     required
                   />
                 </div>
               </div>
 
-              {/* Registered Address */}
-              <div className="clean-field">
-                <label>Registered Warehouse / Office Address</label>
-                <div className="clean-input-row">
-                  <svg className="clean-input-icon" width="18" height="18" viewBox="0 0 24 24" fill="none">
-                    <path d="M12 21s-8-7.5-8-12a8 8 0 1 1 16 0c0 4.5-8 12-8 12z" stroke="currentColor" strokeWidth="1.8" />
-                    <circle cx="12" cy="9" r="2.5" stroke="currentColor" strokeWidth="1.8" />
-                  </svg>
-                  <input
-                    type="text"
-                    placeholder="Plot No., Industrial Area, Sector"
-                    value={address}
-                    onChange={(e) => setAddress(e.target.value)}
-                  />
-                </div>
-              </div>
-
-              {/* City, State & PIN Code */}
-              <div className="clean-grid-3">
-                <div className="clean-field">
-                  <label>City</label>
-                  <div className="clean-input-row">
-                    <input
-                      type="text"
-                      placeholder="e.g. Gurugram"
-                      value={city}
-                      onChange={(e) => setCity(e.target.value)}
-                    />
-                  </div>
-                </div>
-
-                <div className="clean-field">
-                  <label>State</label>
-                  <div className="clean-input-row">
-                    <input
-                      type="text"
-                      placeholder="e.g. Haryana"
-                      value={state}
-                      onChange={(e) => setState(e.target.value)}
-                    />
-                  </div>
-                </div>
-
-                <div className="clean-field">
-                  <label>Postal PIN</label>
-                  <div className="clean-input-row">
-                    <input
-                      type="text"
-                      placeholder="6-digit PIN"
-                      maxLength={6}
-                      value={pincode}
-                      onChange={(e) => setPincode(e.target.value.replace(/\D/g, ""))}
-                      onBlur={handlePincodeBlur}
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {/* Drug License Number */}
-              <div className="clean-field">
-                <label>
-                  <span>Drug License Number (DL No. Form 20B/21B)</span>
-                  <span className="field-hint">Optional Pharma Master</span>
-                </label>
-                <div className="clean-input-row">
-                  <svg className="clean-input-icon" width="18" height="18" viewBox="0 0 24 24" fill="none">
-                    <path d="M10.5 20.5l10-10a4.95 4.95 0 1 0-7-7l-10 10a4.95 4.95 0 1 0 7 7Z" stroke="currentColor" strokeWidth="1.8" />
-                    <path d="M8.5 8.5l7 7" stroke="currentColor" strokeWidth="1.8" />
-                  </svg>
-                  <input
-                    type="text"
-                    placeholder="e.g. DL-HR-GUR-198273"
-                    value={drugLicenseNo}
-                    onChange={(e) => setDrugLicenseNo(e.target.value.toUpperCase())}
-                  />
-                </div>
-              </div>
-
-              {/* Multi-GST Section */}
-              <div className="clean-multi-gst-box">
-                <div className="multi-gst-top">
-                  <span className="multi-gst-title">
-                    <span>🏢 Additional State GSTINs (Multi-Branch)</span>
-                  </span>
-                  <button type="button" className="btn-add-gst" onClick={handleAddAdditionalGst}>
-                    + Add Another GSTIN
-                  </button>
-                </div>
-
-                {additionalGsts.length === 0 ? (
-                  <p className="multi-gst-desc">
-                    Operating in multiple states (e.g. Delhi, Baddi, Maharashtra)? Add extra GSTINs to manage multi-branch billing seamlessly.
-                  </p>
-                ) : (
-                  additionalGsts.map((item, idx) => (
-                    <div key={item.id} className="clean-branch-card">
-                      <div className="branch-card-row">
-                        <div className="clean-input-row" style={{ flex: 1 }}>
-                          <input
-                            type="text"
-                            placeholder={`Branch #${idx + 2} 15-digit GSTIN`}
-                            maxLength={15}
-                            value={item.gstNo}
-                            onChange={(e) => {
-                              const list = [...additionalGsts];
-                              list[idx].gstNo = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "");
-                              list[idx].verified = false;
-                              setAdditionalGsts(list);
-                            }}
-                          />
-                          <button
-                            type="button"
-                            className={`clean-inline-btn ${item.verified ? "is-verified" : ""}`}
-                            disabled={item.isVerifying || item.verified}
-                            onClick={() => handleVerifyAdditionalGst(idx)}
-                          >
-                            {item.isVerifying ? "Verifying…" : item.verified ? "✓ Verified" : "Verify"}
-                          </button>
-                        </div>
-                        <button
-                          type="button"
-                          className="btn-delete-gst"
-                          onClick={() => handleRemoveAdditionalGst(item.id)}
-                          title="Remove GSTIN"
-                        >
-                          ✕
-                        </button>
-                      </div>
-                      {item.verified && (
-                        <div className="branch-verified-tag">
-                          ✓ State: <strong>{item.state}</strong> ({item.city || "Branch Depot"})
-                        </div>
-                      )}
-                    </div>
-                  ))
-                )}
-              </div>
-            </div>
-          )}
-
-          {/* ========================================================
-              STEP 2: ADMIN PROFILE & OTP SECURITY
-             ======================================================== */}
-          {currentStep === 2 && (
-            <div className="clean-form-module">
+              {/* Row 4: State & City */}
               <div className="clean-grid-2">
                 <div className="clean-field">
-                  <label>Administrator / Owner Full Name <span className="req-star">*</span></label>
+                  <label>
+                    <span className="req-star">*</span> State
+                  </label>
                   <div className="clean-input-row">
-                    <svg className="clean-input-icon" width="18" height="18" viewBox="0 0 24 24" fill="none">
-                      <circle cx="12" cy="8" r="4" stroke="currentColor" strokeWidth="1.8" />
-                      <path d="M6 21v-2a4 4 0 0 1 4-4h4a4 4 0 0 1 4 4v2" stroke="currentColor" strokeWidth="1.8" />
-                    </svg>
                     <input
                       type="text"
-                      placeholder="e.g. Rajesh Sharma"
-                      value={name}
-                      onChange={(e) => setName(e.target.value.replace(/[^a-zA-Z\s.\-']/g, ""))}
-                      maxLength={80}
+                      placeholder="Enter State"
+                      value={state}
+                      onChange={(e) => setState(e.target.value)}
                       required
                     />
                   </div>
                 </div>
 
                 <div className="clean-field">
-                  <label>Designation</label>
+                  <label>
+                    <span className="req-star">*</span> City
+                  </label>
                   <div className="clean-input-row">
-                    <select
-                      value={designation}
-                      onChange={(e) => setDesignation(e.target.value)}
-                    >
-                      <option value="Managing Director">Managing Director</option>
-                      <option value="Director / Partner">Director / Partner</option>
-                      <option value="Proprietor">Proprietor</option>
-                      <option value="VP / Sales Head">VP / Sales Head</option>
-                      <option value="Commercial Manager">Commercial Manager</option>
-                    </select>
+                    <input
+                      type="text"
+                      placeholder="Enter City"
+                      value={city}
+                      onChange={(e) => setCity(e.target.value)}
+                      required
+                    />
                   </div>
                 </div>
               </div>
 
-              {/* Work Email with OTP */}
+              {/* Row 5: Postal Code & Phone Number with OTP */}
+              <div className="clean-grid-2">
+                <div className="clean-field">
+                  <label>
+                    <span className="req-star">*</span> Postal Code
+                  </label>
+                  <div className="clean-input-row">
+                    <input
+                      type="text"
+                      placeholder="6-digit pincode"
+                      maxLength={6}
+                      value={pincode}
+                      onChange={(e) => setPincode(e.target.value.replace(/\D/g, ""))}
+                      onBlur={handlePincodeBlur}
+                      required
+                    />
+                  </div>
+                </div>
+
+                <div className="clean-field">
+                  <div className="clean-label-row">
+                    <label>
+                      <span className="req-star">*</span> Phone Number
+                    </label>
+                    {mobileVerified && <span className="verified-badge">✓ Phone Verified</span>}
+                  </div>
+                  <div className="clean-input-row">
+                    <input
+                      type="tel"
+                      placeholder="10-digit phone number"
+                      maxLength={10}
+                      value={mobile}
+                      disabled={mobileVerified}
+                      onChange={(e) => setMobile(e.target.value.replace(/\D/g, ""))}
+                      onBlur={handleMobileBlur}
+                      required
+                    />
+                    <button
+                      type="button"
+                      className={`clean-inline-btn ${mobileVerified ? "is-verified" : ""}`}
+                      disabled={mobileVerified || mobileSending || mobileCountdown > 0 || mobile.replace(/\D/g, "").length !== 10}
+                      onClick={handleSendMobileOtp}
+                    >
+                      {mobileVerified
+                        ? "✓ Verified"
+                        : mobileSending
+                        ? "Sending…"
+                        : mobileCountdown > 0
+                        ? `Resend in ${mobileCountdown}s`
+                        : "Send OTP"}
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {mobileOtpSent && !mobileVerified && (
+                <div className="clean-otp-box">
+                  <label>Enter 6-digit WhatsApp OTP sent to +91 {mobile}</label>
+                  <div className="otp-compact-row">
+                    <SquareOtpInput
+                      idPrefix="mobile-otp"
+                      value={mobileOtp}
+                      onChange={setMobileOtp}
+                      disabled={mobileVerifying}
+                    />
+                    <button
+                      type="button"
+                      className="clean-otp-confirm-btn"
+                      disabled={mobileVerifying || mobileOtp.length < 6}
+                      onClick={handleVerifyMobileOtp}
+                    >
+                      {mobileVerifying ? "Verifying…" : "Confirm OTP ✓"}
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Row 6: Email Address with OTP */}
               <div className="clean-field">
-                <label>
-                  <span>Work Email Address <span className="req-star">*</span></span>
+                <div className="clean-label-row">
+                  <label>
+                    <span className="req-star">*</span> Email Address
+                  </label>
                   {emailVerified && <span className="verified-badge">✓ Email Verified</span>}
-                </label>
+                </div>
                 <div className="clean-input-row">
                   <svg className="clean-input-icon" width="18" height="18" viewBox="0 0 24 24" fill="none">
                     <rect x="2" y="5" width="20" height="14" rx="3" stroke="currentColor" strokeWidth="1.8" />
@@ -862,111 +1310,65 @@ export default function RegisterPage() {
                   </svg>
                   <input
                     type="email"
-                    placeholder="director@pharma.com"
+                    placeholder="Enter email address"
                     value={email}
                     disabled={emailVerified}
                     onChange={(e) => setEmail(e.target.value)}
+                    onBlur={handleEmailBlur}
+                    required
                   />
                   <button
                     type="button"
                     className={`clean-inline-btn ${emailVerified ? "is-verified" : ""}`}
-                    disabled={emailVerified || emailSending}
+                    disabled={emailVerified || emailSending || emailCountdown > 0 || !email.includes("@")}
                     onClick={handleSendEmailOtp}
                   >
-                    {emailVerified ? "✓ Verified" : emailSending ? "Sending…" : "Send OTP"}
+                    {emailVerified
+                      ? "✓ Verified"
+                      : emailSending
+                      ? "Sending…"
+                      : emailCountdown > 0
+                      ? `Resend in ${emailCountdown}s`
+                      : "Send OTP"}
                   </button>
                 </div>
               </div>
 
               {emailOtpSent && !emailVerified && (
                 <div className="clean-otp-box">
-                  <label>Enter 6-Digit Email OTP</label>
-                  <div className="clean-input-row">
-                    <input
-                      type="text"
-                      placeholder="Enter email OTP code"
-                      maxLength={6}
+                  <label>Enter 6-digit verification code sent to {email}</label>
+                  <div className="otp-compact-row">
+                    <SquareOtpInput
+                      idPrefix="email-otp"
                       value={emailOtp}
-                      onChange={(e) => setEmailOtp(e.target.value.replace(/\D/g, ""))}
+                      onChange={setEmailOtp}
+                      disabled={emailVerifying}
                     />
                     <button
                       type="button"
-                      className="clean-inline-btn"
-                      disabled={emailVerifying || !emailOtp}
+                      className="clean-otp-confirm-btn"
+                      disabled={emailVerifying || emailOtp.length < 6}
                       onClick={handleVerifyEmailOtp}
                     >
-                      {emailVerifying ? "Verifying…" : "Confirm OTP"}
+                      {emailVerifying ? "Verifying…" : "Confirm OTP ✓"}
                     </button>
                   </div>
                 </div>
               )}
 
-              {/* WhatsApp Mobile with OTP */}
-              <div className="clean-field">
-                <label>
-                  <span>WhatsApp Mobile Number <span className="req-star">*</span></span>
-                  {mobileVerified && <span className="verified-badge">✓ Mobile Verified</span>}
-                </label>
-                <div className="clean-input-row">
-                  <svg className="clean-input-icon" width="18" height="18" viewBox="0 0 24 24" fill="none">
-                    <path d="M6.5 3.5h3l1.4 4.4-2.2 1.8a13 13 0 0 0 5.6 5.6l1.8-2.2 4.4 1.4v3a2 2 0 0 1-2.2 2C10.3 19 5 13.7 4.5 5.7A2 2 0 0 1 6.5 3.5z" stroke="currentColor" strokeWidth="1.8" />
-                  </svg>
-                  <input
-                    type="tel"
-                    placeholder="10-digit mobile number"
-                    maxLength={10}
-                    value={mobile}
-                    disabled={mobileVerified}
-                    onChange={(e) => setMobile(e.target.value.replace(/\D/g, ""))}
-                  />
-                  <button
-                    type="button"
-                    className={`clean-inline-btn ${mobileVerified ? "is-verified" : ""}`}
-                    disabled={mobileVerified || mobileSending}
-                    onClick={handleSendMobileOtp}
-                  >
-                    {mobileVerified ? "✓ Verified" : mobileSending ? "Sending…" : "Send WhatsApp OTP"}
-                  </button>
-                </div>
-              </div>
-
-              {mobileOtpSent && !mobileVerified && (
-                <div className="clean-otp-box">
-                  <label>Enter 6-Digit WhatsApp OTP</label>
-                  <div className="clean-input-row">
-                    <input
-                      type="text"
-                      placeholder="Enter WhatsApp OTP code"
-                      maxLength={6}
-                      value={mobileOtp}
-                      onChange={(e) => setMobileOtp(e.target.value.replace(/\D/g, ""))}
-                    />
-                    <button
-                      type="button"
-                      className="clean-inline-btn"
-                      disabled={mobileVerifying || !mobileOtp}
-                      onClick={handleVerifyMobileOtp}
-                    >
-                      {mobileVerifying ? "Verifying…" : "Confirm OTP"}
-                    </button>
-                  </div>
-                </div>
-              )}
-
-              {/* Password & Confirm Password */}
+              {/* Row 7: Password & Confirm Password */}
               <div className="clean-grid-2">
                 <div className="clean-field">
-                  <label>Password <span className="req-star">*</span></label>
+                  <label>
+                    <span className="req-star">*</span> Password
+                  </label>
                   <div className="clean-input-row">
-                    <svg className="clean-input-icon" width="18" height="18" viewBox="0 0 24 24" fill="none">
-                      <rect x="4" y="10" width="16" height="11" rx="3" stroke="currentColor" strokeWidth="1.8" />
-                      <path d="M7 10V7a5 5 0 0 1 10 0v3" stroke="currentColor" strokeWidth="1.8" />
-                    </svg>
                     <input
                       type={showPassword ? "text" : "password"}
-                      placeholder="Min. 6 characters"
+                      placeholder="Create password"
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
+                      required
                     />
                     <button
                       type="button"
@@ -979,17 +1381,16 @@ export default function RegisterPage() {
                 </div>
 
                 <div className="clean-field">
-                  <label>Confirm Password <span className="req-star">*</span></label>
+                  <label>
+                    <span className="req-star">*</span> Confirm Password
+                  </label>
                   <div className="clean-input-row">
-                    <svg className="clean-input-icon" width="18" height="18" viewBox="0 0 24 24" fill="none">
-                      <rect x="4" y="10" width="16" height="11" rx="3" stroke="currentColor" strokeWidth="1.8" />
-                      <path d="M7 10V7a5 5 0 0 1 10 0v3" stroke="currentColor" strokeWidth="1.8" />
-                    </svg>
                     <input
                       type={showConfirm ? "text" : "password"}
-                      placeholder="Re-type password"
+                      placeholder="Confirm password"
                       value={confirmPassword}
                       onChange={(e) => setConfirmPassword(e.target.value)}
+                      required
                     />
                     <button
                       type="button"
@@ -1001,46 +1402,568 @@ export default function RegisterPage() {
                   </div>
                 </div>
               </div>
+
+              {/* Drug License Optional */}
+              <div className="clean-field">
+                <label>
+                  <span>Drug License Number (Optional)</span>
+                  <span className="field-hint">Pharma License 20B/21B</span>
+                </label>
+                <div className="clean-input-row">
+                  <input
+                    type="text"
+                    placeholder="Enter Drug License Number (Optional)"
+                    value={drugLicenseNo}
+                    onChange={(e) => setDrugLicenseNo(e.target.value.toUpperCase())}
+                  />
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ========================================================
+              STEP 2: DEDICATED BRANCH DETAILS (ONLY IF BRANCHES >= 1)
+             ======================================================== */}
+          {currentStep === branchStepNumber && branchCount > 0 && additionalGsts.length > 0 && (
+            <div className="clean-form-module">
+              <div style={{ marginBottom: "12px" }}>
+                <h3 style={{ fontSize: "16px", fontWeight: 700, color: "#0f172a", margin: "0 0 4px" }}>
+                  🏢 Configure Your {branchCount} Additional Branch {branchCount === 1 ? "Office" : "Offices"}
+                </h3>
+                <p style={{ fontSize: "12.5px", color: "#64748b", margin: 0 }}>
+                  Select a branch tab below to enter its details. You can copy Head Office details with a single click.
+                </p>
+              </div>
+
+              {/* Horizontal Branch Tab Navigation Bar */}
+              <div className="branch-nav-tabs">
+                {additionalGsts.map((br, idx) => {
+                  const isBranchComplete = Boolean(
+                    br.branchName?.trim() &&
+                    (br.mobile || "").replace(/\D/g, "").length === 10 &&
+                    br.email?.trim().includes("@") &&
+                    br.emailVerified &&
+                    br.password &&
+                    br.password.length >= 6 &&
+                    br.confirmPassword &&
+                    br.password === br.confirmPassword
+                  );
+
+                  return (
+                    <button
+                      key={br.id}
+                      type="button"
+                      className={`branch-nav-tab ${activeBranchIndex === idx ? "active" : ""}`}
+                      onClick={() => setActiveBranchIndex(idx)}
+                    >
+                      <span>🏢 Branch #{idx + 1}</span>
+                      {br.branchName && !br.branchName.startsWith("Branch #") && (
+                        <span style={{ opacity: 0.85, fontSize: "11.5px" }}>({br.branchName.slice(0, 14)})</span>
+                      )}
+                      {isBranchComplete ? (
+                        <span style={{ color: activeBranchIndex === idx ? "#ffffff" : "#10b981", fontWeight: 700 }}>✓</span>
+                      ) : (
+                        <span style={{ color: activeBranchIndex === idx ? "#ffd4b2" : "#f59e0b", fontSize: "11px", fontWeight: 600 }}>
+                          (Incomplete)
+                        </span>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* Active Branch Card Form */}
+              {(() => {
+                const idx = activeBranchIndex < additionalGsts.length ? activeBranchIndex : 0;
+                const item = additionalGsts[idx] || additionalGsts[0];
+                if (!item) return null;
+
+                return (
+                  <div key={item.id} className="clean-branch-card">
+                    <div className="branch-card-header">
+                      <span className="branch-card-title">
+                        🏢 Main Branch #{idx + 1} {item.branchName ? `— ${item.branchName}` : ""}
+                      </span>
+                      <span style={{ fontSize: "12px", color: "#64748b", fontWeight: 600 }}>
+                        Branch {idx + 1} of {additionalGsts.length}
+                      </span>
+                    </div>
+
+                    {/* Branch Company Name */}
+                    <div className="clean-field">
+                      <label>
+                        <span className="req-star">*</span> Branch Company / Unit Name
+                      </label>
+                      <div className="clean-input-row">
+                        <input
+                          type="text"
+                          placeholder="Enter branch company name"
+                          value={item.branchName}
+                          onChange={(e) => {
+                            const list = [...additionalGsts];
+                            list[idx].branchName = e.target.value;
+                            setAdditionalGsts(list);
+                          }}
+                          required
+                        />
+                      </div>
+                    </div>
+
+                    {/* Branch GST Number */}
+                    <div className="clean-field">
+                      <div className="clean-label-row" style={{ marginBottom: "4px" }}>
+                        <label>
+                          <span>GST Number</span>
+                        </label>
+                        {primaryGst && (
+                          <button
+                            type="button"
+                            className="same-as-ho-btn"
+                            onClick={() => handleCopyHeadOfficeGst(idx)}
+                            title="Copy GST & Address from Head Office"
+                          >
+                            📋 Same GST as Head Office
+                          </button>
+                        )}
+                      </div>
+                      <div className="clean-input-row">
+                        <input
+                          type="text"
+                          placeholder="ENTER GSTIN (E.G. 22AAAAA0000A1Z5)"
+                          maxLength={15}
+                          value={item.gstNo}
+                          onChange={(e) => {
+                            const list = [...additionalGsts];
+                            list[idx].gstNo = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "");
+                            list[idx].verified = false;
+                            setAdditionalGsts(list);
+                          }}
+                        />
+                        <button
+                          type="button"
+                          className={`clean-inline-btn ${item.verified ? "is-verified" : ""}`}
+                          disabled={item.isVerifying || item.verified}
+                          onClick={() => handleVerifyBranchGst(idx)}
+                        >
+                          {item.isVerifying ? "Verifying…" : item.verified ? "✓ Verified" : "Verify GST"}
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Full Address */}
+                    <div className="clean-field">
+                      <label>Full Address</label>
+                      <div className="clean-input-row">
+                        <input
+                          type="text"
+                          placeholder="Enter complete address"
+                          value={item.address}
+                          onChange={(e) => {
+                            const list = [...additionalGsts];
+                            list[idx].address = e.target.value;
+                            setAdditionalGsts(list);
+                          }}
+                        />
+                      </div>
+                    </div>
+
+                    {/* State & City */}
+                    <div className="clean-grid-2">
+                      <div className="clean-field">
+                        <label>State</label>
+                        <div className="clean-input-row">
+                          <input
+                            type="text"
+                            placeholder="Enter State"
+                            value={item.state}
+                            onChange={(e) => {
+                              const list = [...additionalGsts];
+                              list[idx].state = e.target.value;
+                              setAdditionalGsts(list);
+                            }}
+                          />
+                        </div>
+                      </div>
+
+                      <div className="clean-field">
+                        <label>City</label>
+                        <div className="clean-input-row">
+                          <input
+                            type="text"
+                            placeholder="Enter City"
+                            value={item.city}
+                            onChange={(e) => {
+                              const list = [...additionalGsts];
+                              list[idx].city = e.target.value;
+                              setAdditionalGsts(list);
+                            }}
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Postal Code & Phone Number */}
+                    <div className="clean-grid-2">
+                      <div className="clean-field">
+                        <label>Postal Code</label>
+                        <div className="clean-input-row">
+                          <input
+                            type="text"
+                            placeholder="6-digit pincode"
+                            maxLength={6}
+                            value={item.pincode}
+                            onChange={(e) => {
+                              const list = [...additionalGsts];
+                              list[idx].pincode = e.target.value.replace(/\D/g, "");
+                              setAdditionalGsts(list);
+                            }}
+                          />
+                        </div>
+                      </div>
+
+                      <div className="clean-field">
+                        <div className="clean-label-row" style={{ marginBottom: "4px" }}>
+                          <label>
+                            <span className="req-star">*</span> Phone Number
+                          </label>
+                          {mobile && (
+                            <button
+                              type="button"
+                              className="same-as-ho-btn"
+                              onClick={() => handleCopyHeadOfficePhone(idx)}
+                              title="Copy Phone from Head Office"
+                            >
+                              📋 Same as Head Office
+                            </button>
+                          )}
+                        </div>
+                        <div className="clean-input-row">
+                          <input
+                            type="tel"
+                            placeholder="10-digit phone number"
+                            maxLength={10}
+                            value={item.mobile}
+                            onChange={(e) => {
+                              const list = [...additionalGsts];
+                              list[idx].mobile = e.target.value.replace(/\D/g, "");
+                              setAdditionalGsts(list);
+                            }}
+                            required
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Branch Email with OTP Verification */}
+                    <div className="clean-field">
+                      <div className="clean-label-row" style={{ marginBottom: "4px" }}>
+                        <label>
+                          <span className="req-star">*</span> Branch Email Address
+                        </label>
+                        {item.emailVerified ? (
+                          <span className="verified-badge">✓ Email Verified</span>
+                        ) : (
+                          <span className="field-hint">Must be unique & verified for this branch</span>
+                        )}
+                      </div>
+                      <div className="clean-input-row">
+                        <svg className="clean-input-icon" width="18" height="18" viewBox="0 0 24 24" fill="none">
+                          <rect x="2" y="5" width="20" height="14" rx="3" stroke="currentColor" strokeWidth="1.8" />
+                          <path d="M3 7l9 6 9-6" stroke="currentColor" strokeWidth="1.8" />
+                        </svg>
+                        <input
+                          type="email"
+                          placeholder="Enter branch email address"
+                          value={item.email}
+                          disabled={item.emailVerified}
+                          onChange={(e) => {
+                            const list = [...additionalGsts];
+                            list[idx].email = e.target.value.toLowerCase().trim();
+                            list[idx].emailVerified = false;
+                            list[idx].emailOtpSent = false;
+                            list[idx].emailOtp = "";
+                            setAdditionalGsts(list);
+                          }}
+                          onBlur={() => handleBranchEmailBlur(idx)}
+                          required
+                        />
+                        <button
+                          type="button"
+                          className={`clean-inline-btn ${item.emailVerified ? "is-verified" : ""}`}
+                          disabled={
+                            item.emailVerified ||
+                            item.emailSending ||
+                            (item.emailCountdown || 0) > 0 ||
+                            !item.email ||
+                            !item.email.includes("@")
+                          }
+                          onClick={() => handleSendBranchEmailOtp(idx)}
+                        >
+                          {item.emailVerified
+                            ? "✓ Verified"
+                            : item.emailSending
+                            ? "Sending…"
+                            : (item.emailCountdown || 0) > 0
+                            ? `Resend in ${item.emailCountdown}s`
+                            : "Send OTP"}
+                        </button>
+                      </div>
+                    </div>
+
+                    {item.emailOtpSent && !item.emailVerified && (
+                      <div className="clean-otp-box">
+                        <label>Enter 6-digit verification code sent to {item.email}</label>
+                        <div className="otp-compact-row">
+                          <SquareOtpInput
+                            idPrefix={`branch-${idx}-email-otp`}
+                            value={item.emailOtp || ""}
+                            onChange={(val) => {
+                              const list = [...additionalGsts];
+                              list[idx].emailOtp = val;
+                              setAdditionalGsts(list);
+                            }}
+                            disabled={item.emailVerifying}
+                          />
+                          <button
+                            type="button"
+                            className="clean-otp-confirm-btn"
+                            disabled={item.emailVerifying || (item.emailOtp || "").length < 6}
+                            onClick={() => handleVerifyBranchEmailOtp(idx)}
+                          >
+                            {item.emailVerifying ? "Verifying…" : "Confirm OTP ✓"}
+                          </button>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Branch Account Password & Confirm Password */}
+                    <div className="clean-grid-2" style={{ marginTop: "16px" }}>
+                      <div className="clean-field">
+                        <label>
+                          <span className="req-star">*</span> Branch Login Password
+                        </label>
+                        <div className="clean-input-row">
+                          <input
+                            type={item.showPassword ? "text" : "password"}
+                            placeholder="Create password (min 6 chars)"
+                            value={item.password || ""}
+                            onChange={(e) => {
+                              const list = [...additionalGsts];
+                              list[idx].password = e.target.value;
+                              setAdditionalGsts(list);
+                            }}
+                            required
+                          />
+                          <button
+                            type="button"
+                            className="clean-inline-btn"
+                            style={{ width: "auto", padding: "0 12px", background: "none", color: "#64748b", border: "none" }}
+                            onClick={() => {
+                              const list = [...additionalGsts];
+                              list[idx].showPassword = !list[idx].showPassword;
+                              setAdditionalGsts(list);
+                            }}
+                          >
+                            {item.showPassword ? "🙈" : "👁"}
+                          </button>
+                        </div>
+                      </div>
+
+                      <div className="clean-field">
+                        <label>
+                          <span className="req-star">*</span> Confirm Branch Password
+                        </label>
+                        <div className="clean-input-row">
+                          <input
+                            type={item.showConfirm ? "text" : "password"}
+                            placeholder="Confirm branch password"
+                            value={item.confirmPassword || ""}
+                            onChange={(e) => {
+                              const list = [...additionalGsts];
+                              list[idx].confirmPassword = e.target.value;
+                              setAdditionalGsts(list);
+                            }}
+                            required
+                          />
+                          <button
+                            type="button"
+                            className="clean-inline-btn"
+                            style={{ width: "auto", padding: "0 12px", background: "none", color: "#64748b", border: "none" }}
+                            onClick={() => {
+                              const list = [...additionalGsts];
+                              list[idx].showConfirm = !list[idx].showConfirm;
+                              setAdditionalGsts(list);
+                            }}
+                          >
+                            {item.showConfirm ? "🙈" : "👁"}
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+
+                    {item.verified && (
+                      <div className="branch-verified-tag">
+                        ✓ Verified State: <strong>{item.state}</strong> ({item.city || "Branch Location"}) {item.address ? `• ${item.address}` : ""}
+                      </div>
+                    )}
+
+                    {/* Branch Pagination Controls */}
+                    <div className="branch-pagination-row">
+                      <button
+                        type="button"
+                        className="clean-btn-back"
+                        disabled={idx === 0}
+                        onClick={() => setActiveBranchIndex((prev) => Math.max(0, prev - 1))}
+                      >
+                        ← Previous Branch
+                      </button>
+
+                      {idx < additionalGsts.length - 1 ? (
+                        <button
+                          type="button"
+                          className="clean-btn-primary"
+                          style={{ padding: "8px 18px", fontSize: "13px" }}
+                          onClick={() => {
+                            const cur = additionalGsts[idx];
+                            const curMob = (cur?.mobile || "").replace(/\D/g, "");
+                            if (!cur?.branchName?.trim()) {
+                              const msg = `Please enter the branch company name for Branch #${idx + 1}`;
+                              setErrorBanner(msg);
+                              showToast(msg, "error");
+                              return;
+                            }
+                            if (curMob.length !== 10) {
+                              const msg = `Please enter a 10-digit phone number for Branch #${idx + 1}`;
+                              setErrorBanner(msg);
+                              showToast(msg, "error");
+                              return;
+                            }
+                            if (!cur?.emailVerified) {
+                              const msg = `Please verify the email OTP for Branch #${idx + 1}`;
+                              setErrorBanner(msg);
+                              showToast(msg, "error");
+                              return;
+                            }
+                            if (!cur?.password || cur.password.length < 6) {
+                              const msg = `Please enter a password of at least 6 characters for Branch #${idx + 1}`;
+                              setErrorBanner(msg);
+                              showToast(msg, "error");
+                              return;
+                            }
+                            if (cur.password !== cur.confirmPassword) {
+                              const msg = `Passwords do not match for Branch #${idx + 1}. Please re-enter.`;
+                              setErrorBanner(msg);
+                              showToast(msg, "error");
+                              return;
+                            }
+                            setActiveBranchIndex((prev) => Math.min(additionalGsts.length - 1, prev + 1));
+                          }}
+                        >
+                          Next Branch ({idx + 2} of {additionalGsts.length}) →
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          className="clean-btn-primary"
+                          style={{ padding: "8px 18px", fontSize: "13px" }}
+                          onClick={goToNextStep}
+                        >
+                          Proceed to Review →
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                );
+              })()}
             </div>
           )}
 
           {/* ========================================================
               STEP 3: REVIEW & INSTANT LAUNCH
              ======================================================== */}
-          {currentStep === 3 && (
+          {currentStep === reviewStepNumber && (
             <div className="clean-form-module">
               <div className="clean-review-card">
                 <div className="review-item">
-                  <span className="rev-label">Company Enterprise</span>
+                  <span className="rev-label">Head Office Company</span>
                   <span className="rev-val">{companyName || "N/A"}</span>
                 </div>
                 <div className="review-item">
-                  <span className="rev-label">Primary GSTIN</span>
+                  <span className="rev-label">Primary Head Office GSTIN</span>
                   <span className="rev-val mono-font">
                     {primaryGst || "Unregistered"} {isPrimaryGstVerified ? "✓" : ""}
                   </span>
                 </div>
                 <div className="review-item">
-                  <span className="rev-label">Location / State</span>
-                  <span className="rev-val">{city ? `${city}, ${state}` : state || "India"}</span>
-                </div>
-                <div className="review-item">
-                  <span className="rev-label">Multi-GST Branches</span>
+                  <span className="rev-label">Head Office Address</span>
                   <span className="rev-val">
-                    {additionalGsts.length > 0 ? `${additionalGsts.length} Additional Branch(es)` : "Single Location"}
+                    {address ? `${address}, ` : ""}{city ? `${city}, ` : ""}{state || "India"} {pincode ? `(${pincode})` : ""}
                   </span>
                 </div>
+                {drugLicenseNo && (
+                  <div className="review-item">
+                    <span className="rev-label">Drug License No.</span>
+                    <span className="rev-val mono-font">{drugLicenseNo}</span>
+                  </div>
+                )}
                 <div className="review-item">
-                  <span className="rev-label">Admin Owner</span>
-                  <span className="rev-val">{name} ({designation})</span>
+                  <span className="rev-label">Main Branches</span>
+                  <span className="rev-val">
+                    {branchCount > 0
+                      ? `${branchCount} Dedicated Branch ${branchCount === 1 ? "Entity" : "Entities"}`
+                      : "0 (Single Head Office)"}
+                  </span>
+                </div>
+
+                {additionalGsts.length > 0 && (
+                  <div className="review-branch-box">
+                    <span style={{ fontSize: "12px", fontWeight: 700, color: "#f97316" }}>
+                      Registered Branch Entities:
+                    </span>
+                    {additionalGsts.map((br, i) => (
+                      <div key={br.id} className="review-branch-item">
+                        <div className="rev-branch-name">
+                          🏢 Branch #{i + 1}: {br.branchName || `Branch #${i + 1}`} {br.verified ? "✓" : ""}
+                        </div>
+                        <div className="rev-branch-meta">
+                          <strong>GSTIN:</strong> {br.gstNo || "Not Specified"} • <strong>Location:</strong> {br.city ? `${br.city}, ` : ""}{br.state || "India"} {br.pincode ? `(${br.pincode})` : ""}
+                        </div>
+                        {(br.email || br.mobile) && (
+                          <div className="rev-branch-meta">
+                            {br.email ? `✉ ${br.email}` : ""} {br.mobile ? `• 📞 +91 ${br.mobile}` : ""}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                <div className="review-item" style={{ marginTop: "6px", borderTop: "1.5px solid #e2e8f0", paddingTop: "10px" }}>
+                  <span className="rev-label">Administrator</span>
+                  <span className="rev-val">{name || companyName}</span>
                 </div>
                 <div className="review-item">
-                  <span className="rev-label">Verified Email</span>
+                  <span className="rev-label">Verified Email Address</span>
                   <span className="rev-val">{email}</span>
                 </div>
                 <div className="review-item">
-                  <span className="rev-label">WhatsApp Mobile</span>
+                  <span className="rev-label">Verified Phone Number</span>
                   <span className="rev-val mono-font">+91 {mobile}</span>
+                </div>
+
+                {/* Terms and Conditions Checkbox */}
+                <div className={`terms-checkbox-box ${termsAccepted ? "checked" : ""}`}>
+                  <label className="terms-checkbox-label">
+                    <input
+                      type="checkbox"
+                      checked={termsAccepted}
+                      onChange={(e) => setTermsAccepted(e.target.checked)}
+                      className="terms-checkbox-input"
+                    />
+                    <span>
+                      I agree to the <strong>Terms of Service</strong> and <strong>Privacy Policy</strong>, and confirm that all company, GST, and branch details are accurate and authorized.
+                    </span>
+                  </label>
                 </div>
               </div>
             </div>
@@ -1052,44 +1975,43 @@ export default function RegisterPage() {
               <button
                 type="button"
                 className="clean-btn-back"
-                onClick={() => setCurrentStep((s) => (s - 1) as any)}
+                onClick={() => setCurrentStep((s) => (s - 1))}
                 disabled={loading}
               >
                 ← Back
               </button>
             )}
 
-            {currentStep < 3 ? (
+            {currentStep < reviewStepNumber ? (
               <button
                 type="button"
                 className="clean-btn-primary"
                 onClick={goToNextStep}
+                disabled={currentStep === 1 && !isStep1Valid}
               >
-                {currentStep === 1 ? "Next: Admin Profile & OTP →" : "Review & Confirm →"}
+                {currentStep === 1 && branchCount > 0
+                  ? `Next: Branch Details (${branchCount} ${branchCount === 1 ? "Branch" : "Branches"}) →`
+                  : "Next: Review & Launch →"}
               </button>
             ) : (
               <button
                 type="button"
-                className="clean-btn-primary"
-                disabled={loading}
+                className="clean-btn-launch"
                 onClick={handleCompleteRegistration}
+                disabled={loading || !termsAccepted}
               >
-                {loading ? <span className="clean-spinner" aria-hidden="true" /> : null}
-                {loading ? "Launching Workspace…" : "🚀 Launch Pharma CRM Workspace"}
+                {loading ? "Creating Pharma CRM Workspace…" : "🚀 Complete Registration & Launch Workspace"}
               </button>
             )}
           </div>
 
-          <p className="clean-switch-text">
-            Already have an account?{" "}
-            <button
-              type="button"
-              className="clean-link-signin"
-              onClick={() => router.push("/login")}
-            >
-              Sign in →
-            </button>
-          </p>
+          {/* Card Footer Note */}
+          <div className="clean-card-footer">
+            <span>Already have an account?</span>
+            <Link href="/login" className="clean-login-link">
+              Sign In to Your Workspace →
+            </Link>
+          </div>
         </div>
       </div>
     </div>

@@ -31,6 +31,85 @@ kbd {
   box-shadow: none;
 }
 
+/* ==========================================================================
+   Bootstrap Override & Border-Radius Enforcement
+   Prevents Bootstrap from overriding or flattening buttons, inputs, and pills
+   ========================================================================== */
+
+/* Unset Bootstrap button border-radius constraints */
+.btn {
+  border-radius: inherit;
+}
+
+/* Enforce Tailwind rounded utilities over Bootstrap's !important rules */
+.rounded-none { border-radius: 0px !important; }
+.rounded-xs { border-radius: 0.125rem !important; }
+.rounded-sm { border-radius: 0.125rem !important; }
+.rounded { border-radius: 0.25rem !important; }
+.rounded-md { border-radius: 0.375rem !important; }
+.rounded-lg { border-radius: 0.5rem !important; }
+.rounded-xl { border-radius: 0.75rem !important; }
+.rounded-2xl { border-radius: 1rem !important; }
+.rounded-3xl { border-radius: 1.5rem !important; }
+.rounded-full { border-radius: 9999px !important; }
+
+/* Enforce directional rounded utilities */
+.rounded-t-none { border-top-left-radius: 0px !important; border-top-right-radius: 0px !important; }
+.rounded-t-sm { border-top-left-radius: 0.125rem !important; border-top-right-radius: 0.125rem !important; }
+.rounded-t { border-top-left-radius: 0.25rem !important; border-top-right-radius: 0.25rem !important; }
+.rounded-t-md { border-top-left-radius: 0.375rem !important; border-top-right-radius: 0.375rem !important; }
+.rounded-t-lg { border-top-left-radius: 0.5rem !important; border-top-right-radius: 0.5rem !important; }
+.rounded-t-xl { border-top-left-radius: 0.75rem !important; border-top-right-radius: 0.75rem !important; }
+.rounded-t-2xl { border-top-left-radius: 1rem !important; border-top-right-radius: 1rem !important; }
+.rounded-t-3xl { border-top-left-radius: 1.5rem !important; border-top-right-radius: 1.5rem !important; }
+.rounded-t-full { border-top-left-radius: 9999px !important; border-top-right-radius: 9999px !important; }
+
+.rounded-b-none { border-bottom-left-radius: 0px !important; border-bottom-right-radius: 0px !important; }
+.rounded-b-sm { border-bottom-left-radius: 0.125rem !important; border-bottom-right-radius: 0.125rem !important; }
+.rounded-b { border-bottom-left-radius: 0.25rem !important; border-bottom-right-radius: 0.25rem !important; }
+.rounded-b-md { border-bottom-left-radius: 0.375rem !important; border-bottom-right-radius: 0.375rem !important; }
+.rounded-b-lg { border-bottom-left-radius: 0.5rem !important; border-bottom-right-radius: 0.5rem !important; }
+.rounded-b-xl { border-bottom-left-radius: 0.75rem !important; border-bottom-right-radius: 0.75rem !important; }
+.rounded-b-2xl { border-bottom-left-radius: 1rem !important; border-bottom-right-radius: 1rem !important; }
+.rounded-b-3xl { border-bottom-left-radius: 1.5rem !important; border-bottom-right-radius: 1.5rem !important; }
+.rounded-b-full { border-bottom-left-radius: 9999px !important; border-bottom-right-radius: 9999px !important; }
+
+.rounded-l-full { border-top-left-radius: 9999px !important; border-bottom-left-radius: 9999px !important; }
+.rounded-r-full { border-top-right-radius: 9999px !important; border-bottom-right-radius: 9999px !important; }
+
+/* Explicit button & interactive element overrides */
+button.rounded-full,
+a.rounded-full,
+.btn.rounded-full,
+input.rounded-full,
+select.rounded-full {
+  border-radius: 9999px !important;
+}
+
+button.rounded-2xl,
+a.rounded-2xl,
+.btn.rounded-2xl,
+input.rounded-2xl,
+select.rounded-2xl {
+  border-radius: 1rem !important;
+}
+
+button.rounded-xl,
+a.rounded-xl,
+.btn.rounded-xl,
+input.rounded-xl,
+select.rounded-xl {
+  border-radius: 0.75rem !important;
+}
+
+button.rounded-lg,
+a.rounded-lg,
+.btn.rounded-lg,
+input.rounded-lg,
+select.rounded-lg {
+  border-radius: 0.5rem !important;
+}
+
 /* DARK MODE */
 
 .dark-mode {

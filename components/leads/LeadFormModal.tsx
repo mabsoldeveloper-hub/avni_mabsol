@@ -226,7 +226,7 @@ export default function LeadFormModal({ onClose, onSaved, initialData, activeCom
     const roleType = (currentUser.roleType || "").toUpperCase();
     const roleName = (currentUser.roleId?.roleName || currentUser.role || "").toLowerCase();
     if (roleType === "MR" || roleType === "RSM" || roleType === "ZSM" || roleName === "employee") return false;
-    return roleType === "ADMIN" || roleName.includes("admin") || roleName.includes("superadmin") || currentUser.isAdmin === true || currentUser.email === "admin@mabsol.com" || !currentUser.roleType;
+    return roleType === "ADMIN" || roleName.includes("admin") || roleName.includes("superadmin") || currentUser.isAdmin === true || currentUser.isSuperAdmin === true || !currentUser.roleType;
   })();
 
   const isEdit = !!initialData?._id;
@@ -464,7 +464,7 @@ export default function LeadFormModal({ onClose, onSaved, initialData, activeCom
             <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
               <div>
                 <label style={lbl}>Party / Doctor / Company Name *</label>
-                <input style={inp} placeholder="e.g. Dr. Rahul Verma / Apex Pharma"
+                <input style={inp} placeholder=""
                   value={form.partyName} onChange={e => set("partyName", e.target.value)} />
               </div>
               <div style={grid2}>

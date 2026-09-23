@@ -259,7 +259,7 @@ if (data.entries) {
           
 
           <button
-            className="btn btn-primary"
+            className="px-5 py-2 rounded-full text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 border border-blue-600 shadow-sm transition-all cursor-pointer"
             onClick={() => window.print()}
           >
             Print

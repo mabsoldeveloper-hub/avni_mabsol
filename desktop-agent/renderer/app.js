@@ -191,6 +191,13 @@ function setupEventListeners() {
       const res = await window.electronAPI.login({ cloudUrl, email, password });
       setButtonLoading(loginBtn, false);
 
+      if (res.success && res.directLogin) {
+        currentAuthEmail = res.email || email;
+        currentSession = res.session;
+        showSyncDashboard(res.user);
+        return;
+      }
+
       if (res.success && res.otpRequired) {
         currentAuthEmail = res.email || email;
         otpTargetEmail.textContent = currentAuthEmail;
@@ -526,10 +533,10 @@ function updateStatusDisplay(status) {
   }
 
   if (status.isSyncing) {
-    statLastStatus.textContent = "Syncing...";
+    statLastStatus.textContent = "Storing...";
     statLastStatus.style.color = "#38bdf8";
-  } else if (status.lastStatus === "synced") {
-    statLastStatus.textContent = "Synced (Cloud)";
+  } else if (status.lastStatus === "stored" || status.lastStatus === "synced") {
+    statLastStatus.textContent = "Stored (Cloud)";
     statLastStatus.style.color = "#34d399";
   } else if (status.lastStatus === "offline_queued") {
     statLastStatus.textContent = "Offline (Queued)";

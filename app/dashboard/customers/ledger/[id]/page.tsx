@@ -78,16 +78,16 @@ fetch(`/api/customers/ledger/${id}`)
           </small>
         </div>
 
-        <div>
+        <div className="flex items-center gap-2">
           <Link
             href="/dashboard/customers"
-            className="btn btn-secondary me-2"
+            className="px-4 py-2 rounded-full text-xs font-bold text-slate-700 bg-slate-100 hover:bg-slate-200 border border-slate-200 transition-all cursor-pointer"
           >
             Back
           </Link>
 
           <button
-            className="btn btn-primary"
+            className="px-5 py-2 rounded-full text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 border border-blue-600 shadow-sm transition-all cursor-pointer"
             onClick={() => window.print()}
           >
             Print
@@ -314,13 +314,13 @@ fetch(`/api/customers/ledger/${id}`)
         </small>
       </div>
 
-<div>
+<div className="flex items-center gap-1.5">
 
   <button
-    className={`btn btn-sm me-2 ${
+    className={`px-3.5 py-1.5 rounded-full text-xs font-bold transition-all cursor-pointer ${
       view === "ledger"
-        ? "btn-warning"
-        : "btn-light"
+        ? "bg-amber-500 text-white shadow-xs"
+        : "bg-slate-100 text-slate-700 hover:bg-slate-200"
     }`}
     onClick={() => setView("ledger")}
   >
@@ -328,10 +328,10 @@ fetch(`/api/customers/ledger/${id}`)
   </button>
 
   <button
-    className={`btn btn-sm me-2 ${
+    className={`px-3.5 py-1.5 rounded-full text-xs font-bold transition-all cursor-pointer ${
       view === "sales"
-        ? "btn-warning"
-        : "btn-light"
+        ? "bg-amber-500 text-white shadow-xs"
+        : "bg-slate-100 text-slate-700 hover:bg-slate-200"
     }`}
     onClick={() => setView("sales")}
   >
@@ -339,10 +339,10 @@ fetch(`/api/customers/ledger/${id}`)
   </button>
 
   <button
-    className={`btn btn-sm ${
+    className={`px-3.5 py-1.5 rounded-full text-xs font-bold transition-all cursor-pointer ${
       view === "outstanding"
-        ? "btn-warning"
-        : "btn-light"
+        ? "bg-amber-500 text-white shadow-xs"
+        : "bg-slate-100 text-slate-700 hover:bg-slate-200"
     }`}
     onClick={() => setView("outstanding")}
   >

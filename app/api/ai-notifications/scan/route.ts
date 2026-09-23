@@ -27,7 +27,9 @@ export async function GET(request: NextRequest) {
       .limit(10)
       .lean();
 
-    const latestModel = recentAiAlerts[0]?.metadata?.model || "gemini-2.5-flash";
+    const latestModel = recentAiAlerts[0]?.metadata?.model
+      ? String(recentAiAlerts[0]?.metadata?.model).replace(/gemini-?/gi, "AI ")
+      : "AI Smart Engine";
     const apiMeta = getGeminiApiStatus(null, latestModel);
 
     return NextResponse.json({

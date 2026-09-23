@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { usePathname } from "next/navigation";
+import { useUser } from "@/context/UserContext";
 import { usePermission } from "@/context/PermissionContext";
 import { useCompany } from "@/context/CompanyContext";
 import { useFinancialYear } from "@/context/FinancialYearContext";
@@ -11,7 +12,26 @@ import {
   SubMenuItemConfig,
   renderMenuIcon,
 } from "@/lib/defaultMenuData";
-import { FaChevronLeft, FaChevronRight } from "react-icons/fa";
+import Link from "next/link";
+import {
+  FaChevronLeft,
+  FaChevronRight,
+  FaShieldAlt,
+  FaUserCheck,
+  FaUsers,
+  FaUserTimes,
+  FaChartPie,
+  FaCogs,
+  FaTachometerAlt,
+  FaAddressCard,
+  FaBan,
+  FaCodeBranch,
+  FaCreditCard,
+  FaChartBar,
+  FaFileAlt,
+  FaCog,
+} from "react-icons/fa";
+import { checkIsSuperAdmin } from "@/lib/constants/superAdmin.constant";
 
 // Modular Sidebar Subcomponents, Constants, and Types
 import {
@@ -222,6 +242,10 @@ export default function Sidebar({ collapsed, setCollapsed, mobile }: SidebarProp
       .catch(() => {});
   }, []);
 
+  const { user: ctxUser } = useUser();
+  const currentUser = ctxUser || user;
+  const isSuperAdmin = checkIsSuperAdmin(currentUser);
+
   const toggleGroup = useCallback((groupId: string) => {
     setOpenGroups((prev) => ({
       ...prev,
@@ -329,15 +353,15 @@ export default function Sidebar({ collapsed, setCollapsed, mobile }: SidebarProp
     <>
 
       <div
-        className={`glass-sidebar flex flex-col ${currentVisuals.isDark ? "sidebar-dark-theme" : ""}`}
+        className={`glass-sidebar flex flex-col ${currentVisuals.isDark || isSuperAdmin ? "sidebar-dark-theme" : ""}`}
         style={{
           width: mobile ? "270px" : collapsed ? "76px" : "265px",
           height: "100vh",
           position: "fixed",
           left: 0,
           top: 0,
-          background: currentVisuals.bg,
-          borderRight: `1px solid ${currentVisuals.borderColor}`,
+          background: isSuperAdmin ? "#0B101B" : currentVisuals.bg,
+          borderRight: isSuperAdmin ? "1px solid rgba(30, 41, 59, 0.8)" : `1px solid ${currentVisuals.borderColor}`,
           transform: mobile && collapsed ? "translateX(-100%)" : "translateX(0)",
           transition:
             "width 0.28s cubic-bezier(0.4, 0, 0.2, 1), transform 0.28s cubic-bezier(0.4, 0, 0.2, 1)",
@@ -367,95 +391,232 @@ export default function Sidebar({ collapsed, setCollapsed, mobile }: SidebarProp
           {/* Logo / Brand Header */}
           <SidebarHeader
             iconOnly={iconOnly}
-            isDark={currentVisuals.isDark}
+            isDark={currentVisuals.isDark || isSuperAdmin}
             logoUrl={logoUrl}
+            isSuperAdmin={isSuperAdmin}
           />
 
           {/* Nav List with categorized sections */}
-          <div className="flex-1 min-h-0 py-2 sidebar-scroll px-2 overflow-y-auto overflow-x-hidden">
-            <div className="flex flex-col gap-1.5">
-              {groupedSections.map((section) => (
-                <div key={section.key} className="flex flex-col">
-                  {/* Smooth Category Header Label */}
-                  <div
-                    className="sidebar-category-label transition-all duration-300 ease-out overflow-hidden select-none whitespace-nowrap text-[9.5px] font-extrabold uppercase tracking-wider text-slate-400 dark:text-slate-500"
-                    style={{
-                      height: iconOnly ? "4px" : "20px",
-                      opacity: iconOnly ? 0 : 1,
-                      paddingLeft: "8px",
-                      paddingTop: iconOnly ? "0px" : "5px",
-                      paddingBottom: iconOnly ? "0px" : "1px",
-                    }}
-                  >
-                    {section.label}
-                  </div>
+          <div className="flex-1 min-h-0 py-3 sidebar-scroll px-2 overflow-y-auto overflow-x-hidden">
+            {isSuperAdmin ? (
+              <div className="flex flex-col gap-1">
+                <ul className="flex flex-col p-0 m-0 list-none gap-1">
+                  {/* 1. Dashboard */}
+                  <li>
+                    <SidebarNavLink
+                      href="/dashboard/super-admin/dashboard"
+                      icon={<FaTachometerAlt size={14} />}
+                      label="Dashboard"
+                      active={pathname === "/dashboard/super-admin/dashboard"}
+                      color="indigo"
+                      iconOnly={iconOnly}
+                      customActiveStyle={true}
+                      onNavigate={handleMobileNavigate}
+                    />
+                  </li>
 
-                  <ul className="flex flex-col p-0 m-0 list-none gap-1">
-                    {section.items.map((item) => {
-                      const color = item.color || "indigo";
+                  {/* 2. Approve Admins */}
+                  <li>
+                    <SidebarNavLink
+                      href="/dashboard/super-admin"
+                      icon={<FaUserCheck size={14} />}
+                      label="Approve Admins"
+                      active={pathname === "/dashboard/super-admin"}
+                      color="indigo"
+                      iconOnly={iconOnly}
+                      customActiveStyle={true}
+                      onNavigate={handleMobileNavigate}
+                    />
+                  </li>
 
-                      if (item.isGroup && item.subItems && item.subItems.length > 0) {
-                        const isGroupActive = item.subItems.some((sub) => {
-                          if (!sub.href) return false;
-                          if (sub.href === "/dashboard") return pathname === "/dashboard";
+                  {/* 3. All Accounts */}
+                  <li>
+                    <SidebarNavLink
+                      href="/dashboard/super-admin/accounts"
+                      icon={<FaAddressCard size={14} />}
+                      label="All Accounts"
+                      active={pathname === "/dashboard/super-admin/accounts"}
+                      color="indigo"
+                      iconOnly={iconOnly}
+                      customActiveStyle={true}
+                      onNavigate={handleMobileNavigate}
+                    />
+                  </li>
+
+                  {/* 4. Deactivated Accounts */}
+                  <li>
+                    <SidebarNavLink
+                      href="/dashboard/super-admin/deactivated"
+                      icon={<FaBan size={14} />}
+                      label="Deactivated Accounts"
+                      active={pathname === "/dashboard/super-admin/deactivated"}
+                      color="indigo"
+                      iconOnly={iconOnly}
+                      customActiveStyle={true}
+                      onNavigate={handleMobileNavigate}
+                    />
+                  </li>
+
+                  {/* 5. Branch Management */}
+                  <li>
+                    <SidebarNavLink
+                      href="/dashboard/super-admin/branches"
+                      icon={<FaCodeBranch size={14} />}
+                      label="Branch Management"
+                      active={pathname === "/dashboard/super-admin/branches"}
+                      color="indigo"
+                      iconOnly={iconOnly}
+                      badge="Soon"
+                      customActiveStyle={true}
+                      onNavigate={handleMobileNavigate}
+                    />
+                  </li>
+
+                  {/* 6. Subscription Plans */}
+                  <li>
+                    <SidebarNavLink
+                      href="/dashboard/super-admin/plans"
+                      icon={<FaCreditCard size={14} />}
+                      label="Subscription Plans"
+                      active={pathname === "/dashboard/super-admin/plans"}
+                      color="indigo"
+                      iconOnly={iconOnly}
+                      badge="Soon"
+                      customActiveStyle={true}
+                      onNavigate={handleMobileNavigate}
+                    />
+                  </li>
+
+                  {/* 7. Reports */}
+                  <li>
+                    <SidebarNavLink
+                      href="/dashboard/super-admin/reports"
+                      icon={<FaChartBar size={14} />}
+                      label="Reports"
+                      active={pathname === "/dashboard/super-admin/reports"}
+                      color="indigo"
+                      iconOnly={iconOnly}
+                      badge="Soon"
+                      customActiveStyle={true}
+                      onNavigate={handleMobileNavigate}
+                    />
+                  </li>
+
+                  {/* 8. Audit Logs */}
+                  <li>
+                    <SidebarNavLink
+                      href="/dashboard/super-admin/audit-logs"
+                      icon={<FaFileAlt size={14} />}
+                      label="Audit Logs"
+                      active={pathname === "/dashboard/super-admin/audit-logs"}
+                      color="indigo"
+                      iconOnly={iconOnly}
+                      badge="Soon"
+                      customActiveStyle={true}
+                      onNavigate={handleMobileNavigate}
+                    />
+                  </li>
+
+                  {/* 9. System Settings */}
+                  <li>
+                    <SidebarNavLink
+                      href="/dashboard/super-admin/settings"
+                      icon={<FaCog size={14} />}
+                      label="System Settings"
+                      active={pathname === "/dashboard/super-admin/settings"}
+                      color="indigo"
+                      iconOnly={iconOnly}
+                      customActiveStyle={true}
+                      onNavigate={handleMobileNavigate}
+                    />
+                  </li>
+                </ul>
+              </div>
+            ) : (
+              <div className="flex flex-col gap-1.5">
+                {groupedSections.map((section) => (
+                  <div key={section.key} className="flex flex-col">
+                    {/* Smooth Category Header Label */}
+                    <div
+                      className="sidebar-category-label transition-all duration-300 ease-out overflow-hidden select-none whitespace-nowrap text-[9.5px] font-extrabold uppercase tracking-wider text-slate-400 dark:text-white/70"
+                      style={{
+                        height: iconOnly ? "4px" : "20px",
+                        opacity: iconOnly ? 0 : 1,
+                        paddingLeft: "8px",
+                        paddingTop: iconOnly ? "0px" : "5px",
+                        paddingBottom: iconOnly ? "0px" : "1px",
+                      }}
+                    >
+                      {section.label}
+                    </div>
+
+                    <ul className="flex flex-col p-0 m-0 list-none gap-1">
+                      {section.items.map((item) => {
+                        const color = item.color || "indigo";
+
+                        if (item.isGroup && item.subItems && item.subItems.length > 0) {
+                          const isGroupActive = item.subItems.some((sub) => {
+                            if (!sub.href) return false;
+                            if (sub.href === "/dashboard") return pathname === "/dashboard";
+                            return (
+                              pathname === sub.href ||
+                              pathname.startsWith(sub.href + "/") ||
+                              (sub.href.endsWith("/") && pathname.startsWith(sub.href))
+                            );
+                          });
+
                           return (
-                            pathname === sub.href ||
-                            pathname.startsWith(sub.href + "/") ||
-                            (sub.href.endsWith("/") && pathname.startsWith(sub.href))
+                            <SidebarGroup
+                              key={item.id}
+                              id={item.id}
+                              icon={renderMenuIcon(item.icon)}
+                              label={item.label}
+                              open={!!openGroups[item.id]}
+                              active={isGroupActive}
+                              color={color}
+                              subItems={item.subItems}
+                              iconOnly={iconOnly}
+                              pathname={pathname}
+                              currentVisuals={currentVisuals}
+                              can={can}
+                              onToggle={() => toggleGroup(item.id)}
+                              onNavigate={handleMobileNavigate}
+                            />
                           );
-                        });
+                        }
+
+                        // Single link item
+                        const href = item.href || "#";
+                        const isSingleActive =
+                          href === "/dashboard"
+                            ? pathname === "/dashboard"
+                            : pathname === href || pathname.startsWith(href + "/");
 
                         return (
-                          <SidebarGroup
-                            key={item.id}
-                            id={item.id}
-                            icon={renderMenuIcon(item.icon)}
-                            label={item.label}
-                            open={!!openGroups[item.id]}
-                            active={isGroupActive}
-                            color={color}
-                            subItems={item.subItems}
-                            iconOnly={iconOnly}
-                            pathname={pathname}
-                            currentVisuals={currentVisuals}
-                            can={can}
-                            onToggle={() => toggleGroup(item.id)}
-                            onNavigate={handleMobileNavigate}
-                          />
+                          <li key={item.id}>
+                            <SidebarNavLink
+                              href={href}
+                              icon={renderMenuIcon(item.icon)}
+                              label={item.label}
+                              active={isSingleActive}
+                              color={color}
+                              iconOnly={iconOnly}
+                              onNavigate={handleMobileNavigate}
+                            />
+                          </li>
                         );
-                      }
-
-                      // Single link item
-                      const href = item.href || "#";
-                      const isSingleActive =
-                        href === "/dashboard"
-                          ? pathname === "/dashboard"
-                          : pathname === href || pathname.startsWith(href + "/");
-
-                      return (
-                        <li key={item.id}>
-                          <SidebarNavLink
-                            href={href}
-                            icon={renderMenuIcon(item.icon)}
-                            label={item.label}
-                            active={isSingleActive}
-                            color={color}
-                            iconOnly={iconOnly}
-                            onNavigate={handleMobileNavigate}
-                          />
-                        </li>
-                      );
-                    })}
-                  </ul>
-                </div>
-              ))}
-            </div>
+                      })}
+                    </ul>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
 
           {/* Profile & Theme customizer footer */}
           <SidebarFooter
             iconOnly={iconOnly}
-            user={user}
+            user={currentUser}
             companyName={selectedCompany?.companyName}
             currentVisuals={currentVisuals}
             sidebarTheme={sidebarTheme}

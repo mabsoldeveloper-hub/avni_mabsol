@@ -195,7 +195,8 @@ export default function AiNotificationsPage() {
         if (data.apiMeta) {
           setApiMeta(data.apiMeta);
         }
-        setLastModelUsed(data.modelUsed || "Gemini 2.5 Flash");
+        const cleanModel = data.modelUsed ? String(data.modelUsed).replace(/gemini-?/gi, "AI ") : "AI Smart Engine";
+        setLastModelUsed(cleanModel);
         setLastScannedTime(new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }));
         await fetchNotifications(false);
       } else {
@@ -382,7 +383,7 @@ export default function AiNotificationsPage() {
         )}
       </div>
 
-      {/* Live Gemini Free Tier Status & Quota Alert Banner */}
+      {/* Live AI Tier Status & Quota Alert Banner */}
       {apiMeta?.alertBanner && !bannerDismissed && (
         <div
           className={`p-4 sm:p-5 rounded-2xl border transition-all duration-300 shadow-sm flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 ${
@@ -715,7 +716,7 @@ export default function AiNotificationsPage() {
                       {notif.message}
                     </p>
 
-                    {/* Gemini AI Recommended Action Box */}
+                    {/* AI Recommended Action Box */}
                     {notif.suggestedAction && (
                       <div className="mt-3 p-3 rounded-xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200/80 dark:border-slate-700/60 flex items-start gap-2.5">
                         <FaLightbulb className="text-amber-500 text-base mt-0.5 flex-shrink-0" />

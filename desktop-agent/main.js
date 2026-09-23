@@ -3,7 +3,7 @@ const path = require("path");
 const fs = require("fs");
 const os = require("os");
 const crypto = require("crypto");
-const { spawn } = require("child_process");
+const { spawn, execSync } = require("child_process");
 const axios = require("axios");
 const FormData = require("form-data");
 
@@ -35,6 +35,9 @@ let mainWindow = null;
 let tray = null;
 let isQuitting = false;
 let syncIntervalTimer = null;
+let sourceDirWatcher = null;
+let realtimeDebounceTimer = null;
+const lastSyncFileSignatures = new Map();
 let heartbeatTimer = null;
 let isSyncing = false;
 let isOnlineState = true;
@@ -49,6 +52,34 @@ const QUEUE_PATH = path.join(USER_DATA_DIR, "mabsol_sync_queue.json");
 const ENGINE_DIR = app.isPackaged
   ? path.join(process.resourcesPath, "engine")
   : path.join(__dirname, "engine");
+
+// Hidden secure vault directory for offline DBF storage (never visible to users)
+function getHiddenVaultDir() {
+  // Use persistent directory on C: drive:
+  // C:\Users\<Username>\AppData\Roaming\MabsolSyncAgent\.mabsol_offline_vault
+  // Or alongside portable executable if portable folder is explicitly detected and writable
+  let vaultDir = path.join(USER_DATA_DIR, ".mabsol_offline_vault");
+
+  if (process.env.PORTABLE_EXECUTABLE_DIR) {
+    try {
+      const portableCandidate = path.join(process.env.PORTABLE_EXECUTABLE_DIR, ".mabsol_offline_vault");
+      if (!fs.existsSync(portableCandidate)) fs.mkdirSync(portableCandidate, { recursive: true });
+      const testFile = path.join(portableCandidate, `.test_${Date.now()}`);
+      fs.writeFileSync(testFile, "test");
+      fs.unlinkSync(testFile);
+      vaultDir = portableCandidate;
+    } catch {}
+  }
+
+  try {
+    if (!fs.existsSync(vaultDir)) fs.mkdirSync(vaultDir, { recursive: true });
+    if (process.platform === "win32") {
+      execSync(`attrib +h "${vaultDir}"`, { windowsHide: true, stdio: "ignore" });
+    }
+  } catch {}
+
+  return vaultDir;
+}
 
 // ---------------------------------------------------------------------------
 // Helpers: Config & Storage & Environment
@@ -89,12 +120,12 @@ function getDefaultCloudUrl() {
   if (env.CLOUD_URL) return env.CLOUD_URL.replace(/\/+$/, "");
   if (env.NEXT_PUBLIC_APP_URL) return env.NEXT_PUBLIC_APP_URL.replace(/\/+$/, "");
   if (!app.isPackaged) return "http://localhost:3000";
-  return "https://mbh.crm.mabsolinfotech.cloud";
+  return "https://phcrm.mabsolinfotech.cloud";
 }
 
 function resolveCloudUrl(candidateUrl) {
   let url = (candidateUrl || "").trim().replace(/\/+$/, "");
-  if (!url || url.includes("phcrm.mabsolinfotech.cloud")) {
+  if (!url) {
     return getDefaultCloudUrl();
   }
   return url;
@@ -108,8 +139,8 @@ function loadConfig() {
     companyCode: "E10",
     sourceDir: "",
     destDir: path.join(USER_DATA_DIR, "staging"),
-    autoSync: false,
-    intervalMins: 10,
+    autoSync: true,
+    intervalMins: "realtime",
     licenseKey: ""
   };
   if (!fs.existsSync(CONFIG_PATH)) return defaults;
@@ -179,17 +210,62 @@ function saveQueue(queue) {
   } catch { }
 }
 
+// Universal sanitizer to ensure internal file names (efwin11, prg, vfp, fxp, fpw, fll, MabsolCRM.EXE)
+// and raw paths are never exposed in user logs, terminal display, or error dialogs.
+function sanitizeMessage(msg) {
+  if (!msg) return "";
+  let text = typeof msg === "string" ? msg : (msg.message || msg.error || JSON.stringify(msg));
+
+  // 1. Scrub Windows absolute file paths pointing to engine or internal files
+  text = text.replace(/[A-Za-z]:\\(?:[^'"\n\r\t<>\\\/]+\\)*([^'"\n\r\t<>\\\/]+)/g, (match, filename) => {
+    if (/efwin11|mabsol_core|mabsolcrm|vfp|\.fll|\.prg|\.fpw|\.fxp/i.test(match)) {
+      return "[System Module]";
+    }
+    return filename;
+  });
+
+  // 2. Scrub Unix-style paths containing engine files
+  text = text.replace(/(?:\/[^'"\n\r\t<>\/]+)+\/(?:efwin11|mabsol_core|mabsolcrm|vfp)[^'"\n\r\t<>\/]*/gi, "[System Module]");
+
+  // 3. Clean up node fs copyfile / lock / EBUSY error leaks
+  text = text.replace(/(?:EBUSY:\s*)?copyfile\s+['"][^'"]+['"]\s*->\s*['"][^'"]+['"]/gi, "system module initialization");
+  text = text.replace(/EBUSY:\s*resource busy or locked[^\n\r]*/gi, "Resource temporarily in use by background process.");
+
+  // 4. Scrub specific internal names & extensions
+  text = text.replace(/efwin11(?:\.fll)?/gi, "security module");
+  text = text.replace(/mabsol_core\.(?:prg|fpw|fxp|bak)/gi, "data processing routine");
+  text = text.replace(/mabsolcrm\.exe/gi, "data service");
+  text = text.replace(/vfp9[a-z0-9]*\.dll/gi, "database driver");
+  text = text.replace(/\bvfp9?\b/gi, "database engine");
+  text = text.replace(/\bfoxpro\b/gi, "database engine");
+  text = text.replace(/\b[a-zA-Z0-9_-]+\.fll\b/gi, "security library");
+  text = text.replace(/\b[a-zA-Z0-9_-]+\.prg\b/gi, "processing task");
+  text = text.replace(/\b[a-zA-Z0-9_-]+\.fpw\b/gi, "system config");
+  text = text.replace(/\b[a-zA-Z0-9_-]+\.fxp\b/gi, "compiled routine");
+  text = text.replace(/\.prg\b/gi, " routine");
+  text = text.replace(/\.fll\b/gi, " module");
+  text = text.replace(/\.fpw\b/gi, " config");
+  text = text.replace(/\.fxp\b/gi, " binary");
+
+  return text;
+}
+
 function emitLog(level, message) {
   const timestamp = new Date().toLocaleTimeString();
-  console.log(`[${timestamp}] [${level.toUpperCase()}] ${message}`);
+  const cleanMessage = sanitizeMessage(message);
+  console.log(`[${timestamp}] [${level.toUpperCase()}] ${cleanMessage}`);
   if (mainWindow && !mainWindow.isDestroyed()) {
-    mainWindow.webContents.send("sync:log", { timestamp, level, message });
+    mainWindow.webContents.send("sync:log", { timestamp, level, message: cleanMessage });
   }
 }
 
 function emitStatus(statusObj) {
+  if (!statusObj) return;
+  const cleanObj = { ...statusObj };
+  if (cleanObj.message) cleanObj.message = sanitizeMessage(cleanObj.message);
+  if (cleanObj.error) cleanObj.error = sanitizeMessage(cleanObj.error);
   if (mainWindow && !mainWindow.isDestroyed()) {
-    mainWindow.webContents.send("sync:status-changed", statusObj);
+    mainWindow.webContents.send("sync:status-changed", cleanObj);
   }
 }
 
@@ -387,8 +463,38 @@ ipcMain.handle("auth:login", async (_event, { cloudUrl, email, password }) => {
   } catch (err) {
     const errorMsg = err.response?.data?.message || err.message;
     const isSuspended = err.response?.status === 403 || err.response?.data?.suspended;
+    const isPendingApproval = errorMsg.toLowerCase().includes("pending approval") || errorMsg.toLowerCase().includes("pending");
     emitLog("error", `Login error (${err.response?.status || "network"}): ${errorMsg}`);
-    return { success: false, message: errorMsg, accountSuspended: isSuspended };
+    return { success: false, message: errorMsg, accountSuspended: isSuspended, pendingApproval: isPendingApproval };
+  }
+});
+
+ipcMain.handle("auth:register", async (_event, { cloudUrl, name, companyName, email, mobile, password }) => {
+  const cleanUrl = resolveCloudUrl(cloudUrl);
+  try {
+    emitLog("info", `Submitting registration request to cloud server (${cleanUrl})...`);
+    const res = await axios.post(
+      `${cleanUrl}/api/mabsolcrmsync/auth/register`,
+      { name, companyName, email, mobile, password },
+      { timeout: 25000 }
+    );
+
+    if (res.data && res.data.success) {
+      emitLog("success", `Account created for ${email}. Status: Pending Superadmin Approval.`);
+      return {
+        success: true,
+        pendingApproval: true,
+        message: res.data.message || "Account created! Awaiting Superadmin approval."
+      };
+    }
+
+    const msg = res.data?.message || "Failed to create account.";
+    emitLog("error", `Registration failed: ${msg}`);
+    return { success: false, message: msg };
+  } catch (err) {
+    const errorMsg = err.response?.data?.message || err.message || "Registration failed";
+    emitLog("error", `Registration network error: ${errorMsg}`);
+    return { success: false, message: errorMsg };
   }
 });
 
@@ -608,14 +714,80 @@ ipcMain.handle("config:get", async () => {
 ipcMain.handle("config:save", async (_event, newCfg) => {
   const current = loadConfig();
   const merged = { ...current, ...newCfg };
+  const cloudUrl = resolveCloudUrl(merged.cloudUrl || getDefaultCloudUrl());
+  const session = loadSession();
+
+  // If a license key is provided, verify and bind to this hardware device immediately!
+  if (merged.licenseKey && merged.licenseKey.trim()) {
+    try {
+      const bindUrl = `${cloudUrl}/api/mabsolcrmsync/license/bind`;
+      const bindRes = await axios.post(
+        bindUrl,
+        {
+          licenseKey: merged.licenseKey.trim(),
+          deviceId: getMachineIdentifier(),
+          deviceName: getMachineName(),
+          userEmail: merged.userEmail || session?.email || ""
+        },
+        {
+          headers: {
+            ...(session?.token ? { Authorization: `Bearer ${session.token}` } : {}),
+            "x-license-key": merged.licenseKey.trim(),
+            "x-device-id": getMachineIdentifier(),
+            "x-device-name": getMachineName()
+          },
+          timeout: 10000
+        }
+      );
+
+      if (!bindRes.data || !bindRes.data.success) {
+        const errMsg = bindRes.data?.error || "Failed to verify license key.";
+        emitLog("error", `License verification failed: ${errMsg}`);
+        return { success: false, error: errMsg };
+      }
+
+      emitLog("success", `License verified & locked to this machine: ${getMachineName()}`);
+    } catch (bindErr) {
+      const errMsg = bindErr.response?.data?.error || bindErr.message || "License verification failed.";
+      emitLog("error", `License Binding Error: ${errMsg}`);
+      return {
+        success: false,
+        error: errMsg,
+        deviceMismatch: bindErr.response?.data?.deviceMismatch,
+        licenseExpired: bindErr.response?.data?.licenseExpired
+      };
+    }
+  }
+
   const res = saveConfig(merged);
   if (merged.autoSync) {
     setupAutoSyncTimer(merged.intervalMins);
   } else {
-    clearInterval(syncIntervalTimer);
+    stopAutoSync();
   }
   emitLog("info", "Configuration saved successfully.");
   return res;
+});
+
+ipcMain.handle("license:get-details", async () => {
+  const current = loadConfig();
+  const cloudUrl = resolveCloudUrl(current.cloudUrl || getDefaultCloudUrl());
+  const session = loadSession();
+  try {
+    const res = await axios.get(`${cloudUrl}/api/mabsolcrmsync/license`, {
+      headers: {
+        ...(session?.token ? { Authorization: `Bearer ${session.token}` } : {}),
+        ...(current.licenseKey ? { "x-license-key": current.licenseKey.trim() } : {})
+      },
+      timeout: 8000
+    });
+    return res.data;
+  } catch (err) {
+    return {
+      success: false,
+      error: err.response?.data?.error || err.message || "Failed to fetch license details"
+    };
+  }
 });
 
 ipcMain.handle("dialog:select-folder", async (_event, title) => {
@@ -627,17 +799,44 @@ ipcMain.handle("dialog:select-folder", async (_event, title) => {
   return result.filePaths[0];
 });
 
+let isAutoSyncPaused = false;
+
 ipcMain.handle("sync:start", async () => {
   if (isSyncing) return { success: false, message: "Sync is already in progress." };
   return await executeDecryptionAndSync("manual");
 });
 
+ipcMain.handle("sync:stop", async () => {
+  stopAutoSync();
+  isAutoSyncPaused = true;
+  emitLog("warn", "🛑 Auto-Sync stopped by operator. Continuous synchronization paused.");
+  emitStatus({ isAutoSyncRunning: false, isAutoSyncPaused: true });
+  return { success: true, isPaused: true };
+});
+
+ipcMain.handle("sync:resume", async () => {
+  isAutoSyncPaused = false;
+  const cfg = loadConfig();
+  if (cfg.autoSync && cfg.intervalMins !== "0" && cfg.intervalMins !== 0) {
+    setupAutoSyncTimer(cfg.intervalMins);
+    emitLog("info", "▶️ Auto-Sync resumed by operator. Live continuous background sync is active.");
+  } else {
+    emitLog("info", "▶️ Auto-sync was disabled in settings. Triggering a single manual sync...");
+    executeDecryptionAndSync("manual").catch(() => {});
+  }
+  emitStatus({ isAutoSyncRunning: true, isAutoSyncPaused: false });
+  return { success: true, isPaused: false };
+});
+
 ipcMain.handle("sync:status", async () => {
   const queue = loadQueue();
+  const cfg = loadConfig();
   return {
     isSyncing,
     isOnline: isOnlineState,
-    queuedBatches: queue.length
+    queuedBatches: queue.length,
+    isAutoSyncEnabled: !!cfg.autoSync && cfg.intervalMins !== "0" && cfg.intervalMins !== 0,
+    isAutoSyncPaused
   };
 });
 
@@ -684,7 +883,7 @@ async function executeDecryptionAndSync(triggerReason = "manual") {
   const engineFllPath = path.join(ENGINE_DIR, "efWin11.fll");
 
   if (!fs.existsSync(engineBinaryPath)) {
-    const msg = `Engine binary missing at: ${engineBinaryPath}`;
+    const msg = "Core extraction service component is missing or inaccessible.";
     emitLog("error", msg);
     isSyncing = false;
     emitStatus({ isSyncing: false, error: msg });
@@ -692,7 +891,7 @@ async function executeDecryptionAndSync(triggerReason = "manual") {
   }
 
   if (!fs.existsSync(engineFllPath)) {
-    const msg = `Engine core library missing at: ${engineFllPath}`;
+    const msg = "Core extraction security module is missing or inaccessible.";
     emitLog("error", msg);
     isSyncing = false;
     emitStatus({ isSyncing: false, error: msg });
@@ -704,10 +903,17 @@ async function executeDecryptionAndSync(triggerReason = "manual") {
   const userEmail = session?.email || config.userEmail || "";
   const licenseKey = config.licenseKey || "";
 
+  // Check connectivity right before processing:
   const isCloudReachable = await checkConnectivity(cloudUrl);
   emitNetwork(isCloudReachable);
+  if (isCloudReachable) {
+    emitLog("info", "Cloud connection active. Converted data will sync directly to server (no local files stored).");
+  } else {
+    emitLog("warn", "No internet connection detected. Extraction will proceed and store files in local hidden vault.");
+  }
 
   let totalUploadedTables = 0;
+  let totalOfflineTables = 0;
   const summaryMessages = [];
 
   for (const compCode of companyCodes) {
@@ -726,12 +932,30 @@ async function executeDecryptionAndSync(triggerReason = "manual") {
     const codeExt = `.${compCode.toLowerCase()}`;
     const matchingFiles = sourceFiles.filter((f) => f.toLowerCase().endsWith(codeExt));
 
-    emitLog("info", `Found ${matchingFiles.length} encrypted record file(s) for company [${compCode}]`);
-
     if (matchingFiles.length === 0) {
       emitLog("warn", `No encrypted records found matching .${compCode} in source folder.`);
       continue;
     }
+
+    // Check modification signature to optimize real-time sync performance
+    const currentSignatures = [];
+    for (const f of matchingFiles) {
+      try {
+        const stat = fs.statSync(path.join(sourceDir, f));
+        currentSignatures.push(`${f}:${stat.mtimeMs}:${stat.size}`);
+      } catch {
+        currentSignatures.push(`${f}:0:0`);
+      }
+    }
+    const sigKey = currentSignatures.join("|");
+    const prevSig = lastSyncFileSignatures.get(compCode);
+
+    if (triggerReason === "realtime" && prevSig && prevSig === sigKey) {
+      // All files unmodified, zero CPU & instant real-time response
+      continue;
+    }
+
+    emitLog("info", `Found ${matchingFiles.length} encrypted record file(s) for company [${compCode}]`);
 
     // Standard table stems
     const knownTables = [
@@ -746,13 +970,12 @@ async function executeDecryptionAndSync(triggerReason = "manual") {
     });
     const allTables = Array.from(tablesSet);
 
-    // 2. Prepare destination: Copy core library into compDestDir
+    // 2. Prepare destination: Ensure core extraction library is available
     const destFllPath = path.join(compDestDir, "efWin11.fll");
-    try {
-      fs.copyFileSync(engineFllPath, destFllPath);
-    } catch (copyErr) {
-      emitLog("error", `Could not initialize extraction library for [${compCode}]: ${copyErr.message}`);
-      continue;
+    if (!fs.existsSync(destFllPath)) {
+      try {
+        fs.copyFileSync(engineFllPath, destFllPath);
+      } catch (copyErr) { }
     }
 
     // 3. Copy matching encrypted files into compDestDir
@@ -767,6 +990,8 @@ async function executeDecryptionAndSync(triggerReason = "manual") {
     // 4. Generate dynamic, headless extraction script
     const prgPath = path.join(compDestDir, "mabsol_core.prg");
     const fpwPath = path.join(compDestDir, "mabsol_core.fpw");
+    const escapedEngineFll = engineFllPath.replace(/\\/g, "\\\\");
+    const escapedDestFll = destFllPath.replace(/\\/g, "\\\\");
 
     let decryptScript =
       `_SCREEN.Visible = .F.\r\n` +
@@ -784,7 +1009,10 @@ async function executeDecryptionAndSync(triggerReason = "manual") {
       `compcode = "${compCode}"\r\n` +
       `destpath = "${compDestDir.replace(/\\/g, "\\\\")}"\r\n` +
       `SET DEFAULT TO (destpath)\r\n\r\n` +
-      `libpath = destpath + "\\\\efWin11.fll"\r\n` +
+      `libpath = "${escapedEngineFll}"\r\n` +
+      `IF !FILE(libpath)\r\n` +
+      `    libpath = "${escapedDestFll}"\r\n` +
+      `ENDIF\r\n` +
       `IF FILE(libpath)\r\n` +
       `    SET LIBRARY TO (libpath) ADDITIVE\r\n` +
       `ENDIF\r\n\r\n`;
@@ -830,7 +1058,7 @@ async function executeDecryptionAndSync(triggerReason = "manual") {
     fs.writeFileSync(prgPath, decryptScript, "utf8");
     fs.writeFileSync(fpwPath, fpwContent, "utf8");
 
-    // 5. Run MabsolCRM.EXE
+    // 5. Run MabsolCRM.EXE headless
     try {
       await new Promise((resolve, reject) => {
         const engineProcess = spawn(engineBinaryPath, ["-t", `-c${fpwPath}`], {
@@ -858,8 +1086,7 @@ async function executeDecryptionAndSync(triggerReason = "manual") {
     } catch (runErr) {
       emitLog("error", `Extraction execution error on [${compCode}]: ${runErr.message}`);
     } finally {
-      // Clean up extraction library and temporary scripts
-      try { if (fs.existsSync(destFllPath)) fs.unlinkSync(destFllPath); } catch { }
+      // Clean up temporary scripts
       const fxpPath = prgPath.replace(/\.prg$/i, ".fxp");
       const bakPath = prgPath.replace(/\.prg$/i, ".bak");
       try { if (fs.existsSync(prgPath)) fs.unlinkSync(prgPath); } catch { }
@@ -867,11 +1094,12 @@ async function executeDecryptionAndSync(triggerReason = "manual") {
       try { if (fs.existsSync(fxpPath)) fs.unlinkSync(fxpPath); } catch { }
       try { if (fs.existsSync(bakPath)) fs.unlinkSync(bakPath); } catch { }
 
-      // Purge non-DBF files from compDestDir
+      // Purge non-DBF files from compDestDir (preserve .fll which Windows may hold locked in memory)
       try {
         if (fs.existsSync(compDestDir)) {
           for (const entry of fs.readdirSync(compDestDir)) {
-            if (!entry.toLowerCase().endsWith(".dbf")) {
+            const lower = entry.toLowerCase();
+            if (!lower.endsWith(".dbf") && !lower.endsWith(".fll")) {
               const entryPath = path.join(compDestDir, entry);
               if (fs.statSync(entryPath).isFile()) fs.unlinkSync(entryPath);
             }
@@ -884,49 +1112,70 @@ async function executeDecryptionAndSync(triggerReason = "manual") {
     const dbfFiles = destFiles.filter(f => f.toLowerCase().endsWith(".dbf"));
     emitLog("success", `[${compCode}] Extraction finished. ${dbfFiles.length} database table(s) ready.`);
 
-    if (!isCloudReachable) {
-      enqueueOfflineBatch(compDestDir, dbfFiles, compCode);
-      summaryMessages.push(`[${compCode}]: Queued ${dbfFiles.length} tables offline`);
-      continue;
+    if (dbfFiles.length === 0) continue;
+
+    // SCENARIO 1: ONLINE -> Upload directly from staging to Cloud Server
+    if (isCloudReachable) {
+      emitLog("info", `Uploading [${compCode}] tables directly to Cloud Server...`);
+      const uploadResult = await uploadDbfBatch(cloudUrl, compDestDir, dbfFiles, authToken, userEmail, licenseKey, compCode, config.companyName);
+
+      if (uploadResult.success) {
+        lastSyncFileSignatures.set(compCode, sigKey);
+        totalUploadedTables += dbfFiles.length;
+        summaryMessages.push(`[${compCode}]: Stored ${dbfFiles.length} tables`);
+        emitLog("success", `[${compCode}] Stored ${dbfFiles.length} table(s) on cloud server! (No local files kept)`);
+
+        // Clean up staging files immediately - NOTHING is stored in local vault!
+        try {
+          for (const file of dbfFiles) {
+            const fp = path.join(compDestDir, file);
+            if (fs.existsSync(fp)) fs.unlinkSync(fp);
+          }
+          fs.rmdirSync(compDestDir);
+        } catch { }
+        continue;
+      }
+
+      // If upload failed midway (e.g. connection reset or DNS failure), fallback to moving to offline vault
+      emitLog("warn", `Upload interrupted for [${compCode}] (${uploadResult.error}). Moving to secure local vault.`);
     }
 
-    // Upload DBF files to EC2 server targeting this specific company folder
-    emitLog("info", `Uploading [${compCode}] tables to EC2 Cloud Server...`);
-    const uploadResult = await uploadDbfBatch(cloudUrl, compDestDir, dbfFiles, authToken, userEmail, licenseKey, compCode, config.companyName);
-
-    if (uploadResult.success) {
-      totalUploadedTables += dbfFiles.length;
-      summaryMessages.push(`[${compCode}]: Stored ${dbfFiles.length} tables`);
-      emitLog("success", `[${compCode}] Stored ${dbfFiles.length} table(s) on cloud server (direct DB sync skipped)!`);
-
-      // Clean up internal staging files once uploaded to save client disk space
+    // SCENARIO 2: OFFLINE (or upload failed) -> Move files into Hidden Offline Vault
+    const vaultCompDir = path.join(getHiddenVaultDir(), compCode);
+    fs.mkdirSync(vaultCompDir, { recursive: true });
+    for (const file of dbfFiles) {
+      const srcFp = path.join(compDestDir, file);
+      const dstFp = path.join(vaultCompDir, file);
       try {
-        for (const file of dbfFiles) {
-          const fp = path.join(compDestDir, file);
-          if (fs.existsSync(fp)) fs.unlinkSync(fp);
-        }
-        fs.rmdirSync(compDestDir);
-      } catch { }
-    } else {
-      emitLog("error", `Upload failed for [${compCode}]: ${uploadResult.error}. Queued for retry.`);
-      enqueueOfflineBatch(compDestDir, dbfFiles, compCode);
-      summaryMessages.push(`[${compCode}]: Failed, queued offline`);
+        fs.copyFileSync(srcFp, dstFp);
+        if (fs.existsSync(srcFp)) fs.unlinkSync(srcFp);
+      } catch {}
     }
+    try { fs.rmdirSync(compDestDir); } catch {}
+
+    lastSyncFileSignatures.set(compCode, sigKey);
+    enqueueOfflineBatch(vaultCompDir, dbfFiles, compCode);
+    totalOfflineTables += dbfFiles.length;
+    summaryMessages.push(`[${compCode}]: Stored ${dbfFiles.length} tables in local hidden vault`);
+    emitLog("warn", `[${compCode}] Offline mode: ${dbfFiles.length} table(s) securely converted and stored in local hidden vault.`);
   }
 
   isSyncing = false;
 
-  if (!isCloudReachable) {
-    emitLog("warn", "Sync queued in Offline Mode for restoration.");
+  // If anything had to be stored in offline vault:
+  if (totalOfflineTables > 0) {
     emitStatus({
       isSyncing: false,
       isOnline: false,
       lastStatus: "offline_queued",
+      tablesCount: totalOfflineTables,
       message: summaryMessages.join(" | ")
     });
+    emitLog("warn", `Sync finished in Offline Mode (${totalOfflineTables} tables saved locally). Not waiting for internet.`);
     return { success: true, offline: true, message: summaryMessages.join(" | ") };
   }
 
+  // If all were uploaded directly to server:
   saveQueue([]);
   emitStatus({
     isSyncing: false,
@@ -936,7 +1185,7 @@ async function executeDecryptionAndSync(triggerReason = "manual") {
     message: summaryMessages.join(" | ")
   });
 
-  emitLog("success", `=== Transfer Completed! Files safely stored on cloud server (${totalUploadedTables} tables) ===`);
+  emitLog("success", `=== Transfer Completed! All ${totalUploadedTables} tables safely stored on Cloud Server (0 local files kept) ===`);
   return { success: true, message: summaryMessages.join(" | ") };
 }
 
@@ -946,7 +1195,7 @@ async function executeDecryptionAndSync(triggerReason = "manual") {
 async function checkConnectivity(cloudUrl) {
   try {
     const pingUrl = `${cloudUrl}/api/mabsolcrmsync/heartbeat`;
-    await axios.post(pingUrl, { status: "ping" }, { timeout: 4000 });
+    await axios.post(pingUrl, { status: "ping" }, { timeout: 2000 });
     return true;
   } catch (err) {
     if (err.response) return true; // Server replied with HTTP error, but internet is working
@@ -972,7 +1221,8 @@ async function uploadDbfBatch(cloudUrl, destDir, dbfFiles, token, email, license
       emitLog("info", `Syncing [${companyCode || "DEFAULT"}] data package ${b + 1} of ${totalBatches}...`);
 
       const form = new FormData();
-      form.append("isFinalBatch", isFinal ? "true" : "false");
+      // Always use isFinalBatch="false" during file uploads so server never triggers synchronous blocking FoxPro import
+      form.append("isFinalBatch", "false");
       form.append("storeOnly", "true");
       form.append("skipDirectSync", "true");
       if (companyCode) form.append("companyCode", companyCode);
@@ -1009,6 +1259,26 @@ async function uploadDbfBatch(cloudUrl, destDir, dbfFiles, token, email, license
       }
 
       lastSuccessData = res.data;
+    }
+
+    // Trigger asynchronous background server sync now that all tables are uploaded
+    try {
+      const hasValidToken = token && !isTokenExpired(token);
+      await axios.post(
+        `${cloudUrl}/api/mabsolcrmsync/sync-now`,
+        { companyCode, background: true },
+        {
+          headers: {
+            ...(hasValidToken ? { Authorization: `Bearer ${token}` } : {}),
+            ...(licenseKey ? { "x-license-key": licenseKey } : {}),
+            "x-device-id": getMachineIdentifier(),
+            "x-company-code": companyCode || ""
+          },
+          timeout: 15000
+        }
+      );
+    } catch (_triggerErr) {
+      // Ignored: sync-now triggered or already processing
     }
 
     return {
@@ -1095,7 +1365,7 @@ function startNetworkWatcher() {
           if (mainWindow && !mainWindow.isDestroyed()) {
             mainWindow.webContents.send("auth:session-revoked", { message: suspMsg });
           }
-          clearInterval(syncIntervalTimer);
+          stopAutoSync();
           return;
         }
       }
@@ -1123,6 +1393,14 @@ function startNetworkWatcher() {
                 );
                 if (res.success) {
                   emitLog("success", `Offline Batch Synced: [${batch.companyCode || "DEFAULT"}] (${batch.dbfFiles?.length || 0} tables).`);
+                  // Clean up local hidden vault files now that they are stored on server!
+                  try {
+                    for (const f of (batch.dbfFiles || [])) {
+                      const p = path.join(batch.destDir, f);
+                      if (fs.existsSync(p)) fs.unlinkSync(p);
+                    }
+                    if (fs.existsSync(batch.destDir)) fs.rmdirSync(batch.destDir);
+                  } catch { }
                   currentQueue.shift();
                   saveQueue(currentQueue);
                 } else {
@@ -1135,7 +1413,7 @@ function startNetworkWatcher() {
               }
             }
             if (currentQueue.length === 0) {
-              emitLog("success", "All offline batches synced to server successfully!");
+              emitLog("success", "All offline batches synced to server successfully! Local hidden vault cleared.");
               saveQueue([]);
               emitStatus({ isOnline: true, lastStatus: "synced", message: "All queued offline files synchronized." });
             }
@@ -1147,8 +1425,62 @@ function startNetworkWatcher() {
   }, 15000);
 }
 
+function stopAutoSync() {
+  if (syncIntervalTimer) {
+    clearInterval(syncIntervalTimer);
+    syncIntervalTimer = null;
+  }
+  if (sourceDirWatcher) {
+    try {
+      sourceDirWatcher.close();
+    } catch { }
+    sourceDirWatcher = null;
+  }
+  if (realtimeDebounceTimer) {
+    clearTimeout(realtimeDebounceTimer);
+    realtimeDebounceTimer = null;
+  }
+}
+
 function setupAutoSyncTimer(intervalMins) {
-  clearInterval(syncIntervalTimer);
+  stopAutoSync();
+  const cfg = loadConfig();
+  const isRealtime = intervalMins === "realtime" || intervalMins === "real-time" || intervalMins === 0.5 || String(intervalMins) === "0.5";
+
+  if (isRealtime) {
+    emitLog("info", "⚡ Real-Time Auto-Sync active: Live file watcher & continuous sync engaged.");
+
+    // 1. File system watcher on source directory for instant real-time sync
+    if (cfg.sourceDir && fs.existsSync(cfg.sourceDir)) {
+      try {
+        sourceDirWatcher = fs.watch(cfg.sourceDir, { recursive: false }, (eventType, filename) => {
+          if (!filename) return;
+          const lower = filename.toLowerCase();
+          if (lower.endsWith(".tmp") || lower.endsWith(".lck") || lower.endsWith(".log") || lower.endsWith(".bak")) return;
+
+          if (realtimeDebounceTimer) clearTimeout(realtimeDebounceTimer);
+          realtimeDebounceTimer = setTimeout(() => {
+            if (!isSyncing) {
+              emitLog("info", `[Real-Time Watcher] ERP change detected (${filename}). Synchronizing immediately...`);
+              executeDecryptionAndSync("realtime").catch(() => { });
+            }
+          }, 2500); // 2.5s debounce for atomic writes
+        });
+        emitLog("info", `[Real-Time Watcher] Watching source folder: ${cfg.sourceDir}`);
+      } catch (watchErr) {
+        emitLog("warn", `Could not attach live file watcher on ${cfg.sourceDir}: ${watchErr.message}. Fallback to 30s heartbeat.`);
+      }
+    }
+
+    // 2. High-frequency 30-second heartbeat to ensure network shared drives are synced without delay
+    syncIntervalTimer = setInterval(() => {
+      if (!isSyncing) {
+        executeDecryptionAndSync("realtime").catch(() => { });
+      }
+    }, 30 * 1000);
+    return;
+  }
+
   const mins = Math.max(1, Number(intervalMins) || 10);
   emitLog("info", `Auto-sync schedule updated: running every ${mins} minute(s).`);
   syncIntervalTimer = setInterval(() => {

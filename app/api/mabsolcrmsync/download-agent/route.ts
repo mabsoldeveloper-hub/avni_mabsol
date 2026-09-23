@@ -11,9 +11,10 @@ export async function GET(request: NextRequest) {
 
     const candidates = [
       path.join(process.cwd(), "dist-electron", format === "setup" ? "MabsolSyncAgent Setup 1.0.0.exe" : "MabsolSyncAgent 1.0.0.exe"),
+      path.join(process.cwd(), "public", "downloads", format === "setup" ? "MabsolSyncAgent_Setup.exe" : "MabsolSyncAgent_Portable.exe"),
+      path.join(process.cwd(), "public", "downloads", "MabsolSyncAgent.exe"),
       path.join(process.cwd(), "dist-electron", "MabsolSyncAgent 1.0.0.exe"),
       path.join(process.cwd(), "dist-electron", "MabsolSyncAgent Setup 1.0.0.exe"),
-      path.join(process.cwd(), "public", "downloads", "MabsolSyncAgent.exe"),
     ];
 
     let foundPath: string | null = null;

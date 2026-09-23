@@ -47,8 +47,71 @@ export default function VfpSettingsPage() {
     isBound: false,
   });
 
+  // Live countdown timer state (Days, Hours, Minutes, Seconds)
+  const [countdown, setCountdown] = useState<{
+    days: number;
+    hours: number;
+    minutes: number;
+    seconds: number;
+    formatted: string;
+    isExpired: boolean;
+  }>({
+    days: 0,
+    hours: 0,
+    minutes: 0,
+    seconds: 0,
+    formatted: "--",
+    isExpired: false,
+  });
+
+  // Ticking 1-second countdown calculation
+  useEffect(() => {
+    const calcCountdown = () => {
+      if (!licenseInfo.licenseExpiresAt || !licenseInfo.license) {
+        setCountdown({ days: 0, hours: 0, minutes: 0, seconds: 0, formatted: "--", isExpired: false });
+        return;
+      }
+      const target = new Date(licenseInfo.licenseExpiresAt).getTime();
+      const now = Date.now();
+      const diff = target - now;
+
+      if (diff <= 0) {
+        setCountdown({ days: 0, hours: 0, minutes: 0, seconds: 0, formatted: "Expired", isExpired: true });
+        return;
+      }
+
+      const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+      const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+      const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+      const seconds = Math.floor((diff % (1000 * 60)) / 1000);
+
+      const pad = (n: number) => String(n).padStart(2, "0");
+      setCountdown({
+        days,
+        hours,
+        minutes,
+        seconds,
+        formatted: `${days}d ${pad(hours)}h ${pad(minutes)}m ${pad(seconds)}s`,
+        isExpired: false,
+      });
+    };
+
+    calcCountdown();
+    const timer = setInterval(calcCountdown, 1000);
+    return () => clearInterval(timer);
+  }, [licenseInfo.licenseExpiresAt, licenseInfo.license]);
+
   useEffect(() => {
     loadLicense();
+
+    const handleFocus = () => loadLicense();
+    window.addEventListener("focus", handleFocus);
+    const interval = setInterval(loadLicense, 8000);
+
+    return () => {
+      window.removeEventListener("focus", handleFocus);
+      clearInterval(interval);
+    };
   }, []);
 
   const loadLicense = async () => {
@@ -172,9 +235,9 @@ export default function VfpSettingsPage() {
               </div>
 
               {isKeyActive ? (
-                <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-emerald-50 text-emerald-700 border border-emerald-200/60 shrink-0">
-                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-500"></span>
-                  <span>Active — {daysLeft} days left</span>
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium bg-emerald-50 text-emerald-700 border border-emerald-200/60 shrink-0 font-mono shadow-2xs">
+                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                  <span>Active • {countdown.formatted}</span>
                 </span>
               ) : licenseInfo.isExpired ? (
                 <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-rose-50 text-rose-700 border border-rose-200/60 shrink-0">
@@ -209,19 +272,63 @@ export default function VfpSettingsPage() {
                 {licenseInfo.license || "No license generated"}
               </div>
 
-              {/* Validity Term Progress */}
-              <div className="space-y-1 pt-0.5">
+              {/* Validity Term & Live Countdown Timer */}
+              <div className="space-y-2 pt-1">
                 <div className="flex items-center justify-between text-[11px]">
-                  <span className="text-slate-500">Validity term</span>
-                  <span className="font-semibold text-slate-800">
-                    {daysLeft} remaining of 30 days
+                  <span className="text-slate-500">Live countdown</span>
+                  <span className="font-mono font-semibold text-slate-800">
+                    {isKeyActive ? `${countdown.formatted} remaining` : (licenseInfo.isExpired ? "Term Expired" : "Not Active")}
                   </span>
                 </div>
-                <div className="w-full h-1.5 bg-slate-200 rounded-full overflow-hidden">
-                  <div
-                    className="h-full bg-blue-600 rounded-full transition-all"
-                    style={{ width: `${percent}%` }}
-                  />
+
+                {isKeyActive && (
+                  <div className="grid grid-cols-4 gap-1.5">
+                    <div className="bg-white rounded-md border border-slate-200/90 py-1.5 px-1 text-center shadow-2xs">
+                      <div className="text-sm sm:text-base font-black font-mono text-slate-900 leading-none">
+                        {countdown.days}
+                      </div>
+                      <div className="text-[9px] font-bold uppercase tracking-wider text-slate-400 mt-1">
+                        Days
+                      </div>
+                    </div>
+                    <div className="bg-white rounded-md border border-slate-200/90 py-1.5 px-1 text-center shadow-2xs">
+                      <div className="text-sm sm:text-base font-black font-mono text-slate-900 leading-none">
+                        {String(countdown.hours).padStart(2, "0")}
+                      </div>
+                      <div className="text-[9px] font-bold uppercase tracking-wider text-slate-400 mt-1">
+                        Hours
+                      </div>
+                    </div>
+                    <div className="bg-white rounded-md border border-slate-200/90 py-1.5 px-1 text-center shadow-2xs">
+                      <div className="text-sm sm:text-base font-black font-mono text-slate-900 leading-none">
+                        {String(countdown.minutes).padStart(2, "0")}
+                      </div>
+                      <div className="text-[9px] font-bold uppercase tracking-wider text-slate-400 mt-1">
+                        Mins
+                      </div>
+                    </div>
+                    <div className="bg-white rounded-md border border-slate-200/90 py-1.5 px-1 text-center shadow-2xs">
+                      <div className="text-sm sm:text-base font-black font-mono text-blue-600 leading-none">
+                        {String(countdown.seconds).padStart(2, "0")}
+                      </div>
+                      <div className="text-[9px] font-bold uppercase tracking-wider text-slate-400 mt-1">
+                        Secs
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                <div className="space-y-1">
+                  <div className="flex items-center justify-between text-[10.5px] text-slate-400">
+                    <span>30-Day Cycle Progress</span>
+                    <span>{daysLeft} days of 30 ({percent}%)</span>
+                  </div>
+                  <div className="w-full h-1.5 bg-slate-200 rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-blue-600 rounded-full transition-all duration-500"
+                      style={{ width: `${percent}%` }}
+                    />
+                  </div>
                 </div>
               </div>
             </div>

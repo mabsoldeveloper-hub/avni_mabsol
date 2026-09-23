@@ -104,23 +104,34 @@ export default function SyncSystemSelector({
           <div className="py-1">
             {SYNC_SYSTEMS.map((system) => {
               const isSelected = system.id === selectedSystem.id;
+              const isComingSoon = system.isComingSoon;
 
               return (
                 <button
                   key={system.id}
                   type="button"
-                  onClick={() => handleSelect(system)}
-                  className={`w-full text-left px-3 py-2 text-xs flex items-center justify-between gap-2 transition-colors cursor-pointer ${
-                    isSelected
-                      ? "bg-slate-100 text-slate-950 font-semibold"
-                      : "text-slate-700 hover:bg-slate-50 font-normal"
+                  onClick={() => {
+                    if (isComingSoon) return;
+                    handleSelect(system);
+                  }}
+                  disabled={isComingSoon}
+                  className={`w-full text-left px-3 py-2 text-xs flex items-center justify-between gap-2 transition-colors ${
+                    isComingSoon
+                      ? "text-slate-400 bg-slate-50/50 cursor-not-allowed opacity-80"
+                      : isSelected
+                      ? "bg-slate-100 text-slate-950 font-semibold cursor-pointer"
+                      : "text-slate-700 hover:bg-slate-50 font-normal cursor-pointer"
                   }`}
                   role="menuitem"
                 >
                   <span className="truncate">{system.name}</span>
-                  {isSelected && (
+                  {isComingSoon ? (
+                    <span className="text-[9.5px] font-semibold px-1.5 py-0.5 rounded bg-amber-50 text-amber-700 border border-amber-200/80 shrink-0">
+                      Coming Soon
+                    </span>
+                  ) : isSelected ? (
                     <Check size={14} className="text-slate-900 shrink-0" />
-                  )}
+                  ) : null}
                 </button>
               );
             })}

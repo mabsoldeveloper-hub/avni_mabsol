@@ -219,6 +219,23 @@ body {
   box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.2);
 }
 
+.form-group input:disabled, 
+.form-group input[readonly],
+.form-group select:disabled {
+  background: rgba(15, 23, 42, 0.7) !important;
+  border-color: rgba(255, 255, 255, 0.08) !important;
+  color: var(--text-secondary) !important;
+  cursor: not-allowed !important;
+  user-select: none;
+  opacity: 0.72;
+}
+
+button:disabled, .btn-browse:disabled {
+  opacity: 0.45 !important;
+  cursor: not-allowed !important;
+  pointer-events: none !important;
+}
+
 .form-row {
   display: flex;
   gap: 12px;

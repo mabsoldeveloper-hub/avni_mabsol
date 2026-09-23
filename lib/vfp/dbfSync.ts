@@ -115,25 +115,10 @@ export async function performDirectServerSync(userEmail: string, customDataDir?:
       totalImportedTables++;
     }
 
-    // Clean up empty directory in dataDir to keep server storage clean
-    try {
-      if (fs.existsSync(dataDir)) {
-        const remaining = fs.readdirSync(dataDir);
-        if (remaining.length === 0) {
-          fs.rmdirSync(dataDir);
-          // Also clean up parent user folder if now empty
-          const parentDir = path.dirname(dataDir);
-          if (fs.existsSync(parentDir) && fs.readdirSync(parentDir).length === 0) {
-            fs.rmdirSync(parentDir);
-          }
-        }
-      }
-    } catch {}
-
     await VfpSyncLog.findByIdAndUpdate(runningSyncLog._id, {
       $set: {
         status: "success",
-        message: `Direct server sync completed successfully. ${totalImportedTables} table(s), ${totalImportedRows} row(s) synced. (Server disk cleaned)`,
+        message: `Direct server sync completed successfully. ${totalImportedTables} table(s), ${totalImportedRows} row(s) updated in real-time.`,
         finishedAt: new Date(),
       },
     });
@@ -301,31 +286,10 @@ async function importSingleDbfFile(
       $set: {
         status: "success",
         importedCount,
-        message: `Imported ${importedCount} row(s) from ${fileName}.`,
+        message: `Imported and updated ${importedCount} row(s) from ${fileName}.`,
         finishedAt: new Date(),
       },
     });
-
-    // Auto-delete synced DBF and auxiliary memo/index files to protect server disk storage
-    try {
-      if (fs.existsSync(filePath)) {
-        fs.unlinkSync(filePath);
-      }
-      const fileDir = path.dirname(filePath);
-      const ext = path.extname(filePath);
-      const baseNoExt = path.basename(filePath, ext);
-      const auxExtensions = [".fpt", ".FPT", ".cdx", ".CDX", ".idx", ".IDX", ".ntx", ".NTX"];
-      for (const auxExt of auxExtensions) {
-        const auxFile = path.join(fileDir, `${baseNoExt}${auxExt}`);
-        if (fs.existsSync(auxFile)) {
-          try {
-            fs.unlinkSync(auxFile);
-          } catch {}
-        }
-      }
-    } catch (cleanErr) {
-      console.warn(`[Storage Cleanup] Notice: Could not remove synced file ${filePath}:`, cleanErr);
-    }
 
     return importedCount;
   } catch (error: any) {

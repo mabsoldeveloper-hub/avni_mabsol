@@ -54,6 +54,39 @@ export async function POST(request: NextRequest) {
 
     // Fetch user's active VfpConfig from MongoDB to get dynamic SELECTED FILES FOLDER LOCATION
     const config = (await VfpConfig.findOne({ email: targetEmail })) || (await VfpConfig.findOne({ key: "vfp_sync_config" }));
+
+    const licenseKey = (body.licenseKey as string) || request.headers.get("x-license-key");
+    const deviceId = (body.deviceId as string) || request.headers.get("x-device-id");
+    const deviceName = (body.deviceName as string) || request.headers.get("x-device-name");
+
+    if (config && licenseKey) {
+      const isReusedOrRetired = (config.usedLicenses || []).some((u: any) => u.key === licenseKey);
+      if (isReusedOrRetired) {
+        return NextResponse.json(
+          { success: false, licenseExpired: true, error: "License key expired. Cannot be reused." },
+          { status: 403 }
+        );
+      }
+      if (config.licenseExpiresAt && new Date() > new Date(config.licenseExpiresAt)) {
+        return NextResponse.json(
+          { success: false, licenseExpired: true, error: "License key expired (30-day validity ended)." },
+          { status: 403 }
+        );
+      }
+      if (deviceId) {
+        if (!config.boundDeviceId) {
+          await VfpConfig.updateOne(
+            { _id: config._id },
+            { $set: { boundDeviceId: deviceId, boundDeviceName: deviceName || "Operator Machine", boundAt: new Date() } }
+          );
+        } else if (config.boundDeviceId !== deviceId) {
+          return NextResponse.json(
+            { success: false, deviceMismatch: true, error: `License key already bound to machine: ${config.boundDeviceName || "First Device"}` },
+            { status: 403 }
+          );
+        }
+      }
+    }
     const configuredDir: string = config?.consoleSyncDir || config?.sourceDir || config?.dataDir || "";
     const enabledFiles: string[] = config?.enabledFiles || [];
 

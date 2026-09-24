@@ -1058,7 +1058,7 @@ export default function LoginPage() {
                   <circle cx="14.8" cy="14.8" r="1" fill="#ffffff" />
                 </svg>
               </span>
-              <span className="brand-name">Mabsol Pharma CRM</span>
+              <span className="brand-name">MabsolCrm</span>
             </div>
 
             {/* Enterprise Security Chip */}
@@ -1164,7 +1164,7 @@ export default function LoginPage() {
 
                 <button type="submit" className="btn-primary" disabled={loading}>
                   {loading ? <span className="spinner" aria-hidden="true" /> : null}
-                  <span>{loading ? "Authenticating Session…" : "Sign In to Pharma Console"}</span>
+                  <span>{loading ? "Authenticating Session…" : "Sign In to MabsolCrm"}</span>
                   {!loading && (
                     <svg className="btn-arrow-icon" width="16" height="16" viewBox="0 0 24 24" fill="none">
                       <path d="M5 12h14M12 5l7 7-7 7" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />

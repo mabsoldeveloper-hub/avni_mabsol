@@ -72,7 +72,7 @@ const NotificationGatewayConfigSchema = new Schema<INotificationGatewayConfig>(
       smtpUser: { type: String, default: "" },
       smtpPass: { type: String, default: "" },
       fromEmail: { type: String, default: "notifications@mabsolpharma.com" },
-      fromName: { type: String, default: "Mabsol Pharma CRM" },
+      fromName: { type: String, default: "MabsolCrm" },
     },
 
     whatsapp: {

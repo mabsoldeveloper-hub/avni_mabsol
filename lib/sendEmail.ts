@@ -5,7 +5,7 @@ import nodemailer from "nodemailer";
 // SMTP_PORT=587
 // SMTP_USER=your-smtp-username
 // SMTP_PASS=your-smtp-password
-// EMAIL_FROM="Mabsol Pharma CRM <no-reply@yourdomain.com>"
+// EMAIL_FROM="MabsolCrm <no-reply@yourdomain.com>"
 
 const transporter = nodemailer.createTransport({
   host: process.env.SMTP_HOST || "smtp.hostinger.com",
@@ -31,14 +31,14 @@ const BORDER = "#ECEEF9";
 export async function sendOtpEmail(email: string, otp: string) {
   const digits = otp.split("");
   const senderEmail = process.env.SMTP_USER || "support@mabsolinfotech.com";
-  const from = `"Mabsol Pharma CRM" <${senderEmail}>`;
+  const from = `"MabsolCrm" <${senderEmail}>`;
 
   try {
     const info = await transporter.sendMail({
       from,
       to: email,
-      subject: `${otp} is your Mabsol Pharma CRM login verification code`,
-      text: `Your Mabsol Pharma CRM login verification code is ${otp}. This code expires in 5 minutes. If you did not request this, please ignore this email.`,
+      subject: `${otp} is your MabsolCrm login verification code`,
+      text: `Your MabsolCrm login verification code is ${otp}. This code expires in 5 minutes. If you did not request this, please ignore this email.`,
       html: `
 <!DOCTYPE html>
 <html>
@@ -62,7 +62,7 @@ export async function sendOtpEmail(email: string, otp: string) {
                       <div style="width:22px; height:22px; background:${ORANGE}; border-radius:6px;"></div>
                     </td>
                     <td style="vertical-align:middle; color:#ffffff; font-size:16px; font-weight:700; letter-spacing:-0.01em;">
-                      Mabsol Pharma CRM
+                      MabsolCrm
                     </td>
                   </tr>
                 </table>
@@ -76,7 +76,7 @@ export async function sendOtpEmail(email: string, otp: string) {
                   Login Verification Code
                 </h2>
                 <p style="margin:0 0 24px; color:${MUTED}; font-size:14px; line-height:1.6;">
-                  Use the 6-digit verification code below to sign in to your Mabsol Pharma CRM account:
+                  Use the 6-digit verification code below to sign in to your MabsolCrm account:
                 </p>
 
                 <!-- OTP Display -->
@@ -93,7 +93,7 @@ export async function sendOtpEmail(email: string, otp: string) {
                 <hr style="border:none; border-top:1px solid ${BORDER}; margin:24px 0 16px;" />
 
                 <p style="margin:0; color:#888aa8; font-size:12px; line-height:1.5;">
-                  If you didn't attempt to log in to Mabsol Pharma CRM, you can safely ignore this email.
+                  If you didn't attempt to log in to MabsolCrm, you can safely ignore this email.
                 </p>
               </td>
             </tr>
@@ -102,7 +102,7 @@ export async function sendOtpEmail(email: string, otp: string) {
             <tr>
               <td style="padding:16px 28px 24px; background:#fafaff; border-top:1px solid ${BORDER};">
                 <p style="margin:0; color:#A6A8D2; font-size:11.5px; text-align:center;">
-                  © ${new Date().getFullYear()} Mabsol Pharma CRM. All rights reserved.
+                  © ${new Date().getFullYear()} MabsolCrm. All rights reserved.
                 </p>
               </td>
             </tr>

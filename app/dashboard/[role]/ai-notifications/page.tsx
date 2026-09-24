@@ -629,7 +629,7 @@ export default function AiNotificationsPage() {
             const isWarning = notif.severity === "warning" || notif.impactScore === "HIGH";
 
             const shareText = encodeURIComponent(
-              `*Pharma CRM Alert: ${notif.title}*\n${notif.message}\n${
+              `*MabsolCrm Alert: ${notif.title}*\n${notif.message}\n${
                 notif.suggestedAction ? `*Recommended Action:* ${notif.suggestedAction}` : ""
               }`
             );

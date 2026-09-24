@@ -33,7 +33,7 @@ export default function NotificationSettingsPage() {
       smtpUser: "",
       smtpPass: "",
       fromEmail: "notifications@mabsolpharma.com",
-      fromName: "Mabsol Pharma CRM",
+      fromName: "MabsolCrm",
     },
     whatsapp: {
       enabled: true,
@@ -298,7 +298,7 @@ export default function NotificationSettingsPage() {
                   <label className={labelClass}>From Sender Name</label>
                   <input
                     className={inputClass}
-                    placeholder="Mabsol Pharma CRM"
+                    placeholder="MabsolCrm"
                     value={settings.email?.fromName || ""}
                     onChange={(e) =>
                       setSettings({ ...settings, email: { ...settings.email, fromName: e.target.value } })

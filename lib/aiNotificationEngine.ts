@@ -409,7 +409,7 @@ function generateRuleBasedFallbackAlerts(snapshot: any, mode: string): Generated
   // Executive Morning Briefing Alert
   if (mode === "morning_briefing") {
     alerts.unshift({
-      title: "🌅 Pharma Morning Briefing",
+      title: "🌅 MabsolCrm Morning Briefing",
       message: `Operational Snapshot: ${outOfStock.length} stockout risks identified, ${snapshot.targetsCount} active target portfolios, and ${snapshot.formSubmissionsCount} recent field interactions logged.`,
       suggestedAction: "Prioritize clearing stock bottlenecks and review under-visited doctor territories.",
       actionUrl: "/dashboard",

@@ -12,7 +12,7 @@ export interface DataMapperResult {
 /**
  * MARG ERP Data Mapper
  * Transforms raw MARG DBF collections (e.g. vfp_new_folder_order, vfp_new_folder_pro, vfp_new_folder_pend)
- * into structured CRM Collections used by Mabsol Pharma CRM.
+ * into structured CRM Collections used by MabsolCrm.
  */
 export async function runMargDataMapper(email?: string): Promise<DataMapperResult> {
   await dbConnect();

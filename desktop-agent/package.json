@@ -3,7 +3,7 @@
   "productName": "MabsolSyncAgent",
   "appId": "com.mabsol.syncagent",
   "version": "1.0.0",
-  "description": "Mabsol Pharma CRM - Desktop Data Synchronization Agent",
+  "description": "MabsolCrm - Desktop Data Synchronization Agent",
   "main": "main.js",
   "scripts": {
     "start": "electron .",
@@ -75,7 +75,7 @@
   },
   "keywords": [
     "mabsol",
-    "pharma-crm",
+    "mabsol-crm",
     "sync-agent",
     "database-sync"
   ],

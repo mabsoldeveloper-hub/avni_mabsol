@@ -1,5 +1,5 @@
 /**
- * User role constants for Mabsol Pharma CRM
+ * User role constants for MabsolCrm
  */
 
 // Role Type strings stored in DB

@@ -43,15 +43,15 @@ export async function POST(req: Request) {
       if (channel === "whatsapp") {
         const res = await NotificationGatewayService.sendWhatsApp({
           to: testRecipient,
-          message: "🧪 *Mabsol Pharma*: WhatsApp Gateway connection test successful! ✅",
+          message: "🧪 *MabsolCrm*: WhatsApp Gateway connection test successful! ✅",
           config: settings as any,
         });
         return NextResponse.json(res);
       } else if (channel === "email") {
         const res = await NotificationGatewayService.sendEmail({
           to: testRecipient,
-          subject: "🧪 Mabsol Pharma Email Gateway Test",
-          html: "<div style='font-family: Arial; padding: 15px;'><h3>✅ Test Email Successful</h3><p>Your SMTP/Email settings are configured properly in Mabsol Pharma CRM.</p></div>",
+          subject: "🧪 MabsolCrm Email Gateway Test",
+          html: "<div style='font-family: Arial; padding: 15px;'><h3>✅ Test Email Successful</h3><p>Your SMTP/Email settings are configured properly in MabsolCrm.</p></div>",
           config: settings as any,
         });
         return NextResponse.json(res);

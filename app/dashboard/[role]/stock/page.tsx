@@ -378,7 +378,7 @@ export default function StockDashboard() {
                         <h1 className="text-3xl font-semibold tracking-tight text-slate-900">
                             Stock Dashboard
                         </h1>
-                        <p className="text-xs text-slate-500 mt-1">Mabsol Pharma · Live inventory overview</p>
+                        <p className="text-xs text-slate-500 mt-1">MabsolCrm · Live inventory overview</p>
                     </div>
                     <span className="text-xs text-slate-400">
                         Updated {new Date(data.generatedAt).toLocaleString("en-IN")}

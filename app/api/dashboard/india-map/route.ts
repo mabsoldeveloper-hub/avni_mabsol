@@ -31,7 +31,7 @@ import {
  * GLEDGER, PRO, PROBAT, ORDER.
  *
  * FIX — Party Directory was empty / junk-filled. Checked
- * mabsol_pharma_crm_vfp_new_folder_order.json directly: it has 297 rows.
+ * mabsol_crm_vfp_new_folder_order.json directly: it has 297 rows.
  *   - If the "order" collection in your MongoDB is empty right now, this
  *     API will correctly return an empty party list — that's a data
  *     problem, not a code problem. Import all 8 provided JSON files into

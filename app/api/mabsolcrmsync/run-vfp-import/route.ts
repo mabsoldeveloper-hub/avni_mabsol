@@ -108,7 +108,7 @@ export async function POST() {
     let prgLines = [
       "SET SAFETY OFF",
       "SET TALK OFF",
-      'WAIT WINDOW "Mabsol Pharma CRM - Starting MabsolCRM Import..." TIMEOUT 1',
+      'WAIT WINDOW "MabsolCrm - Starting Import..." TIMEOUT 1',
       ""
     ];
     let copiedCount = 0;
@@ -134,7 +134,7 @@ export async function POST() {
       copiedCount++;
     }
 
-    prgLines.push('WAIT WINDOW "Mabsol Pharma CRM - MabsolCRM Import Complete!" TIMEOUT 1.5');
+    prgLines.push('WAIT WINDOW "MabsolCrm - Import Complete!" TIMEOUT 1.5');
     prgLines.push("QUIT");
     fs.writeFileSync(prgPath, prgLines.join("\r\n"));
 

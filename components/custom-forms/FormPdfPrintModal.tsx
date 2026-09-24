@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import React, { useRef } from "react";
 import { FaPrint, FaTimes, FaQrcode, FaCheckCircle, FaFileAlt } from "react-icons/fa";
@@ -116,7 +116,7 @@ tr:nth-child(even) td{background:#f8fafc;}
 <body>
 <div class="header">
   <div>
-    <div class="brand-name">Mabsol Pharma CRM</div>
+    <div class="brand-name">MabsolCrm</div>
     <div class="brand-tagline">Enterprise Custom Form Studio</div>
     <div class="doc-title">${template.title}</div>
     ${template.category ? `<span class="doc-cat">${template.category}</span>` : ""}
@@ -145,7 +145,7 @@ tr:nth-child(even) td{background:#f8fafc;}
 <div class="section-title">&#9642; Submission Form Responses</div>
 <div class="field-grid">${fieldCells}</div>
 <div class="footer">
-  <div>Generated via Mabsol Pharma CRM Form Studio</div>
+  <div>Generated via MabsolCrm Form Studio</div>
   <div class="footer-stamp">SEC-CONFIRMED &middot; ${new Date().toLocaleDateString("en-IN")}</div>
 </div>
 <script>window.addEventListener('load',function(){setTimeout(function(){window.print();},400);});</script>
@@ -249,7 +249,7 @@ tr:nth-child(even) td{background:#f8fafc;}
             {/* Header */}
             <div className="flex items-start justify-between border-b-2 border-indigo-600 pb-5 mb-6">
               <div>
-                <div className="text-xl font-black text-indigo-600 tracking-widest uppercase">Mabsol Pharma CRM</div>
+                <div className="text-xl font-black text-indigo-600 tracking-widest uppercase">MabsolCrm</div>
                 <div className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider mt-0.5">Enterprise Custom Form Studio</div>
                 <div className="text-base font-bold text-slate-900 mt-2">{template.title}</div>
                 {template.category && (
@@ -309,7 +309,7 @@ tr:nth-child(even) td{background:#f8fafc;}
 
             {/* Footer */}
             <div className="mt-10 pt-4 border-t border-slate-200 flex items-center justify-between text-[10px] text-slate-400 font-semibold">
-              <div>Generated automatically via Mabsol Pharma CRM Form Studio</div>
+              <div>Generated automatically via MabsolCrm Form Studio</div>
               <div className="bg-slate-100 border border-slate-200 px-3 py-1 rounded font-mono text-slate-500">
                 SEC-CONFIRMED &middot; {new Date().toLocaleDateString("en-IN")}
               </div>

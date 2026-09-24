@@ -141,7 +141,7 @@ export async function POST(req: Request) {
                   <p>Hello <strong>${r.name}</strong>,</p>
                   <div style="font-size: 14px; line-height: 1.6; color: #334155; white-space: pre-wrap;">${personalizedMsg}</div>
                   <hr style="border: 0; border-top: 1px solid #e2e8f0; margin: 20px 0;" />
-                  <p style="font-size: 11px; color: #94a3b8;">Sent via Mabsol Pharma CRM Broadcast</p>
+                  <p style="font-size: 11px; color: #94a3b8;">Sent via MabsolCrm Broadcast</p>
                 </div>`,
           config,
         });

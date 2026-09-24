@@ -30,9 +30,9 @@ export default function BroadcastMessagePage() {
   const [areasList, setAreasList] = useState<any[]>([]);
   const [rolesList, setRolesList] = useState<any[]>([]);
 
-  const [title, setTitle] = useState("Important Announcement from Mabsol Pharma");
+  const [title, setTitle] = useState("Important Announcement from MabsolCrm");
   const [messageBody, setMessageBody] = useState(
-    "Dear {name},\n\nPlease review your latest targets and active customer orders for {area}. Kindly ensure all daily field reports are updated on time.\n\nRegards,\nMabsol Pharma Team"
+    "Dear {name},\n\nPlease review your latest targets and active customer orders for {area}. Kindly ensure all daily field reports are updated on time.\n\nRegards,\nMabsolCrm Team"
   );
 
   const [sending, setSending] = useState(false);
@@ -108,7 +108,7 @@ export default function BroadcastMessagePage() {
     if (type === "launch") {
       setTitle("🚀 New Product Launch Notice");
       setMessageBody(
-        "Dear {name},\n\nWe are excited to introduce our new formulation now available in {area}! Reach out to your doctor network to discuss samples and place initial stock bookings.\n\nBest,\nMabsol Pharma"
+        "Dear {name},\n\nWe are excited to introduce our new formulation now available in {area}! Reach out to your doctor network to discuss samples and place initial stock bookings.\n\nBest,\nMabsolCrm"
       );
     } else if (type === "target") {
       setTitle("🎯 Mid-Cycle Target & Performance Update");

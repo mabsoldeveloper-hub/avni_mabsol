@@ -342,7 +342,7 @@ function createWindow() {
       nodeIntegration: false,
       devTools: false,
     },
-    title: "Mabsol Pharma CRM - Desktop Sync Agent",
+    title: "MabsolCrm - Desktop Sync Agent",
   });
 
   mainWindow.setMenuBarVisibility(false);

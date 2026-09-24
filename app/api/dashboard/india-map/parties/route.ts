@@ -25,7 +25,7 @@ import {
  *      below can produce rows that don't exist in the DB. Import the 8
  *      provided VFP JSON exports (see the import script) into the exact
  *      collection names models/IndiaMapModels.ts expects, in particular
- *      "order" for mabsol_pharma_crm_vfp_new_folder_order.json.
+ *      "order" for mabsol_crm_vfp_new_folder_order.json.
  *   2. isRealParty() is now row-aware, so accounting/ledger heads that
  *      don't match the old keyword-only filter (RENT, SALARY & WAGES,
  *      CASH, FREIGHT, DEPRECIATION A/C, CAPITAL ACCOUNT, PROFIT & LOSS A/C,

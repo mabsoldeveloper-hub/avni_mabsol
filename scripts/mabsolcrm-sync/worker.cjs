@@ -92,7 +92,7 @@ main().catch((error) => {
 
 async function main() {
   console.log("========================================================");
-  console.log("  Mabsol Pharma CRM - Desktop DBF Sync Worker");
+  console.log("  MabsolCrm - Desktop DBF Sync Worker");
   console.log("========================================================");
   console.log(`[vfp-worker] Cloud URL    : ${CLOUD_URL}`);
   console.log(`[vfp-worker] Account Email: ${USER_EMAIL || "(fetched dynamically)"}`);

@@ -33,6 +33,7 @@ export async function POST() {
         path.join("/home/vfpuser/MabsolPRG", baseName),
         path.join(/*turbopackIgnore: true*/ process.cwd(), "VfpNew", baseName),
         path.join(/*turbopackIgnore: true*/ process.cwd(), baseName),
+        path.join("/home/vfpuser/MabsolCrm/VfpNew", baseName),
         path.join("/home/vfpuser/Mabsol_pharma_crm/VfpNew", baseName),
         path.join("/home/vfpuser/VfpNew", baseName),
         path.join("/home/vfpuser", baseName),

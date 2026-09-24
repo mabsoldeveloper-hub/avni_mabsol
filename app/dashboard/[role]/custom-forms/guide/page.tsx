@@ -32,7 +32,7 @@ export default function FormStudioGuidePage() {
       id: "templates",
       category: "1-Click Presets",
       icon: FaMagic,
-      title: "1-Click Ready Pharma CRM Templates Library",
+      title: "1-Click Ready MabsolCrm Templates Library",
       badge: "Instant Setup",
       accent: "from-violet-500 to-indigo-600",
       description:
@@ -230,7 +230,7 @@ export default function FormStudioGuidePage() {
       description:
         "Transform submitted form entries into branded PDF reports complete with company header, e-signatures, GPS maps, and QR stamps.",
       details: [
-        "Official Mabsol Pharma CRM branded header & logo",
+        "Official MabsolCrm branded header & logo",
         "Itemized sub-table grid printing for POB & Expense bills",
         "E-Signature & GPS Verification stamp embedding",
         "1-Click browser print & PDF download engine",
@@ -274,7 +274,7 @@ export default function FormStudioGuidePage() {
               Custom Form Studio - Feature Showcase & Guide
             </h1>
             <p className="text-sm text-slate-300 max-w-3xl leading-relaxed">
-              Form Studio is a complete **No-Code Application & Workflow Automation Suite** for Pharma CRM. 
+              Form Studio is a complete **No-Code Application & Workflow Automation Suite** for MabsolCrm. 
               Build multi-step forms, capture digital e-signatures, GPS stamps, file uploads, sub-table line items, and auto-sync entries directly into your database.
             </p>
           </div>

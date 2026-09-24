@@ -24,6 +24,7 @@ export async function GET() {
       ? [
           "/home/vfpuser/MabsolEXE/MabsolCRM.exe",
           "/home/vfpuser/MabsolEXE/MabsolCRM.EXE",
+          "/home/vfpuser/MabsolCrm/VfpNew/MabsolCRM.EXE",
           "/home/vfpuser/Mabsol_pharma_crm/VfpNew/MabsolCRM.EXE",
           "/home/vfpuser/VfpNew/MabsolCRM.EXE",
           "MabsolCRM.EXE"
@@ -38,6 +39,7 @@ export async function GET() {
       ? [
           "/home/vfpuser/MabsolPRG/7.PRG",
           "/home/vfpuser/MabsolPRG/7.prg",
+          "/home/vfpuser/MabsolCrm/VfpNew/7.PRG",
           "/home/vfpuser/Mabsol_pharma_crm/VfpNew/7.PRG",
           "/home/vfpuser/VfpNew/7.PRG",
           "7.PRG"
@@ -56,6 +58,8 @@ export async function GET() {
           "Backup"
         ]
       : [
+          "D:\\Avni_MabsolCRM\\data",
+          "D:\\MabsolCrm\\data",
           "D:\\Mabsol_pharma_crm\\data",
           "Backup"
         ];

@@ -133,11 +133,11 @@ export default function EmailCampaignPage() {
     </ul>
   </div>
   <p style="font-size: 14px; color: #64748b;">
-    Contact your regional sales executive or place your order directly via Mabsol Pharma CRM Portal.
+    Contact your regional sales executive or place your order directly via MabsolCrm Portal.
   </p>
   <hr style="border: none; border-top: 1px solid #e2e8f0; margin: 20px 0;" />
   <p style="font-size: 12px; color: #94a3b8; text-align: center;">
-    © ${new Date().getFullYear()} Mabsol Pharma CRM. All rights reserved.
+    © ${new Date().getFullYear()} MabsolCrm. All rights reserved.
   </p>
 </div>`
       );
@@ -150,7 +150,7 @@ export default function EmailCampaignPage() {
     Dear Valued Partner,
   </p>
   <p style="font-size: 15px; line-height: 1.6; color: #475569;">
-    This is a friendly reminder regarding your outstanding invoice balance with Mabsol Pharma. Attached with this email is your latest detailed ledger statement.
+    This is a friendly reminder regarding your outstanding invoice balance with MabsolCrm. Attached with this email is your latest detailed ledger statement.
   </p>
   <div style="background: #fff1f2; border: 1px solid #fecdd3; padding: 16px; margin: 20px 0; border-radius: 8px;">
     <p style="margin: 0; font-weight: bold; color: #be123c;">Action Required:</p>
@@ -163,7 +163,7 @@ export default function EmailCampaignPage() {
   </p>
   <hr style="border: none; border-top: 1px solid #e2e8f0; margin: 20px 0;" />
   <p style="font-size: 12px; color: #94a3b8; text-align: center;">
-    Mabsol Pharma Finance & Accounts Division
+    MabsolCrm Finance & Accounts Division
   </p>
 </div>`
       );
@@ -179,7 +179,7 @@ export default function EmailCampaignPage() {
     Our senior Medical Representative is scheduled to visit your clinic/establishment this week to present sample kits and clinical trial data for our recent Cardiology & Gastroenterology range.
   </p>
   <p style="font-size: 14px; color: #64748b;">
-    Thank you for your continued trust in Mabsol Pharma products.
+    Thank you for your continued trust in MabsolCrm products.
   </p>
 </div>`
       );
@@ -433,7 +433,7 @@ export default function EmailCampaignPage() {
                 </label>
                 <input
                   type="text"
-                  placeholder="e.g. Special Discount on Antibiotics Order - Mabsol Pharma"
+                  placeholder="e.g. Special Discount on Antibiotics Order - MabsolCrm"
                   value={subject}
                   onChange={(e) => setSubject(e.target.value)}
                   className="w-full px-4 py-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-indigo-500 focus:bg-white dark:focus:bg-slate-900 text-sm transition-all"

@@ -155,7 +155,7 @@ export class NotificationGatewayService {
           });
 
           const info = await transporter.sendMail({
-            from: `"${activeConfig.email.fromName || 'Mabsol Pharma'}" <${activeConfig.email.fromEmail || activeConfig.email.smtpUser}>`,
+            from: `"${activeConfig.email.fromName || 'MabsolCrm'}" <${activeConfig.email.fromEmail || activeConfig.email.smtpUser}>`,
             to,
             subject,
             text: text || subject,
@@ -298,8 +298,8 @@ export class NotificationGatewayService {
       .join("\n") || "Products in order";
 
     if (event === "DISPATCHED") {
-      const waMsg = `📦 *Order Dispatched Notice*\n\nDear *${customerName}*,\nYour Order *#${orderNo}* has been dispatched via *${courier}* (AWB: ${trackingNo}).\n\n*Stock & Item Summary:*\n${itemsSummary}\n\nThank you for choosing Mabsol Pharma!`;
-      const emailSubject = `Order #${orderNo} Dispatched — Mabsol Pharma`;
+      const waMsg = `📦 *Order Dispatched Notice*\n\nDear *${customerName}*,\nYour Order *#${orderNo}* has been dispatched via *${courier}* (AWB: ${trackingNo}).\n\n*Stock & Item Summary:*\n${itemsSummary}\n\nThank you for choosing MabsolCrm!`;
+      const emailSubject = `Order #${orderNo} Dispatched — MabsolCrm`;
       const emailHtml = `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: auto; padding: 20px; border: 1px solid #e2e8f0; border-radius: 12px;">
           <h2 style="color: #4f46e5;">📦 Order Dispatched</h2>
@@ -339,7 +339,7 @@ export class NotificationGatewayService {
       }
     } else if (event === "DELIVERED") {
       const waMsg = `✅ *Order Delivered Successfully*\n\nDear *${customerName}*,\nYour Order *#${orderNo}* has been marked as delivered.\n\nPlease inspect the package and let your representative (*${orderTracking.salespersonName || 'MR'}*) know if you have any feedback.\n\nThank you!`;
-      const emailSubject = `Order #${orderNo} Delivered Successfully — Mabsol Pharma`;
+      const emailSubject = `Order #${orderNo} Delivered Successfully — MabsolCrm`;
       const emailHtml = `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: auto; padding: 20px; border: 1px solid #e2e8f0; border-radius: 12px;">
           <h2 style="color: #10b981;">✅ Order Delivered</h2>

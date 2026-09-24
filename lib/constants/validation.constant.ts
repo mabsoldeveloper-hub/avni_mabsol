@@ -1,5 +1,5 @@
 /**
- * Common validation constants and regex patterns for Mabsol Pharma CRM
+ * Common validation constants and regex patterns for MabsolCrm
  */
 
 // ── Regex Patterns ──────────────────────────────────────

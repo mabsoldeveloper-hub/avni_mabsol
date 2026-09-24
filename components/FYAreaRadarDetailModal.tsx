@@ -526,7 +526,7 @@ export default function FYAreaRadarDetailModal({
         if (!comparedStates.length) return;
 
         const rows: string[] = [];
-        rows.push(["Mabsol Pharma CRM — Territory Radar & Customer Deep-Dive Report"].join(","));
+        rows.push(["MabsolCrm — Territory Radar & Customer Deep-Dive Report"].join(","));
         rows.push([`Generated On: ${new Date().toLocaleString("en-IN")}`].join(","));
         rows.push([`Compared States: ${comparedStates.map((s) => s.stateName).join(" vs ")}`].join(","));
         rows.push("");

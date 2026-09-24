@@ -1067,7 +1067,7 @@ export default function ReceiptEntryPage() {
                         <div className="flex items-center justify-between border-b border-slate-200 pb-4">
                             <div>
                                 <h2 className="text-xl font-bold tracking-tight text-emerald-800">
-                                    MAABSOL PHARMA CRM
+                                    MABSOLCRM
                                 </h2>
                                 <p className="text-xs text-slate-500 uppercase tracking-widest font-semibold">
                                     Official Payment Receipt Voucher Slip

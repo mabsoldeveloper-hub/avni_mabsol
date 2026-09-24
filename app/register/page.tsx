@@ -1019,15 +1019,15 @@ export default function RegisterPage() {
               </svg>
             </div>
             <div className="brand-text-col">
-              <span className="brand-name">Mabsol Pharma CRM</span>
-              <span className="brand-tagline">Pharmaceutical Enterprise Onboarding</span>
+              <span className="brand-name">MabsolCrm</span>
+              <span className="brand-tagline">Enterprise CRM Onboarding</span>
             </div>
           </div>
 
           <div className="wizard-heading-box">
-            <h1>Create Your Pharma Account</h1>
+            <h1>Create Your MabsolCrm Account</h1>
             <p className="wizard-subtext">
-              Set up your company, verify GSTINs with live government verification, and launch your pharma CRM workspace.
+              Set up your company, verify GSTINs with live government verification, and launch your MabsolCrm workspace.
             </p>
           </div>
 
@@ -2001,7 +2001,7 @@ export default function RegisterPage() {
                 onClick={handleCompleteRegistration}
                 disabled={loading || !termsAccepted}
               >
-                {loading ? "Creating Pharma CRM Workspace…" : "🚀 Complete Registration & Launch Workspace"}
+                {loading ? "Creating MabsolCrm Workspace…" : "🚀 Complete Registration & Launch Workspace"}
               </button>
             )}
           </div>

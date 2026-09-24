@@ -403,7 +403,7 @@ export default function FYRadarDetailModal({
         if (!fyData || fyData.length === 0) return;
 
         const rows: string[] = [];
-        rows.push(["Mabsol Pharma CRM — Financial Year Radar Deep-Dive Report"].join(","));
+        rows.push(["MabsolCrm — Financial Year Radar Deep-Dive Report"].join(","));
         rows.push([`Generated On: ${new Date().toLocaleString("en-IN")}`].join(","));
         rows.push("");
 

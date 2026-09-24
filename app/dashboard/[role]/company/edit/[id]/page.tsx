@@ -23,7 +23,7 @@ const PHARMA_MODULES = [
   { id: "purchase", label: "Purchase & Inward (GRN)", desc: "Purchase Bills, Debit Notes & Payments" },
   { id: "inventory", label: "Inventory & Expiry Control", desc: "Batch Tracking, Expiry Alerts & Valuation" },
   { id: "accounting", label: "Financial Accounts & Ledgers", desc: "Receipts, Ledgers & Outstanding Dues" },
-  { id: "leads", label: "Pharma CRM & Leads", desc: "Lead Pipelines, Stages & Follow-ups" },
+  { id: "leads", label: "MabsolCrm & Leads", desc: "Lead Pipelines, Stages & Follow-ups" },
   { id: "fieldforce", label: "MR Fieldforce & Reporting", desc: "Doctor Calls, Chemist Visits & Tours" },
   { id: "reports", label: "Executive Reports & MIS", desc: "Sales Analytics, Territory & Tax Reports" },
   { id: "master", label: "Pharma Master Data", desc: "Products, Categories, Divisions & Areas" },

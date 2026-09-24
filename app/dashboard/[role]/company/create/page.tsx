@@ -17,7 +17,7 @@ const PHARMA_MODULES = [
   { id: "purchase", label: "Purchase & Inward (GRN)", desc: "Purchase Bills, Debit Notes & Payments" },
   { id: "inventory", label: "Inventory & Expiry Control", desc: "Batch Tracking, Expiry Alerts & Valuation" },
   { id: "accounting", label: "Financial Accounts & Ledgers", desc: "Receipts, Ledgers & Outstanding Dues" },
-  { id: "leads", label: "Pharma CRM & Leads", desc: "Lead Pipelines, Stages & Follow-ups" },
+  { id: "leads", label: "MabsolCrm & Leads", desc: "Lead Pipelines, Stages & Follow-ups" },
   { id: "fieldforce", label: "MR Fieldforce & Reporting", desc: "Doctor Calls, Chemist Visits & Tours" },
   { id: "reports", label: "Executive Reports & MIS", desc: "Sales Analytics, Territory & Tax Reports" },
   { id: "master", label: "Pharma Master Data", desc: "Products, Categories, Divisions & Areas" },
@@ -493,8 +493,8 @@ export default function CreateCompanyPage() {
               </svg>
             </div>
             <div className="cw-brand-text">
-              <span className="cw-brand-name" style={{ fontFamily: "var(--font-display)" }}>Mabsol Pharma CRM</span>
-              <span className="cw-brand-sub">Register a New Pharma Enterprise</span>
+              <span className="cw-brand-name" style={{ fontFamily: "var(--font-display)" }}>MabsolCrm</span>
+              <span className="cw-brand-sub">Register a New Enterprise</span>
             </div>
           </div>
 
@@ -726,7 +726,7 @@ export default function CreateCompanyPage() {
                       <circle cx="12" cy="9" r="2.5" stroke="currentColor" strokeWidth="1.8"/>
                     </svg>
                   </span>
-                  <textarea rows={2} placeholder="e.g. Plot 17, GIDC Pharma SEZ, Sector 28, Near Water Tank" value={address} onChange={(e) => setAddress(e.target.value)} />
+                  <textarea rows={2} placeholder="e.g. Plot 17, GIDC SEZ, Sector 28, Near Water Tank" value={address} onChange={(e) => setAddress(e.target.value)} />
                 </div>
               </div>
 

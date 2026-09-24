@@ -131,12 +131,21 @@ function resolveCloudUrl(candidateUrl) {
   return url;
 }
 
+function sanitizeFolderPath(dir) {
+  if (!dir) return "";
+  let clean = String(dir).trim().replace(/^["']+|["']+$/g, "").trim();
+  try {
+    clean = path.normalize(clean);
+  } catch {}
+  return clean;
+}
+
 function loadConfig() {
   const defaultUrl = getDefaultCloudUrl();
   const defaults = {
     cloudUrl: defaultUrl,
     companyName: "",
-    companyCode: "E10",
+    companyCode: "",
     sourceDir: "",
     destDir: path.join(USER_DATA_DIR, "staging"),
     autoSync: true,
@@ -148,6 +157,9 @@ function loadConfig() {
     const raw = fs.readFileSync(CONFIG_PATH, "utf8");
     const parsed = JSON.parse(raw);
     parsed.cloudUrl = resolveCloudUrl(parsed.cloudUrl);
+    if (parsed.sourceDir) {
+      parsed.sourceDir = sanitizeFolderPath(parsed.sourceDir);
+    }
     return { ...defaults, ...parsed };
   } catch {
     return defaults;
@@ -156,8 +168,10 @@ function loadConfig() {
 
 function saveConfig(cfg) {
   try {
-    if (cfg && cfg.cloudUrl) {
-      cfg.cloudUrl = resolveCloudUrl(cfg.cloudUrl);
+    if (cfg) {
+      if (cfg.cloudUrl) cfg.cloudUrl = resolveCloudUrl(cfg.cloudUrl);
+      if (cfg.sourceDir) cfg.sourceDir = sanitizeFolderPath(cfg.sourceDir);
+      if (cfg.companyCode !== undefined) cfg.companyCode = (cfg.companyCode || "").trim().toUpperCase();
     }
     fs.mkdirSync(USER_DATA_DIR, { recursive: true });
     fs.writeFileSync(CONFIG_PATH, JSON.stringify(cfg, null, 2), "utf8");
@@ -432,6 +446,7 @@ ipcMain.handle("auth:login", async (_event, { cloudUrl, email, password }) => {
           }
         }
         const verifiedEmail = email || res.data.user?.email || "";
+        const autoCompName = res.data.user?.companyName || res.data.companyName || "";
         const session = {
           user: res.data.user,
           email: verifiedEmail,
@@ -443,6 +458,9 @@ ipcMain.handle("auth:login", async (_event, { cloudUrl, email, password }) => {
         const cfg = loadConfig();
         cfg.userEmail = verifiedEmail;
         cfg.cloudUrl = cleanUrl;
+        if (autoCompName && (!cfg.companyName || cfg.companyName.trim() === "" || cfg.companyName.toLowerCase() === "test")) {
+          cfg.companyName = autoCompName;
+        }
         saveConfig(cfg);
         emitLog("success", `Login verified! Welcome, ${res.data.user?.name || verifiedEmail}`);
         return { success: true, directLogin: true, user: res.data.user, session };
@@ -714,10 +732,25 @@ ipcMain.handle("config:get", async () => {
 ipcMain.handle("config:save", async (_event, newCfg) => {
   const current = loadConfig();
   const merged = { ...current, ...newCfg };
+  if (merged.sourceDir) {
+    merged.sourceDir = sanitizeFolderPath(merged.sourceDir);
+  }
+  if (merged.companyCode !== undefined) {
+    merged.companyCode = (merged.companyCode || "").trim().toUpperCase();
+  }
   const cloudUrl = resolveCloudUrl(merged.cloudUrl || getDefaultCloudUrl());
   const session = loadSession();
 
-  // If a license key is provided, verify and bind to this hardware device immediately!
+  // ALWAYS save the user's settings (folder path, company codes, etc.) to local disk first!
+  const res = saveConfig(merged);
+  if (merged.autoSync) {
+    setupAutoSyncTimer(merged.intervalMins);
+  } else {
+    stopAutoSync();
+  }
+
+  // If a license key is provided, verify and bind to this hardware device
+  let licenseWarning = null;
   if (merged.licenseKey && merged.licenseKey.trim()) {
     try {
       const bindUrl = `${cloudUrl}/api/mabsolcrmsync/license/bind`;
@@ -741,32 +774,25 @@ ipcMain.handle("config:save", async (_event, newCfg) => {
       );
 
       if (!bindRes.data || !bindRes.data.success) {
-        const errMsg = bindRes.data?.error || "Failed to verify license key.";
-        emitLog("error", `License verification failed: ${errMsg}`);
-        return { success: false, error: errMsg };
+        licenseWarning = bindRes.data?.error || "License key could not be verified on server.";
+        emitLog("warn", `Settings saved locally, but license check returned: ${licenseWarning}`);
+      } else {
+        merged.isLicenseVerified = true;
+        merged.lastVerifiedLicense = merged.licenseKey.trim();
+        saveConfig(merged);
+        emitLog("success", `License verified & locked to this machine: ${getMachineName()}`);
       }
-
-      emitLog("success", `License verified & locked to this machine: ${getMachineName()}`);
     } catch (bindErr) {
-      const errMsg = bindErr.response?.data?.error || bindErr.message || "License verification failed.";
-      emitLog("error", `License Binding Error: ${errMsg}`);
-      return {
-        success: false,
-        error: errMsg,
-        deviceMismatch: bindErr.response?.data?.deviceMismatch,
-        licenseExpired: bindErr.response?.data?.licenseExpired
-      };
+      licenseWarning = bindErr.response?.data?.error || bindErr.message || "License verification failed.";
+      emitLog("warn", `Settings saved locally. Server response: ${licenseWarning}`);
     }
   }
 
-  const res = saveConfig(merged);
-  if (merged.autoSync) {
-    setupAutoSyncTimer(merged.intervalMins);
-  } else {
-    stopAutoSync();
-  }
   emitLog("info", "Configuration saved successfully.");
-  return res;
+  if (licenseWarning) {
+    return { success: true, licenseWarning, message: `Configuration saved! Notice: ${licenseWarning}` };
+  }
+  return { success: true, message: "Configuration saved successfully." };
 });
 
 ipcMain.handle("license:get-details", async () => {
@@ -791,12 +817,18 @@ ipcMain.handle("license:get-details", async () => {
 });
 
 ipcMain.handle("dialog:select-folder", async (_event, title) => {
-  const result = await dialog.showOpenDialog(mainWindow, {
-    title: title || "Select Directory",
-    properties: ["openDirectory", "createDirectory"]
-  });
-  if (result.canceled || !result.filePaths.length) return null;
-  return result.filePaths[0];
+  try {
+    const parentWin = (mainWindow && !mainWindow.isDestroyed()) ? mainWindow : null;
+    const result = await dialog.showOpenDialog(parentWin, {
+      title: title || "Select Directory",
+      properties: ["openDirectory"]
+    });
+    if (result.canceled || !result.filePaths || !result.filePaths.length) return null;
+    return result.filePaths[0];
+  } catch (err) {
+    emitLog("error", `Folder select dialog error: ${err.message}`);
+    return null;
+  }
 });
 
 let isAutoSyncPaused = false;
@@ -850,18 +882,24 @@ async function executeDecryptionAndSync(triggerReason = "manual") {
 
   const config = loadConfig();
   const session = loadSession();
-  const rawCodes = (config.companyCode || "E10").trim();
+  const rawCodes = (config.companyCode || "").trim();
   const companyCodes = rawCodes.split(/[,\s;]+/).map(c => c.trim().toUpperCase()).filter(Boolean);
-  if (companyCodes.length === 0) companyCodes.push("E10");
+  if (companyCodes.length === 0) {
+    const msg = "Company Code is not set. Please click Edit Configuration and enter your Company Code(s) (e.g. B01).";
+    emitLog("error", msg);
+    isSyncing = false;
+    emitStatus({ isSyncing: false, error: msg });
+    return { success: false, message: msg };
+  }
 
-  const sourceDir = config.sourceDir;
+  const sourceDir = sanitizeFolderPath(config.sourceDir);
   // Destination staging folder is internal and automated! No need to configure manually.
   const baseStagingDir = config.destDir || path.join(USER_DATA_DIR, "staging");
 
   emitLog("info", `=== Starting Secure Extraction & Cloud Sync (Companies: [${companyCodes.join(", ")}], Trigger: ${triggerReason}) ===`);
 
   if (!sourceDir || !fs.existsSync(sourceDir)) {
-    const msg = `Source folder does not exist: ${sourceDir || "(not set)"}`;
+    const msg = `Source folder does not exist: "${sourceDir || "(not set)"}". Please check your source folder path in settings.`;
     emitLog("error", msg);
     isSyncing = false;
     emitStatus({ isSyncing: false, error: msg });
@@ -901,14 +939,72 @@ async function executeDecryptionAndSync(triggerReason = "manual") {
   const cloudUrl = resolveCloudUrl(session?.cloudUrl || config.cloudUrl);
   const authToken = session?.token || "";
   const userEmail = session?.email || config.userEmail || "";
-  const licenseKey = config.licenseKey || "";
+  const licenseKey = (config.licenseKey || "").trim();
+
+  // 1. License key presence check: if missing, abort immediately without converting any files
+  if (!licenseKey) {
+    const msg = "License Key is missing in settings. File conversion and extraction aborted.";
+    emitLog("error", msg);
+    isSyncing = false;
+    emitStatus({ isSyncing: false, error: msg });
+    return { success: false, message: msg };
+  }
 
   // Check connectivity right before processing:
   const isCloudReachable = await checkConnectivity(cloudUrl);
   emitNetwork(isCloudReachable);
+
+  // 2. Pre-validate License Key with Server BEFORE converting any files!
   if (isCloudReachable) {
-    emitLog("info", "Cloud connection active. Converted data will sync directly to server (no local files stored).");
+    try {
+      const bindUrl = `${cloudUrl}/api/mabsolcrmsync/license/bind`;
+      const bindRes = await axios.post(
+        bindUrl,
+        {
+          licenseKey,
+          deviceId: getMachineIdentifier(),
+          deviceName: getMachineName(),
+          userEmail: userEmail || session?.email || ""
+        },
+        {
+          headers: {
+            ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
+            "x-license-key": licenseKey,
+            "x-device-id": getMachineIdentifier(),
+            "x-device-name": getMachineName()
+          },
+          timeout: 10000
+        }
+      );
+
+      if (!bindRes.data || !bindRes.data.success) {
+        const errMsg = bindRes.data?.error || "License key validation failed.";
+        emitLog("error", `[License Rejected] ${errMsg} — Extraction ABORTED. Files will NOT be converted.`);
+        isSyncing = false;
+        emitStatus({ isSyncing: false, error: errMsg });
+        return { success: false, message: errMsg };
+      }
+
+      config.isLicenseVerified = true;
+      config.lastVerifiedLicense = licenseKey;
+      saveConfig(config);
+      emitLog("info", "Cloud connection active. License verified. Converted data will sync directly to server.");
+    } catch (licErr) {
+      const errMsg = licErr.response?.data?.error || licErr.message || "Invalid license key.";
+      emitLog("error", `[License Rejected] ${errMsg} — Extraction ABORTED. Files will NOT be converted.`);
+      isSyncing = false;
+      emitStatus({ isSyncing: false, error: errMsg });
+      return { success: false, message: errMsg };
+    }
   } else {
+    // Offline mode: do NOT convert files if license was never validated online
+    if (!config.isLicenseVerified || config.lastVerifiedLicense !== licenseKey) {
+      const errMsg = "License key has not been verified online with server yet. File conversion is blocked in offline mode.";
+      emitLog("error", errMsg);
+      isSyncing = false;
+      emitStatus({ isSyncing: false, error: errMsg });
+      return { success: false, message: errMsg };
+    }
     emitLog("warn", "No internet connection detected. Extraction will proceed and store files in local hidden vault.");
   }
 
@@ -1136,11 +1232,24 @@ async function executeDecryptionAndSync(triggerReason = "manual") {
         continue;
       }
 
-      // If upload failed midway (e.g. connection reset or DNS failure), fallback to moving to offline vault
+      // If license failed at upload time, purge extracted tables immediately - do not store in offline vault!
+      if (uploadResult.licenseInvalid || uploadResult.licenseExpired || uploadResult.deviceMismatch) {
+        emitLog("error", `Sync rejected for [${compCode}] (${uploadResult.error}). Staging files purged.`);
+        try {
+          for (const file of dbfFiles) {
+            const fp = path.join(compDestDir, file);
+            if (fs.existsSync(fp)) fs.unlinkSync(fp);
+          }
+          fs.rmdirSync(compDestDir);
+        } catch {}
+        continue;
+      }
+
+      // If upload failed midway (e.g. temporary network drop), fallback to moving to offline vault
       emitLog("warn", `Upload interrupted for [${compCode}] (${uploadResult.error}). Moving to secure local vault.`);
     }
 
-    // SCENARIO 2: OFFLINE (or upload failed) -> Move files into Hidden Offline Vault
+    // SCENARIO 2: OFFLINE (temporary network drop) -> Move files into Hidden Offline Vault
     const vaultCompDir = path.join(getHiddenVaultDir(), compCode);
     fs.mkdirSync(vaultCompDir, { recursive: true });
     for (const file of dbfFiles) {
@@ -1301,6 +1410,11 @@ async function uploadDbfBatch(cloudUrl, destDir, dbfFiles, token, email, license
       const licMsg = err.response?.data?.error || "License key has expired. Please generate a new key from Cloud Dashboard.";
       emitLog("error", `License Notice: ${licMsg}`);
       return { success: false, error: licMsg, licenseExpired: true };
+    }
+    if (err.response?.status === 403 && err.response?.data?.licenseInvalid) {
+      const licMsg = err.response?.data?.error || "Invalid license key.";
+      emitLog("error", `License Error: ${licMsg}`);
+      return { success: false, error: licMsg, licenseInvalid: true };
     }
     if (err.response?.status === 403 && err.response?.data?.deviceMismatch) {
       const devMsg = err.response?.data?.error || "License key is bound to another device. Only 1 device allowed per key.";

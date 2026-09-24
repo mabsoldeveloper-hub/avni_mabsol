@@ -1,5 +1,8 @@
 import { NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/auth";
+import Company from "@/models/Company";
+import Tenant from "@/models/Tenant";
+import VfpConfig from "@/models/VfpConfig";
 
 export const dynamic = "force-dynamic";
 
@@ -98,6 +101,23 @@ export async function GET() {
       }
     }
   }
+
+  try {
+    if (!userObj.companyName) {
+      if (userObj.companyId) {
+        const comp: any = await Company.findById(userObj.companyId).lean();
+        if (comp) userObj.companyName = comp.companyName || comp.name || "";
+      }
+      if (!userObj.companyName && userObj.tenantId) {
+        const tenant: any = await Tenant.findOne({ tenantId: userObj.tenantId }).lean();
+        if (tenant) userObj.companyName = tenant.companyName || tenant.name || "";
+      }
+      if (!userObj.companyName) {
+        const vfp: any = await VfpConfig.findOne({ email: userObj.email }).lean();
+        if (vfp) userObj.companyName = vfp.companyName || "";
+      }
+    }
+  } catch {}
 
   return NextResponse.json(
     {

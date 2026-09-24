@@ -299,19 +299,19 @@
                 </div>
                 <div class="form-group flex-1">
                   <label for="companyCodeInput">Company Code(s) <span class="req">*</span></label>
-                  <input type="text" id="companyCodeInput" required placeholder="e.g. E10 or E10, E11"
+                  <input type="text" id="companyCodeInput" required placeholder="e.g. B01 or B01, B02"
                     style="text-transform: uppercase; font-family: monospace; font-weight: 700;" disabled readonly>
-                  <span class="helper">Supports single (E10) or multiple (E10, E11, E12)</span>
+                  <span class="helper">Supports single (B01) or multiple (B01, B02)</span>
                 </div>
               </div>
 
               <div class="form-group">
                 <label for="sourceDirInput">Encrypted Data Folder (Source) <span class="req">*</span></label>
                 <div class="input-with-btn">
-                  <input type="password" id="sourceDirInput" required placeholder="C:\DataFolder or D:\ERPData" disabled readonly>
+                  <input type="text" id="sourceDirInput" required placeholder="C:\DataFolder or D:\ERPData" disabled readonly>
                   <button type="button" id="browseSourceBtn" class="btn-browse" disabled>Browse</button>
                 </div>
-                <span class="helper">Directory containing encrypted ERP data files (e.g. PRO.E10, GLEDGER.E10)</span>
+                <span class="helper">Directory containing encrypted ERP data files (e.g. PRO.B01, GLEDGER.B01)</span>
               </div>
 
               <div class="form-row">
@@ -365,7 +365,8 @@
                   <span>🔒 Edit Configuration</span>
                 </button>
                 <button type="submit" id="saveConfigBtn" class="btn-primary btn-save hidden">
-                  <span>Save Configuration</span>
+                  <span class="btn-text">Save Configuration</span>
+                  <span class="spinner hidden"></span>
                 </button>
                 <button type="button" id="cancelEditBtn" class="btn-secondary hidden">
                   <span>Cancel</span>

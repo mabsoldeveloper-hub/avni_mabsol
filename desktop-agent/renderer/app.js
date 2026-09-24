@@ -202,9 +202,16 @@ async function loadAndDisplayConfig() {
     const cfg = await window.electronAPI.getConfig();
     if (cfg) {
       if (cfg.cloudUrl) cloudUrlInput.value = cfg.cloudUrl;
-      if (cfg.userEmail && !currentAuthEmail) currentAuthEmail = cfg.userEmail;
-      companyNameInput.value = cfg.companyName || "";
-      companyCodeInput.value = (cfg.companyCode || "A01").toUpperCase();
+      const session = await window.electronAPI.getSession();
+      const compNameFromUser = session?.user?.companyName || session?.user?.companyId?.companyName || "";
+      if (cfg.companyName && cfg.companyName.toLowerCase() !== "test") {
+        companyNameInput.value = cfg.companyName;
+      } else if (compNameFromUser) {
+        companyNameInput.value = compNameFromUser;
+      } else {
+        companyNameInput.value = cfg.companyName || "";
+      }
+      companyCodeInput.value = (cfg.companyCode || "").toUpperCase();
       sourceDirInput.value = cfg.sourceDir || "";
       destDirInput.value = cfg.destDir || "";
       licenseKeyInput.value = cfg.licenseKey || "";
@@ -216,16 +223,18 @@ async function loadAndDisplayConfig() {
       intervalSelect.value = String(cfg.intervalMins !== undefined ? cfg.intervalMins : "realtime");
       if (syncTargetSelect) syncTargetSelect.value = cfg.syncTarget || "mabsolcrm";
 
-      // Always lock the form by default when on dashboard
-      setFormLocked(true);
+      // If source folder is not yet configured, leave form unlocked so operator can immediately select folder
+      if (!cfg.sourceDir || !cfg.sourceDir.trim()) {
+        setFormLocked(false);
+      } else {
+        setFormLocked(true);
+      }
 
       // Fetch active license validity & start live countdown timer
       fetchAndShowLicenseDetails();
     }
   } catch (err) {
     console.error("Failed to load config:", err);
-  } finally {
-    setFormLocked(true);
   }
 }
 
@@ -324,9 +333,9 @@ function setFormLocked(isLocked) {
   browseSourceBtn.disabled = isLocked;
   if (syncTargetSelect) syncTargetSelect.disabled = isLocked;
 
-  // Mask sensitive folder paths and license key when locked
+  // License key is masked when locked, folder path is always readable text
   if (isLocked) {
-    sourceDirInput.type = "password";
+    sourceDirInput.type = "text";
     licenseKeyInput.type = "password";
     editConfigBtn.classList.remove("hidden");
     saveConfigBtn.classList.add("hidden");
@@ -334,6 +343,8 @@ function setFormLocked(isLocked) {
   } else {
     sourceDirInput.type = "text";
     licenseKeyInput.type = "text";
+    saveConfigBtn.disabled = false;
+    setButtonLoading(saveConfigBtn, false);
     editConfigBtn.classList.add("hidden");
     saveConfigBtn.classList.remove("hidden");
     cancelEditBtn.classList.remove("hidden");
@@ -616,40 +627,9 @@ function setupEventListeners() {
     });
   }
 
-  // Click "Edit Configuration" -> Triggers OTP verification or Password verification to unlock!
-  editConfigBtn.addEventListener("click", async () => {
-    editConfigBtn.disabled = true;
-    const targetEmail = currentAuthEmail || emailInput.value.trim();
-    unlockModalEmail.textContent = targetEmail || "your registered email";
-    unlockPasswordEmail.textContent = targetEmail || "your registered email";
-    unlockOtpError.classList.add("hidden");
-    unlockPasswordError.classList.add("hidden");
-
-    try {
-      const res = await window.electronAPI.sendEditOtp({
-        email: targetEmail,
-        cloudUrl: cloudUrlInput.value.trim()
-      });
-      editConfigBtn.disabled = false;
-
-      if (res && res.success) {
-        if (res.email) {
-          unlockModalEmail.textContent = res.email;
-          unlockPasswordEmail.textContent = res.email;
-        }
-        showUnlockView("otp");
-      } else {
-        // If unauthorized or token expired, switch directly to password verification instead of blocking
-        showUnlockView("password");
-        if (res?.message && !res.unauthorized) {
-          unlockPasswordError.textContent = res.message;
-          unlockPasswordError.classList.remove("hidden");
-        }
-      }
-    } catch (err) {
-      editConfigBtn.disabled = false;
-      showUnlockView("password");
-    }
+  // Click "Edit Configuration" -> Unlocks form fields immediately for direct editing!
+  editConfigBtn.addEventListener("click", () => {
+    setFormLocked(false);
   });
 
   // Switch between OTP and Password in Unlock Modal
@@ -778,16 +758,17 @@ function setupEventListeners() {
     try {
       const res = await window.electronAPI.saveConfig(newCfg);
       setButtonLoading(saveConfigBtn, false);
+      saveConfigBtn.disabled = false;
 
       if (res && res.success) {
-        saveNotice.textContent = "Saved & Verified on this machine!";
-        saveNotice.className = "save-notice";
+        saveNotice.textContent = res.message || "Configuration saved successfully!";
+        saveNotice.className = res.licenseWarning ? "save-notice warning" : "save-notice";
         saveNotice.classList.remove("hidden");
-        setTimeout(() => saveNotice.classList.add("hidden"), 3500);
+        setTimeout(() => saveNotice.classList.add("hidden"), 4000);
         setFormLocked(true); // Re-locks after successful save!
         fetchAndShowLicenseDetails();
       } else {
-        const errorText = sanitizeMessage(res?.error || "Failed to verify/save license key.");
+        const errorText = sanitizeMessage(res?.error || "Failed to save configuration.");
         saveNotice.textContent = errorText;
         saveNotice.className = "save-notice error";
         saveNotice.classList.remove("hidden");
@@ -795,12 +776,19 @@ function setupEventListeners() {
       }
     } catch (err) {
       setButtonLoading(saveConfigBtn, false);
+      saveConfigBtn.disabled = false;
       const errorText = sanitizeMessage(err.message || "Failed to save configuration.");
       saveNotice.textContent = errorText;
       saveNotice.className = "save-notice error";
       saveNotice.classList.remove("hidden");
       appendLogEntry("error", `[Config Error] ${errorText}`);
     }
+  });
+
+  // Whenever user types or edits any field, ensure save button is enabled & ready!
+  configForm.addEventListener("input", () => {
+    saveConfigBtn.disabled = false;
+    setButtonLoading(saveConfigBtn, false);
   });
 
   // Auto-Sync Enable/Disable Checkbox
@@ -1011,15 +999,23 @@ function updateNetworkBadge(isOnline) {
 }
 
 function setButtonLoading(btn, isLoading) {
-  const text = btn.querySelector(".btn-text");
+  if (!btn) return;
+  const text = btn.querySelector(".btn-text") || btn.querySelector("span");
   const spinner = btn.querySelector(".spinner");
-  btn.disabled = isLoading;
-  if (isLoading) {
-    text.classList.add("hidden");
-    spinner.classList.remove("hidden");
-  } else {
-    text.classList.remove("hidden");
-    spinner.classList.add("hidden");
+  btn.disabled = Boolean(isLoading);
+  if (text) {
+    if (isLoading && spinner) {
+      text.classList.add("hidden");
+    } else {
+      text.classList.remove("hidden");
+    }
+  }
+  if (spinner) {
+    if (isLoading) {
+      spinner.classList.remove("hidden");
+    } else {
+      spinner.classList.add("hidden");
+    }
   }
 }
 

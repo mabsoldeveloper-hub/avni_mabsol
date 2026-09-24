@@ -66,11 +66,25 @@ export async function POST(request: NextRequest) {
     const deviceName = request.headers.get("x-device-name") || "";
 
     if (licenseKey) {
-      const config =
+      let config: any =
+        (await VfpConfig.findOne({ license: licenseKey })) ||
         (await VfpConfig.findOne({ email: user.email })) ||
         (await VfpConfig.findOne({ key: "vfp_sync_config" }));
 
       if (config) {
+        // If config was found by email/key but has a different license, double check if licenseKey exists in another config
+        if (config.license && config.license !== licenseKey) {
+          const directMatch = await VfpConfig.findOne({ license: licenseKey });
+          if (directMatch) {
+            config = directMatch;
+          } else {
+            return NextResponse.json(
+              { success: false, licenseInvalid: true, error: "Invalid license key." },
+              { status: 403 }
+            );
+          }
+        }
+
         // 1. Check if key is in retired/expired history
         const isReusedOrRetired = (config.usedLicenses || []).some((u: any) => u.key === licenseKey);
         if (isReusedOrRetired) {
@@ -145,6 +159,29 @@ export async function POST(request: NextRequest) {
             );
           }
         }
+
+        // Keep user config's license aligned so future operations know this user is using this license
+        if (user?.email && (!config.email || config.email !== user.email)) {
+          await VfpConfig.updateOne(
+            { email: user.email },
+            {
+              $set: {
+                license: licenseKey,
+                licenseExpiresAt: config.licenseExpiresAt,
+                licenseIssuedAt: config.licenseIssuedAt,
+                licenseStatus: "active",
+                boundDeviceId: deviceId || config.boundDeviceId,
+                boundDeviceName: deviceName || config.boundDeviceName,
+              },
+            },
+            { upsert: true }
+          );
+        }
+      } else {
+        return NextResponse.json(
+          { success: false, licenseInvalid: true, error: "Invalid license key. No matching active license was found on the server." },
+          { status: 403 }
+        );
       }
     }
 

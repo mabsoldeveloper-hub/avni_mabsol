@@ -133,11 +133,11 @@ export default function EmailCampaignPage() {
     </ul>
   </div>
   <p style="font-size: 14px; color: #64748b;">
-    Contact your regional sales executive or place your order directly via Mabsol Pharma CRM Portal.
+    Contact your regional sales executive or place your order directly via MabsolCrm Portal.
   </p>
   <hr style="border: none; border-top: 1px solid #e2e8f0; margin: 20px 0;" />
   <p style="font-size: 12px; color: #94a3b8; text-align: center;">
-    © ${new Date().getFullYear()} Mabsol Pharma CRM. All rights reserved.
+    © ${new Date().getFullYear()} MabsolCrm. All rights reserved.
   </p>
 </div>`
       );

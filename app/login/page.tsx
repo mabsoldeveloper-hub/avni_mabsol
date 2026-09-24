@@ -1058,7 +1058,7 @@ export default function LoginPage() {
                   <circle cx="14.8" cy="14.8" r="1" fill="#ffffff" />
                 </svg>
               </span>
-              <span className="brand-name">Mabsol Pharma CRM</span>
+              <span className="brand-name">MabsolCrm</span>
             </div>
 
             {/* Enterprise Security Chip */}

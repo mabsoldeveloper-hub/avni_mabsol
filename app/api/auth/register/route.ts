@@ -455,7 +455,7 @@ export async function POST(req: Request) {
 
     return NextResponse.json({
       success: true,
-      message: "Pharma CRM Workspace & Account Created. Your account is pending Super Admin approval before you can log in.",
+      message: "MabsolCrm Workspace & Account Created. Your account is pending Super Admin approval before you can log in.",
       isApproved: false,
       status: USER_APPROVAL_STATUS.PENDING,
       tenantId,

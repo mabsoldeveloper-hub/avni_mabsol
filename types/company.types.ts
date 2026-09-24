@@ -1,5 +1,5 @@
 /**
- * Shared TypeScript interfaces for Mabsol Pharma CRM
+ * Shared TypeScript interfaces for MabsolCrm
  */
 
 // ── Auth Types ──────────────────────────────────────────

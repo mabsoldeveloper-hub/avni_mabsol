@@ -87,6 +87,9 @@ export async function POST(request: NextRequest) {
 
       // Bind machine immediately across all config representations
       const updatePayload = {
+        license: licenseKey,
+        licenseExpiresAt: config.licenseExpiresAt,
+        licenseIssuedAt: config.licenseIssuedAt,
         boundDeviceId: deviceId,
         boundDeviceName: deviceName || "Operator Machine",
         boundAt: now,
@@ -109,6 +112,18 @@ export async function POST(request: NextRequest) {
           { $set: updatePayload }
         );
       }
+    } else if (userEmail) {
+      await VfpConfig.updateMany(
+        { email: userEmail },
+        {
+          $set: {
+            license: licenseKey,
+            licenseExpiresAt: config.licenseExpiresAt,
+            licenseIssuedAt: config.licenseIssuedAt,
+            licenseStatus: "active",
+          },
+        }
+      );
     }
 
     return NextResponse.json({

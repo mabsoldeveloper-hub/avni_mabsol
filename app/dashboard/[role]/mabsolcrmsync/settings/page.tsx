@@ -208,11 +208,11 @@ export default function VfpSettingsPage() {
             </button>
 
             <a
-              href="/api/mabsolcrmsync/download-agent?type=portable"
+              href="/api/mabsolcrmsync/download-agent?type=zip"
               className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-semibold shadow-xs transition-colors"
             >
               <Download size={13} />
-              <span>Download agent (.EXE)</span>
+              <span>Download agent (.ZIP)</span>
             </a>
           </div>
         </div>
@@ -407,7 +407,7 @@ export default function VfpSettingsPage() {
               </span>
             </div>
 
-            {/* Download Option 1: Portable Client */}
+            {/* Download Option 1: Portable Client (ZIP - Recommended) */}
             <div className="rounded-lg border-2 border-blue-500/80 bg-blue-50/20 p-2.5 sm:p-3 flex items-center justify-between gap-3">
               <div className="flex items-center gap-2.5">
                 <div className="w-8 h-8 rounded-md bg-white border border-blue-200 flex items-center justify-center text-slate-700 shrink-0">
@@ -416,14 +416,39 @@ export default function VfpSettingsPage() {
                 <div>
                   <div className="flex items-center gap-1.5">
                     <strong className="text-xs sm:text-sm font-bold text-slate-900">
-                      Portable client
+                      Portable client (.ZIP)
                     </strong>
                     <span className="text-[9.5px] uppercase font-bold tracking-wider px-1.5 py-0.2 rounded-full bg-blue-600 text-white">
                       Recommended
                     </span>
                   </div>
                   <span className="text-[11px] text-slate-500 block mt-0.5">
-                    Direct run • no installation • 76.4 MB
+                    Clean download • No Chrome warning • 76.3 MB
+                  </span>
+                </div>
+              </div>
+
+              <a
+                href="/api/mabsolcrmsync/download-agent?type=zip"
+                title="Download Portable ZIP"
+                className="w-8 h-8 rounded-lg bg-blue-600 hover:bg-blue-700 text-white flex items-center justify-center shadow-xs transition-colors shrink-0"
+              >
+                <Download size={14} />
+              </a>
+            </div>
+
+            {/* Download Option 2: Direct Standalone EXE */}
+            <div className="rounded-lg border border-slate-200 bg-white p-2.5 sm:p-3 flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-md bg-slate-50 border border-slate-200 flex items-center justify-center text-slate-700 shrink-0">
+                  <AppWindow size={16} />
+                </div>
+                <div>
+                  <strong className="text-xs sm:text-sm font-bold text-slate-900 block">
+                    Direct portable (.EXE)
+                  </strong>
+                  <span className="text-[11px] text-slate-500 block mt-0.5">
+                    Standalone executable without ZIP • 76.4 MB
                   </span>
                 </div>
               </div>
@@ -431,13 +456,13 @@ export default function VfpSettingsPage() {
               <a
                 href="/api/mabsolcrmsync/download-agent?type=portable"
                 title="Download Portable EXE"
-                className="w-8 h-8 rounded-lg bg-blue-600 hover:bg-blue-700 text-white flex items-center justify-center shadow-xs transition-colors shrink-0"
+                className="w-8 h-8 rounded-lg bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-700 flex items-center justify-center transition-colors shrink-0"
               >
                 <Download size={14} />
               </a>
             </div>
 
-            {/* Download Option 2: Windows Installer */}
+            {/* Download Option 3: Windows Installer */}
             <div className="rounded-lg border border-slate-200 bg-white p-2.5 sm:p-3 flex items-center justify-between gap-3">
               <div className="flex items-center gap-2.5">
                 <div className="w-8 h-8 rounded-md bg-slate-50 border border-slate-200 flex items-center justify-center text-slate-700 shrink-0">

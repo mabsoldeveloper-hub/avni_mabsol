@@ -7,6 +7,9 @@ import { sendOtpEmail } from "@/lib/sendEmail";
 import { sendWhatsAppOTP } from "@/lib/whatsapp";
 import Otp from "@/models/Otp";
 import User from "@/models/User";
+import Company from "@/models/Company";
+import Tenant from "@/models/Tenant";
+import VfpConfig from "@/models/VfpConfig";
 import {
   ensureSuperAdminUser,
   isSuperAdminUser,
@@ -95,11 +98,28 @@ export async function POST(req: Request) {
       { expiresIn: (isAgent ? "30d" : sessionTiming.jwtExpiry) as any }
     );
 
+    let companyName = "";
+    try {
+      if (user.companyId) {
+        const comp: any = await Company.findById(user.companyId).lean();
+        if (comp) companyName = comp.companyName || comp.name || "";
+      }
+      if (!companyName && user.tenantId) {
+        const tenant: any = await Tenant.findOne({ tenantId: user.tenantId }).lean();
+        if (tenant) companyName = tenant.companyName || tenant.name || "";
+      }
+      if (!companyName) {
+        const vfp: any = await VfpConfig.findOne({ email: user.email }).lean();
+        if (vfp) companyName = vfp.companyName || "";
+      }
+    } catch {}
+
     const userResponse = {
       _id: user._id,
       tenantId: user.tenantId,
       name: user.name,
       email: user.email,
+      companyName,
       roleId: user.roleId,
       roleType: user.roleType,
       companyId: user.companyId,

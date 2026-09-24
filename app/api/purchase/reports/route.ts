@@ -49,6 +49,12 @@ export async function GET(req: Request) {
 
     const webBills = await PurchaseBill.find(billQuery).sort({ billDate: -1 }).lean();
 
+    const seenBillNos = new Set<string>();
+    webBills.forEach((b: any) => {
+      const key = String(b.billNumber || b.supplierInvoiceNo || "").trim().toUpperCase();
+      if (key) seenBillNos.add(key);
+    });
+
     // Fetch legacy VFP bills from SalesMdis
     const vfpBillQuery: any = { TYPE: { $in: ["P", "PURCHASE"] } };
     if (vendorRegex) vfpBillQuery.NAME = vendorRegex;
@@ -56,15 +62,21 @@ export async function GET(req: Request) {
 
     const vfpBills = await SalesMdis.find(vfpBillQuery).sort({ DATE: -1 }).limit(200).lean();
 
-    // Map VFP bills into uniform format
-    const mappedVfpBills = vfpBills.map((v: any) => {
+    // Map VFP bills into uniform format, filtering out duplicates
+    const mappedVfpBills: any[] = [];
+    vfpBills.forEach((v: any) => {
+      const billNo = String(v.VCN || v.VOUCHER || v.PM || v.VNO || "").trim();
+      const upperNo = billNo.toUpperCase();
+      if (upperNo && seenBillNos.has(upperNo)) return;
+      if (upperNo) seenBillNos.add(upperNo);
+
       const net = Math.abs(Number(v.FINAL || v.AMOUNT || 0));
-      return {
+      mappedVfpBills.push({
         _id: v._id,
-        billNumber: v.VNO || "VFP-PUR",
-        supplierInvoiceNo: v.INVNO || v.VNO || "N/A",
+        billNumber: billNo || "VFP-PUR",
+        supplierInvoiceNo: v.PM || v.INVNO || v.VNO || "N/A",
         billDate: v.DATE ? String(v.DATE).slice(0, 10) : "",
-        vendorName: v.NAME || "VFP Supplier",
+        vendorName: v.NAME || v.PARNAM || v.CODEP || "VFP Supplier",
         vendorGst: v.GST || "",
         netAmount: net,
         paidAmount: net,
@@ -72,7 +84,7 @@ export async function GET(req: Request) {
         paymentStatus: "Paid",
         taxType: "Intrastate",
         isLegacy: true,
-      };
+      });
     });
 
     // Combine Web + VFP Bills

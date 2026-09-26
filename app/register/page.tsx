@@ -163,12 +163,6 @@ export default function RegisterPage() {
   const [drugLicenseNo, setDrugLicenseNo] = useState("");
 
   const [name, setName] = useState("");
-  const [mobile, setMobile] = useState("");
-  const [mobileOtp, setMobileOtp] = useState("");
-  const [mobileOtpSent, setMobileOtpSent] = useState(false);
-  const [mobileVerified, setMobileVerified] = useState(false);
-  const [mobileSending, setMobileSending] = useState(false);
-  const [mobileVerifying, setMobileVerifying] = useState(false);
 
   const [email, setEmail] = useState("");
   const [emailOtp, setEmailOtp] = useState("");
@@ -182,8 +176,7 @@ export default function RegisterPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
 
-  // 60-Second Countdown Timers for OTP
-  const [mobileCountdown, setMobileCountdown] = useState<number>(0);
+  // 60-Second Countdown Timer for Email OTP
   const [emailCountdown, setEmailCountdown] = useState<number>(0);
 
   // Terms and Conditions
@@ -197,9 +190,8 @@ export default function RegisterPage() {
   useEffect(() => {
     let timer: NodeJS.Timeout;
     const hasBranchCountdown = additionalGsts.some((b) => (b.emailCountdown || 0) > 0);
-    if (mobileCountdown > 0 || emailCountdown > 0 || hasBranchCountdown) {
+    if (emailCountdown > 0 || hasBranchCountdown) {
       timer = setInterval(() => {
-        setMobileCountdown((prev) => (prev > 0 ? prev - 1 : 0));
         setEmailCountdown((prev) => (prev > 0 ? prev - 1 : 0));
         setAdditionalGsts((prev) => {
           let changed = false;
@@ -215,7 +207,7 @@ export default function RegisterPage() {
       }, 1000);
     }
     return () => clearInterval(timer);
-  }, [mobileCountdown, emailCountdown, additionalGsts]);
+  }, [emailCountdown, additionalGsts]);
 
   function handleCopyHeadOfficeGst(idx: number) {
     const list = [...additionalGsts];
@@ -228,14 +220,6 @@ export default function RegisterPage() {
     list[idx].verified = isPrimaryGstVerified;
     setAdditionalGsts(list);
     showToast(`Copied Head Office GST & Address to Branch #${idx + 1}`, "info");
-  }
-
-  function handleCopyHeadOfficePhone(idx: number) {
-    const list = [...additionalGsts];
-    if (!list[idx]) return;
-    list[idx].mobile = mobile;
-    setAdditionalGsts(list);
-    showToast(`Copied Head Office Phone (+91 ${mobile}) to Branch #${idx + 1}`, "info");
   }
 
   // Branch email duplicate check on blur
@@ -393,7 +377,6 @@ export default function RegisterPage() {
   const branchStepNumber = 2;
 
   // Validation States for Enabling Next/Submit Buttons
-  const cleanMobileDigits = mobile.replace(/\D/g, "");
   const isStep1Valid = Boolean(
     companyName.trim() &&
     name.trim() &&
@@ -402,8 +385,6 @@ export default function RegisterPage() {
     city.trim() &&
     state.trim() &&
     pincode.trim().length === 6 &&
-    cleanMobileDigits.length === 10 &&
-    mobileVerified &&
     email.trim().includes("@") &&
     emailVerified &&
     password &&
@@ -418,7 +399,6 @@ export default function RegisterPage() {
       additionalGsts.slice(0, branchCount).every(
         (br) =>
           br.branchName.trim() &&
-          (br.mobile || "").replace(/\D/g, "").length === 10 &&
           (br.email || "").trim().includes("@") &&
           (br.email || "").trim().toLowerCase() !== email.trim().toLowerCase() &&
           Boolean(br.emailVerified) &&
@@ -625,25 +605,7 @@ export default function RegisterPage() {
     }
   }
 
-  async function handleMobileBlur() {
-    if (!mobile || mobileVerified) return;
-    const cleanMobile = mobile.replace(/\D/g, "");
-    if (cleanMobile.length !== 10) return;
 
-    try {
-      const res = await fetch(API.CHECK_EXISTS, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ mobile: cleanMobile }),
-      });
-      const json = await res.json();
-      if (json.exists) {
-        showToast(json.message || "This mobile number is already registered.", "error");
-      }
-    } catch {
-      // Ignore
-    }
-  }
 
   // ==========================================
   // OTP SEND & VERIFY HANDLERS
@@ -716,73 +678,7 @@ export default function RegisterPage() {
     }
   }
 
-  async function handleSendMobileOtp() {
-    if (mobileSending || mobileCountdown > 0) return;
-    const cleanMobile = mobile.replace(/\D/g, "");
-    if (cleanMobile.length !== 10) {
-      showToast("Please enter a valid 10-digit mobile number", "error");
-      return;
-    }
 
-    setMobileSending(true);
-    try {
-      // 1. Check if mobile number is already registered
-      const checkRes = await fetch(API.CHECK_EXISTS, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ mobile: cleanMobile }),
-      });
-      const checkJson = await checkRes.json();
-      if (checkJson.exists) {
-        showToast(checkJson.message || "This mobile number is already registered in the system.", "error");
-        return;
-      }
-
-      // 2. Send Mobile OTP only if mobile does not exist
-      const res = await fetch(API.SEND_MOBILE_OTP , {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ mobile: cleanMobile }),
-      });
-      const json = await res.json();
-      if (json.success) {
-        setMobileOtpSent(true);
-        setMobileCountdown(60);
-        showToast(`Verification code sent to WhatsApp (+91 ${cleanMobile})`, "success");
-      } else {
-        showToast(json.message || "Failed to send WhatsApp OTP", "error");
-      }
-    } catch {
-      showToast("Failed to send WhatsApp OTP", "error");
-    } finally {
-      setMobileSending(false);
-    }
-  }
-
-  async function handleVerifyMobileOtp() {
-    if (mobileVerifying || !mobileOtp) return;
-    setMobileVerifying(true);
-    try {
-      const res = await fetch(API.VERIFY_MOBILE_OTP, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ mobile: mobile.trim(), otp: mobileOtp.trim() }),
-      });
-      const json = await res.json();
-      if (json.success) {
-        setMobileVerified(true);
-        setMobileOtpSent(false);
-        setMobileCountdown(0);
-        showToast("Mobile verified successfully!", "success");
-      } else {
-        showToast(json.message || "Incorrect verification code", "error");
-      }
-    } catch {
-      showToast("Verification failed", "error");
-    } finally {
-      setMobileVerifying(false);
-    }
-  }
 
   // ==========================================
   // STEP TRANSITIONS & SUBMISSION
@@ -807,21 +703,7 @@ export default function RegisterPage() {
         return;
       }
 
-      // Validate Mobile & Email
-      const cleanMobile = mobile.replace(/\D/g, "");
-      if (cleanMobile.length !== 10) {
-        const msg = "Please enter a valid 10-digit phone number";
-        setErrorBanner(msg);
-        showToast(msg, "error");
-        return;
-      }
-      if (!mobileVerified) {
-        const msg = "Please verify your phone number with the OTP before continuing";
-        setErrorBanner(msg);
-        showToast(msg, "error");
-        return;
-      }
-
+      // Validate Email
       if (!email.trim() || !email.includes("@")) {
         const msg = "Please enter a valid email address";
         setErrorBanner(msg);
@@ -863,14 +745,6 @@ export default function RegisterPage() {
         const br = additionalGsts[i];
         if (!br.branchName.trim()) {
           const msg = `Please enter the branch company name for Branch #${i + 1}`;
-          setErrorBanner(msg);
-          showToast(msg, "error");
-          setActiveBranchIndex(i);
-          return;
-        }
-        const cleanBrMob = (br.mobile || "").replace(/\D/g, "");
-        if (cleanBrMob.length !== 10) {
-          const msg = `Please enter a valid 10-digit phone number for Branch #${i + 1}`;
           setErrorBanner(msg);
           showToast(msg, "error");
           setActiveBranchIndex(i);
@@ -946,7 +820,7 @@ export default function RegisterPage() {
       const payload = {
         name: adminName,
         email: email.trim().toLowerCase(),
-        mobile: mobile.replace(/\D/g, ""),
+        mobile: "",
         password,
         role: "Admin",
         companyName: companyName.trim(),
@@ -1060,7 +934,7 @@ export default function RegisterPage() {
             <button
               type="button"
               className={`step-btn ${currentStep === reviewStepNumber ? "active" : ""}`}
-              onClick={() => { if (emailVerified && mobileVerified) setCurrentStep(reviewStepNumber); }}
+              onClick={() => { if (emailVerified) setCurrentStep(reviewStepNumber); }}
             >
               <span className="step-num">{totalSteps}</span>
               <span className="step-txt">Review &amp; Launch</span>
@@ -1186,8 +1060,8 @@ export default function RegisterPage() {
                 </div>
               </div>
 
-              {/* Row 4: State & City */}
-              <div className="clean-grid-2">
+              {/* Row 4: State, City & Postal Code */}
+              <div className="clean-grid-3">
                 <div className="clean-field">
                   <label>
                     <span className="req-star">*</span> State
@@ -1217,10 +1091,7 @@ export default function RegisterPage() {
                     />
                   </div>
                 </div>
-              </div>
 
-              {/* Row 5: Postal Code & Phone Number with OTP */}
-              <div className="clean-grid-2">
                 <div className="clean-field">
                   <label>
                     <span className="req-star">*</span> Postal Code
@@ -1237,64 +1108,7 @@ export default function RegisterPage() {
                     />
                   </div>
                 </div>
-
-                <div className="clean-field">
-                  <div className="clean-label-row">
-                    <label>
-                      <span className="req-star">*</span> Phone Number
-                    </label>
-                    {mobileVerified && <span className="verified-badge">✓ Phone Verified</span>}
-                  </div>
-                  <div className="clean-input-row">
-                    <input
-                      type="tel"
-                      placeholder="10-digit phone number"
-                      maxLength={10}
-                      value={mobile}
-                      disabled={mobileVerified}
-                      onChange={(e) => setMobile(e.target.value.replace(/\D/g, ""))}
-                      onBlur={handleMobileBlur}
-                      required
-                    />
-                    <button
-                      type="button"
-                      className={`clean-inline-btn ${mobileVerified ? "is-verified" : ""}`}
-                      disabled={mobileVerified || mobileSending || mobileCountdown > 0 || mobile.replace(/\D/g, "").length !== 10}
-                      onClick={handleSendMobileOtp}
-                    >
-                      {mobileVerified
-                        ? "✓ Verified"
-                        : mobileSending
-                        ? "Sending…"
-                        : mobileCountdown > 0
-                        ? `Resend in ${mobileCountdown}s`
-                        : "Send OTP"}
-                    </button>
-                  </div>
-                </div>
               </div>
-
-              {mobileOtpSent && !mobileVerified && (
-                <div className="clean-otp-box">
-                  <label>Enter 6-digit WhatsApp OTP sent to +91 {mobile}</label>
-                  <div className="otp-compact-row">
-                    <SquareOtpInput
-                      idPrefix="mobile-otp"
-                      value={mobileOtp}
-                      onChange={setMobileOtp}
-                      disabled={mobileVerifying}
-                    />
-                    <button
-                      type="button"
-                      className="clean-otp-confirm-btn"
-                      disabled={mobileVerifying || mobileOtp.length < 6}
-                      onClick={handleVerifyMobileOtp}
-                    >
-                      {mobileVerifying ? "Verifying…" : "Confirm OTP ✓"}
-                    </button>
-                  </div>
-                </div>
-              )}
 
               {/* Row 6: Email Address with OTP */}
               <div className="clean-field">
@@ -1441,7 +1255,6 @@ export default function RegisterPage() {
                 {additionalGsts.map((br, idx) => {
                   const isBranchComplete = Boolean(
                     br.branchName?.trim() &&
-                    (br.mobile || "").replace(/\D/g, "").length === 10 &&
                     br.email?.trim().includes("@") &&
                     br.emailVerified &&
                     br.password &&
@@ -1568,8 +1381,8 @@ export default function RegisterPage() {
                       </div>
                     </div>
 
-                    {/* State & City */}
-                    <div className="clean-grid-2">
+                    {/* State, City & Postal Code */}
+                    <div className="clean-grid-3">
                       <div className="clean-field">
                         <label>State</label>
                         <div className="clean-input-row">
@@ -1601,10 +1414,7 @@ export default function RegisterPage() {
                           />
                         </div>
                       </div>
-                    </div>
 
-                    {/* Postal Code & Phone Number */}
-                    <div className="clean-grid-2">
                       <div className="clean-field">
                         <label>Postal Code</label>
                         <div className="clean-input-row">
@@ -1618,38 +1428,6 @@ export default function RegisterPage() {
                               list[idx].pincode = e.target.value.replace(/\D/g, "");
                               setAdditionalGsts(list);
                             }}
-                          />
-                        </div>
-                      </div>
-
-                      <div className="clean-field">
-                        <div className="clean-label-row" style={{ marginBottom: "4px" }}>
-                          <label>
-                            <span className="req-star">*</span> Phone Number
-                          </label>
-                          {mobile && (
-                            <button
-                              type="button"
-                              className="same-as-ho-btn"
-                              onClick={() => handleCopyHeadOfficePhone(idx)}
-                              title="Copy Phone from Head Office"
-                            >
-                              📋 Same as Head Office
-                            </button>
-                          )}
-                        </div>
-                        <div className="clean-input-row">
-                          <input
-                            type="tel"
-                            placeholder="10-digit phone number"
-                            maxLength={10}
-                            value={item.mobile}
-                            onChange={(e) => {
-                              const list = [...additionalGsts];
-                              list[idx].mobile = e.target.value.replace(/\D/g, "");
-                              setAdditionalGsts(list);
-                            }}
-                            required
                           />
                         </div>
                       </div>
@@ -1826,15 +1604,8 @@ export default function RegisterPage() {
                           style={{ padding: "8px 18px", fontSize: "13px" }}
                           onClick={() => {
                             const cur = additionalGsts[idx];
-                            const curMob = (cur?.mobile || "").replace(/\D/g, "");
                             if (!cur?.branchName?.trim()) {
                               const msg = `Please enter the branch company name for Branch #${idx + 1}`;
-                              setErrorBanner(msg);
-                              showToast(msg, "error");
-                              return;
-                            }
-                            if (curMob.length !== 10) {
-                              const msg = `Please enter a 10-digit phone number for Branch #${idx + 1}`;
                               setErrorBanner(msg);
                               showToast(msg, "error");
                               return;
@@ -1929,9 +1700,9 @@ export default function RegisterPage() {
                         <div className="rev-branch-meta">
                           <strong>GSTIN:</strong> {br.gstNo || "Not Specified"} • <strong>Location:</strong> {br.city ? `${br.city}, ` : ""}{br.state || "India"} {br.pincode ? `(${br.pincode})` : ""}
                         </div>
-                        {(br.email || br.mobile) && (
+                        {br.email && (
                           <div className="rev-branch-meta">
-                            {br.email ? `✉ ${br.email}` : ""} {br.mobile ? `• 📞 +91 ${br.mobile}` : ""}
+                            ✉ {br.email}
                           </div>
                         )}
                       </div>
@@ -1946,10 +1717,6 @@ export default function RegisterPage() {
                 <div className="review-item">
                   <span className="rev-label">Verified Email Address</span>
                   <span className="rev-val">{email}</span>
-                </div>
-                <div className="review-item">
-                  <span className="rev-label">Verified Phone Number</span>
-                  <span className="rev-val mono-font">+91 {mobile}</span>
                 </div>
 
                 {/* Terms and Conditions Checkbox */}

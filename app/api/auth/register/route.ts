@@ -89,8 +89,11 @@ export async function POST(req: Request) {
     const emailErr = validateEmail(email || "");
     if (emailErr) return NextResponse.json({ success: false, message: emailErr }, { status: 400 });
 
-    const mobileErr = validateMobile(mobile || "");
-    if (mobileErr) return NextResponse.json({ success: false, message: mobileErr }, { status: 400 });
+    const cleanMobile = mobile ? String(mobile).replace(/\D/g, "") : "";
+    if (cleanMobile) {
+      const mobileErr = validateMobile(cleanMobile);
+      if (mobileErr) return NextResponse.json({ success: false, message: mobileErr }, { status: 400 });
+    }
 
     const passwordErr = validatePassword(password || "");
     if (passwordErr) return NextResponse.json({ success: false, message: passwordErr }, { status: 400 });
@@ -100,7 +103,6 @@ export async function POST(req: Request) {
     }
 
     const cleanEmail = email.toLowerCase().trim();
-    const cleanMobile = mobile.replace(/\D/g, "");
 
     // ── Duplicate Checks for Head Office ──────────────────────────────────────
     const emailExists = await User.findOne({ email: cleanEmail });
@@ -120,12 +122,14 @@ export async function POST(req: Request) {
       }
     }
 
-    const mobileExists = await User.findOne({ mobile: cleanMobile });
-    if (mobileExists) {
-      return NextResponse.json({
-        success: false,
-        message: "This mobile number is already registered. Please use a different number or sign in.",
-      }, { status: 409 });
+    if (cleanMobile) {
+      const mobileExists = await User.findOne({ mobile: cleanMobile });
+      if (mobileExists) {
+        return NextResponse.json({
+          success: false,
+          message: "This mobile number is already registered. Please use a different number or sign in.",
+        }, { status: 409 });
+      }
     }
 
     // ── Branch Email Uniqueness & Database Validation ─────────────────────────
@@ -193,17 +197,19 @@ export async function POST(req: Request) {
       }, { status: 400 });
     }
 
-    const mobileOtp = await Otp.findOne({
-      mobile: cleanMobile,
-      type: "mobile",
-      verified: true,
-    });
+    if (cleanMobile) {
+      const mobileOtp = await Otp.findOne({
+        mobile: cleanMobile,
+        type: "mobile",
+        verified: true,
+      });
 
-    if (!mobileOtp) {
-      return NextResponse.json({
-        success: false,
-        message: "Mobile OTP verification is required before registration. Please verify your mobile number.",
-      }, { status: 400 });
+      if (!mobileOtp) {
+        return NextResponse.json({
+          success: false,
+          message: "Mobile OTP verification is required before registration. Please verify your mobile number.",
+        }, { status: 400 });
+      }
     }
 
     // ── Branch Email OTP Verification ─────────────────────────────────────────
@@ -446,11 +452,14 @@ export async function POST(req: Request) {
 
     // ── Cleanup OTPs ──────────────────────────────────────────────────────────
     const allEmailsToClean = [cleanEmail, ...formattedAdditionalGstins.map((g: any) => g.email).filter(Boolean)];
+    const otpCleanupConditions: Array<{ email?: { $in: string[] }; mobile?: string; type: string }> = [
+      { email: { $in: allEmailsToClean }, type: "email" },
+    ];
+    if (cleanMobile) {
+      otpCleanupConditions.push({ mobile: cleanMobile, type: "mobile" });
+    }
     await Otp.deleteMany({
-      $or: [
-        { email: { $in: allEmailsToClean }, type: "email" },
-        { mobile: cleanMobile, type: "mobile" },
-      ],
+      $or: otpCleanupConditions,
     });
 
     return NextResponse.json({

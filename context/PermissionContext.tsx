@@ -87,8 +87,16 @@ export function PermissionProvider({ children }: { children: React.ReactNode }) 
   }, [user?._id, loadPermissions]);
 
   const can = (key: string) => {
-    // If the logged-in user is an Admin, grant instant full access
-    if (user?.roleType === "Admin" || user?.role === "Admin" || (user?.roleId as any)?.roleName === "Admin") {
+    // Super Admin & Admin have unrestricted full access to everything across the entire platform
+    if (
+      user?.roleType === "SuperAdmin" ||
+      user?.role === "SuperAdmin" ||
+      user?.isSuperAdmin ||
+      user?.email?.toLowerCase() === "mabsoldeveloper@gmail.com" ||
+      user?.roleType === "Admin" ||
+      user?.role === "Admin" ||
+      (user?.roleId as any)?.roleName === "Admin"
+    ) {
       return true;
     }
     if (loading) return false;

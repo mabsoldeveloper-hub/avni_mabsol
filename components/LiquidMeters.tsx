@@ -76,13 +76,13 @@ export default function LiquidMeters({ kpis, analytics }: LiquidMetersProps) {
                         Live Executive Meters & Liquid Gauges
                     </h3>
                 </div>
-                <span className="text-[11px] text-slate-500 dark:text-slate-400 font-medium flex items-center gap-1">
+                <span className="text-[11px] text-slate-500 dark:text-slate-400 font-medium hidden sm:flex items-center gap-1">
                     <FaInfoCircle className="text-indigo-500" size={11} /> Hover meter for detailed breakdown
                 </span>
             </div>
 
             {/* Grid of 4 Apple Liquid Glass Meters */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-4">
                 
                 {/* METER 1: Collection Efficiency Liquid Ring */}
                 <div
@@ -93,18 +93,16 @@ export default function LiquidMeters({ kpis, analytics }: LiquidMetersProps) {
                         bg-white/60 dark:bg-slate-900/60 backdrop-blur-2xl backdrop-saturate-150
                         border border-white/80 dark:border-slate-800
                         shadow-[0_8px_32px_rgba(0,0,0,0.04),inset_0_1px_1px_rgba(255,255,255,0.9)]
-                        hover:shadow-[0_16px_40px_rgba(16,185,129,0.15),inset_0_1px_1px_rgba(255,255,255,1)]
-                        hover:border-emerald-300 dark:hover:border-emerald-700/60
-                        transition-all duration-500 ease-[cubic-bezier(0.16,1,0.3,1)]
-                        hover:-translate-y-1.5 hover:scale-[1.02]
-                        p-4 flex flex-col justify-between
+                        hover:shadow-md hover:border-slate-300 dark:hover:border-slate-700
+                        transition-all duration-150
+                        p-3 sm:p-4 flex flex-col justify-between
                     "
                 >
                     {/* Apple Top Sheen Edge */}
                     <div className="pointer-events-none absolute inset-x-0 top-0 h-[1.5px] bg-gradient-to-r from-transparent via-emerald-400/60 to-transparent" />
                     
                     {/* Ambient Glow */}
-                    <div className="pointer-events-none absolute -top-10 -right-10 w-28 h-28 rounded-full bg-emerald-500/15 blur-2xl group-hover:scale-125 transition-transform duration-700" />
+                    <div className="pointer-events-none absolute -top-10 -right-10 w-28 h-28 rounded-full bg-emerald-500/10 blur-2xl" />
 
                     <div className="flex items-center justify-between gap-2 mb-3">
                         <div>
@@ -183,15 +181,13 @@ export default function LiquidMeters({ kpis, analytics }: LiquidMetersProps) {
                         bg-white/60 dark:bg-slate-900/60 backdrop-blur-2xl backdrop-saturate-150
                         border border-white/80 dark:border-slate-800
                         shadow-[0_8px_32px_rgba(0,0,0,0.04),inset_0_1px_1px_rgba(255,255,255,0.9)]
-                        hover:shadow-[0_16px_40px_rgba(59,130,246,0.15),inset_0_1px_1px_rgba(255,255,255,1)]
-                        hover:border-blue-300 dark:hover:border-blue-700/60
-                        transition-all duration-500 ease-[cubic-bezier(0.16,1,0.3,1)]
-                        hover:-translate-y-1.5 hover:scale-[1.02]
-                        p-4 flex flex-col justify-between
+                        hover:shadow-md hover:border-slate-300 dark:hover:border-slate-700
+                        transition-all duration-150
+                        p-3 sm:p-4 flex flex-col justify-between
                     "
                 >
                     <div className="pointer-events-none absolute inset-x-0 top-0 h-[1.5px] bg-gradient-to-r from-transparent via-blue-400/60 to-transparent" />
-                    <div className="pointer-events-none absolute -top-10 -right-10 w-28 h-28 rounded-full bg-blue-500/15 blur-2xl group-hover:scale-125 transition-transform duration-700" />
+                    <div className="pointer-events-none absolute -top-10 -right-10 w-28 h-28 rounded-full bg-blue-500/10 blur-2xl" />
 
                     <div className="flex items-center justify-between gap-2 mb-3">
                         <div>
@@ -209,7 +205,7 @@ export default function LiquidMeters({ kpis, analytics }: LiquidMetersProps) {
 
                     {/* Radial Meter */}
                     <div className="relative flex items-center justify-center my-2">
-                        <svg className="w-32 h-32 transform -rotate-90" viewBox="0 0 120 120">
+                        <svg className="w-28 h-28 sm:w-32 sm:h-32 transform -rotate-90" viewBox="0 0 120 120">
                             <circle
                                 cx="60"
                                 cy="60"
@@ -239,7 +235,7 @@ export default function LiquidMeters({ kpis, analytics }: LiquidMetersProps) {
                         </svg>
 
                         <div className="absolute inset-0 flex flex-col items-center justify-center text-center">
-                            <span className="text-2xl font-extrabold text-slate-900 dark:text-white tracking-tight font-sans">
+                            <span className="text-xl sm:text-2xl font-extrabold text-slate-900 dark:text-white tracking-tight font-sans">
                                 {stockHealthScore}<span className="text-xs text-blue-600 font-semibold">%</span>
                             </span>
                             <span className="text-[10px] font-medium text-slate-500 dark:text-slate-400">
@@ -266,15 +262,13 @@ export default function LiquidMeters({ kpis, analytics }: LiquidMetersProps) {
                         bg-white/60 dark:bg-slate-900/60 backdrop-blur-2xl backdrop-saturate-150
                         border border-white/80 dark:border-slate-800
                         shadow-[0_8px_32px_rgba(0,0,0,0.04),inset_0_1px_1px_rgba(255,255,255,0.9)]
-                        hover:shadow-[0_16px_40px_rgba(244,63,94,0.15),inset_0_1px_1px_rgba(255,255,255,1)]
-                        hover:border-rose-300 dark:hover:border-rose-700/60
-                        transition-all duration-500 ease-[cubic-bezier(0.16,1,0.3,1)]
-                        hover:-translate-y-1.5 hover:scale-[1.02]
-                        p-4 flex flex-col justify-between
+                        hover:shadow-md hover:border-slate-300 dark:hover:border-slate-700
+                        transition-all duration-150
+                        p-3 sm:p-4 flex flex-col justify-between
                     "
                 >
                     <div className="pointer-events-none absolute inset-x-0 top-0 h-[1.5px] bg-gradient-to-r from-transparent via-rose-400/60 to-transparent" />
-                    <div className="pointer-events-none absolute -top-10 -right-10 w-28 h-28 rounded-full bg-rose-500/15 blur-2xl group-hover:scale-125 transition-transform duration-700" />
+                    <div className="pointer-events-none absolute -top-10 -right-10 w-28 h-28 rounded-full bg-rose-500/10 blur-2xl" />
 
                     <div className="flex items-center justify-between gap-2 mb-3">
                         <div>
@@ -292,7 +286,7 @@ export default function LiquidMeters({ kpis, analytics }: LiquidMetersProps) {
 
                     {/* Semi-Circle Speedometer Arc — fills RED based on RISK level */}
                     <div className="relative flex flex-col items-center justify-center my-1 pt-2">
-                        <svg className="w-36 h-20" viewBox="0 0 120 65">
+                        <svg className="w-32 h-18 sm:w-36 sm:h-20" viewBox="0 0 120 65">
                             {/* Track Arc */}
                             <path
                                 d="M 10 60 A 50 50 0 0 1 110 60"
@@ -323,7 +317,7 @@ export default function LiquidMeters({ kpis, analytics }: LiquidMetersProps) {
                         </svg>
 
                         <div className="absolute bottom-0 text-center">
-                            <span className={`text-2xl font-extrabold tracking-tight font-sans ${
+                            <span className={`text-xl sm:text-2xl font-extrabold tracking-tight font-sans ${
                                 creditRiskLevel >= 80 ? "text-rose-600" : creditRiskLevel >= 50 ? "text-amber-600" : "text-emerald-600"
                             }`}>
                                 {creditRiskLevel}<span className="text-xs font-normal text-slate-500">%</span>
@@ -360,15 +354,13 @@ export default function LiquidMeters({ kpis, analytics }: LiquidMetersProps) {
                         bg-white/60 dark:bg-slate-900/60 backdrop-blur-2xl backdrop-saturate-150
                         border border-white/80 dark:border-slate-800
                         shadow-[0_8px_32px_rgba(0,0,0,0.04),inset_0_1px_1px_rgba(255,255,255,0.9)]
-                        hover:shadow-[0_16px_40px_rgba(168,85,247,0.15),inset_0_1px_1px_rgba(255,255,255,1)]
-                        hover:border-purple-300 dark:hover:border-purple-700/60
-                        transition-all duration-500 ease-[cubic-bezier(0.16,1,0.3,1)]
-                        hover:-translate-y-1.5 hover:scale-[1.02]
-                        p-4 flex flex-col justify-between
+                        hover:shadow-md hover:border-slate-300 dark:hover:border-slate-700
+                        transition-all duration-150
+                        p-3 sm:p-4 flex flex-col justify-between
                     "
                 >
                     <div className="pointer-events-none absolute inset-x-0 top-0 h-[1.5px] bg-gradient-to-r from-transparent via-purple-400/60 to-transparent" />
-                    <div className="pointer-events-none absolute -top-10 -right-10 w-28 h-28 rounded-full bg-purple-500/15 blur-2xl group-hover:scale-125 transition-transform duration-700" />
+                    <div className="pointer-events-none absolute -top-10 -right-10 w-28 h-28 rounded-full bg-purple-500/10 blur-2xl" />
 
                     <div className="flex items-center justify-between gap-2 mb-3">
                         <div>

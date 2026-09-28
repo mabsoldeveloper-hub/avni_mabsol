@@ -241,7 +241,7 @@ export function getGeminiApiStatus(lastErrorMeta?: any, activeModel?: string): A
   return {
     tier: "AI Cloud Engine",
     status: "active",
-    model: activeModel || "AI Smart Engine",
+    model: activeModel ? String(activeModel).replace(/gemini-?/gi, "AI ") : "AI Smart Engine",
     isFreeTier: true,
     isQuotaExhausted: false,
     alertBanner: {
@@ -555,9 +555,9 @@ Return ONLY valid JSON format matching:
     generatedAlerts = generateRuleBasedFallbackAlerts(snapshot, mode);
     modelUsed = "Rule-Based Pharma Engine (Fallback)";
     if (!apiKey) {
-      warningMessage = "GEMINI_API_KEY not configured in .env. Operating on Built-in Pharma Intelligence Engine.";
+      warningMessage = "AI API Key not configured in .env. Operating on Built-in Pharma Intelligence Engine.";
     } else if (lastErrorMeta?.isQuota) {
-      warningMessage = "Google Gemini Free Tier rate-limit reached (HTTP 429). Using Built-in Pharma Rule Engine.";
+      warningMessage = "AI Service rate-limit reached (HTTP 429). Using Built-in Pharma Rule Engine.";
     }
   }
 

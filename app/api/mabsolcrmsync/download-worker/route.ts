@@ -67,9 +67,9 @@ export async function GET(request: NextRequest) {
 
     // Dynamically generate smart run_local_sync.bat
     const batContent = `@echo off
-title Mabsol Pharma CRM - Desktop DBF Sync Worker
+title MabsolCrm - Desktop DBF Sync Worker
 echo ========================================================
-echo   Mabsol Pharma CRM - Desktop DBF Sync Worker (MabsolCRM)
+echo   MabsolCrm - Desktop DBF Sync Worker (MabsolCRM)
 echo ========================================================
 echo.
 echo Target Cloud URL: ${cloudUrl}

@@ -121,12 +121,10 @@ function ChartCard({
                 bg-white/65 dark:bg-slate-900/65 backdrop-blur-2xl backdrop-saturate-180
                 border border-white/80 dark:border-slate-800/80
                 shadow-[0_8px_32px_rgba(0,0,0,0.03),inset_0_1px_1px_rgba(255,255,255,0.9)]
-                animate-[fadeSlideIn_0.5s_cubic-bezier(0.16,1,0.3,1)_both]
-                transition-all duration-500 ease-[cubic-bezier(0.16,1,0.3,1)]
-                hover:-translate-y-1.5 hover:scale-[1.015]
-                hover:shadow-[0_20px_45px_rgba(31,38,135,0.15),inset_0_1px_1px_rgba(255,255,255,1)]
-                hover:border-indigo-300/80 dark:hover:border-indigo-700/80
-                p-5 sm:p-6
+                animate-[fadeSlideIn_0.35s_cubic-bezier(0.16,1,0.3,1)_both]
+                transition-all duration-150
+                hover:shadow-md hover:border-indigo-300/80 dark:hover:border-indigo-700/80
+                p-3.5 sm:p-5 md:p-6
                 ${span === "full" ? "xl:col-span-2" : ""}
             `}
         >
@@ -138,32 +136,32 @@ function ChartCard({
                 style={{ background: `radial-gradient(circle, ${iconColor}44, transparent 70%)` }}
             />
 
-            <div className="relative mb-4 flex items-center justify-between gap-3">
-                <div className="flex items-center gap-3">
+            <div className="relative mb-3 sm:mb-4 flex items-center justify-between gap-2 sm:gap-3">
+                <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
                     <div
-                        className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-white/80 dark:border-slate-800 bg-white/70 dark:bg-slate-800/80 backdrop-blur-md shadow-2xs transition-all duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] group-hover:scale-110 group-hover:-rotate-6"
+                        className="flex h-8 w-8 sm:h-9 sm:w-9 shrink-0 items-center justify-center rounded-xl border border-white/80 dark:border-slate-800 bg-white/70 dark:bg-slate-800/80 backdrop-blur-md shadow-2xs transition-all duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] group-hover:scale-110 group-hover:-rotate-6"
                     >
-                        <Icon className="h-4.5 w-4.5" style={{ color: iconColor }} strokeWidth={2} />
+                        <Icon className="h-4 w-4 sm:h-4.5 sm:w-4.5" style={{ color: iconColor }} strokeWidth={2} />
                     </div>
                     <div className="min-w-0">
                         <h5 className="truncate text-xs sm:text-sm font-semibold text-slate-800 dark:text-slate-200">{title}</h5>
-                        {subtitle && <p className="mt-0.5 text-[10.5px] sm:text-xs font-medium text-slate-500 dark:text-slate-400">{subtitle}</p>}
+                        {subtitle && <p className="mt-0.5 text-[10px] sm:text-xs font-medium text-slate-500 dark:text-slate-400 truncate">{subtitle}</p>}
                     </div>
                 </div>
 
-                <div className="opacity-0 group-hover:opacity-100 transition-opacity text-indigo-600 dark:text-indigo-400 flex items-center gap-1 text-[11px] font-bold bg-indigo-50 dark:bg-indigo-950 px-2 py-0.5 rounded-full border border-indigo-200/50">
-                    <span>Expand</span> <Maximize2 size={11} />
+                <div className="opacity-0 group-hover:opacity-100 transition-opacity text-indigo-600 dark:text-indigo-400 flex items-center gap-1 text-[10px] sm:text-[11px] font-bold bg-indigo-50 dark:bg-indigo-950 px-2 py-0.5 rounded-full border border-indigo-200/50 flex-shrink-0">
+                    <span className="hidden xs:inline">Expand</span> <Maximize2 size={11} />
                 </div>
             </div>
 
             {emptyMessage ? (
-                <div className="relative flex h-[260px] flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-white/70 bg-white/30 backdrop-blur-sm px-6 text-center">
+                <div className="relative flex h-[220px] sm:h-[260px] flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-white/70 bg-white/30 backdrop-blur-sm px-4 sm:px-6 text-center">
                     <AlertTriangle className="h-5 w-5 text-slate-400" strokeWidth={1.75} />
                     <p className="text-xs leading-relaxed text-slate-500">{emptyMessage}</p>
                 </div>
             ) : (
-                <div className="relative">
-                    <ResponsiveContainer width="100%" height={260}>
+                <div className="relative h-[220px] sm:h-[260px] w-full min-w-0">
+                    <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={200}>
                         {children as any}
                     </ResponsiveContainer>
                 </div>

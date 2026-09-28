@@ -89,36 +89,71 @@ export async function PUT(
     const body =
       await req.json();
 
-    // Password aaye to hash karo
+    // Uniqueness validation for updated email & mobile
+    if (body.email) {
+      const cleanEmail = String(body.email).toLowerCase().trim();
+      const duplicateEmail = await User.findOne({
+        email: cleanEmail,
+        _id: { $ne: id },
+      });
+      if (duplicateEmail) {
+        return NextResponse.json(
+          { error: "This email address is already in use by another user." },
+          { status: 400 }
+        );
+      }
+      body.email = cleanEmail;
+    }
 
+    if (body.mobile) {
+      const cleanMobile = String(body.mobile).replace(/\D/g, "");
+      if (cleanMobile) {
+        const duplicateMobile = await User.findOne({
+          mobile: cleanMobile,
+          _id: { $ne: id },
+        });
+        if (duplicateMobile) {
+          return NextResponse.json(
+            { error: "This mobile number is already in use by another user." },
+            { status: 400 }
+          );
+        }
+        body.mobile = cleanMobile;
+      }
+    }
+
+    // Password aaye to hash karo
     if (
       body.password &&
       body.password.trim() !== ""
     ) {
-
       body.password =
         await bcrypt.hash(
           body.password,
           10
         );
-
     } else {
-
       delete body.password;
+    }
 
+    if (body.status) {
+      const s = String(body.status).trim().toLowerCase();
+      if (s === "inactive" || s === "suspended" || s === "deactivated" || s === "deactive" || s === "disabled") {
+        body.isApproved = false;
+        body.status = "Inactive";
+      } else if (s === "active") {
+        body.isApproved = true;
+        body.status = "Active";
+      }
     }
 
     const user =
       await User.findByIdAndUpdate(
-
         id,
-
         body,
-
         {
           new: true,
         }
-
       );
 
     // Sales Hierarchy Sync

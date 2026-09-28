@@ -5,7 +5,12 @@ import jwt from "jsonwebtoken";
 import connectDB from "@/lib/mongodb";
 import User from "@/models/User";
 import Otp from "@/models/Otp";
-import { SESSION_DURATION_JWT, SESSION_DURATION_SECONDS } from "@/lib/constants/session.constant";
+import {
+    SESSION_DURATION_JWT,
+    SESSION_DURATION_SECONDS,
+    getUserSessionDuration,
+} from "@/lib/constants/session.constant";
+import { validateUserLoginAccess, isSuperAdminUser } from "@/lib/services/superAdmin.service";
 
 const MAX_ATTEMPTS = 5;
 
@@ -65,16 +70,29 @@ export async function POST(req: Request) {
             });
         }
 
+        const accessCheck = await validateUserLoginAccess(user);
+        if (!accessCheck.allowed) {
+            return NextResponse.json({
+                success: false,
+                message: accessCheck.message,
+            }, { status: accessCheck.statusCode || 403 });
+        }
+
+        const isSuperAdmin = isSuperAdminUser(user);
         const isAgent = Boolean(body.isAgent || body.isDesktopAgent);
+        const sessionTiming = getUserSessionDuration(user);
+
         const token = jwt.sign(
             {
                 id: user._id,
                 tenantId: user.tenantId,
                 roleId: user.roleId,
                 companyId: user.companyId,
+                roleType: user.roleType,
+                isSuperAdmin,
             },
-            process.env.JWT_SECRET!,
-            { expiresIn: isAgent ? "30d" : SESSION_DURATION_JWT }
+            process.env.JWT_SECRET || "mabsol_super_secret_jwt_key_2026",
+            { expiresIn: (isAgent ? "30d" : sessionTiming.jwtExpiry) as any }
         );
 
         const userResponse = {
@@ -83,8 +101,13 @@ export async function POST(req: Request) {
             name: user.name,
             email: user.email,
             roleId: user.roleId,
+            roleType: user.roleType,
             companyId: user.companyId,
             status: user.status,
+            isApproved: user.isApproved,
+            isSuperAdmin,
+            sessionTimeoutHours: user.sessionTimeoutHours || 1,
+            accessValidUntil: user.accessValidUntil,
         };
 
         const response = NextResponse.json({
@@ -98,7 +121,7 @@ export async function POST(req: Request) {
             secure: process.env.NODE_ENV === "production",
             sameSite: "lax",
             path: "/",
-            maxAge: SESSION_DURATION_SECONDS,
+            maxAge: isAgent ? 30 * 24 * 60 * 60 : sessionTiming.maxAgeSeconds,
         });
 
         return response;

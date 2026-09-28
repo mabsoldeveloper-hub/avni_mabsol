@@ -24,21 +24,43 @@ export async function performDirectServerSync(userEmail: string, customDataDir?:
   let dataDir: string = customDataDir || config?.consoleSyncDir || config?.sourceDir || config?.dataDir || process.env.VFP_DATA_DIR || "";
   const enabledFiles: string[] = config?.enabledFiles || [];
 
-  // User-specific upload directory (browser-uploaded DBF files)
   const sanitizedEmail = (userEmail || "global").replace(/[^a-zA-Z0-9_-]/g, "_");
   const uploadDir = path.join(process.cwd(), "data", "vfp_uploads", sanitizedEmail);
 
-  const hasUploadedFiles =
-    fs.existsSync(uploadDir) &&
-    fs.readdirSync(uploadDir).some((f) => f.toLowerCase().endsWith(".dbf"));
+  // Helper to find directory containing DBF files
+  const findDbfInDir = (dirPath: string): string | null => {
+    try {
+      if (!fs.existsSync(dirPath)) return null;
+      const entries = fs.readdirSync(dirPath, { withFileTypes: true });
+      if (entries.some((e) => !e.isDirectory() && e.name.toLowerCase().endsWith(".dbf"))) {
+        return dirPath;
+      }
+      for (const e of entries) {
+        if (e.isDirectory()) {
+          const sub = path.join(dirPath, e.name);
+          const found = findDbfInDir(sub);
+          if (found) return found;
+        }
+      }
+    } catch {}
+    return null;
+  };
 
-  // Fallback: check if DBF files were uploaded via browser to THIS USER's server storage
-  if ((!dataDir || !fs.existsSync(dataDir)) && hasUploadedFiles) {
-    dataDir = uploadDir;
+  if (!dataDir || !fs.existsSync(dataDir) || !findDbfInDir(dataDir)) {
+    const candidates = [
+      uploadDir,
+      path.join("/home/vfpuser/data", sanitizedEmail),
+      "/home/vfpuser/data",
+      path.join(process.cwd(), "data"),
+    ];
+    for (const c of candidates) {
+      const found = findDbfInDir(c);
+      if (found) {
+        dataDir = found;
+        break;
+      }
+    }
   }
-
-  // REMOVED: Cross-user fallback that searched all configs in DB.
-  // That fallback was incorrectly picking up other users' folder paths.
 
   if (!dataDir || !fs.existsSync(dataDir)) {
     throw new Error(
@@ -49,93 +71,75 @@ export async function performDirectServerSync(userEmail: string, customDataDir?:
   const runId = `${Date.now()}-${crypto.randomBytes(4).toString("hex")}`;
   const startedAt = new Date();
 
-  await VfpSyncLog.create({
+  const runningSyncLog = await VfpSyncLog.create({
     runId,
     email,
     action: "sync",
     status: "running",
-    message: `Direct server DBF sync started for user ${email}`,
+    message: `Direct server data sync started for user ${email}`,
     startedAt,
   });
 
-  let files = listFiles(dataDir).filter((filePath) =>
-    isValidTableFile(path.basename(filePath))
-  );
-
-  // Only apply the enabledFiles filter when syncing from a non-upload directory
-  // (e.g. a configured local VFP folder path).
-  // When dataDir IS the upload folder, we trust only the physical files that were
-  // just written there — the enabledFiles config may still reference stale entries
-  // from a previous upload session (e.g. GLMONTH_E10).
-  const isUploadDir = dataDir === uploadDir;
-  if (!isUploadDir && enabledFiles && enabledFiles.length > 0) {
-    const enabledSet = new Set(
-      enabledFiles.map((f) => path.basename(f).toLowerCase())
+  try {
+    let files = listFiles(dataDir).filter((filePath) =>
+      isValidTableFile(path.basename(filePath))
     );
-    files = files.filter((filePath) => {
-      const baseName = path.basename(filePath).toLowerCase();
-      const baseNameWithoutExt = baseName.replace(/\.[^.]+$/, "");
 
-      if (enabledSet.has(baseName)) return true;
-      if (enabledSet.has(`${baseNameWithoutExt}.dbf`)) return true;
-      if (enabledSet.has(baseNameWithoutExt)) return true;
-      return false;
-    });
-  }
+    // Only apply the enabledFiles filter when syncing from a non-upload directory
+    const isUploadDir = dataDir === uploadDir;
+    if (!isUploadDir && enabledFiles && enabledFiles.length > 0) {
+      const enabledSet = new Set(
+        enabledFiles.map((f) => path.basename(f).toLowerCase())
+      );
+      files = files.filter((filePath) => {
+        const baseName = path.basename(filePath).toLowerCase();
+        const baseNameWithoutExt = baseName.replace(/\.[^.]+$/, "");
 
-  const dbfFiles = files.filter((filePath) =>
-    filePath.toLowerCase().endsWith(".dbf")
-  );
-
-  let totalImportedTables = 0;
-  let totalImportedRows = 0;
-
-  for (const filePath of dbfFiles) {
-    const importedRows = await importSingleDbfFile(filePath, runId, email, dataDir);
-    totalImportedRows += importedRows;
-    totalImportedTables++;
-  }
-
-  const scannedFileNames = dbfFiles.map((filePath) =>
-    path.relative(dataDir, filePath).replace(/\\/g, "/")
-  );
-  const scannedTableNames = scannedFileNames.map((fName) =>
-    fName.replace(/\.[^.]+$/, "")
-  );
-
-  // Preserve existing metadata for all tables without deleting unscanned table states
-
-  // If dataDir was the browser upload folder (data/vfp_uploads/<sanitizedEmail>),
-  // clean up the temp .DBF files from server disk storage now that MongoDB holds 100% of data
-  if (isUploadDir && fs.existsSync(uploadDir)) {
-    try {
-      const filesInUploadDir = fs.readdirSync(uploadDir);
-      for (const file of filesInUploadDir) {
-        const filePath = path.join(uploadDir, file);
-        if (fs.existsSync(filePath) && fs.statSync(filePath).isFile()) {
-          fs.unlinkSync(filePath);
-        }
-      }
-    } catch (cleanErr) {
-      console.error("[dbfSync] Error cleaning up temp upload files:", cleanErr);
+        if (enabledSet.has(baseName)) return true;
+        if (enabledSet.has(`${baseNameWithoutExt}.dbf`)) return true;
+        if (enabledSet.has(baseNameWithoutExt)) return true;
+        return false;
+      });
     }
+
+    const dbfFiles = files.filter((filePath) =>
+      filePath.toLowerCase().endsWith(".dbf")
+    );
+
+    let totalImportedTables = 0;
+    let totalImportedRows = 0;
+
+    for (const filePath of dbfFiles) {
+      const importedRows = await importSingleDbfFile(filePath, runId, email, dataDir);
+      totalImportedRows += importedRows;
+      totalImportedTables++;
+    }
+
+    await VfpSyncLog.findByIdAndUpdate(runningSyncLog._id, {
+      $set: {
+        status: "success",
+        message: `Direct server sync completed successfully. ${totalImportedTables} table(s), ${totalImportedRows} row(s) updated in real-time.`,
+        finishedAt: new Date(),
+      },
+    });
+
+    return {
+      success: true,
+      runId,
+      importedTables: totalImportedTables,
+      importedRows: totalImportedRows,
+    };
+  } catch (syncErr: any) {
+    await VfpSyncLog.findByIdAndUpdate(runningSyncLog._id, {
+      $set: {
+        status: "failed",
+        error: syncErr?.message || "Sync failed",
+        message: `Direct server sync failed: ${syncErr?.message || "Unknown error"}`,
+        finishedAt: new Date(),
+      },
+    });
+    throw syncErr;
   }
-
-  await VfpSyncLog.create({
-    runId,
-    email,
-    action: "sync",
-    status: "success",
-    message: `Direct server sync completed successfully. ${totalImportedTables} DBF table(s), ${totalImportedRows} row(s) synced.`,
-    finishedAt: new Date(),
-  });
-
-  return {
-    success: true,
-    runId,
-    importedTables: totalImportedTables,
-    importedRows: totalImportedRows,
-  };
 }
 
 async function importSingleDbfFile(
@@ -168,7 +172,7 @@ async function importSingleDbfFile(
   );
 
   // Write a "running" log entry so live progress polling can see this table is active
-  await VfpSyncLog.create({
+  const runningTableLog = await VfpSyncLog.create({
     runId,
     email,
     tableName,
@@ -183,6 +187,12 @@ async function importSingleDbfFile(
     const stats = fs.statSync(filePath);
     const dbf = readDbf(filePath);
     const primaryKeyFields = guessPrimaryKeyFields(dbf.fields, dbf.rows);
+
+    // Pre-index field names in uppercase once for O(1) row processing
+    const fieldUpperMap = new Map<string, string>();
+    for (const f of dbf.fields) {
+      fieldUpperMap.set(f.name.toUpperCase(), f.name);
+    }
 
     await VfpTableMap.updateOne(
       { fileName, email },
@@ -204,16 +214,20 @@ async function importSingleDbfFile(
     );
 
     const collection = mongoose.connection.collection(targetCollection);
-    // Drop single-field unique index if it exists (which caused cross-table/cross-year collisions)
-    await collection.dropIndex("_vfpSourceKey_1").catch(() => { });
-    // 1. Deduplicate any existing duplicate documents in this collection
-    await deduplicateCollection(collection, "_vfpSourceKey");
-    // 2. Ensure compound unique index on {_vfpTable: 1, _vfpSourceKey: 1} to prevent duplicate documents on repeated sync
-    await collection.createIndex({ _vfpTable: 1, _vfpSourceKey: 1 }, { unique: true }).catch(() => { });
+    // Only check and build index if not already present, avoiding heavy aggregation on every sync
+    const existingIndexes = await collection.indexes().catch(() => []);
+    const hasCompoundIndex = existingIndexes.some(
+      (idx: any) => idx.key && idx.key._vfpTable && idx.key._vfpSourceKey
+    );
+    if (!hasCompoundIndex) {
+      await collection.dropIndex("_vfpSourceKey_1").catch(() => { });
+      await deduplicateCollection(collection, "_vfpSourceKey");
+      await collection.createIndex({ _vfpTable: 1, _vfpSourceKey: 1 }, { unique: true }).catch(() => { });
+    }
 
     const seenCounts = new Map<string, number>();
     const docs = dbf.rows.map((row: any) => {
-      const sourceKey = buildSourceKey(row, tableName, primaryKeyFields, seenCounts);
+      const sourceKey = buildSourceKey(row, tableName, primaryKeyFields, seenCounts, fieldUpperMap);
       return {
         ...row.data,
         _vfpTable: tableName,
@@ -228,13 +242,10 @@ async function importSingleDbfFile(
     });
 
     let importedCount = 0;
-    const BATCH_SIZE = 2000;
+    const BATCH_SIZE = 5000;
     for (let i = 0; i < docs.length; i += BATCH_SIZE) {
       const chunk = docs.slice(i, i + BATCH_SIZE);
       if (chunk.length > 0) {
-        // Upsert by {_vfpTable, _vfpSourceKey}:
-        // Updates existing document in place when syncing the same file again.
-        // Never creates duplicate documents and never overwrites other tables or financial years.
         const ops = chunk.map((doc: any) => ({
           updateOne: {
             filter: {
@@ -249,8 +260,6 @@ async function importSingleDbfFile(
         importedCount += chunk.length;
       }
     }
-
-    // Previously synced records are preserved; upsert appends new records and updates existing ones without deleting old data
 
     const syncDateLabel = getSyncDateLabel(new Date());
     const tableHash = `${stats.mtimeMs}-${dbf.recordCount}`;
@@ -272,17 +281,14 @@ async function importSingleDbfFile(
       { upsert: true }
     );
 
-    await VfpSyncLog.create({
-      runId,
-      email,
-      tableName,
-      fileName,
-      action: "dbf_to_crm",
-      status: "success",
-      importedCount,
-      message: `Imported ${importedCount} row(s) from ${fileName}.`,
-      startedAt,
-      finishedAt: new Date(),
+    // Update running log in-place to success
+    await VfpSyncLog.findByIdAndUpdate(runningTableLog._id, {
+      $set: {
+        status: "success",
+        importedCount,
+        message: `Imported and updated ${importedCount} row(s) from ${fileName}.`,
+        finishedAt: new Date(),
+      },
     });
 
     return importedCount;
@@ -298,16 +304,14 @@ async function importSingleDbfFile(
       { upsert: true }
     );
 
-    await VfpSyncLog.create({
-      runId,
-      email,
-      tableName,
-      fileName,
-      action: "dbf_to_crm",
-      status: "failed",
-      error: error.message,
-      startedAt,
-      finishedAt: new Date(),
+    // Update running log in-place to failed
+    await VfpSyncLog.findByIdAndUpdate(runningTableLog._id, {
+      $set: {
+        status: "failed",
+        error: error.message,
+        message: `Failed to import ${fileName}: ${error.message}`,
+        finishedAt: new Date(),
+      },
     });
 
     return 0;
@@ -637,18 +641,27 @@ export function buildSourceKey(
   row: any,
   tableName: string,
   primaryKeyFields: string[],
-  seenCounts?: Map<string, number>
+  seenCounts?: Map<string, number>,
+  fieldUpperMap?: Map<string, string>
 ): string {
   const normTable = sanitizeCollectionName(tableName);
   const d = row.data || {};
 
-  // Helper to safely get string from field regardless of casing
+  // High-speed O(1) field getter avoiding expensive Object.keys loops per row
   const getField = (...names: string[]) => {
     for (const name of names) {
-      for (const k of Object.keys(d)) {
-        if (k.toUpperCase() === name.toUpperCase() && d[k] !== undefined && d[k] !== null) {
-          const s = String(d[k]).trim();
+      if (fieldUpperMap) {
+        const actualKey = fieldUpperMap.get(name.toUpperCase());
+        if (actualKey && d[actualKey] !== undefined && d[actualKey] !== null) {
+          const s = String(d[actualKey]).trim();
           if (s) return s;
+        }
+      } else {
+        for (const k of Object.keys(d)) {
+          if (k.toUpperCase() === name.toUpperCase() && d[k] !== undefined && d[k] !== null) {
+            const s = String(d[k]).trim();
+            if (s) return s;
+          }
         }
       }
     }

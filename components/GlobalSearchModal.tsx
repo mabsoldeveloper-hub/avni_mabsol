@@ -22,25 +22,17 @@ import {
   ShieldCheck,
   Info,
   Calendar,
-  DollarSign,
-  Phone,
-  MapPin,
-  BookOpen,
   HelpCircle,
-  Zap,
-  Command,
-  CornerDownLeft,
-  Sliders,
   TrendingUp,
   Filter,
   CheckSquare,
   Square,
   ArrowUpDown,
-  ShoppingBag,
   Share2,
   Trash2,
   AlertTriangle,
   Database,
+  Zap,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { usePermission } from "@/context/PermissionContext";
@@ -1021,18 +1013,18 @@ export default function GlobalSearchModal({
                 <h4 className="text-xs font-extrabold text-slate-400 uppercase tracking-wider mb-3">
                   Summary & Metrics
                 </h4>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2.5">
                   {Object.entries(selectedItem.details || {}).map(([key, val]) => {
                     if (key === "batches") return null;
                     return (
                       <div
                         key={key}
-                        className="p-3 rounded-xl bg-slate-50 border border-slate-200/80 flex flex-col justify-center"
+                        className="p-2.5 rounded-2xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200/80 dark:border-slate-700/80 flex flex-col justify-center"
                       >
-                        <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wide">
+                        <span className="text-[10px] font-bold text-slate-400 dark:text-slate-400 uppercase tracking-wide">
                           {key.replace(/([A-Z])/g, " $1")}
                         </span>
-                        <span className="text-sm font-extrabold text-slate-800 mt-0.5 truncate">
+                        <span className="text-xs sm:text-sm font-extrabold text-slate-800 dark:text-slate-100 mt-0.5 truncate">
                           {String(val || "N/A")}
                         </span>
                       </div>

@@ -25,7 +25,7 @@ New-Service `
   -DisplayName $DisplayName `
   -BinaryPathName $binaryPath `
   -StartupType Automatic `
-  -Description "Watches DBF files and syncs them into Mabsol Pharma CRM MongoDB."
+  -Description "Watches DBF files and syncs them into MabsolCrm MongoDB."
 
 Write-Host "Installed $ServiceName."
 Write-Host "Start it with: Start-Service $ServiceName"

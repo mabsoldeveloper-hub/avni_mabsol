@@ -374,7 +374,7 @@ export default function PharmaTemplatesModal({
           <div>
             <h3 className="font-bold text-slate-800 dark:text-slate-100 text-lg flex items-center gap-2">
               <FaPlusCircle className="text-indigo-600 dark:text-indigo-400" />
-              1-Click Ready Pharma CRM Templates Library
+              1-Click Ready MabsolCrm Templates Library
             </h3>
             <p className="text-xs text-slate-500 mt-0.5">
               Select a pre-built enterprise template to instantly load structure, fields, and workflow.

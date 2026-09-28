@@ -13,7 +13,7 @@ import {
   INDIA_LOCATIONS,
   INDIA_VIEWBOX,
   STATE_NAME_TO_MAP_ID,
-} from "@/app/dashboard/area/india-map-data";
+} from "@/app/dashboard/[role]/area/india-map-data";
 
 function fmt(v: number) {
   if (Math.abs(v) >= 10000000) return `₹${(v / 10000000).toFixed(2)} Cr`;

@@ -5,7 +5,7 @@ import { FaChevronDown } from "react-icons/fa";
 import { SidebarGroupProps } from "./types";
 import { COLOR_MAP } from "./constants";
 import SidebarSubLink from "./SidebarSubLink";
-import { renderMenuIcon } from "@/lib/defaultMenuData";
+import { renderMenuIcon, getRoleBasedHref, isPathActive } from "@/lib/defaultMenuData";
 
 export default React.memo(function SidebarGroup({
   id,
@@ -19,6 +19,7 @@ export default React.memo(function SidebarGroup({
   pathname,
   currentVisuals,
   can,
+  role,
   onToggle,
   onNavigate,
 }: SidebarGroupProps) {
@@ -87,15 +88,13 @@ export default React.memo(function SidebarGroup({
   if (visibleSubs.length === 0) return null;
 
   const renderedSubs = visibleSubs.map((sub) => {
-    const isSubActive =
-      sub.href === "/dashboard"
-        ? pathname === "/dashboard"
-        : pathname === sub.href || pathname.startsWith(sub.href + "/");
+    const targetHref = getRoleBasedHref(sub.href, role);
+    const isSubActive = isPathActive(sub.href, pathname, role);
 
     return (
       <li key={sub.id || sub.href}>
         <SidebarSubLink
-          href={sub.href}
+          href={targetHref}
           icon={renderMenuIcon(sub.icon)}
           label={sub.label}
           active={isSubActive}
@@ -127,7 +126,7 @@ export default React.memo(function SidebarGroup({
         className={`glass-nav-item relative flex items-center h-[40px] w-full rounded-xl transition-all duration-300 ease-out group select-none cursor-pointer overflow-hidden px-2.5 ${
           active
             ? "glass-nav-item-active font-semibold text-slate-900 dark:text-white"
-            : "text-slate-700 dark:text-slate-200 hover:text-slate-900 dark:hover:text-white font-medium"
+            : "text-slate-700 dark:text-white hover:text-slate-900 dark:hover:text-white font-medium"
         }`}
       >
         {active && (
@@ -169,7 +168,7 @@ export default React.memo(function SidebarGroup({
         </span>
         <FaChevronDown
           size={9}
-          className="text-slate-400 group-hover:text-slate-600 dark:text-slate-500 transition-all duration-300 ease-out shrink-0"
+          className="text-slate-400 group-hover:text-slate-600 dark:text-white/80 dark:group-hover:text-white transition-all duration-300 ease-out shrink-0"
           style={{
             opacity: iconOnly ? 0 : 1,
             maxWidth: iconOnly ? 0 : "12px",

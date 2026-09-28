@@ -25,7 +25,7 @@ export async function POST(req: Request) {
     if (exists) {
       return NextResponse.json({
         success: false,
-        message: "An account with this mobile number already exists. Please sign in.",
+        message: "This mobile number is already registered in the system. Please use a different number or sign in.",
       });
     }
 
@@ -52,10 +52,7 @@ export async function POST(req: Request) {
 
     return NextResponse.json({
       success: true,
-      message: isLiveDelivered
-        ? `Verification code sent to +91 ${cleanMobile}`
-        : `Verification code generated: ${otp} (Local/Dev Mode)`,
-      otp: otp,
+      message: `Verification code sent to WhatsApp (+91 ${cleanMobile})`,
       deliveredLive: isLiveDelivered,
       provider: sendResult.provider,
     });

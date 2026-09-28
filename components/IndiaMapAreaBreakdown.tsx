@@ -13,7 +13,7 @@ import {
   FaCheckCircle,
   FaFilter,
 } from "react-icons/fa";
-import { INDIA_LOCATIONS, INDIA_VIEWBOX, type StatePath } from "@/app/dashboard/area/india-map-data";
+import { INDIA_LOCATIONS, INDIA_VIEWBOX, type StatePath } from "@/app/dashboard/[role]/area/india-map-data";
 
 export interface StateSummaryData {
   stateId: string;

@@ -23,9 +23,11 @@ export async function getHierarchyScopeFilter(currentUser: any): Promise<Hierarc
   }
 
   const roleType = currentUser.roleType || (currentUser.roleId?.roleName === "Admin" ? "Admin" : "MR");
+  const roleNameStr = String(currentUser.roleName || currentUser.roleId?.roleName || "").toLowerCase();
+  const isAdminUser = roleType === "Admin" || roleType === "ADMIN" || currentUser.isAdmin === true || currentUser.isSuperAdmin === true || roleNameStr.includes("admin") || roleNameStr.includes("superadmin");
 
   // Admin has complete access
-  if (roleType === "Admin" || currentUser.email === "admin@mabsol.com") {
+  if (isAdminUser) {
     return {
       queryFilter: {},
       accessibleUserIds: [],

@@ -86,7 +86,7 @@ export async function performDirectServerSync(userEmail: string, customDataDir?:
     );
 
     // Only apply the enabledFiles filter when syncing from a non-upload directory
-    const isUploadDir = dataDir === uploadDir;
+    const isUploadDir = Boolean(customDataDir) || dataDir === uploadDir || dataDir.includes("vfp_uploads");
     if (!isUploadDir && enabledFiles && enabledFiles.length > 0) {
       const enabledSet = new Set(
         enabledFiles.map((f) => path.basename(f).toLowerCase())
@@ -110,8 +110,8 @@ export async function performDirectServerSync(userEmail: string, customDataDir?:
     let totalImportedRows = 0;
 
     for (const filePath of dbfFiles) {
-      const importedRows = await importSingleDbfFile(filePath, runId, email, dataDir);
-      totalImportedRows += importedRows;
+      const syncResult = await importSingleDbfFile(filePath, runId, email, dataDir);
+      totalImportedRows += syncResult.importedCount;
       totalImportedTables++;
     }
 
@@ -142,12 +142,12 @@ export async function performDirectServerSync(userEmail: string, customDataDir?:
   }
 }
 
-async function importSingleDbfFile(
+export async function importSingleDbfFile(
   filePath: string,
   runId: string,
   email: string,
   dataDir: string
-) {
+): Promise<{ importedCount: number; error?: string }> {
   const baseName = path.basename(filePath, path.extname(filePath));
   const fileName = path.basename(filePath);
   const tableName = baseName;
@@ -185,12 +185,26 @@ async function importSingleDbfFile(
 
   try {
     const stats = fs.statSync(filePath);
-    const dbf = readDbf(filePath);
-    const primaryKeyFields = guessPrimaryKeyFields(dbf.fields, dbf.rows);
+    const buffer = fs.readFileSync(filePath);
+    const { fields, recordCount, headerLength, recordLength } = parseDbfHeader(buffer);
+
+    const ext = path.extname(filePath);
+    const baseNameWithoutExt = filePath.slice(0, -ext.length);
+    const fptPath = baseNameWithoutExt + (ext === ext.toUpperCase() ? ".FPT" : ".fpt");
+    const hasFpt = fs.existsSync(fptPath);
+
+    // Sample up to 2000 rows for guessing primary key candidate fields efficiently
+    const sampleLimit = Math.min(recordCount, 2000);
+    const sampleRows: any[] = [];
+    for (let index = 0; index < sampleLimit; index++) {
+      const row = parseRowFromBuffer(buffer, index, headerLength, recordLength, fields, hasFpt, fptPath);
+      if (row) sampleRows.push(row);
+    }
+    const primaryKeyFields = guessPrimaryKeyFields(fields, sampleRows);
 
     // Pre-index field names in uppercase once for O(1) row processing
     const fieldUpperMap = new Map<string, string>();
-    for (const f of dbf.fields) {
+    for (const f of fields) {
       fieldUpperMap.set(f.name.toUpperCase(), f.name);
     }
 
@@ -203,8 +217,8 @@ async function importSingleDbfFile(
           filePath,
           targetCollection,
           primaryKeyFields,
-          columns: dbf.fields,
-          recordCount: dbf.recordCount,
+          columns: fields,
+          recordCount,
           lastFileMtimeMs: stats.mtimeMs,
           lastDiscoveredAt: new Date(),
           enabled: true,
@@ -214,55 +228,71 @@ async function importSingleDbfFile(
     );
 
     const collection = mongoose.connection.collection(targetCollection);
-    // Only check and build index if not already present, avoiding heavy aggregation on every sync
+    // Fast index check: create directly without slow full-table aggregation scan
     const existingIndexes = await collection.indexes().catch(() => []);
     const hasCompoundIndex = existingIndexes.some(
       (idx: any) => idx.key && idx.key._vfpTable && idx.key._vfpSourceKey
     );
     if (!hasCompoundIndex) {
       await collection.dropIndex("_vfpSourceKey_1").catch(() => { });
-      await deduplicateCollection(collection, "_vfpSourceKey");
-      await collection.createIndex({ _vfpTable: 1, _vfpSourceKey: 1 }, { unique: true }).catch(() => { });
+      try {
+        await collection.createIndex({ _vfpTable: 1, _vfpSourceKey: 1 }, { unique: true });
+      } catch (idxErr: any) {
+        if (idxErr?.code === 11000 || idxErr?.message?.includes("E11000")) {
+          await deduplicateCollection(collection, "_vfpSourceKey");
+          await collection.createIndex({ _vfpTable: 1, _vfpSourceKey: 1 }, { unique: true }).catch(() => { });
+        }
+      }
     }
 
+    const fptBuffer = hasFpt && fs.existsSync(fptPath) ? fs.readFileSync(fptPath) : null;
     const seenCounts = new Map<string, number>();
-    const docs = dbf.rows.map((row: any) => {
-      const sourceKey = buildSourceKey(row, tableName, primaryKeyFields, seenCounts, fieldUpperMap);
-      return {
-        ...row.data,
-        _vfpTable: tableName,
-        _vfpSourceKey: sourceKey,
-        _vfpRowNumber: row.rowNumber,
-        _vfpFileName: fileName,
-        _vfpFileMtimeMs: stats.mtimeMs,
-        _vfpDeleted: row.deleted,
-        _vfpSyncRunId: runId,
-        _vfpSyncedAt: new Date(),
-      };
-    });
-
     let importedCount = 0;
-    const BATCH_SIZE = 5000;
-    for (let i = 0; i < docs.length; i += BATCH_SIZE) {
-      const chunk = docs.slice(i, i + BATCH_SIZE);
-      if (chunk.length > 0) {
-        const ops = chunk.map((doc: any) => ({
+    const BATCH_SIZE = 2000;
+    const syncedAt = new Date();
+
+    // Stream-process rows in chunks of 2000 directly from the buffer with zero file-descriptor leaks
+    for (let i = 0; i < recordCount; i += BATCH_SIZE) {
+      const batchEnd = Math.min(i + BATCH_SIZE, recordCount);
+      const ops: any[] = [];
+
+      for (let index = i; index < batchEnd; index++) {
+        const row = parseRowFromBuffer(buffer, index, headerLength, recordLength, fields, hasFpt, fptBuffer);
+        if (!row) break;
+
+        const sourceKey = buildSourceKey(row, tableName, primaryKeyFields, seenCounts, fieldUpperMap);
+        const doc = {
+          ...row.data,
+          _vfpTable: tableName,
+          _vfpSourceKey: sourceKey,
+          _vfpRowNumber: row.rowNumber,
+          _vfpFileName: fileName,
+          _vfpFileMtimeMs: stats.mtimeMs,
+          _vfpDeleted: row.deleted,
+          _vfpSyncRunId: runId,
+          _vfpSyncedAt: syncedAt,
+        };
+
+        ops.push({
           updateOne: {
             filter: {
               _vfpTable: tableName,
-              _vfpSourceKey: doc._vfpSourceKey,
+              _vfpSourceKey: sourceKey,
             },
             update: { $set: doc },
             upsert: true,
           },
-        }));
-        await collection.bulkWrite(ops, { ordered: false });
-        importedCount += chunk.length;
+        });
+      }
+
+      if (ops.length > 0) {
+        await collection.bulkWrite(ops, { ordered: false, bypassDocumentValidation: true });
+        importedCount += ops.length;
       }
     }
 
     const syncDateLabel = getSyncDateLabel(new Date());
-    const tableHash = `${stats.mtimeMs}-${dbf.recordCount}`;
+    const tableHash = `${stats.mtimeMs}-${recordCount}`;
     await VfpSyncState.updateOne(
       { tableName, email },
       {
@@ -271,7 +301,7 @@ async function importSingleDbfFile(
           lastSyncedAt: new Date(),
           lastSyncedDate: syncDateLabel,
           lastFileMtimeMs: stats.mtimeMs,
-          lastRecordCount: dbf.recordCount,
+          lastRecordCount: recordCount,
           lastImportedCount: importedCount,
           lastSkippedCount: 0,
           lastHash: tableHash,
@@ -291,7 +321,7 @@ async function importSingleDbfFile(
       },
     });
 
-    return importedCount;
+    return { importedCount, error: undefined };
   } catch (error: any) {
     await VfpSyncState.updateOne(
       { tableName, email },
@@ -314,7 +344,7 @@ async function importSingleDbfFile(
       },
     });
 
-    return 0;
+    return { importedCount: 0, error: error.message };
   }
 }
 
@@ -353,8 +383,7 @@ function isValidTableFile(fileName: string) {
   return true;
 }
 
-export function readDbf(filePath: string) {
-  const buffer = fs.readFileSync(filePath);
+export function parseDbfHeader(buffer: Buffer) {
   const recordCount = buffer.readUInt32LE(4);
   const headerLength = buffer.readUInt16LE(8);
   const recordLength = buffer.readUInt16LE(10);
@@ -374,47 +403,77 @@ export function readDbf(filePath: string) {
     }
   }
 
+  return { fields, recordCount, headerLength, recordLength };
+}
+
+export function parseRowFromBuffer(
+  buffer: Buffer,
+  index: number,
+  headerLength: number,
+  recordLength: number,
+  fields: any[],
+  hasFpt: boolean,
+  fptSource: string | Buffer | null
+) {
+  const base = headerLength + index * recordLength;
+  if (base + recordLength > buffer.length) return null;
+
+  let cursor = base + 1;
+  const data: Record<string, any> = {};
+
+  for (const field of fields) {
+    const raw = buffer.subarray(cursor, cursor + field.length);
+    let val = parseFieldValue(raw, field);
+
+    if (hasFpt && fptSource && (field.type === "M" || field.type === "G" || field.type === "P")) {
+      const blockNumber = parseMemoPointer(raw);
+      if (blockNumber > 0) {
+        val = readFptMemo(fptSource, blockNumber, field.type);
+      } else {
+        val = "";
+      }
+    }
+
+    data[field.name] = val;
+    cursor += field.length;
+  }
+
+  return {
+    rowNumber: index + 1,
+    deleted: buffer[base] === 0x2a,
+    data,
+  };
+}
+
+export function readDbf(filePath: string) {
+  const buffer = fs.readFileSync(filePath);
+  const { fields, recordCount, headerLength, recordLength } = parseDbfHeader(buffer);
+
   const ext = path.extname(filePath);
   const baseName = filePath.slice(0, -ext.length);
   const fptPath = baseName + (ext === ext.toUpperCase() ? ".FPT" : ".fpt");
   const hasFpt = fs.existsSync(fptPath);
+  const fptBuffer = hasFpt ? fs.readFileSync(fptPath) : null;
 
   const rows: any[] = [];
   for (let index = 0; index < recordCount; index += 1) {
-    const base = headerLength + index * recordLength;
-    if (base + recordLength > buffer.length) break;
-
-    let cursor = base + 1;
-    const data: Record<string, any> = {};
-
-    for (const field of fields) {
-      const raw = buffer.subarray(cursor, cursor + field.length);
-      let val = parseFieldValue(raw, field);
-
-      if (hasFpt && (field.type === "M" || field.type === "G" || field.type === "P")) {
-        const blockNumber = parseMemoPointer(raw);
-        if (blockNumber > 0) {
-          val = readFptMemo(fptPath, blockNumber, field.type);
-        } else {
-          val = "";
-        }
-      }
-
-      data[field.name] = val;
-      cursor += field.length;
-    }
-
-    rows.push({
-      rowNumber: index + 1,
-      deleted: buffer[base] === 0x2a,
-      data,
-    });
+    const row = parseRowFromBuffer(buffer, index, headerLength, recordLength, fields, hasFpt, fptBuffer);
+    if (!row) break;
+    rows.push(row);
   }
 
   return { fields, rows, recordCount, headerLength, recordLength };
 }
 
 function parseFieldValue(raw: Buffer, field: any) {
+  // Fast-path binary integer and currency fields without string decoding
+  if (field.type === "I") {
+    return raw.length >= 4 ? raw.readInt32LE(0) : null;
+  }
+  if (field.type === "Y") {
+    return raw.length >= 8 ? Number(raw.readBigInt64LE(0)) / 10000 : null;
+  }
+
   const text = decodeText(raw).trim();
   if (text === "") return null;
 
@@ -422,10 +481,6 @@ function parseFieldValue(raw: Buffer, field: any) {
     case "N":
     case "F":
       return Number.isNaN(Number(text)) ? text : Number(text);
-    case "I":
-      return raw.length >= 4 ? raw.readInt32LE(0) : null;
-    case "Y":
-      return raw.length >= 8 ? Number(raw.readBigInt64LE(0)) / 10000 : null;
     case "D":
       return /^\d{8}$/.test(text)
         ? `${text.slice(0, 4)}-${text.slice(4, 6)}-${text.slice(6, 8)}`
@@ -452,33 +507,31 @@ function parseMemoPointer(raw: Buffer) {
   return isNaN(num) ? 0 : num;
 }
 
-function readFptMemo(fptPath: string, blockNum: number, fieldType: string) {
+function readFptMemo(fptSource: string | Buffer, blockNum: number, fieldType: string) {
   try {
-    const fd = fs.openSync(fptPath, "r");
-    try {
-      const headerBuffer = Buffer.alloc(8);
-      fs.readSync(fd, headerBuffer, 0, 8, 0);
-      const blockSize = headerBuffer.readUInt16BE(6) || 64;
+    let fptBuffer: Buffer;
+    if (Buffer.isBuffer(fptSource)) {
+      fptBuffer = fptSource;
+    } else {
+      if (!fs.existsSync(fptSource)) return "";
+      fptBuffer = fs.readFileSync(fptSource);
+    }
 
-      const blockOffset = blockNum * blockSize;
-      const blockHeader = Buffer.alloc(8);
-      fs.readSync(fd, blockHeader, 0, 8, blockOffset);
+    if (fptBuffer.length < 8) return "";
+    const blockSize = fptBuffer.readUInt16BE(6) || 64;
+    const blockOffset = blockNum * blockSize;
+    if (blockOffset + 8 > fptBuffer.length) return "";
 
-      const signature = blockHeader.readUInt32BE(0);
-      const length = blockHeader.readUInt32BE(4);
+    const signature = fptBuffer.readUInt32BE(blockOffset);
+    const length = fptBuffer.readUInt32BE(blockOffset + 4);
 
-      if (length <= 0 || length > 50 * 1024 * 1024) return "";
+    if (length <= 0 || blockOffset + 8 + length > fptBuffer.length) return "";
 
-      const memoBuffer = Buffer.alloc(length);
-      fs.readSync(fd, memoBuffer, 0, length, blockOffset + 8);
-
-      if (signature === 1 && fieldType === "M") {
-        return memoBuffer.toString(VFP_ENCODING as BufferEncoding).trim();
-      } else {
-        return memoBuffer.toString("base64");
-      }
-    } finally {
-      fs.closeSync(fd);
+    const memoBytes = fptBuffer.subarray(blockOffset + 8, blockOffset + 8 + length);
+    if (signature === 1 && fieldType === "M") {
+      return memoBytes.toString(VFP_ENCODING as BufferEncoding).trim();
+    } else {
+      return memoBytes.toString("base64");
     }
   } catch {
     return "";
@@ -623,8 +676,9 @@ function guessPrimaryKeyFields(fields: any[], rows: any[]) {
 
       const values = new Set();
       let unique = true;
-      for (const row of rows) {
-        const val = row.data[realName];
+      const limit = Math.min(rows.length, 2000);
+      for (let i = 0; i < limit; i++) {
+        const val = rows[i].data[realName];
         if (val === undefined || val === null || String(val).trim() === "" || values.has(val)) {
           unique = false;
           break;

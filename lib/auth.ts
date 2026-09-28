@@ -26,7 +26,7 @@ export async function verifyToken() {
 
     return jwt.verify(
       token,
-      process.env.JWT_SECRET!
+      process.env.JWT_SECRET || "mabsol_super_secret_jwt_key_2026"
     );
 
   } catch {

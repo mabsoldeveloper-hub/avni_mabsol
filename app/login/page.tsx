@@ -520,7 +520,7 @@ export default function LoginPage() {
             } catch {}
           }
           const destination = data.redirectUrl || (data.user?.isSuperAdmin || data.user?.roleType === "SuperAdmin" ? "/dashboard/super-admin" : "/dashboard");
-          router.push(destination);
+          window.location.href = destination;
           return;
         }
         setStep("otp");
@@ -619,9 +619,12 @@ export default function LoginPage() {
 
       if (data.success) {
         if (data.user?.isSuperAdmin || data.user?.roleType === "SuperAdmin") {
-          router.push("/dashboard/super-admin");
+          window.location.href = "/dashboard/super-admin";
         } else {
-          router.push("/dashboard");
+          const roleSlug = data.user?.roleType
+            ? String(data.user.roleType).toLowerCase().trim().replace(/[\s_]+/g, "-")
+            : "admin";
+          window.location.href = `/dashboard/${roleSlug}`;
         }
       } else {
         setOtpError(data.message || "That code didn't work. Please try again.");

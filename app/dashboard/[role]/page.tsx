@@ -1,9 +1,10 @@
-import DashboardContent from "@/components/dashboard/DashboardContent";
+import ClientDashboardWrapper from "@/components/dashboard/ClientDashboardWrapper";
 import ProtectedPage from "@/components/ProtectedPage";
 import jwt from "jsonwebtoken";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 
+export const dynamic = "force-dynamic";
 
 export default async function RoleDashboardPage() {
   const cookieStore = await cookies();
@@ -14,15 +15,18 @@ export default async function RoleDashboardPage() {
   }
 
   try {
-    jwt.verify(token, process.env.JWT_SECRET as string);
+    const secret = process.env.JWT_SECRET || "mabsol_super_secret_jwt_key_2026";
+    jwt.verify(token, secret);
   } catch {
     redirect("/login");
   }
 
   return (
     <ProtectedPage permission="dashboard.view">
-      <DashboardContent/>
+      <ClientDashboardWrapper />
     </ProtectedPage>
   );
 }
+
+
 

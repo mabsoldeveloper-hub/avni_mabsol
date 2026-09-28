@@ -153,7 +153,7 @@ export default function PurchaseInvoiceModal({
 
             <button
               type="button"
-              onClose ={onClose}
+              // onClose ={onClose}
               className="inline-flex items-center justify-center w-9 h-9 rounded-lg bg-white/10 hover:bg-white/20"
               onClick={onClose}
               aria-label="Close"

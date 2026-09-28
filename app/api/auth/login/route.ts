@@ -130,9 +130,14 @@ export async function POST(req: Request) {
       accessValidUntil: user.accessValidUntil,
     };
 
+    const roleSlug = user.roleType
+      ? String(user.roleType).toLowerCase().trim().replace(/[\s_]+/g, "-")
+      : "admin";
+
     const redirectUrl = isSuperAdmin || user.roleType === "SuperAdmin"
       ? "/dashboard/super-admin"
-      : "/dashboard";
+      : `/dashboard/${roleSlug}`;
+
 
     const response = NextResponse.json({
       success: true,

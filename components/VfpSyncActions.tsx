@@ -405,9 +405,11 @@ export default function VfpSyncActions({
   // Direct Browser Upload Handler with per-file tracking
   const handleDirectDbfUpload = async (files: FileList | File[] | null) => {
     if (!files || files.length === 0) return;
-    const dbfFiles = Array.from(files).filter((f) => f.name.toLowerCase().endsWith(".dbf"));
+    const allFiles = Array.from(files);
+    const dbfFiles = allFiles.filter((f) => f.name.toLowerCase().endsWith(".dbf"));
+    const fptFiles = allFiles.filter((f) => f.name.toLowerCase().endsWith(".fpt"));
     if (dbfFiles.length === 0) {
-      setMessage({ type: "error", text: "Please select valid data files to upload." });
+      setMessage({ type: "error", text: "Please select valid data files to upload (.dbf)." });
       return;
     }
 
@@ -428,66 +430,93 @@ export default function VfpSyncActions({
     const allUploadedNames: string[] = [];
 
     try {
-      for (let i = 0; i < dbfFiles.length; i++) {
-        const file = dbfFiles[i];
-        const mbSize = (file.size / (1024 * 1024)).toFixed(1);
+      // Concurrent upload & sync pool: runs up to 3 tables in parallel for maximum sync speed
+      const CONCURRENCY = Math.min(3, dbfFiles.length);
+      let nextIndex = 0;
 
-        setUploadQueue((prev) =>
-          prev.map((item, idx) => (idx === i ? { ...item, status: "uploading" } : item))
-        );
+      const worker = async () => {
+        while (true) {
+          const i = nextIndex++;
+          if (i >= dbfFiles.length) break;
 
-        setMessage({
-          type: "info",
-          text: `[${i + 1}/${dbfFiles.length}] Uploading & syncing ${file.name.replace(/\.dbf$/i, "")} (${mbSize} MB)...`,
-        });
-
-        const formData = new FormData();
-        formData.append("directSync", "true");
-        formData.append("files", file);
-
-        const res = await fetch("/api/mabsolcrmsync/upload-dbf", {
-          method: "POST",
-          body: formData,
-        });
-
-        if (!res.ok) {
-          const errText = await res.text().catch(() => "");
-          const errMsg = res.status === 413
-            ? `File ${file.name} (${mbSize} MB) exceeds server upload limit.`
-            : errText || `Server returned HTTP status ${res.status}`;
-          
-          setUploadQueue((prev) =>
-            prev.map((item, idx) => (idx === i ? { ...item, status: "error", error: errMsg } : item))
-          );
-          continue;
-        }
-
-        const data = await res.json();
-        if (data.success) {
-          successCount++;
-          const rows = data.result?.importedRows || 0;
-          totalImportedRows += rows;
-          if (data.uploadedFileNames) {
-            allUploadedNames.push(...data.uploadedFileNames);
-          }
+          const file = dbfFiles[i];
+          const mbSize = (file.size / (1024 * 1024)).toFixed(1);
 
           setUploadQueue((prev) =>
-            prev.map((item, idx) =>
-              idx === i ? { ...item, status: "success", importedRows: rows } : item
-            )
+            prev.map((item, idx) => (idx === i ? { ...item, status: "uploading" } : item))
           );
 
           setMessage({
             type: "info",
-            text: `[${i + 1}/${dbfFiles.length}] Synced ${file.name.replace(/\.dbf$/i, "")} (${rows.toLocaleString()} rows).`,
+            text: `Uploading & syncing ${file.name.replace(/\.dbf$/i, "")} (${mbSize} MB)...`,
           });
-        } else {
-          const errMsg = data.error || `Failed to sync ${file.name}`;
-          setUploadQueue((prev) =>
-            prev.map((item, idx) => (idx === i ? { ...item, status: "error", error: errMsg } : item))
+
+          const formData = new FormData();
+          formData.append("directSync", "true");
+          formData.append("files", file);
+
+          // Include companion memo file (.fpt) if selected by user
+          const baseNameLower = file.name.replace(/\.dbf$/i, "").toLowerCase();
+          const companionFpt = fptFiles.find(
+            (fpt) => fpt.name.replace(/\.fpt$/i, "").toLowerCase() === baseNameLower
           );
+          if (companionFpt) {
+            formData.append("files", companionFpt);
+          }
+
+          try {
+            const res = await fetch("/api/mabsolcrmsync/upload-dbf", {
+              method: "POST",
+              body: formData,
+            });
+
+            if (!res.ok) {
+              const errText = await res.text().catch(() => "");
+              const errMsg = res.status === 413
+                ? `File ${file.name} (${mbSize} MB) exceeds server upload limit.`
+                : errText || `Server returned HTTP status ${res.status}`;
+
+              setUploadQueue((prev) =>
+                prev.map((item, idx) => (idx === i ? { ...item, status: "error", error: errMsg } : item))
+              );
+              continue;
+            }
+
+            const data = await res.json();
+            if (data.success) {
+              successCount++;
+              const rows = data.result?.importedRows || 0;
+              totalImportedRows += rows;
+              if (data.uploadedFileNames) {
+                allUploadedNames.push(...data.uploadedFileNames);
+              }
+
+              setUploadQueue((prev) =>
+                prev.map((item, idx) =>
+                  idx === i ? { ...item, status: "success", importedRows: rows } : item
+                )
+              );
+
+              setMessage({
+                type: "info",
+                text: `Synced ${file.name.replace(/\.dbf$/i, "")} (${rows.toLocaleString()} rows).`,
+              });
+            } else {
+              const errMsg = data.error || `Failed to sync ${file.name}`;
+              setUploadQueue((prev) =>
+                prev.map((item, idx) => (idx === i ? { ...item, status: "error", error: errMsg } : item))
+              );
+            }
+          } catch (fetchErr: any) {
+            setUploadQueue((prev) =>
+              prev.map((item, idx) => (idx === i ? { ...item, status: "error", error: fetchErr.message } : item))
+            );
+          }
         }
-      }
+      };
+
+      const workers = Array.from({ length: CONCURRENCY }, () => worker());
+      await Promise.all(workers);
 
       if (successCount > 0) {
         setDirectSyncCompleted(true);
@@ -2004,7 +2033,7 @@ export default function VfpSyncActions({
       <input
         type="file"
         ref={nativeFileInputRef}
-        accept=".dbf"
+        accept=".dbf,.DBF,.fpt,.FPT"
         multiple
         style={{ display: "none" }}
         onChange={handleNativeFileChange}

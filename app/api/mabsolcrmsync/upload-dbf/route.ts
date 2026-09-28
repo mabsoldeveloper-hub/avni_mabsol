@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import dbConnect from "@/lib/mongodb";
 import { getCurrentUser } from "@/lib/auth";
-import { performDirectServerSync } from "@/lib/vfp/dbfSync";
+import { performDirectServerSync, importSingleDbfFile } from "@/lib/vfp/dbfSync";
 import VfpConfig from "@/models/VfpConfig";
 import fs from "fs";
 import path from "path";
+import crypto from "crypto";
 
 import jwt from "jsonwebtoken";
 import User from "@/models/User";
@@ -12,6 +13,7 @@ import { validateUserLoginAccess } from "@/lib/services/superAdmin.service";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+export const maxDuration = 300; // 5 minutes timeout for 200MB+ file uploads and parsing
 
 export async function POST(request: NextRequest) {
   try {
@@ -267,6 +269,48 @@ export async function POST(request: NextRequest) {
       { upsert: true }
     );
 
+    const isDirectSync = formData.get("directSync") === "true";
+
+    // Direct Browser Upload & Sync: Parse and import DBF tables synchronously, returning real imported row counts
+    if (isDirectSync) {
+      let totalImportedRows = 0;
+      let syncError: string | undefined;
+      const runId = `${Date.now()}-${crypto.randomBytes(4).toString("hex")}`;
+      const dbfFileNames = uploadedFileNames.filter((f) => f.toLowerCase().endsWith(".dbf"));
+
+      for (const fileName of dbfFileNames) {
+        const filePath = path.join(uploadDir, fileName);
+        const syncResult = await importSingleDbfFile(filePath, runId, user.email, uploadDir);
+        totalImportedRows += syncResult.importedCount;
+        if (syncResult.error) {
+          syncError = syncResult.error;
+        }
+      }
+
+      if (syncError && totalImportedRows === 0 && dbfFileNames.length > 0) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: syncError,
+            uploadedFileNames,
+          },
+          { status: 500 }
+        );
+      }
+
+      return NextResponse.json({
+        success: true,
+        companyCode,
+        uploadedFileNames,
+        result: {
+          importedRows: totalImportedRows,
+          importedTables: dbfFileNames.length,
+          runId,
+        },
+        message: `Uploaded and synced ${dbfFileNames.length} table(s) (${totalImportedRows.toLocaleString()} rows).`,
+      });
+    }
+
     const isFinalBatch = formData.get("isFinalBatch") !== "false";
     const storeOnly = formData.get("storeOnly") === "true";
     const skipDirectSync = formData.get("skipDirectSync") === "true";
@@ -283,7 +327,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Decouple direct server database sync to run asynchronously in background
-    // so HTTP response returns in <500ms and NEVER triggers Nginx 504 Gateway Timeout
+    // for non-browser/desktop-agent uploads
     setImmediate(() => {
       performDirectServerSync(user.email, uploadDir).catch((syncErr) => {
         console.error(`[Background DB Sync Error - ${companyCode}]:`, syncErr.message);

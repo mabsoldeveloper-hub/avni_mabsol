@@ -42,35 +42,35 @@ interface ApiAlertDetails {
 const GEMINI_MODELS: GeminiModelOption[] = [
   {
     id: "gemini-2.5-flash",
-    name: "Gemini 2.5 Flash",
+    name: "AI Fast 2.5",
     tag: "Recommended",
     desc: "Fastest response with top accuracy for CRM field schemas",
     badgeColor: "bg-emerald-100 text-emerald-700 border-emerald-300 dark:bg-emerald-950/60 dark:text-emerald-300 dark:border-emerald-800",
   },
   {
     id: "gemini-2.5-pro",
-    name: "Gemini 2.5 Pro",
+    name: "AI Pro 2.5",
     tag: "Deep Reasoning",
     desc: "Advanced logic, complex sub-repeaters, and multi-step conditions",
     badgeColor: "bg-purple-100 text-purple-700 border-purple-300 dark:bg-purple-950/60 dark:text-purple-300 dark:border-purple-800",
   },
   {
     id: "gemini-2.5-flash-lite",
-    name: "Gemini 2.5 Flash Lite",
+    name: "AI Flash Lite",
     tag: "Lightweight",
     desc: "Ultra-fast generation with minimal token latency",
     badgeColor: "bg-cyan-100 text-cyan-700 border-cyan-300 dark:bg-cyan-950/60 dark:text-cyan-300 dark:border-cyan-800",
   },
   {
     id: "gemini-flash-latest",
-    name: "Gemini Flash Latest",
+    name: "AI Standard Latest",
     tag: "Latest",
-    desc: "Continuously updated latest production Flash model",
+    desc: "Continuously updated latest production model",
     badgeColor: "bg-blue-100 text-blue-700 border-blue-300 dark:bg-blue-950/60 dark:text-blue-300 dark:border-blue-800",
   },
   {
     id: "gemini-pro-latest",
-    name: "Gemini Pro Latest",
+    name: "AI Pro Latest",
     tag: "Pro Edition",
     desc: "Production pro-tier reasoning model for detailed clinical surveys",
     badgeColor: "bg-amber-100 text-amber-700 border-amber-300 dark:bg-amber-950/60 dark:text-amber-300 dark:border-amber-800",
@@ -176,14 +176,14 @@ export default function AiFormStudioModal({
           data.errorDetails || {
             title: `Request Failed (HTTP ${res.status})`,
             message: data.error || "Failed to communicate with AI generation endpoint.",
-            hint: "Please check your network connection or verify GEMINI_API_KEY in .env.",
+            hint: "Please check your network connection or verify AI_API_KEY in .env.",
           }
         );
         return;
       }
 
       if (data.success && data.formSchema) {
-        // If Google Gemini free tier rate limit was reached or returned warning
+        // If AI free tier rate limit was reached or returned warning
         if (data.warning) {
           setWarningAlert({
             alert: data.warning,
@@ -193,13 +193,13 @@ export default function AiFormStudioModal({
           return;
         }
 
-        // Pure Gemini success! Apply directly to form builder canvas
+        // AI success! Apply directly to form builder canvas
         onApplySchema(data.formSchema, data);
         onClose();
       } else {
         setErrorAlert({
           title: "AI Generation Error",
-          message: data.error || "No valid schema was returned by Gemini.",
+          message: data.error || "No valid schema was returned by the AI engine.",
           hint: "Try picking a different model or tweaking your prompt.",
         });
       }

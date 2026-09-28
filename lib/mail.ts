@@ -28,12 +28,12 @@ export async function sendEmailOTP(email: string, otp: string) {
   try {
     const digits = otp.split("");
     const senderEmail = process.env.SMTP_USER || "support@mabsolinfotech.com";
-    const from = `"Mabsol Pharma CRM" <${senderEmail}>`;
+    const from = `"MabsolCrm" <${senderEmail}>`;
 
     const info = await transporter.sendMail({
       from,
       to: email,
-      subject: `${otp} is your Mabsol Pharma CRM verification code`,
+      subject: `${otp} is your MabsolCrm verification code`,
 
       html: `
 <!DOCTYPE html>
@@ -55,7 +55,7 @@ export async function sendEmailOTP(email: string, otp: string) {
                       <div style="width:20px; height:20px; background:${ORANGE}; border-radius:5px;"></div>
                     </td>
                     <td style="color:#ffffff; font-size:15px; font-weight:700;">
-                      Mabsol Pharma CRM
+                      MabsolCrm
                     </td>
                   </tr>
                 </table>
@@ -70,7 +70,7 @@ export async function sendEmailOTP(email: string, otp: string) {
                 </h2>
 
                 <p style="margin:0 0 24px; color:${MUTED}; font-size:14px; line-height:1.6;">
-                  Use the verification code below to confirm your email address and continue using Mabsol Pharma CRM.
+                  Use the verification code below to confirm your email address and continue using MabsolCrm.
                 </p>
 
                 <table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 auto 24px;">
@@ -115,7 +115,7 @@ export async function sendEmailOTP(email: string, otp: string) {
             <tr>
               <td style="padding:16px 32px 28px; border-top:1px solid ${BORDER};">
                 <p style="margin:0; color:#A6A8D2; font-size:11.5px;">
-                  © ${new Date().getFullYear()} Mabsol Pharma CRM. Synced live with ERP.
+                  © ${new Date().getFullYear()} MabsolCrm. Synced live with ERP.
                 </p>
               </td>
             </tr>
@@ -129,7 +129,7 @@ export async function sendEmailOTP(email: string, otp: string) {
 </html>
       `,
 
-      text: `Your Mabsol Pharma CRM email verification code is ${otp}. This code expires in 5 minutes.`,
+      text: `Your MabsolCrm email verification code is ${otp}. This code expires in 5 minutes.`,
     });
 
     console.log("Mail Sent:", info.messageId);

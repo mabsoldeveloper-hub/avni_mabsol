@@ -55,7 +55,7 @@ if (fs.existsSync(configJsonPath)) {
 const CLOUD_URL = (
   process.env.CLOUD_URL ||
   workerConfigFile.cloudUrl ||
-  "https://phcrm.mabsolinfotech.cloud"
+  "https://mbh.crm.mabsolinfotech.cloud"
 ).replace(/\/+$/, "");
 
 // VFP_DATA_DIR starts from config but MUST be dynamically updated from cloud dashboard heartbeat
@@ -92,7 +92,7 @@ main().catch((error) => {
 
 async function main() {
   console.log("========================================================");
-  console.log("  Mabsol Pharma CRM - Desktop DBF Sync Worker");
+  console.log("  MabsolCrm - Desktop DBF Sync Worker");
   console.log("========================================================");
   console.log(`[vfp-worker] Cloud URL    : ${CLOUD_URL}`);
   console.log(`[vfp-worker] Account Email: ${USER_EMAIL || "(fetched dynamically)"}`);
@@ -328,7 +328,7 @@ function setupWatcher(dirPath) {
   // Close old watchers that are no longer needed
   for (const [watchedPath, watcher] of activeWatchers.entries()) {
     if (watchedPath !== dirPath) {
-      try { watcher.close(); } catch {}
+      try { watcher.close(); } catch { }
       activeWatchers.delete(watchedPath);
       console.log(`[vfp-worker] Stopped watching old path: ${watchedPath}`);
     }

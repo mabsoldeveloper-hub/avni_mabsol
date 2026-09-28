@@ -860,7 +860,7 @@ export default function LandingPage() {
               <div className="hero-banner-wrapper">
                 <img
                   src="/uploads/index-banner.png"
-                  alt="Mabsol Pharma CRM Dashboard"
+                  alt="MabsolCrm Dashboard"
                   className="hero-banner-image"
                 />
               </div>
@@ -1068,7 +1068,7 @@ export default function LandingPage() {
 
               <div className="fp-header-content">
                 <div className="fp-header-info">
-                  <h2 className="fp-title">Mabsol Pharma CRM — Complete Feature Catalog</h2>
+                  <h2 className="fp-title">MabsolCrm — Complete Feature Catalog</h2>
                   <p className="fp-subtitle">
                     Complete breakdown of <strong>{ALL_FEATURES.length} modules</strong> & <strong>{totalFeatures} features</strong>.
                   </p>
@@ -1153,7 +1153,7 @@ export default function LandingPage() {
 
             {/* Footer */}
             <div className="fp-footer">
-              <span>Mabsol Pharma CRM &copy; {new Date().getFullYear()} · Built by Mabsol Team</span>
+              <span>MabsolCrm &copy; {new Date().getFullYear()} · Built by Mabsol Team</span>
               <a href="/login" className="btn btn-primary fp-cta">
                 Get Started →
               </a>

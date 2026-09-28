@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { FaPalette, FaPowerOff } from "react-icons/fa";
 import { SidebarThemeId, SidebarVisuals } from "./types";
 import SidebarThemePopover from "./SidebarThemePopover";
+import { checkIsSuperAdmin } from "@/lib/constants/superAdmin.constant";
 
 interface SidebarFooterProps {
   iconOnly: boolean;
@@ -115,53 +116,83 @@ export default React.memo(function SidebarFooter({
           overflow: "hidden",
         }}
       >
-        {/* Separate Theme Customizer Row */}
-        <button
-          ref={!iconOnly ? colorPickerBtnRef : undefined}
-          type="button"
-          onClick={handleTogglePicker}
-          className="w-full flex items-center justify-between px-3 py-1.5 rounded-xl bg-slate-50/80 hover:bg-slate-100/90 dark:bg-slate-800/60 dark:hover:bg-slate-800 border border-slate-200/80 dark:border-slate-700/60 text-slate-600 dark:text-slate-300 text-[11.5px] font-medium transition-all group cursor-pointer shadow-2xs"
-        >
-          <span className="flex items-center gap-2">
-            <span className="w-5 h-5 rounded-lg bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 flex items-center justify-center text-[10.5px] group-hover:scale-110 transition-transform">
-              <FaPalette />
+        {/* Separate Theme Customizer Row (Hidden for Super Admin) */}
+        {!checkIsSuperAdmin(user) && (
+          <button
+            ref={!iconOnly ? colorPickerBtnRef : undefined}
+            type="button"
+            onClick={handleTogglePicker}
+            className="w-full flex items-center justify-between px-3 py-1.5 rounded-xl bg-slate-50/80 hover:bg-slate-100/90 dark:bg-slate-800/60 dark:hover:bg-slate-800 border border-slate-200/80 dark:border-slate-700/60 text-slate-600 dark:text-slate-300 text-[11.5px] font-medium transition-all group cursor-pointer shadow-2xs"
+          >
+            <span className="flex items-center gap-2">
+              <span className="w-5 h-5 rounded-lg bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 flex items-center justify-center text-[10.5px] group-hover:scale-110 transition-transform">
+                <FaPalette />
+              </span>
+              <span>Customize Theme</span>
             </span>
-            <span>Customize Theme</span>
-          </span>
-          <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-white dark:bg-slate-700 text-slate-500 dark:text-slate-400 border border-slate-200/60 dark:border-slate-600">
-            Palette
-          </span>
-        </button>
+            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-white dark:bg-slate-700 text-slate-500 dark:text-slate-400 border border-slate-200/60 dark:border-slate-600">
+              Palette
+            </span>
+          </button>
+        )}
 
         {/* Clean User Profile Card */}
-        <div className="rounded-xl border border-slate-200/90 dark:border-slate-800 bg-white/95 dark:bg-slate-900/95 p-2 shadow-xs flex items-center justify-between gap-2">
-          <div className="flex items-center gap-2 min-w-0 flex-1">
-            <div className="relative shrink-0">
-              <span className="flex items-center justify-center w-8 h-8 rounded-full bg-slate-900 text-white font-extrabold text-[10.5px] shadow-xs">
-                {initials}
-              </span>
-              <span className="absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full bg-emerald-500 ring-2 ring-white dark:ring-slate-900" />
+        {checkIsSuperAdmin(user) ? (
+          <div className="rounded-xl border border-slate-800/90 bg-[#0B101B] p-2 shadow-xs flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2.5 min-w-0 flex-1">
+              <div className="w-8 h-8 rounded-lg bg-blue-950/90 border border-blue-800/70 text-blue-300 font-black text-xs flex items-center justify-center shrink-0 select-none">
+                AD
+              </div>
+
+              <div className="min-w-0 flex-1">
+                <div className="text-xs font-bold text-white truncate">
+                  {user?.name || "System Owner"}
+                </div>
+                <div className="text-[9px] font-extrabold text-blue-400 tracking-wider uppercase mt-0.5">
+                  ROOT ADMIN
+                </div>
+              </div>
             </div>
 
-            <div className="min-w-0 flex-1">
-              <div className="text-[11.5px] font-bold text-slate-800 dark:text-white truncate">
-                {displayEmail}
-              </div>
-              <div className="text-[9.5px] font-semibold text-slate-500 dark:text-slate-400">
-                Role: <span className="text-slate-800 dark:text-slate-200 font-bold">{roleName}</span>
-              </div>
-            </div>
+            <button
+              type="button"
+              onClick={handleLogout}
+              className="w-7 h-7 rounded-lg bg-slate-900 border border-slate-800 text-white/80 hover:text-white hover:bg-rose-950/40 flex items-center justify-center transition-colors cursor-pointer shrink-0"
+              title="Logout"
+            >
+              <FaPowerOff size={11} />
+            </button>
           </div>
+        ) : (
+          <div className="rounded-xl border border-slate-200/90 dark:border-slate-800 bg-white/95 dark:bg-slate-900/95 p-2 shadow-xs flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2 min-w-0 flex-1">
+              <div className="relative shrink-0">
+                <span className="flex items-center justify-center w-8 h-8 rounded-full bg-slate-900 text-white font-extrabold text-[10.5px] shadow-xs">
+                  {initials}
+                </span>
+                <span className="absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full bg-emerald-500 ring-2 ring-white dark:ring-slate-900" />
+              </div>
 
-          <button
-            type="button"
-            onClick={handleLogout}
-            className="w-7 h-7 rounded-full bg-slate-100 hover:bg-rose-50 dark:bg-slate-800 dark:hover:bg-rose-950/40 text-slate-500 hover:text-rose-600 dark:hover:text-rose-400 flex items-center justify-center transition-colors cursor-pointer shrink-0"
-            title="Logout"
-          >
-            <FaPowerOff size={10} />
-          </button>
-        </div>
+              <div className="min-w-0 flex-1">
+                <div className="text-[11.5px] font-bold text-slate-800 dark:text-white truncate">
+                  {displayEmail}
+                </div>
+                <div className="text-[9.5px] font-semibold text-slate-500 dark:text-slate-400">
+                  Role: <span className="text-slate-800 dark:text-slate-200 font-bold">{roleName}</span>
+                </div>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={handleLogout}
+              className="w-7 h-7 rounded-full bg-slate-100 hover:bg-rose-50 dark:bg-slate-800 dark:hover:bg-rose-950/40 text-slate-500 hover:text-rose-600 dark:hover:text-rose-400 flex items-center justify-center transition-colors cursor-pointer shrink-0"
+              title="Logout"
+            >
+              <FaPowerOff size={10} />
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Collapsed View */}

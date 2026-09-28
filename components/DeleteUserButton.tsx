@@ -38,7 +38,7 @@ export default function DeleteUserButton({
 
   return (
     <button
-      className="btn btn-danger btn-sm"
+      className="px-3.5 py-1 rounded-full text-xs font-bold text-rose-600 bg-rose-50 hover:bg-rose-600 hover:text-white border border-rose-200 transition-all cursor-pointer shadow-2xs"
       onClick={deleteUser}
     >
       Delete

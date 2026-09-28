@@ -8,6 +8,7 @@ import path from "path";
 
 import jwt from "jsonwebtoken";
 import User from "@/models/User";
+import { validateUserLoginAccess } from "@/lib/services/superAdmin.service";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -46,6 +47,144 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: "Unauthorized. Please login or provide a valid agent token." }, { status: 401 });
     }
 
+    // Verify user account is active, approved, and not suspended or deactivated
+    const accessCheck = await validateUserLoginAccess(user);
+    if (!accessCheck.allowed) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: accessCheck.message || "Account is suspended or deactivated. Access denied.",
+          accountSuspended: true,
+        },
+        { status: 403 }
+      );
+    }
+
+    // Validate License Key, Expiry, and Single-Device Binding
+    const licenseKey = request.headers.get("x-license-key");
+    const deviceId = request.headers.get("x-device-id") || "";
+    const deviceName = request.headers.get("x-device-name") || "";
+
+    if (licenseKey) {
+      let config: any =
+        (await VfpConfig.findOne({ license: licenseKey })) ||
+        (await VfpConfig.findOne({ email: user.email })) ||
+        (await VfpConfig.findOne({ key: "vfp_sync_config" }));
+
+      if (config) {
+        // If config was found by email/key but has a different license, double check if licenseKey exists in another config
+        if (config.license && config.license !== licenseKey) {
+          const directMatch = await VfpConfig.findOne({ license: licenseKey });
+          if (directMatch) {
+            config = directMatch;
+          } else {
+            return NextResponse.json(
+              { success: false, licenseInvalid: true, error: "Invalid license key." },
+              { status: 403 }
+            );
+          }
+        }
+
+        // 1. Check if key is in retired/expired history
+        const isReusedOrRetired = (config.usedLicenses || []).some((u: any) => u.key === licenseKey);
+        if (isReusedOrRetired) {
+          return NextResponse.json(
+            {
+              success: false,
+              licenseExpired: true,
+              error: "This license key has expired or was regenerated. Expired keys cannot be reused. Please generate a new key from Sync Settings.",
+            },
+            { status: 403 }
+          );
+        }
+
+        // 2. Check if current key is expired by date
+        if (config.licenseExpiresAt && new Date() > new Date(config.licenseExpiresAt)) {
+          await VfpConfig.updateOne(
+            { _id: config._id },
+            {
+              $addToSet: {
+                usedLicenses: {
+                  key: config.license,
+                  issuedAt: config.licenseIssuedAt,
+                  expiredAt: config.licenseExpiresAt,
+                  boundDeviceId: config.boundDeviceId,
+                  status: "expired",
+                },
+              },
+              $set: { licenseStatus: "expired" },
+            }
+          );
+          return NextResponse.json(
+            {
+              success: false,
+              licenseExpired: true,
+              error: "Your license key has expired (30-day validity ended). Please generate a new key from Cloud Dashboard > Sync Settings.",
+            },
+            { status: 403 }
+          );
+        }
+
+        // 3. Verify key matches active config
+        if (config.license && config.license !== licenseKey) {
+          return NextResponse.json(
+            { success: false, licenseInvalid: true, error: "Invalid license key." },
+            { status: 403 }
+          );
+        }
+
+        // 4. Single-Device Binding: 1 key can only be used on 1 machine!
+        if (deviceId) {
+          if (!config.boundDeviceId) {
+            // First device to use this key -> Bind it!
+            await VfpConfig.updateOne(
+              { _id: config._id },
+              {
+                $set: {
+                  boundDeviceId: deviceId,
+                  boundDeviceName: deviceName || "Operator Machine",
+                  boundAt: new Date(),
+                },
+              }
+            );
+          } else if (config.boundDeviceId !== deviceId) {
+            // Another device trying to use the same key!
+            return NextResponse.json(
+              {
+                success: false,
+                deviceMismatch: true,
+                error: `This license key is already bound to another machine (${config.boundDeviceName || "First Device"}). Each license key can only be activated on 1 device. Please generate a separate license key.`,
+              },
+              { status: 403 }
+            );
+          }
+        }
+
+        // Keep user config's license aligned so future operations know this user is using this license
+        if (user?.email && (!config.email || config.email !== user.email)) {
+          await VfpConfig.updateOne(
+            { email: user.email },
+            {
+              $set: {
+                license: licenseKey,
+                licenseExpiresAt: config.licenseExpiresAt,
+                licenseIssuedAt: config.licenseIssuedAt,
+                licenseStatus: "active",
+                boundDeviceId: deviceId || config.boundDeviceId,
+                boundDeviceName: deviceName || config.boundDeviceName,
+              },
+            },
+            { upsert: true }
+          );
+        }
+      } else {
+        return NextResponse.json(
+          { success: false, licenseInvalid: true, error: "Invalid license key. No matching active license was found on the server." },
+          { status: 403 }
+        );
+      }
+    }
+
     const formData = await request.formData();
     const files = formData.getAll("files") as File[];
 
@@ -62,17 +201,21 @@ export async function POST(request: NextRequest) {
       ? "/home/vfpuser/data"
       : path.join(process.cwd(), "data");
 
+    // Clean up any legacy migration directory to prevent disk bloat
+    const legacyMigrationDir = path.join(baseDataDir, "migration");
+    if (fs.existsSync(legacyMigrationDir)) {
+      try {
+        fs.rmSync(legacyMigrationDir, { recursive: true, force: true });
+      } catch {}
+    }
+
     const userFolder = (user.email || "default").replace(/[^a-zA-Z0-9_-]/g, "_");
 
-    // Company-specific folder: <baseDataDir>/<userEmail>/<companyCode>/
+    // Company-specific folder: <baseDataDir>/<userFolder>/<companyCode>/
     const uploadDir = path.join(baseDataDir, userFolder, companyCode);
-    const migrationDir = path.join(baseDataDir, "migration", userFolder, companyCode);
 
     if (!fs.existsSync(uploadDir)) {
       fs.mkdirSync(uploadDir, { recursive: true });
-    }
-    if (!fs.existsSync(migrationDir)) {
-      fs.mkdirSync(migrationDir, { recursive: true });
     }
 
     const uploadedFileNames: string[] = [];
@@ -83,12 +226,8 @@ export async function POST(request: NextRequest) {
         const buffer = Buffer.from(arrayBuffer);
         const fileName = path.basename(file.name);
         
-        // Write to both user directory and migration directory
+        // Write file to temporary upload directory for immediate parsing and sync
         fs.writeFileSync(path.join(uploadDir, fileName), buffer);
-        try {
-          fs.writeFileSync(path.join(migrationDir, fileName), buffer);
-        } catch {}
-
         uploadedFileNames.push(fileName);
       }
     }
@@ -129,31 +268,37 @@ export async function POST(request: NextRequest) {
     );
 
     const isFinalBatch = formData.get("isFinalBatch") !== "false";
+    const storeOnly = formData.get("storeOnly") === "true";
+    const skipDirectSync = formData.get("skipDirectSync") === "true";
 
-    if (!isFinalBatch) {
+    if (!isFinalBatch || storeOnly || skipDirectSync) {
       return NextResponse.json({
         success: true,
         batchComplete: true,
         companyCode,
         uploadedCount: uploadedFileNames.length,
-        message: `Staged ${uploadedFileNames.length} table(s) in company [${companyCode}] folder.`,
+        message: `Uploaded and stored ${uploadedFileNames.length} table(s) in company [${companyCode}] folder.`,
+        uploadedFileNames,
       });
     }
 
-    // Run direct DBF sync on server using newly uploaded files for this company
-    const syncResult = await performDirectServerSync(user.email, uploadDir);
+    // Decouple direct server database sync to run asynchronously in background
+    // so HTTP response returns in <500ms and NEVER triggers Nginx 504 Gateway Timeout
+    setImmediate(() => {
+      performDirectServerSync(user.email, uploadDir).catch((syncErr) => {
+        console.error(`[Background DB Sync Error - ${companyCode}]:`, syncErr.message);
+      });
+    });
 
     return NextResponse.json({
       success: true,
       companyCode,
-      folder: uploadDir.replace(/\\/g, "/"),
-      message: `Uploaded ${allUploadDbfFiles.length} table(s) to company [${companyCode}] folder & synced successfully! Synced ${syncResult.importedTables} table(s), ${syncResult.importedRows} row(s).`,
-      result: syncResult,
+      message: `Uploaded and stored ${uploadedFileNames.length} table(s) for company [${companyCode}]. Background DB synchronization initiated.`,
       uploadedFileNames,
     });
   } catch (error: any) {
     return NextResponse.json(
-      { success: false, error: error.message || "Failed to process DBF upload" },
+      { success: false, error: error.message || "Failed to process file upload" },
       { status: 500 }
     );
   }

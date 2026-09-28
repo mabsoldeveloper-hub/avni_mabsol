@@ -53,6 +53,7 @@ import {
   FaHeartbeat,
   FaShieldAlt,
   FaCreditCard,
+  FaSearch,
 } from "react-icons/fa";
 
 export type ColorKey =
@@ -90,21 +91,95 @@ export interface MenuItemConfig {
   subItems?: SubMenuItemConfig[];
 }
 
-export const COLOR_OPTIONS: { key: ColorKey; label: string; bg: string; text: string; hex: string }[] = [
-  { key: "indigo", label: "Indigo", bg: "bg-indigo-600", text: "text-indigo-600", hex: "#4f46e5" },
-  { key: "violet", label: "Violet", bg: "bg-violet-600", text: "text-violet-600", hex: "#7c3aed" },
-  { key: "sky", label: "Sky Blue", bg: "bg-sky-600", text: "text-sky-600", hex: "#0284c7" },
-  { key: "blue", label: "Blue", bg: "bg-blue-600", text: "text-blue-600", hex: "#2563eb" },
-  { key: "emerald", label: "Emerald Green", bg: "bg-emerald-600", text: "text-emerald-600", hex: "#059669" },
-  { key: "amber", label: "Amber Orange", bg: "bg-amber-600", text: "text-amber-600", hex: "#d97706" },
-  { key: "teal", label: "Teal", bg: "bg-teal-600", text: "text-teal-600", hex: "#0d9488" },
-  { key: "rose", label: "Rose Red", bg: "bg-rose-600", text: "text-rose-600", hex: "#e11d48" },
-  { key: "orange", label: "Deep Orange", bg: "bg-orange-600", text: "text-orange-600", hex: "#ea580c" },
-  { key: "cyan", label: "Cyan", bg: "bg-cyan-600", text: "text-cyan-600", hex: "#0891b2" },
+export const COLOR_OPTIONS: {
+  key: ColorKey;
+  label: string;
+  bg: string;
+  text: string;
+  hex: string;
+}[] = [
+  {
+    key: "indigo",
+    label: "Indigo",
+    bg: "bg-indigo-600",
+    text: "text-indigo-600",
+    hex: "#4f46e5",
+  },
+  {
+    key: "violet",
+    label: "Violet",
+    bg: "bg-violet-600",
+    text: "text-violet-600",
+    hex: "#7c3aed",
+  },
+  {
+    key: "sky",
+    label: "Sky Blue",
+    bg: "bg-sky-600",
+    text: "text-sky-600",
+    hex: "#0284c7",
+  },
+  {
+    key: "blue",
+    label: "Blue",
+    bg: "bg-blue-600",
+    text: "text-blue-600",
+    hex: "#2563eb",
+  },
+  {
+    key: "emerald",
+    label: "Emerald Green",
+    bg: "bg-emerald-600",
+    text: "text-emerald-600",
+    hex: "#059669",
+  },
+  {
+    key: "amber",
+    label: "Amber Orange",
+    bg: "bg-amber-600",
+    text: "text-amber-600",
+    hex: "#d97706",
+  },
+  {
+    key: "teal",
+    label: "Teal",
+    bg: "bg-teal-600",
+    text: "text-teal-600",
+    hex: "#0d9488",
+  },
+  {
+    key: "rose",
+    label: "Rose Red",
+    bg: "bg-rose-600",
+    text: "text-rose-600",
+    hex: "#e11d48",
+  },
+  {
+    key: "orange",
+    label: "Deep Orange",
+    bg: "bg-orange-600",
+    text: "text-orange-600",
+    hex: "#ea580c",
+  },
+  {
+    key: "cyan",
+    label: "Cyan",
+    bg: "bg-cyan-600",
+    text: "text-cyan-600",
+    hex: "#0891b2",
+  },
 ];
 
-export const ICON_CATALOG: { name: string; label: string; icon: React.ReactNode }[] = [
-  { name: "FaTachometerAlt", label: "Dashboard / Speed", icon: <FaTachometerAlt /> },
+export const ICON_CATALOG: {
+  name: string;
+  label: string;
+  icon: React.ReactNode;
+}[] = [
+  {
+    name: "FaTachometerAlt",
+    label: "Dashboard / Speed",
+    icon: <FaTachometerAlt />,
+  },
   { name: "FaBrain", label: "AI / Brain", icon: <FaBrain /> },
   { name: "FaBullseye", label: "Target / Goal", icon: <FaBullseye /> },
   { name: "FaChartBar", label: "Analytics / Chart", icon: <FaChartBar /> },
@@ -115,7 +190,11 @@ export const ICON_CATALOG: { name: string; label: string; icon: React.ReactNode 
   { name: "FaCog", label: "Settings / Cog", icon: <FaCog /> },
   { name: "FaCogs", label: "Preferences / Cogs", icon: <FaCogs /> },
   { name: "FaBuilding", label: "Company / Building", icon: <FaBuilding /> },
-  { name: "FaBalanceScale", label: "Compare / Balance", icon: <FaBalanceScale /> },
+  {
+    name: "FaBalanceScale",
+    label: "Compare / Balance",
+    icon: <FaBalanceScale />,
+  },
   { name: "FaUsers", label: "Users / Customers", icon: <FaUsers /> },
   { name: "FaUserShield", label: "Security / Admin", icon: <FaUserShield /> },
   { name: "FaUserTag", label: "Roles / Tag", icon: <FaUserTag /> },
@@ -125,12 +204,24 @@ export const ICON_CATALOG: { name: string; label: string; icon: React.ReactNode 
   { name: "FaShoppingBag", label: "Purchase / Bag", icon: <FaShoppingBag /> },
   { name: "FaWarehouse", label: "Stock / Warehouse", icon: <FaWarehouse /> },
   { name: "FaFileInvoice", label: "Invoice / Bill", icon: <FaFileInvoice /> },
-  { name: "FaFileInvoiceDollar", label: "Outstanding / Finance", icon: <FaFileInvoiceDollar /> },
+  {
+    name: "FaFileInvoiceDollar",
+    label: "Outstanding / Finance",
+    icon: <FaFileInvoiceDollar />,
+  },
   { name: "FaReceipt", label: "Receipt / Payment", icon: <FaReceipt /> },
   { name: "FaUndo", label: "Return / Undo", icon: <FaUndo /> },
-  { name: "FaClipboardList", label: "Orders / List", icon: <FaClipboardList /> },
+  {
+    name: "FaClipboardList",
+    label: "Orders / List",
+    icon: <FaClipboardList />,
+  },
   { name: "FaCamera", label: "AI Camera / OCR", icon: <FaCamera /> },
-  { name: "FaCalendarAlt", label: "Financial Year / Date", icon: <FaCalendarAlt /> },
+  {
+    name: "FaCalendarAlt",
+    label: "Financial Year / Date",
+    icon: <FaCalendarAlt />,
+  },
   { name: "FaExchangeAlt", label: "Migration / Sync", icon: <FaExchangeAlt /> },
   { name: "FaSyncAlt", label: "Refresh / Sync ERP", icon: <FaSyncAlt /> },
   { name: "FaLayerGroup", label: "Group / Hierarchy", icon: <FaLayerGroup /> },
@@ -145,14 +236,22 @@ export const ICON_CATALOG: { name: string; label: string; icon: React.ReactNode 
   { name: "FaFolder", label: "Folder / Category", icon: <FaFolder /> },
   { name: "FaTable", label: "Table / Data", icon: <FaTable /> },
   { name: "FaTruck", label: "Dispatch / Logistics", icon: <FaTruck /> },
-  { name: "FaMoneyBillWave", label: "Cash / Cashflow", icon: <FaMoneyBillWave /> },
+  {
+    name: "FaMoneyBillWave",
+    label: "Cash / Cashflow",
+    icon: <FaMoneyBillWave />,
+  },
   { name: "FaDatabase", label: "Database / Master", icon: <FaDatabase /> },
   { name: "FaKey", label: "Permissions / Key", icon: <FaKey /> },
   { name: "FaBell", label: "Alerts / Notifications", icon: <FaBell /> },
   { name: "FaGlobe", label: "Online / Web", icon: <FaGlobe /> },
   { name: "FaStore", label: "Outlet / Store", icon: <FaStore /> },
   { name: "FaTags", label: "Tags / Discounts", icon: <FaTags /> },
-  { name: "FaCalculator", label: "Accounting / Calculator", icon: <FaCalculator /> },
+  {
+    name: "FaCalculator",
+    label: "Accounting / Calculator",
+    icon: <FaCalculator />,
+  },
   { name: "FaHandshake", label: "Deals / CRM", icon: <FaHandshake /> },
   { name: "FaHeartbeat", label: "Health / Analytics", icon: <FaHeartbeat /> },
   { name: "FaShieldAlt", label: "Compliance / Shield", icon: <FaShieldAlt /> },
@@ -267,9 +366,84 @@ export function renderMenuIcon(iconName: string): React.ReactNode {
       return <FaShieldAlt />;
     case "FaCreditCard":
       return <FaCreditCard />;
+    case "FaSearch":
+      return <FaSearch />;
     default:
       return <FaLayerGroup />;
   }
+}
+export function getRoleBasedHref(
+  href: string | undefined,
+  role: string | undefined
+): string {
+  if (!href || href === "#") {
+    return "#";
+  }
+
+  // Non-dashboard or external routes
+  if (!href.startsWith("/dashboard")) {
+    return href;
+  }
+
+  // Clean and normalize role (e.g. "Super Admin" -> "super-admin", "MR" -> "mr")
+  const cleanRole = (role || "").toLowerCase().trim().replace(/[\s_]+/g, "-");
+
+  if (!cleanRole) {
+    return href;
+  }
+
+  // Root /dashboard or /dashboard/ -> /dashboard/${cleanRole}
+  if (href === "/dashboard" || href === "/dashboard/") {
+    return `/dashboard/${cleanRole}`;
+  }
+
+  if (href.startsWith("/dashboard/")) {
+    const afterDashboard = href.slice("/dashboard/".length);
+
+    // If role is already present at the start of the path:
+    // e.g. href = "/dashboard/admin/sales", role = "admin"
+    // or href = "/dashboard/super-admin/accounts", role = "super-admin"
+    if (afterDashboard === cleanRole || afterDashboard.startsWith(`${cleanRole}/`)) {
+      return href;
+    }
+
+    return `/dashboard/${cleanRole}/${afterDashboard}`;
+  }
+
+  return href;
+}
+
+export function isPathActive(
+  href: string | undefined,
+  pathname: string,
+  role?: string
+): boolean {
+  if (!href || href === "#" || !pathname) {
+    return false;
+  }
+
+  const targetHref = getRoleBasedHref(href, role);
+  const cleanRole = (role || "").toLowerCase().trim().replace(/[\s_]+/g, "-");
+
+  // Dashboard root match
+  if (
+    targetHref === "/dashboard" ||
+    (cleanRole && targetHref === `/dashboard/${cleanRole}`)
+  ) {
+    return (
+      pathname === "/dashboard" ||
+      pathname === "/dashboard/" ||
+      (!!cleanRole && (pathname === `/dashboard/${cleanRole}` || pathname === `/dashboard/${cleanRole}/`))
+    );
+  }
+
+  // Exact match or subpath match
+  // e.g. targetHref = "/dashboard/admin/sales", pathname = "/dashboard/admin/sales/invoice"
+  return (
+    pathname === targetHref ||
+    pathname.startsWith(targetHref + "/") ||
+    (targetHref.endsWith("/") && pathname.startsWith(targetHref))
+  );
 }
 
 export const DEFAULT_MENU_ITEMS: MenuItemConfig[] = [
@@ -285,6 +459,17 @@ export const DEFAULT_MENU_ITEMS: MenuItemConfig[] = [
     order: 0,
   },
   {
+    id: "global-search",
+    label: "Global Search & Voice AI",
+    icon: "FaSearch",
+    color: "cyan",
+    href: "/dashboard/search",
+    isGroup: false,
+    permission: "dashboard.view",
+    isVisible: true,
+    order: 1,
+  },
+  {
     id: "executive-ai",
     label: "Executive AI Dashboard",
     icon: "FaBrain",
@@ -293,7 +478,7 @@ export const DEFAULT_MENU_ITEMS: MenuItemConfig[] = [
     isGroup: false,
     permission: "dashboard.view",
     isVisible: true,
-    order: 1,
+    order: 2,
   },
   {
     id: "ai-notifications",
@@ -350,6 +535,28 @@ export const DEFAULT_MENU_ITEMS: MenuItemConfig[] = [
     permission: "dashboard.view",
     isVisible: true,
     order: 5,
+  },
+  {
+    id: "broadcast-hub",
+    label: "1-Click Broadcast Hub",
+    icon: "FaBullhorn",
+    color: "violet",
+    href: "/dashboard/broadcast",
+    isGroup: false,
+    permission: "dashboard.view",
+    isVisible: true,
+    order: 6,
+  },
+  {
+    id: "order-stock-tracking",
+    label: "Live Order & Stock Tracking",
+    icon: "FaTruck",
+    color: "sky",
+    href: "/dashboard/orders/tracking",
+    isGroup: false,
+    permission: "dashboard.view",
+    isVisible: true,
+    order: 7,
   },
   {
     id: "leads",
@@ -973,49 +1180,13 @@ export const DEFAULT_MENU_ITEMS: MenuItemConfig[] = [
     order: 18,
     subItems: [
       {
-        id: "migration-busy",
-        label: "Sync Busy ERP",
+        id: "migration-sync",
+        label: "Data Sync",
         href: "/dashboard/mabsolcrmsync",
         icon: "FaSyncAlt",
         permission: "vfp.view",
         isVisible: true,
         order: 0,
-      },
-      {
-        id: "migration-tally",
-        label: "Sync Tally ERP",
-        href: "/dashboard/mabsolcrmsync",
-        icon: "FaSyncAlt",
-        permission: "vfp.view",
-        isVisible: true,
-        order: 1,
-      },
-      {
-        id: "migration-easysol",
-        label: "Sync EasySol",
-        href: "/dashboard/mabsolcrmsync",
-        icon: "FaSyncAlt",
-        permission: "vfp.view",
-        isVisible: true,
-        order: 2,
-      },
-      {
-        id: "migration-logic",
-        label: "Sync Logic ERP",
-        href: "/dashboard/mabsolcrmsync",
-        icon: "FaSyncAlt",
-        permission: "vfp.view",
-        isVisible: true,
-        order: 3,
-      },
-      {
-        id: "migration-marg",
-        label: "Sync Marg ERP",
-        href: "/dashboard/mabsolcrmsync",
-        icon: "FaSyncAlt",
-        permission: "vfp.view",
-        isVisible: true,
-        order: 4,
       },
       {
         id: "migration-settings",
@@ -1024,7 +1195,7 @@ export const DEFAULT_MENU_ITEMS: MenuItemConfig[] = [
         icon: "FaSlidersH",
         permission: "vfp.settings",
         isVisible: true,
-        order: 5,
+        order: 1,
       },
     ],
   },
@@ -1094,6 +1265,24 @@ export const DEFAULT_MENU_ITEMS: MenuItemConfig[] = [
         permission: "settings.edit",
         isVisible: true,
         order: 2,
+      },
+      {
+        id: "settings-notifications",
+        label: "Notification Gateway Settings",
+        href: "/dashboard/settings/notifications",
+        icon: "FaEnvelope",
+        permission: "settings.edit",
+        isVisible: true,
+        order: 3,
+      },
+      {
+        id: "settings-backup-restore",
+        label: "Backup & Restore Settings",
+        href: "/dashboard/backup",
+        icon: "FaEnvelope",
+        permission: "settings.edit",
+        isVisible: true,
+        order: 4,
       },
     ],
   },

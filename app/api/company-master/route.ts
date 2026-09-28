@@ -15,29 +15,47 @@ export async function GET() {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
+    const userCompany = user.companyId ? await Company.findById(user.companyId) : null;
     const isSuperAdmin = user.roleType === ROLE_TYPE.SUPER_ADMIN;
-    const isAdmin = user.roleType === ROLE_TYPE.ADMIN;
 
-    // SuperAdmin: can see all companies across tenants
-    // Admin: can see all companies in their own tenant
-    // All others: see ONLY their own company
+    // Visibility Rules:
+    // 1. SuperAdmin: can see all companies across all tenants
+    // 2. Head Office (isHeadOffice === true): can see all branches under its tenant
+    // 3. Branch (isHeadOffice === false): can ONLY see itself and any sub-branches created under it
+    //    (Cannot see Head Office, cannot see sibling branches)
     let query: Record<string, any> = {};
 
     if (isSuperAdmin) {
-      // No filter — sees everything
       query = {};
-    } else if (isAdmin && user.tenantId) {
-      // Scoped strictly to this tenant only
-      query.tenantId = user.tenantId;
+    } else if (userCompany?.isHeadOffice) {
+      query = { tenantId: user.tenantId };
+    } else if (userCompany) {
+      // Find all companies in the tenant to resolve child branch hierarchy
+      const allTenantCompanies = await Company.find({ tenantId: user.tenantId }).lean();
+
+      const allowedIds = new Set<string>();
+      allowedIds.add(userCompany._id.toString());
+
+      // Collect all descendants recursively
+      let addedNew = true;
+      while (addedNew) {
+        addedNew = false;
+        for (const comp of allTenantCompanies) {
+          const compIdStr = comp._id.toString();
+          const parentIdStr = comp.parentCompanyId ? comp.parentCompanyId.toString() : null;
+          if (parentIdStr && allowedIds.has(parentIdStr) && !allowedIds.has(compIdStr)) {
+            allowedIds.add(compIdStr);
+            addedNew = true;
+          }
+        }
+      }
+
+      query = {
+        _id: { $in: Array.from(allowedIds) },
+      };
     } else if (user.tenantId) {
-      // Regular user — scoped to own tenant
-      query.tenantId = user.tenantId;
-    } else if (user.companyId) {
-      // Fallback: scope by own companyId
-      const compId = typeof user.companyId === "object" ? user.companyId._id : user.companyId;
-      query._id = compId;
+      query = { tenantId: user.tenantId };
     } else {
-      // Safety: never return all records — return empty
       return NextResponse.json([]);
     }
 
@@ -60,8 +78,10 @@ export async function POST(req: Request) {
 
     const data = await req.json();
 
-    // CRITICAL: always use the logged-in user's tenantId — never trust client-sent tenantId
+    // Always use the logged-in user's tenantId
     const targetTenantId = user.tenantId || `TENANT_${user._id}`;
+    const userCompany = user.companyId ? await Company.findById(user.companyId) : null;
+    const parentCompanyId = userCompany ? userCompany._id : null;
 
     // Validate company name
     if (!data.companyName?.trim()) {
@@ -83,12 +103,15 @@ export async function POST(req: Request) {
       city: data.city || "",
       state: data.state || "",
       pincode: data.pincode || "",
-      invoicePrefix: data.invoicePrefix || "INV-001",
-      purchasePrefix: data.purchasePrefix || "PUR-001",
-      currency: data.currency || "INR",
+      invoicePrefix: data.invoicePrefix || null,
+      purchasePrefix: data.purchasePrefix || null,
+      currency: data.currency || null,
       logo: data.logo || "",
       enabledModules: Array.isArray(data.enabledModules) ? data.enabledModules : [],
       status: data.status || "Active",
+      isDefault: false,
+      isHeadOffice: false,
+      parentCompanyId: parentCompanyId,
       createdBy: user._id || null,
     });
 

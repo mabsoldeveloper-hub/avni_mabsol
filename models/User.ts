@@ -4,7 +4,7 @@ const UserSchema = new mongoose.Schema(
   {
     tenantId: {
       type: String,
-      default: "TENANT001",
+      trim: true,
     },
 
     name: {
@@ -16,6 +16,8 @@ const UserSchema = new mongoose.Schema(
       type: String,
       required: true,
       unique: true,
+      trim: true,
+      lowercase: true,
     },
 
     password: {
@@ -33,18 +35,31 @@ const UserSchema = new mongoose.Schema(
       ref: "Role",
     },
 
+    roleName: {
+      type: String,
+      default: "",
+    },
+
     roleType: {
       type: String,
       default: "MR",
+    },
+
+    role: {
+      type: String,
+      default: "",
+    },
+
+    isSuperAdmin: {
+      type: Boolean,
+      default: false,
     },
 
     // Original Customer record for MR / Field Staff mapping
     mrCustomerId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Customer",
-      default: null,
-      unique: true,
-      sparse: true,
+      index: true,
     },
 
     reportsTo: {
@@ -52,30 +67,65 @@ const UserSchema = new mongoose.Schema(
       ref: "User",
     },
 
-    zoneCode: {
-      type: String,
-      default: "",
-    },
-
-    regionCode: {
-      type: String,
-      default: "",
-    },
-
-    headquarter: {
-      type: String,
-      default: "",
-    },
-
     status: {
       type: String,
       default: "Active",
+    },
+
+    // Super Admin Approval & Time-Bound Access
+    isApproved: {
+      type: Boolean,
+      default: false,
+    },
+
+    approvedAt: {
+      type: Date,
+      default: null,
+    },
+
+    approvedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      default: null,
+    },
+
+    accessDurationDays: {
+      type: Number,
+      default: 30,
+    },
+
+    accessValidUntil: {
+      type: Date,
+      default: null,
+    },
+
+    isUnlimitedAccess: {
+      type: Boolean,
+      default: false,
+    },
+
+    approvalNotes: {
+      type: String,
+      default: "",
+    },
+
+    // Session Timeout / Login Validity Duration (in Hours: 1hr, 2hr, 4hr, 8hr, etc.)
+    sessionTimeoutHours: {
+      type: Number,
+      default: 1,
     },
 
     // Profile Fields
     mobile: {
       type: String,
       default: "",
+      trim: true,
+    },
+
+    gstNo: {
+      type: String,
+      default: "",
+      trim: true,
     },
 
     profilePhoto: {
@@ -84,16 +134,6 @@ const UserSchema = new mongoose.Schema(
     },
 
     designation: {
-      type: String,
-      default: "",
-    },
-
-    department: {
-      type: String,
-      default: "",
-    },
-
-    gender: {
       type: String,
       default: "",
     },
@@ -135,10 +175,20 @@ const UserSchema = new mongoose.Schema(
       type: String,
       default: "",
     },
+
+    termsAccepted: {
+      type: Boolean,
+      default: false,
+    },
   },
   {
     timestamps: true,
   }
 );
+
+// Delete cached model in Next.js hot-reload environment so updated schema is always used
+if (mongoose.models.User) {
+  delete (mongoose.models as any).User;
+}
 
 export default mongoose.models.User || mongoose.model("User", UserSchema);

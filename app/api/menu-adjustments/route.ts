@@ -67,6 +67,19 @@ export async function GET(req: Request) {
         const found = mergedItems.find((i: any) => i.id === defItem.id);
         if (found && defItem.subItems && defItem.subItems.length > 0) {
           if (!found.subItems) found.subItems = [];
+          // Prune obsolete migration ERP sub-items that have been consolidated into Data Sync
+          if (found.id === "migration") {
+            const obsoleteMigrationIds = new Set([
+              "migration-busy",
+              "migration-tally",
+              "migration-easysol",
+              "migration-logic",
+              "migration-marg",
+            ]);
+            found.subItems = found.subItems.filter(
+              (s: any) => !obsoleteMigrationIds.has(s.id)
+            );
+          }
           const existingSubIds = new Set(found.subItems.map((s: any) => s.id));
           defItem.subItems.forEach((defSub) => {
             if (!existingSubIds.has(defSub.id)) {

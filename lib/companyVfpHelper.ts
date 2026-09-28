@@ -106,7 +106,32 @@ export async function getCompanyVfpFilter(searchParams: URLSearchParams): Promis
     addCode(compDoc.code);
   }
 
-  // 4. Build MongoDB Query
+  // 4. Auto-detect VFP folder/table suffixes from synced files (e.g. "_F18.DBF" -> "F18")
+  try {
+    const db = mongoose.connection.db;
+    if (db) {
+      const configDocs = await db.collection("vfpconfigs").find({}).toArray();
+      for (const cfg of configDocs) {
+        if (Array.isArray(cfg.enabledFiles)) {
+          for (const f of cfg.enabledFiles) {
+            const m = String(f).match(/_([A-Za-z0-9]+)\.DBF$/i);
+            if (m && m[1]) addCode(m[1]);
+          }
+        }
+      }
+      const tableMaps = await db.collection("vfptablemaps").find({}, { projection: { fileName: 1 } }).limit(30).toArray();
+      for (const tm of tableMaps) {
+        if (tm.fileName) {
+          const m = String(tm.fileName).match(/_([A-Za-z0-9]+)\.DBF$/i);
+          if (m && m[1]) addCode(m[1]);
+        }
+      }
+    }
+  } catch (e) {
+    console.error("Error auto-detecting VFP table suffix in getCompanyVfpFilter:", e);
+  }
+
+  // 5. Build MongoDB Query
   const vfpOrList: any[] = [];
   for (const code of Array.from(codesToMatch)) {
     if (code) {

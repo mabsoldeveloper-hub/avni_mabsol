@@ -333,11 +333,12 @@ export default function FormBuilder({ initialData, isEditMode = false }: FormBui
     }
     if (meta?.warning || meta?.source === "fallback") {
       setSuccessMsg(
-        `⚠️ Form schema loaded via Offline Engine (${meta?.warning?.title || "Gemini Free Quota Busy"}). You can edit and save normally!`
+        `⚠️ Form schema loaded via Offline Engine (${meta?.warning?.title || "AI Quota Busy"}). You can edit and save normally!`
       );
     } else {
+      const cleanModel = meta?.model ? String(meta.model).replace(/gemini-?/gi, "AI ") : "Pharma AI";
       setSuccessMsg(
-        `✨ Form schema successfully designed by Google ${meta?.model || "Gemini AI"} and loaded into canvas!`
+        `✨ Form schema successfully designed by ${cleanModel} and loaded into canvas!`
       );
     }
     setTimeout(() => setSuccessMsg(""), 6000);

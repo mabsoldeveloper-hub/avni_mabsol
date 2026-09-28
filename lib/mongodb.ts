@@ -42,6 +42,12 @@ async function dbConnect() {
       const collections = await db.listCollections().toArray();
       const colNames = collections.map(c => c.name);
       
+      if (colNames.includes("users")) {
+        await db.collection("users").dropIndex("mrCustomerId_1").catch(() => {});
+      }
+      if (colNames.includes("roles")) {
+        await db.collection("roles").dropIndex("roleName_1").catch(() => {});
+      }
       if (colNames.includes("vfpsyncstates")) {
         await db.collection("vfpsyncstates").dropIndex("tableName_1").catch(() => {});
       }
@@ -98,4 +104,5 @@ async function dbConnect() {
   return cached.conn;
 }
 
+export { dbConnect, dbConnect as connectDB };
 export default dbConnect;

@@ -90,7 +90,7 @@ export async function sendWhatsAppOTP(
         type: "text",
         text: {
           preview_url: false,
-          body: `Your Mabsol Pharma CRM verification code is: *${otp}*. Valid for 10 minutes. Please do not share this code.`,
+          body: `Your MabsolCrm verification code is: *${otp}*. Valid for 10 minutes. Please do not share this code.`,
         },
       };
 

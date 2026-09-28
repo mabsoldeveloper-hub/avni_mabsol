@@ -159,9 +159,9 @@ function parseGeminiError(status: number, rawText: string, modelName: string) {
     parsedMessage.toLowerCase().includes("quota")
   ) {
     return {
-      title: "Gemini Free-Tier Rate Limit Reached (HTTP 429)",
-      message: `Google AI Studio free quota for "${modelName}" is temporarily exhausted or rate-limited.`,
-      hint: "Google free-tier allows approx. 15 requests/min. Please wait 30-60 seconds, or use the offline schema fallback.",
+      title: "AI Rate Limit Reached (HTTP 429)",
+      message: `AI Cloud Service quota for "${String(modelName).replace(/gemini-?/gi, "AI ")}" is temporarily exhausted or rate-limited.`,
+      hint: "Requests are paced. Please wait 30-60 seconds, or use the offline schema fallback.",
       status: 429,
       isQuota: true,
     };
@@ -174,9 +174,9 @@ function parseGeminiError(status: number, rawText: string, modelName: string) {
     parsedMessage.toLowerCase().includes("api key not valid")
   ) {
     return {
-      title: "Gemini API Key Authentication Failed (HTTP 403/401)",
-      message: "The GEMINI_API_KEY in your .env file is either invalid or expired.",
-      hint: "Please generate a new free key at aistudio.google.com and update GEMINI_API_KEY in .env.",
+      title: "AI API Key Authentication Failed (HTTP 403/401)",
+      message: "The AI API key in your .env file is either invalid or expired.",
+      hint: "Please verify your AI API key in .env.",
       status: status || 403,
       isQuota: false,
     };
@@ -184,9 +184,9 @@ function parseGeminiError(status: number, rawText: string, modelName: string) {
 
   if (status === 404 || parsedMessage.toLowerCase().includes("not_found")) {
     return {
-      title: `Gemini Model "${modelName}" Not Available (HTTP 404)`,
-      message: `The model "${modelName}" was not found on your current Google AI Studio account.`,
-      hint: "Select 'gemini-2.5-flash' from the Model Selector dropdown.",
+      title: `AI Model "${String(modelName).replace(/gemini-?/gi, "AI ")}" Not Available (HTTP 404)`,
+      message: `The model "${String(modelName).replace(/gemini-?/gi, "AI ")}" was not found on your current AI account.`,
+      hint: "Select a standard model from the Model Selector dropdown.",
       status: 404,
       isQuota: false,
     };
@@ -199,8 +199,8 @@ function parseGeminiError(status: number, rawText: string, modelName: string) {
     parsedMessage.toLowerCase().includes("unavailable")
   ) {
     return {
-      title: "Google AI Studio Servers Overloaded (HTTP 503)",
-      message: "Google Gemini servers are temporarily busy.",
+      title: "AI Servers Overloaded (HTTP 503)",
+      message: "AI servers are temporarily busy.",
       hint: "Please try again in a few moments.",
       status: status || 503,
       isQuota: false,
@@ -208,7 +208,7 @@ function parseGeminiError(status: number, rawText: string, modelName: string) {
   }
 
   return {
-    title: `Gemini API Error (HTTP ${status})`,
+    title: `AI Service Error (HTTP ${status})`,
     message: parsedMessage || `Request failed with HTTP status ${status}.`,
     hint: "Please check your network connection or try again shortly.",
     status,
@@ -385,9 +385,9 @@ export async function POST(req: Request) {
         source: "fallback",
         model: "rule-based",
         warning: {
-          title: "GEMINI_API_KEY Missing in .env",
-          message: "No Gemini API key was detected in your server configuration (.env).",
-          hint: "The form was generated using the built-in Pharma Schema Engine. To enable live Gemini AI, add GEMINI_API_KEY in .env.",
+          title: "AI API Key Missing in .env",
+          message: "No AI API key was detected in your server configuration (.env).",
+          hint: "The form was generated using the built-in Pharma Schema Engine. To enable live AI generation, configure the API key in .env.",
           isQuota: false,
         },
         formSchema: fallbackSchema,
@@ -515,8 +515,8 @@ Return a strictly valid JSON object matching this schema:
         source: "fallback",
         model: "rule-based",
         warning: lastErrorMeta || {
-          title: "Gemini API Issue",
-          message: "Google Gemini API was temporarily unreachable.",
+          title: "AI Engine Notice",
+          message: "AI service was temporarily unreachable.",
           hint: "Loaded standard template via offline schema engine.",
           isQuota: false,
         },

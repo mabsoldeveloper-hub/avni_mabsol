@@ -1,7 +1,7 @@
 @echo off
-title Mabsol Pharma CRM - Desktop Sync Worker
+title MabsolCrm - Desktop Sync Worker
 echo ========================================================
-echo   Mabsol Pharma CRM - Desktop Database Sync Worker
+echo   MabsolCrm - Desktop Database Sync Worker
 echo ========================================================
 echo.
 echo Starting background worker for live cloud database sync...

@@ -83,7 +83,7 @@ export default function StandalonePublicFormPage({
         </div>
 
         <div className="text-center text-xs text-slate-400">
-          Powered by Mabsol Pharma CRM • Secure Form Studio
+          Powered by MabsolCrm • Secure Form Studio
         </div>
       </div>
     </div>

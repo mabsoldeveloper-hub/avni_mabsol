@@ -48,10 +48,30 @@ const CONFIG_PATH = path.join(USER_DATA_DIR, "mabsol_sync_config.json");
 const SESSION_PATH = path.join(USER_DATA_DIR, "mabsol_auth_session.json");
 const QUEUE_PATH = path.join(USER_DATA_DIR, "mabsol_sync_queue.json");
 
-// Engine directory (contains MabsolCRM.EXE, security core, and dependencies)
-const ENGINE_DIR = app.isPackaged
-  ? path.join(process.resourcesPath, "engine")
-  : path.join(__dirname, "engine");
+// Multi-candidate Engine directory resolver (contains MabsolCRM.EXE, security core, and dependencies)
+function getEngineDir() {
+  const candidates = [];
+  if (process.resourcesPath) {
+    candidates.push(path.join(process.resourcesPath, "engine"));
+    candidates.push(path.join(process.resourcesPath, "app.asar.unpacked", "engine"));
+  }
+  if (process.execPath) {
+    const execDir = path.dirname(process.execPath);
+    candidates.push(path.join(execDir, "resources", "engine"));
+    candidates.push(path.join(execDir, "engine"));
+  }
+  candidates.push(path.join(__dirname, "engine"));
+  candidates.push(path.join(__dirname, "..", "engine"));
+
+  for (const dir of candidates) {
+    try {
+      if (fs.existsSync(path.join(dir, "MabsolCRM.EXE")) && fs.existsSync(path.join(dir, "efWin11.fll"))) {
+        return dir;
+      }
+    } catch {}
+  }
+  return app.isPackaged ? path.join(process.resourcesPath, "engine") : path.join(__dirname, "engine");
+}
 
 // Hidden secure vault directory for offline DBF storage (never visible to users)
 function getHiddenVaultDir() {
@@ -133,10 +153,23 @@ function resolveCloudUrl(candidateUrl) {
 
 function sanitizeFolderPath(dir) {
   if (!dir) return "";
-  let clean = String(dir).trim().replace(/^["']+|["']+$/g, "").trim();
+  let clean = String(dir).trim().replace(/^["'`]+|["'`]+$/g, "").trim();
+  if (!clean) return "";
+
+  // Normalize forward slashes to backslashes on Windows
+  clean = clean.replace(/\//g, "\\");
+
   try {
     clean = path.normalize(clean);
   } catch {}
+
+  // If path is a drive root like C:\ or D:\, keep the trailing backslash
+  if (/^[a-zA-Z]:\\?$/.test(clean)) {
+    return clean.substring(0, 2) + "\\";
+  }
+
+  // Otherwise strip trailing backslashes
+  clean = clean.replace(/\\+$/, "");
   return clean;
 }
 
@@ -152,7 +185,9 @@ function loadConfig() {
     intervalMins: "realtime",
     licenseKey: ""
   };
-  if (!fs.existsSync(CONFIG_PATH)) return defaults;
+  if (!fs.existsSync(CONFIG_PATH)) {
+    return { ...defaults, isSourceDirValid: false };
+  }
   try {
     const raw = fs.readFileSync(CONFIG_PATH, "utf8");
     const parsed = JSON.parse(raw);
@@ -160,9 +195,13 @@ function loadConfig() {
     if (parsed.sourceDir) {
       parsed.sourceDir = sanitizeFolderPath(parsed.sourceDir);
     }
-    return { ...defaults, ...parsed };
+    const resolvedConfig = { ...defaults, ...parsed };
+    resolvedConfig.isSourceDirValid = Boolean(
+      resolvedConfig.sourceDir && fs.existsSync(resolvedConfig.sourceDir)
+    );
+    return resolvedConfig;
   } catch {
-    return defaults;
+    return { ...defaults, isSourceDirValid: false };
   }
 }
 
@@ -487,32 +526,92 @@ ipcMain.handle("auth:login", async (_event, { cloudUrl, email, password }) => {
   }
 });
 
-ipcMain.handle("auth:register", async (_event, { cloudUrl, name, companyName, email, mobile, password }) => {
-  const cleanUrl = resolveCloudUrl(cloudUrl);
+ipcMain.handle("auth:register", async (_event, payload) => {
+  const cleanUrl = resolveCloudUrl(payload.cloudUrl);
   try {
-    emitLog("info", `Submitting registration request to cloud server (${cleanUrl})...`);
+    emitLog("info", `Submitting workspace registration to cloud server (${cleanUrl})...`);
     const res = await axios.post(
-      `${cleanUrl}/api/mabsolcrmsync/auth/register`,
-      { name, companyName, email, mobile, password },
-      { timeout: 25000 }
+      `${cleanUrl}/api/auth/register`,
+      { ...payload, isDesktopAgent: true },
+      { timeout: 30000 }
     );
 
     if (res.data && res.data.success) {
-      emitLog("success", `Account created for ${email}. Status: Pending Superadmin Approval.`);
-      return {
-        success: true,
-        pendingApproval: true,
-        message: res.data.message || "Account created! Awaiting Superadmin approval."
-      };
+      emitLog("success", `Workspace created for ${payload.email}.`);
+      return res.data;
     }
 
-    const msg = res.data?.message || "Failed to create account.";
+    const msg = res.data?.message || "Registration failed.";
     emitLog("error", `Registration failed: ${msg}`);
     return { success: false, message: msg };
   } catch (err) {
     const errorMsg = err.response?.data?.message || err.message || "Registration failed";
-    emitLog("error", `Registration network error: ${errorMsg}`);
+    emitLog("error", `Registration error: ${errorMsg}`);
     return { success: false, message: errorMsg };
+  }
+});
+
+ipcMain.handle("auth:verify-gst", async (_event, { cloudUrl, gstin, pincode }) => {
+  const cleanUrl = resolveCloudUrl(cloudUrl);
+  try {
+    const res = await axios.post(`${cleanUrl}/api/auth/verify-gst`, { gstin, pincode }, { timeout: 15000 });
+    return res.data;
+  } catch (err) {
+    return { success: false, message: err.response?.data?.message || err.message || "Failed to verify GSTIN" };
+  }
+});
+
+ipcMain.handle("auth:check-exists", async (_event, params) => {
+  const cleanUrl = resolveCloudUrl(params?.cloudUrl);
+  try {
+    const payload = {};
+    if (params?.email) payload.email = params.email;
+    if (params?.mobile) payload.mobile = params.mobile;
+    if (params?.field && params?.value) payload[params.field] = params.value;
+    const res = await axios.post(`${cleanUrl}/api/auth/check-exists`, payload, { timeout: 10000 });
+    return res.data;
+  } catch (err) {
+    return { success: false, message: err.response?.data?.message || err.message };
+  }
+});
+
+ipcMain.handle("auth:send-email-otp", async (_event, { cloudUrl, email }) => {
+  const cleanUrl = resolveCloudUrl(cloudUrl);
+  try {
+    const res = await axios.post(`${cleanUrl}/api/auth/send-email-otp`, { email }, { timeout: 15000 });
+    return res.data;
+  } catch (err) {
+    return { success: false, message: err.response?.data?.message || err.message || "Failed to send email OTP" };
+  }
+});
+
+ipcMain.handle("auth:verify-email-otp", async (_event, { cloudUrl, email, otp }) => {
+  const cleanUrl = resolveCloudUrl(cloudUrl);
+  try {
+    const res = await axios.post(`${cleanUrl}/api/auth/verify-email-otp`, { email, otp }, { timeout: 15000 });
+    return res.data;
+  } catch (err) {
+    return { success: false, message: err.response?.data?.message || err.message || "Failed to verify email OTP" };
+  }
+});
+
+ipcMain.handle("auth:send-mobile-otp", async (_event, { cloudUrl, mobile }) => {
+  const cleanUrl = resolveCloudUrl(cloudUrl);
+  try {
+    const res = await axios.post(`${cleanUrl}/api/auth/send-mobile-otp`, { mobile }, { timeout: 15000 });
+    return res.data;
+  } catch (err) {
+    return { success: false, message: err.response?.data?.message || err.message || "Failed to send mobile OTP" };
+  }
+});
+
+ipcMain.handle("auth:verify-mobile-otp", async (_event, { cloudUrl, mobile, otp }) => {
+  const cleanUrl = resolveCloudUrl(cloudUrl);
+  try {
+    const res = await axios.post(`${cleanUrl}/api/auth/verify-mobile-otp`, { mobile, otp }, { timeout: 15000 });
+    return res.data;
+  } catch (err) {
+    return { success: false, message: err.response?.data?.message || err.message || "Failed to verify mobile OTP" };
   }
 });
 
@@ -816,6 +915,111 @@ ipcMain.handle("license:get-details", async () => {
   }
 });
 
+ipcMain.handle("license:check-device", async (_event, payload) => {
+  const current = loadConfig();
+  const cloudUrl = resolveCloudUrl(payload?.cloudUrl || current.cloudUrl || getDefaultCloudUrl());
+  const session = loadSession();
+  const email = payload?.email || session?.email || current.userEmail || "";
+  try {
+    const res = await axios.post(
+      `${cloudUrl}/api/mabsolcrmsync/license/device-check`,
+      {
+        deviceId: getMachineIdentifier(),
+        deviceName: getMachineName(),
+        email
+      },
+      {
+        headers: {
+          ...(session?.token ? { Authorization: `Bearer ${session.token}` } : {}),
+          "x-device-id": getMachineIdentifier(),
+          "x-device-name": getMachineName()
+        },
+        timeout: 10000
+      }
+    );
+    return res.data;
+  } catch (err) {
+    return {
+      success: false,
+      error: err.response?.data?.error || err.message || "Failed to check device license status"
+    };
+  }
+});
+
+ipcMain.handle("license:send-device-otp", async (_event, payload) => {
+  const current = loadConfig();
+  const cloudUrl = resolveCloudUrl(payload?.cloudUrl || current.cloudUrl || getDefaultCloudUrl());
+  const session = loadSession();
+  const email = payload?.email || session?.email || current.userEmail || "";
+  try {
+    const res = await axios.post(
+      `${cloudUrl}/api/mabsolcrmsync/license/send-device-otp`,
+      {
+        deviceId: getMachineIdentifier(),
+        deviceName: getMachineName(),
+        email
+      },
+      {
+        headers: {
+          ...(session?.token ? { Authorization: `Bearer ${session.token}` } : {}),
+          "x-device-id": getMachineIdentifier(),
+          "x-device-name": getMachineName()
+        },
+        timeout: 15000
+      }
+    );
+    return res.data;
+  } catch (err) {
+    return {
+      success: false,
+      error: err.response?.data?.error || err.message || "Failed to send device activation OTP"
+    };
+  }
+});
+
+ipcMain.handle("license:activate-device", async (_event, payload) => {
+  const current = loadConfig();
+  const cloudUrl = resolveCloudUrl(payload?.cloudUrl || current.cloudUrl || getDefaultCloudUrl());
+  const session = loadSession();
+  const email = payload?.email || session?.email || current.userEmail || "";
+  try {
+    const res = await axios.post(
+      `${cloudUrl}/api/mabsolcrmsync/license/activate-device`,
+      {
+        deviceId: getMachineIdentifier(),
+        deviceName: getMachineName(),
+        email,
+        otp: payload?.otp
+      },
+      {
+        headers: {
+          ...(session?.token ? { Authorization: `Bearer ${session.token}` } : {}),
+          "x-device-id": getMachineIdentifier(),
+          "x-device-name": getMachineName()
+        },
+        timeout: 15000
+      }
+    );
+
+    if (res.data && res.data.success && res.data.licenseKey) {
+      current.licenseKey = res.data.licenseKey;
+      current.isLicenseVerified = true;
+      current.lastVerifiedLicense = res.data.licenseKey;
+      if (res.data.companyName && !current.companyName) current.companyName = res.data.companyName;
+      if (res.data.companyCode && !current.companyCode) current.companyCode = res.data.companyCode;
+      saveConfig(current);
+      emitLog("success", `New device activated! License key ${res.data.licenseKey} assigned.`);
+    }
+
+    return res.data;
+  } catch (err) {
+    return {
+      success: false,
+      error: err.response?.data?.error || err.message || "Failed to activate device"
+    };
+  }
+});
+
 ipcMain.handle("dialog:select-folder", async (_event, title) => {
   try {
     const parentWin = (mainWindow && !mainWindow.isDestroyed()) ? mainWindow : null;
@@ -824,10 +1028,49 @@ ipcMain.handle("dialog:select-folder", async (_event, title) => {
       properties: ["openDirectory"]
     });
     if (result.canceled || !result.filePaths || !result.filePaths.length) return null;
-    return result.filePaths[0];
+    return sanitizeFolderPath(result.filePaths[0]);
   } catch (err) {
     emitLog("error", `Folder select dialog error: ${err.message}`);
     return null;
+  }
+});
+
+ipcMain.handle("dialog:validate-folder", async (_event, folderPath, companyCode = "") => {
+  const cleanPath = sanitizeFolderPath(folderPath);
+  if (!cleanPath) {
+    return { valid: false, message: "Folder path cannot be empty." };
+  }
+  try {
+    if (!fs.existsSync(cleanPath)) {
+      return { valid: false, message: `Folder does not exist on this computer: "${cleanPath}"` };
+    }
+    const stat = fs.statSync(cleanPath);
+    if (!stat.isDirectory()) {
+      return { valid: false, message: `Specified path is a file, not a directory: "${cleanPath}"` };
+    }
+    const entries = fs.readdirSync(cleanPath);
+    const codes = (companyCode || "").split(/[,\s;]+/).map(c => c.trim().toLowerCase()).filter(Boolean);
+    let matchingCount = 0;
+    let dbfCount = 0;
+    for (const f of entries) {
+      const lower = f.toLowerCase();
+      if (lower.endsWith(".dbf")) dbfCount++;
+      if (codes.some(c => lower.endsWith(`.${c}`))) matchingCount++;
+    }
+    return {
+      valid: true,
+      path: cleanPath,
+      totalFiles: entries.length,
+      matchingFiles: matchingCount,
+      dbfFiles: dbfCount,
+      message: matchingCount > 0
+        ? `✓ Valid folder: ${matchingCount} ERP record file(s) found for [${codes.join(", ").toUpperCase()}]`
+        : (dbfCount > 0
+          ? `✓ Valid folder: ${dbfCount} DBF database file(s) found`
+          : `✓ Folder exists on this computer (${entries.length} items found)`)
+    };
+  } catch (err) {
+    return { valid: false, message: `Cannot access folder: ${err.message}` };
   }
 });
 
@@ -898,8 +1141,16 @@ async function executeDecryptionAndSync(triggerReason = "manual") {
 
   emitLog("info", `=== Starting Secure Extraction & Cloud Sync (Companies: [${companyCodes.join(", ")}], Trigger: ${triggerReason}) ===`);
 
-  if (!sourceDir || !fs.existsSync(sourceDir)) {
-    const msg = `Source folder does not exist: "${sourceDir || "(not set)"}". Please check your source folder path in settings.`;
+  if (!sourceDir) {
+    const msg = "Encrypted Data Folder (Source) is not set. Please click Edit Configuration and browse to your ERP data folder on this computer.";
+    if (triggerReason === "manual") emitLog("warn", msg);
+    isSyncing = false;
+    emitStatus({ isSyncing: false, lastStatus: "unconfigured", message: msg });
+    return { success: false, message: msg };
+  }
+
+  if (!fs.existsSync(sourceDir)) {
+    const msg = `Source folder does not exist on this computer: "${sourceDir}". Please click Edit Configuration and select your ERP data folder on this PC.`;
     emitLog("error", msg);
     isSyncing = false;
     emitStatus({ isSyncing: false, error: msg });
@@ -916,9 +1167,10 @@ async function executeDecryptionAndSync(triggerReason = "manual") {
     return { success: false, message: msg };
   }
 
-  // Verify bundled extraction engine
-  const engineBinaryPath = path.join(ENGINE_DIR, "MabsolCRM.EXE");
-  const engineFllPath = path.join(ENGINE_DIR, "efWin11.fll");
+  // Verify bundled extraction engine across all runtime paths
+  const engineDir = getEngineDir();
+  const engineBinaryPath = path.join(engineDir, "MabsolCRM.EXE");
+  const engineFllPath = path.join(engineDir, "efWin11.fll");
 
   if (!fs.existsSync(engineBinaryPath)) {
     const msg = "Core extraction service component is missing or inaccessible.";
@@ -1010,6 +1262,7 @@ async function executeDecryptionAndSync(triggerReason = "manual") {
 
   let totalUploadedTables = 0;
   let totalOfflineTables = 0;
+  let skippedDueToNoChange = 0;
   const summaryMessages = [];
 
   for (const compCode of companyCodes) {
@@ -1018,6 +1271,7 @@ async function executeDecryptionAndSync(triggerReason = "manual") {
     const compDestDir = path.join(baseStagingDir, compCode);
     try {
       fs.mkdirSync(compDestDir, { recursive: true });
+      try { fs.chmodSync(compDestDir, 0o777); } catch { }
     } catch (e) {
       emitLog("error", `Could not create staging folder for [${compCode}]: ${e.message}`);
       continue;
@@ -1048,6 +1302,7 @@ async function executeDecryptionAndSync(triggerReason = "manual") {
 
     if (triggerReason === "realtime" && prevSig && prevSig === sigKey) {
       // All files unmodified, zero CPU & instant real-time response
+      skippedDueToNoChange++;
       continue;
     }
 
@@ -1066,18 +1321,37 @@ async function executeDecryptionAndSync(triggerReason = "manual") {
     });
     const allTables = Array.from(tablesSet);
 
-    // 2. Prepare destination: Ensure core extraction library is available
+    // 2. Prepare destination: Ensure core extraction library and runtime modules are available
     const destFllPath = path.join(compDestDir, "efWin11.fll");
     if (!fs.existsSync(destFllPath)) {
       try {
         fs.copyFileSync(engineFllPath, destFllPath);
+        try { fs.chmodSync(destFllPath, 0o666); } catch { }
       } catch (copyErr) { }
     }
 
-    // 3. Copy matching encrypted files into compDestDir
+    // Ensure runtime dependencies are accessible in staging directory
+    for (const dll of ["vfp9enu.dll", "msvcr71.dll", "gdiplus.dll"]) {
+      const srcDll = path.join(engineDir, dll);
+      const dstDll = path.join(compDestDir, dll);
+      if (fs.existsSync(srcDll) && !fs.existsSync(dstDll)) {
+        try {
+          fs.copyFileSync(srcDll, dstDll);
+          try { fs.chmodSync(dstDll, 0o666); } catch { }
+        } catch { }
+      }
+    }
+
+    // 3. Copy matching encrypted files into compDestDir and ensure WRITABLE (strip Windows ReadOnly attribute)
     for (const file of matchingFiles) {
       try {
-        fs.copyFileSync(path.join(sourceDir, file), path.join(compDestDir, file));
+        const srcPath = path.join(sourceDir, file);
+        const dstPath = path.join(compDestDir, file);
+        fs.copyFileSync(srcPath, dstPath);
+        // CRITICAL: Strip Windows Read-Only attribute so efWin11.fll / FoxPro can open for read+write!
+        try {
+          fs.chmodSync(dstPath, 0o666);
+        } catch { }
       } catch (fErr) {
         emitLog("warn", `Skipped copy for ${file}: ${fErr.message}`);
       }
@@ -1122,12 +1396,17 @@ async function executeDecryptionAndSync(triggerReason = "manual") {
         `    TRY\r\n` +
         `        = efwdecrypt(srcfile, "THYFGXWREZBDCVAS")\r\n` +
         `        SELECT * FROM (srcfile) INTO CURSOR curdata READWRITE\r\n` +
-        `        IF RECCOUNT("curdata") > 0\r\n` +
-        `            SELECT curdata\r\n` +
-        `            COPY TO (outdbf) TYPE FOX2X\r\n` +
-        `        ENDIF\r\n` +
+        `        SELECT curdata\r\n` +
+        `        COPY TO (outdbf) TYPE FOX2X\r\n` +
         `        USE IN curdata\r\n` +
         `    CATCH\r\n` +
+        `        TRY\r\n` +
+        `            USE (srcfile) ALIAS curdata AGAIN SHARED\r\n` +
+        `            SELECT curdata\r\n` +
+        `            COPY TO (outdbf) TYPE FOX2X\r\n` +
+        `            USE IN curdata\r\n` +
+        `        CATCH\r\n` +
+        `        ENDTRY\r\n` +
         `    ENDTRY\r\n` +
         `    IF FILE(srcfile)\r\n` +
         `        TRY\r\n` +
@@ -1154,20 +1433,26 @@ async function executeDecryptionAndSync(triggerReason = "manual") {
     fs.writeFileSync(prgPath, decryptScript, "utf8");
     fs.writeFileSync(fpwPath, fpwContent, "utf8");
 
-    // 5. Run MabsolCRM.EXE headless
+    // 5. Run MabsolCRM.EXE headless (with relative config flag to avoid Windows username spaces)
     try {
       await new Promise((resolve, reject) => {
-        const engineProcess = spawn(engineBinaryPath, ["-t", `-c${fpwPath}`], {
+        const fpwFilename = path.basename(fpwPath);
+        const engineProcess = spawn(engineBinaryPath, ["-t", `-c${fpwFilename}`], {
           cwd: compDestDir,
           stdio: "ignore",
           windowsHide: true,
-          detached: false
+          detached: false,
+          env: {
+            ...process.env,
+            PATH: `${engineDir};${compDestDir};${process.env.PATH || ""}`
+          }
         });
 
+        // 5-minute timeout for large ERP databases with 500,000+ rows
         const timer = setTimeout(() => {
           try { engineProcess.kill(); } catch { }
           resolve();
-        }, 45000);
+        }, 300000);
 
         engineProcess.on("close", () => {
           clearTimeout(timer);
@@ -1195,7 +1480,7 @@ async function executeDecryptionAndSync(triggerReason = "manual") {
         if (fs.existsSync(compDestDir)) {
           for (const entry of fs.readdirSync(compDestDir)) {
             const lower = entry.toLowerCase();
-            if (!lower.endsWith(".dbf") && !lower.endsWith(".fll")) {
+            if (!lower.endsWith(".dbf") && !lower.endsWith(".fll") && !lower.endsWith(".dll")) {
               const entryPath = path.join(compDestDir, entry);
               if (fs.statSync(entryPath).isFile()) fs.unlinkSync(entryPath);
             }
@@ -1205,10 +1490,13 @@ async function executeDecryptionAndSync(triggerReason = "manual") {
     }
 
     const destFiles = fs.readdirSync(compDestDir);
-    const dbfFiles = destFiles.filter(f => f.toLowerCase().endsWith(".dbf"));
+    const dbfFiles = destFiles.filter(f => f.toLowerCase().endsWith(".dbf") && !f.toLowerCase().startsWith("foxtask"));
     emitLog("success", `[${compCode}] Extraction finished. ${dbfFiles.length} database table(s) ready.`);
 
-    if (dbfFiles.length === 0) continue;
+    if (dbfFiles.length === 0) {
+      emitLog("warn", `[${compCode}] 0 database tables were produced from ${matchingFiles.length} source file(s). Please verify file integrity.`);
+      continue;
+    }
 
     // SCENARIO 1: ONLINE -> Upload directly from staging to Cloud Server
     if (isCloudReachable) {
@@ -1249,16 +1537,23 @@ async function executeDecryptionAndSync(triggerReason = "manual") {
       emitLog("warn", `Upload interrupted for [${compCode}] (${uploadResult.error}). Moving to secure local vault.`);
     }
 
-    // SCENARIO 2: OFFLINE (temporary network drop) -> Move files into Hidden Offline Vault
+    // SCENARIO 2: OFFLINE (temporary network drop or no internet) -> Move files into Hidden Offline Vault
     const vaultCompDir = path.join(getHiddenVaultDir(), compCode);
     fs.mkdirSync(vaultCompDir, { recursive: true });
     for (const file of dbfFiles) {
       const srcFp = path.join(compDestDir, file);
       const dstFp = path.join(vaultCompDir, file);
       try {
+        if (fs.existsSync(dstFp)) {
+          try { fs.chmodSync(dstFp, 0o666); } catch { }
+          fs.unlinkSync(dstFp);
+        }
         fs.copyFileSync(srcFp, dstFp);
+        try { fs.chmodSync(dstFp, 0o666); } catch { }
         if (fs.existsSync(srcFp)) fs.unlinkSync(srcFp);
-      } catch {}
+      } catch (mvErr) {
+        emitLog("warn", `Vault move warning for ${file}: ${mvErr.message}`);
+      }
     }
     try { fs.rmdirSync(compDestDir); } catch {}
 
@@ -1280,8 +1575,31 @@ async function executeDecryptionAndSync(triggerReason = "manual") {
       tablesCount: totalOfflineTables,
       message: summaryMessages.join(" | ")
     });
-    emitLog("warn", `Sync finished in Offline Mode (${totalOfflineTables} tables saved locally). Not waiting for internet.`);
+    emitLog("warn", `Sync finished in Offline Mode (${totalOfflineTables} tables saved locally in hidden vault). Auto-sync will upload once internet is restored.`);
     return { success: true, offline: true, message: summaryMessages.join(" | ") };
+  }
+
+  // If real-time watcher ran and all files are unmodified, keep existing stored status
+  if (skippedDueToNoChange > 0 && totalUploadedTables === 0 && totalOfflineTables === 0) {
+    isSyncing = false;
+    emitStatus({
+      isSyncing: false,
+      isOnline: true,
+      lastStatus: "stored"
+    });
+    return { success: true, unchanged: true, message: "Data is up to date." };
+  }
+
+  // If nothing was uploaded and nothing was stored offline (e.g. 0 tables converted):
+  if (totalUploadedTables === 0) {
+    emitStatus({
+      isSyncing: false,
+      lastStatus: "failed",
+      tablesCount: 0,
+      error: "No database tables were converted from the source files."
+    });
+    emitLog("error", "Sync finished: 0 tables were converted or stored. Please check that source ERP data files are valid.");
+    return { success: false, message: "No database tables were converted." };
   }
 
   // If all were uploaded directly to server:
@@ -1559,31 +1877,42 @@ function stopAutoSync() {
 function setupAutoSyncTimer(intervalMins) {
   stopAutoSync();
   const cfg = loadConfig();
+  const cleanSource = sanitizeFolderPath(cfg.sourceDir);
+  const isFolderReady = Boolean(cleanSource && fs.existsSync(cleanSource));
+  const hasCompany = Boolean((cfg.companyCode || "").trim());
+
+  if (!isFolderReady || !hasCompany) {
+    if (!hasCompany) {
+      emitLog("info", "⏸️ [Auto-Sync Standby] Company Code not yet set. Auto-sync will start once configured in Settings.");
+    } else {
+      emitLog("info", "⏸️ [Auto-Sync Standby] ERP source folder not yet configured or not found on this computer. Auto-sync will activate once selected in Settings.");
+    }
+    return;
+  }
+
   const isRealtime = intervalMins === "realtime" || intervalMins === "real-time" || intervalMins === 0.5 || String(intervalMins) === "0.5";
 
   if (isRealtime) {
     emitLog("info", "⚡ Real-Time Auto-Sync active: Live file watcher & continuous sync engaged.");
 
     // 1. File system watcher on source directory for instant real-time sync
-    if (cfg.sourceDir && fs.existsSync(cfg.sourceDir)) {
-      try {
-        sourceDirWatcher = fs.watch(cfg.sourceDir, { recursive: false }, (eventType, filename) => {
-          if (!filename) return;
-          const lower = filename.toLowerCase();
-          if (lower.endsWith(".tmp") || lower.endsWith(".lck") || lower.endsWith(".log") || lower.endsWith(".bak")) return;
+    try {
+      sourceDirWatcher = fs.watch(cleanSource, { recursive: false }, (eventType, filename) => {
+        if (!filename) return;
+        const lower = filename.toLowerCase();
+        if (lower.endsWith(".tmp") || lower.endsWith(".lck") || lower.endsWith(".log") || lower.endsWith(".bak")) return;
 
-          if (realtimeDebounceTimer) clearTimeout(realtimeDebounceTimer);
-          realtimeDebounceTimer = setTimeout(() => {
-            if (!isSyncing) {
-              emitLog("info", `[Real-Time Watcher] ERP change detected (${filename}). Synchronizing immediately...`);
-              executeDecryptionAndSync("realtime").catch(() => { });
-            }
-          }, 2500); // 2.5s debounce for atomic writes
-        });
-        emitLog("info", `[Real-Time Watcher] Watching source folder: ${cfg.sourceDir}`);
-      } catch (watchErr) {
-        emitLog("warn", `Could not attach live file watcher on ${cfg.sourceDir}: ${watchErr.message}. Fallback to 30s heartbeat.`);
-      }
+        if (realtimeDebounceTimer) clearTimeout(realtimeDebounceTimer);
+        realtimeDebounceTimer = setTimeout(() => {
+          if (!isSyncing) {
+            emitLog("info", `[Real-Time Watcher] ERP change detected (${filename}). Synchronizing immediately...`);
+            executeDecryptionAndSync("realtime").catch(() => { });
+          }
+        }, 2500); // 2.5s debounce for atomic writes
+      });
+      emitLog("info", `[Real-Time Watcher] Watching source folder: ${cleanSource}`);
+    } catch (watchErr) {
+      emitLog("warn", `Could not attach live file watcher on ${cleanSource}: ${watchErr.message}. Fallback to 30s heartbeat.`);
     }
 
     // 2. High-frequency 30-second heartbeat to ensure network shared drives are synced without delay

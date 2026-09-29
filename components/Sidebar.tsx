@@ -230,17 +230,63 @@ export default function Sidebar({ collapsed, setCollapsed, mobile }: SidebarProp
 
   // Determine active role dynamically from URL or logged-in user
   const activeRole = useMemo(() => {
-    const segments = pathname ? pathname.split("/").filter(Boolean) : [];
-    if (segments[0] === "dashboard" && segments[1]) {
-      const candidate = segments[1].toLowerCase().trim();
-      return candidate.replace(/[\s_]+/g, "-");
-    }
+    const VALID_ROLES = new Set([
+      "admin",
+      "super-admin",
+      "reception",
+      "manager",
+      "sales-executive",
+      "mr",
+      "asm",
+      "rsm",
+      "zsm",
+      "nsm",
+      "vp",
+      "director",
+      "md",
+      "telecaller",
+      "operator",
+      "accountant",
+      "user",
+    ]);
 
     if (isSuperAdmin) return "super-admin";
 
-    const userRole = (currentUser as any)?.role || (currentUser as any)?.roleType;
-    if (typeof userRole === "string" && userRole.trim()) {
-      return userRole.toLowerCase().trim().replace(/[\s_]+/g, "-");
+    // 1. Prioritize authenticated user's actual assigned role
+    const roleIdName = (currentUser as any)?.roleId?.roleName;
+    const directRoleName = (currentUser as any)?.roleName;
+    const directRoleType = (currentUser as any)?.roleType;
+    const directRole = (currentUser as any)?.role;
+    const dashboardType = (currentUser as any)?.dashboardType;
+
+    if (
+      roleIdName?.toLowerCase() === "admin" ||
+      directRoleName?.toLowerCase() === "admin" ||
+      directRoleType?.toLowerCase() === "admin" ||
+      directRole?.toLowerCase() === "admin" ||
+      dashboardType === "admin" ||
+      (currentUser as any)?.isAdmin === true
+    ) {
+      return "admin";
+    }
+
+    const userCandidates = [roleIdName, directRoleName, directRoleType, directRole]
+      .filter((r) => typeof r === "string" && r.trim())
+      .map((r) => r.toLowerCase().trim().replace(/[\s_]+/g, "-"));
+
+    for (const c of userCandidates) {
+      if (VALID_ROLES.has(c)) {
+        return c;
+      }
+    }
+
+    // 2. Fallback to URL segment if not determined from user
+    const segments = pathname ? pathname.split("/").filter(Boolean) : [];
+    if (segments[0] === "dashboard" && segments[1]) {
+      const candidate = segments[1].toLowerCase().trim().replace(/[\s_]+/g, "-");
+      if (VALID_ROLES.has(candidate)) {
+        return candidate;
+      }
     }
 
     return "admin";

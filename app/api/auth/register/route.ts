@@ -179,7 +179,7 @@ export async function POST(req: Request) {
       }
     }
 
-    // ── OTP Verification ──────────────────────────────────────────────────────
+    // Email OTP Verification
     const emailOtp = await Otp.findOne({
       email: cleanEmail,
       type: "email",
@@ -190,19 +190,6 @@ export async function POST(req: Request) {
       return NextResponse.json({
         success: false,
         message: "Email OTP verification is required for Head Office before registration. Please verify your email.",
-      }, { status: 400 });
-    }
-
-    const mobileOtp = await Otp.findOne({
-      mobile: cleanMobile,
-      type: "mobile",
-      verified: true,
-    });
-
-    if (!mobileOtp) {
-      return NextResponse.json({
-        success: false,
-        message: "Mobile OTP verification is required before registration. Please verify your mobile number.",
       }, { status: 400 });
     }
 

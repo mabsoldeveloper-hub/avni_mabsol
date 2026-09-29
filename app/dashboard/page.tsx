@@ -26,4 +26,4 @@ export default async function DashboardRootPage() {
   }
 
   redirect(`/dashboard/${targetRole}`);
-}
+}

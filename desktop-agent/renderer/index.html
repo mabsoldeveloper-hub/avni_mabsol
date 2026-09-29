@@ -21,19 +21,44 @@
     <!-- VIEW 1: LOGIN & OTP SCREEN (Requires Internet)                    -->
     <!-- ================================================================= -->
     <div id="authView" class="auth-view">
-      <div class="auth-card">
+      <div id="toastContainer" class="toast-container"></div>
+      <div class="auth-card" id="authCardBox">
         <div class="auth-header">
           <div class="brand-logo">
             <img src="mabsol_logo.ico" alt="Logo" class="brand-img-logo">
             <h1>MabsolCrm</h1>
           </div>
-          <p class="subtitle">Desktop Data Synchronization Agent</p>
+          <p class="subtitle" id="authSubtitle">Desktop Data Synchronization Agent</p>
         </div>
 
         <!-- Auth Navigation Tabs: Sign In / Create Account -->
         <div class="auth-tabs" id="authTabs">
           <button type="button" id="tabSignIn" class="auth-tab active">Sign In</button>
           <button type="button" id="tabSignUp" class="auth-tab">Create Account</button>
+        </div>
+
+        <!-- Target Cloud Server Selection (Applies to both Sign In and Registration) -->
+        <div class="form-group server-select-group" id="globalServerSelectGroup" style="margin-bottom: 16px;">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 6px;">
+            <label style="margin:0; font-size: 11.5px; font-weight: 600; color: #94a3b8;">Target CRM Server</label>
+            <span style="font-size: 10.5px; color: #38bdf8;">Select where to sign in / register</span>
+          </div>
+          <div class="server-picker-grid">
+            <button type="button" class="server-choice-btn active" id="btnServerPhcrm" data-url="https://phcrm.mabsolinfotech.cloud">
+              <span class="server-choice-title">phcrm.mabsolinfotech.cloud</span>
+              <span class="server-choice-sub">Production Cloud</span>
+            </button>
+            <button type="button" class="server-choice-btn" id="btnServerMbh" data-url="https://mbh.crm.mabsolinfotech.cloud">
+              <span class="server-choice-title">mbh.crm.mabsolinfotech.cloud</span>
+              <span class="server-choice-sub">MBH Cloud</span>
+            </button>
+            <button type="button" class="server-choice-btn local-btn" id="btnServerLocal" data-url="http://localhost:3000">
+              <span class="server-choice-title">Local Dev Server</span>
+              <span class="server-choice-sub">http://localhost:3000</span>
+            </button>
+          </div>
+          <input type="url" id="cloudUrlInput" value="https://phcrm.mabsolinfotech.cloud" required
+            placeholder="https://phcrm.mabsolinfotech.cloud" style="margin-top: 6px;">
         </div>
 
         <!-- Login Step 1: Email & Password -->
@@ -44,25 +69,6 @@
           </div>
 
           <form id="loginForm">
-            <div class="form-group server-select-group">
-              <label style="margin-bottom: 6px; display: block;">Select Cloud CRM Server</label>
-              <div class="server-picker-grid">
-                <button type="button" class="server-choice-btn active" id="btnServerPhcrm" data-url="https://phcrm.mabsolinfotech.cloud">
-                  <span class="server-choice-title">phcrm.mabsolinfotech.cloud</span>
-                  <span class="server-choice-sub">Primary Production Cloud</span>
-                </button>
-                <button type="button" class="server-choice-btn" id="btnServerMbh" data-url="https://mbh.crm.mabsolinfotech.cloud">
-                  <span class="server-choice-title">mbh.crm.mabsolinfotech.cloud</span>
-                  <span class="server-choice-sub">MBH MabsolCrm Cloud</span>
-                </button>
-                <button type="button" class="server-choice-btn local-btn" id="btnServerLocal" data-url="http://localhost:3000">
-                  <span class="server-choice-title">Local Dev Server</span>
-                  <span class="server-choice-sub">http://localhost:3000</span>
-                </button>
-              </div>
-              <input type="url" id="cloudUrlInput" value="https://phcrm.mabsolinfotech.cloud" required
-                placeholder="https://phcrm.mabsolinfotech.cloud" style="margin-top: 6px;">
-            </div>
 
             <div class="form-group">
               <label for="emailInput">Operator Account Email</label>
@@ -88,56 +94,273 @@
           </form>
         </div>
 
-        <!-- Sign Up Step: Create Account (Pending Superadmin Approval) -->
-        <div id="signupStep" class="auth-step hidden">
-          <div class="notice-banner" style="background: rgba(14, 165, 233, 0.1); border-color: rgba(14, 165, 233, 0.25);">
-            <span class="icon">ℹ️</span>
-            <span>New accounts require Superadmin approval before login access is granted.</span>
+        <!-- Sign Up Step: Clean Expanded Onboarding (Identical to Website) -->
+        <div id="signupStep" class="auth-step hidden clean-signup-wrapper">
+          <!-- Wizard Heading & Subtext -->
+          <div class="clean-heading-box">
+            <h2>Create Your MabsolCrm Account</h2>
+            <p class="clean-subtext">Set up your company, verify GSTINs with live government verification, and launch your MabsolCrm workspace.</p>
           </div>
 
-          <form id="signupForm">
-            <div class="form-group">
-              <label for="signupCompanyName">Company / Firm Name *</label>
-              <input type="text" id="signupCompanyName" required placeholder="e.g. Acme Pharmaceuticals">
+          <!-- Step Progress Tracker -->
+          <div class="clean-step-tracker">
+            <button type="button" id="stepTrackBtn1" class="step-btn active">
+              <span class="step-num" id="stepTrackNum1">1</span>
+              <span class="step-txt">Head Office &amp; Account</span>
+            </button>
+            <div class="step-line" id="stepTrackLine1"></div>
+
+            <button type="button" id="stepTrackBtn2" class="step-btn hidden">
+              <span class="step-num" id="stepTrackNum2">2</span>
+              <span class="step-txt" id="stepTrackTxt2">Branch Details</span>
+            </button>
+            <div class="step-line hidden" id="stepTrackLine2"></div>
+
+            <button type="button" id="stepTrackBtn3" class="step-btn">
+              <span class="step-num" id="stepTrackNum3">2</span>
+              <span class="step-txt">Review &amp; Launch</span>
+            </button>
+          </div>
+
+          <div id="signupErrorBanner" class="clean-error-banner hidden"></div>
+
+          <!-- SUBSTEP 1: Head Office & Account -->
+          <div id="signupSubstep1" class="clean-substep">
+            <!-- Row 1: Company Name & Branches -->
+            <div class="clean-grid-2">
+              <div class="clean-field">
+                <label><span class="req-star">*</span> Company Name</label>
+                <div class="clean-input-row">
+                  <input type="text" id="regCompanyName" placeholder="Enter company name" required>
+                </div>
+              </div>
+              <div class="clean-field">
+                <label><span class="req-star">*</span> How many main branches do you want to add?</label>
+                <div class="clean-input-row">
+                  <select id="regBranchCount" class="clean-select">
+                    <option value="0" selected>0 Main Branch (Head Office Only)</option>
+                    <option value="1">1 Main Branch</option>
+                    <option value="2">2 Main Branches</option>
+                    <option value="3">3 Main Branches</option>
+                    <option value="4">4 Main Branches</option>
+                    <option value="5">5 Main Branches</option>
+                  </select>
+                </div>
+              </div>
             </div>
 
-            <div class="form-group">
-              <label for="signupFullName">Full Name *</label>
-              <input type="text" id="signupFullName" required placeholder="e.g. John Doe">
+            <!-- Row 2: Administrator / Owner Full Name -->
+            <div class="clean-field">
+              <label><span class="req-star">*</span> Administrator / Owner Full Name</label>
+              <div class="clean-input-row">
+                <span class="clean-field-icon">👤</span>
+                <input type="text" id="regFullName" placeholder="Enter full name of administrator" required>
+              </div>
             </div>
 
-            <div class="form-group">
-              <label for="signupEmail">Work Email Address *</label>
-              <input type="email" id="signupEmail" required placeholder="operator@acmepharma.com">
+            <!-- Row 3: GST Number + Verify Button -->
+            <div class="clean-field">
+              <div class="clean-label-row">
+                <label><span class="req-star">*</span> GST Number</label>
+                <span class="field-hint">Auto-fills Address, City, State &amp; PIN</span>
+              </div>
+              <div class="clean-input-row">
+                <span class="clean-field-icon">📋</span>
+                <input type="text" id="regGstNo" placeholder="ENTER GSTIN (E.G. 22AAAAA0000A1Z5)" maxlength="15" style="text-transform: uppercase; font-family: monospace;">
+                <button type="button" id="regVerifyGstBtn" class="clean-inline-btn">Verify GST</button>
+              </div>
+              <div id="regGstStatusPill" class="gst-verified-pill hidden"></div>
             </div>
 
-            <div class="form-group">
-              <label for="signupMobile">Mobile Number</label>
-              <input type="tel" id="signupMobile" placeholder="e.g. 9876543210">
+            <!-- Row 4: Full Address -->
+            <div class="clean-field">
+              <label><span class="req-star">*</span> Full Address</label>
+              <div class="clean-input-row">
+                <input type="text" id="regAddress" placeholder="Enter complete address" required>
+              </div>
             </div>
 
-            <div class="form-group">
-              <label for="signupPassword">Password * (min 6 characters)</label>
-              <input type="password" id="signupPassword" minlength="6" required placeholder="••••••••">
+            <!-- Row 5: State & City -->
+            <div class="clean-grid-2">
+              <div class="clean-field">
+                <label><span class="req-star">*</span> State</label>
+                <div class="clean-input-row">
+                  <input type="text" id="regState" placeholder="Enter State" required>
+                </div>
+              </div>
+              <div class="clean-field">
+                <label><span class="req-star">*</span> City</label>
+                <div class="clean-input-row">
+                  <input type="text" id="regCity" placeholder="Enter City" required>
+                </div>
+              </div>
             </div>
 
-            <div class="form-group">
-              <label for="signupConfirmPassword">Confirm Password *</label>
-              <input type="password" id="signupConfirmPassword" minlength="6" required placeholder="••••••••">
+            <!-- Row 6: Postal Code & Phone Number with OTP -->
+            <div class="clean-grid-2">
+              <div class="clean-field">
+                <label><span class="req-star">*</span> Postal Code</label>
+                <div class="clean-input-row">
+                  <input type="text" id="regPincode" placeholder="6-digit pincode" maxlength="6" required>
+                </div>
+              </div>
+              <div class="clean-field">
+                <div class="clean-label-row">
+                  <label><span class="req-star">*</span> Phone Number</label>
+                </div>
+                <div class="clean-input-row">
+                  <span class="clean-field-icon">📞</span>
+                  <input type="tel" id="regMobile" placeholder="10-digit phone number" maxlength="10" required>
+                </div>
+                <div id="regMobileErrorText" class="clean-field-error hidden"></div>
+              </div>
             </div>
 
-            <div id="signupError" class="error-msg hidden"></div>
+            <!-- Row 7: Email Address with OTP -->
+            <div class="clean-field">
+              <div class="clean-label-row">
+                <label><span class="req-star">*</span> Email Address</label>
+                <span id="regEmailVerifiedBadge" class="verified-badge hidden">✓ Email Verified</span>
+              </div>
+              <div class="clean-input-row">
+                <span class="clean-field-icon">✉️</span>
+                <input type="email" id="regEmail" placeholder="Enter work email address" required>
+                <button type="button" id="regSendEmailOtpBtn" class="clean-inline-btn">Send OTP</button>
+              </div>
+              <div id="regEmailErrorText" class="clean-field-error hidden"></div>
+            </div>
 
-            <button type="submit" id="signupBtn" class="btn-primary">
-              <span class="btn-text">Submit for Superadmin Approval</span>
+            <!-- Email OTP Box -->
+            <div id="regEmailOtpBox" class="clean-otp-box hidden">
+              <label>Enter 6-digit verification code sent to <strong id="regEmailOtpTarget"></strong></label>
+              <div class="otp-compact-row">
+                <div class="otp-square-grid" id="regEmailSquareGrid">
+                  <input type="text" maxlength="1" class="otp-square-input" data-idx="0">
+                  <input type="text" maxlength="1" class="otp-square-input" data-idx="1">
+                  <input type="text" maxlength="1" class="otp-square-input" data-idx="2">
+                  <input type="text" maxlength="1" class="otp-square-input" data-idx="3">
+                  <input type="text" maxlength="1" class="otp-square-input" data-idx="4">
+                  <input type="text" maxlength="1" class="otp-square-input" data-idx="5">
+                </div>
+                <button type="button" id="regConfirmEmailOtpBtn" class="clean-otp-confirm-btn" disabled>Confirm OTP ✓</button>
+              </div>
+            </div>
+
+            <!-- Row 8: Password & Confirm Password -->
+            <div class="clean-grid-2">
+              <div class="clean-field">
+                <label><span class="req-star">*</span> Password (min 8 chars, 1 letter, 1 number)</label>
+                <div class="clean-input-row">
+                  <input type="password" id="regPassword" placeholder="Min 8 chars (1 letter, 1 number)" minlength="8" required>
+                  <button type="button" id="regTogglePwBtn" class="clean-eye-btn">👁️</button>
+                </div>
+                <div id="regPasswordCriteria" class="password-criteria-box">
+                  <span class="criteria-pill" id="critLength">✕ Min 8 chars</span>
+                  <span class="criteria-pill" id="critLetter">✕ 1 letter</span>
+                  <span class="criteria-pill" id="critNumber">✕ 1 number</span>
+                </div>
+              </div>
+              <div class="clean-field">
+                <label><span class="req-star">*</span> Confirm Password</label>
+                <div class="clean-input-row">
+                  <input type="password" id="regConfirmPassword" placeholder="Confirm password" minlength="8" required>
+                  <button type="button" id="regToggleConfirmPwBtn" class="clean-eye-btn">👁️</button>
+                </div>
+                <div id="regConfirmPwErrorText" class="clean-field-error hidden">Passwords do not match</div>
+              </div>
+            </div>
+
+            <!-- Row 9: Drug License Number (Optional) -->
+            <div class="clean-field">
+              <div class="clean-label-row">
+                <label>Drug License Number (Optional)</label>
+                <span class="field-hint">Pharma License 20B/21B</span>
+              </div>
+              <div class="clean-input-row">
+                <input type="text" id="regDrugLicense" placeholder="Enter Drug License Number (Optional)" style="text-transform: uppercase;">
+              </div>
+            </div>
+          </div>
+
+          <!-- SUBSTEP 2: Branch Details (When branch count >= 1) -->
+          <div id="signupSubstep2" class="clean-substep hidden">
+            <div class="branch-section-heading">
+              <h3 id="branchSectionTitle">🏢 Configure Your Branches</h3>
+              <p>Select a branch tab below to enter its details. You can copy Head Office details with a single click.</p>
+            </div>
+
+            <!-- Branch Tabs Navigation -->
+            <div class="branch-nav-tabs" id="branchNavTabs"></div>
+
+            <!-- Active Branch Container -->
+            <div id="activeBranchCard" class="active-branch-card"></div>
+          </div>
+
+          <!-- SUBSTEP 3: Review & Instant Launch -->
+          <div id="signupSubstep3" class="clean-substep hidden">
+            <div class="clean-review-card">
+              <div class="review-item">
+                <span class="rev-label">Head Office Company</span>
+                <span class="rev-val" id="revCompanyName">N/A</span>
+              </div>
+              <div class="review-item">
+                <span class="rev-label">Primary Head Office GSTIN</span>
+                <span class="rev-val mono-font" id="revGstNo">Unregistered</span>
+              </div>
+              <div class="review-item">
+                <span class="rev-label">Head Office Address</span>
+                <span class="rev-val" id="revAddress">N/A</span>
+              </div>
+              <div class="review-item" id="revDrugLicenseRow">
+                <span class="rev-label">Drug License No.</span>
+                <span class="rev-val mono-font" id="revDrugLicense">N/A</span>
+              </div>
+              <div class="review-item">
+                <span class="rev-label">Main Branches</span>
+                <span class="rev-val" id="revBranchCount">0 (Single Head Office)</span>
+              </div>
+              <div id="revBranchListBox" class="review-branch-box hidden">
+                <span class="review-branch-title">Registered Branch Entities:</span>
+                <div id="revBranchItems"></div>
+              </div>
+              <div class="review-item divider-top">
+                <span class="rev-label">Administrator</span>
+                <span class="rev-val" id="revAdminName">N/A</span>
+              </div>
+              <div class="review-item">
+                <span class="rev-label">Verified Email</span>
+                <span class="rev-val" id="revEmail">N/A</span>
+              </div>
+              <div class="review-item">
+                <span class="rev-label">Phone Number</span>
+                <span class="rev-val mono-font" id="revMobile">N/A</span>
+              </div>
+
+              <!-- Terms Checkbox -->
+              <div class="terms-checkbox-box" id="regTermsBox">
+                <label class="terms-checkbox-label">
+                  <input type="checkbox" id="regTermsAccepted" class="terms-checkbox-input">
+                  <span>I agree to the <strong>Terms of Service</strong> and <strong>Privacy Policy</strong>, and confirm that all company, GST, and branch details are accurate and authorized.</span>
+                </label>
+              </div>
+            </div>
+          </div>
+
+          <!-- Wizard Action Navigation Buttons -->
+          <div class="clean-wizard-actions">
+            <button type="button" id="regPrevStepBtn" class="clean-btn-back hidden">← Back</button>
+            <button type="button" id="regNextStepBtn" class="clean-btn-primary">Next: Review &amp; Launch →</button>
+            <button type="button" id="regCompleteBtn" class="clean-btn-launch hidden">
+              <span class="btn-text">🚀 Complete Registration &amp; Launch Workspace</span>
               <span class="spinner hidden"></span>
             </button>
+          </div>
 
-            <div class="auth-footer-link">
-              <span>Already registered?</span>
-              <button type="button" id="linkToSignin" class="btn-text-link">Back to Sign In</button>
-            </div>
-          </form>
+          <!-- Footer Link -->
+          <div class="clean-card-footer">
+            <span>Already have an account?</span>
+            <button type="button" id="linkToSignin" class="clean-login-link">Sign In to Your Workspace →</button>
+          </div>
         </div>
 
         <!-- Pending Approval Step (Shown after registration or upon pending login) -->
@@ -312,6 +535,7 @@
                   <button type="button" id="browseSourceBtn" class="btn-browse" disabled>Browse</button>
                 </div>
                 <span class="helper">Directory containing encrypted ERP data files (e.g. PRO.B01, GLEDGER.B01)</span>
+                <div id="sourceDirStatusBadge" class="source-dir-status-badge hidden"></div>
               </div>
 
               <div class="form-row">
@@ -499,6 +723,65 @@
               <a href="#" id="switchToOtpBtn" style="color: #38bdf8; text-decoration: none;">📲 Use OTP Code</a>
             </div>
           </form>
+        </div>
+      </div>
+    </div>
+
+    <!-- ================================================================= -->
+    <!-- MODAL: NEW DEVICE LICENSE ACTIVATION (OTP)                        -->
+    <!-- ================================================================= -->
+    <div id="deviceActivationModal" class="modal-overlay hidden">
+      <div class="modal-content" style="max-width: 480px;">
+        <div class="modal-header">
+          <span class="modal-icon">💻</span>
+          <h3>Activate Sync on This Machine</h3>
+          <p id="deviceActivationSub">This computer needs authorization before it can sync data with your cloud workspace.</p>
+        </div>
+
+        <div style="background: rgba(15, 23, 42, 0.6); border: 1px solid rgba(255,255,255,0.08); border-radius: 8px; padding: 12px 16px; margin-bottom: 16px; font-size: 12px; line-height: 1.6; text-align: left;">
+          <div><span style="color: #94a3b8;">Machine Name:</span> <strong id="devActMachineName" style="color: #38bdf8;">Detecting...</strong></div>
+          <div><span style="color: #94a3b8;">Hardware ID:</span> <span id="devActDeviceId" style="font-family: monospace; color: #a5b4fc;">...</span></div>
+          <div><span style="color: #94a3b8;">Registered Email:</span> <strong id="devActEmail" style="color: #f8fafc;">...</strong></div>
+        </div>
+
+        <!-- Step A: Send OTP Button -->
+        <div id="devActSendSection">
+          <p style="font-size: 12.5px; color: #94a3b8; margin-bottom: 14px;">
+            A 6-digit verification code will be dispatched to your account email to issue a new 30-day sync license for this PC.
+          </p>
+          <button type="button" id="btnDevActSendOtp" class="btn-primary" style="width: 100%;">
+            <span class="btn-text">📧 Send Activation Code</span>
+            <span class="spinner hidden"></span>
+          </button>
+        </div>
+
+        <!-- Step B: Enter OTP Section -->
+        <div id="devActVerifySection" class="hidden" style="margin-top: 12px;">
+          <div style="font-size: 12px; color: #cbd5e1; margin-bottom: 8px;">
+            Enter 6-digit code sent to <strong id="devActSentToEmail" style="color: #38bdf8;"></strong>:
+          </div>
+          <div class="otp-compact-row" style="justify-content: center; margin-bottom: 14px;">
+            <div class="otp-square-grid" id="devActSquareGrid">
+              <input type="text" maxlength="1" class="otp-square-input" data-idx="0">
+              <input type="text" maxlength="1" class="otp-square-input" data-idx="1">
+              <input type="text" maxlength="1" class="otp-square-input" data-idx="2">
+              <input type="text" maxlength="1" class="otp-square-input" data-idx="3">
+              <input type="text" maxlength="1" class="otp-square-input" data-idx="4">
+              <input type="text" maxlength="1" class="otp-square-input" data-idx="5">
+            </div>
+          </div>
+          <div id="devActError" class="clean-field-error hidden" style="margin-bottom: 12px;"></div>
+          <div class="modal-actions" style="margin-top: 0;">
+            <button type="button" id="btnDevActConfirm" class="btn-primary" disabled>
+              <span class="btn-text">Verify &amp; Activate Machine ✓</span>
+              <span class="spinner hidden"></span>
+            </button>
+            <button type="button" id="btnDevActResend" class="btn-secondary" style="font-size: 11px;">Resend OTP</button>
+          </div>
+        </div>
+
+        <div style="margin-top: 14px; text-align: center;">
+          <button type="button" id="btnCloseDevActModal" class="btn-secondary" style="font-size: 11px; padding: 4px 12px; background: transparent; border: none; color: #64748b;">Dismiss for now</button>
         </div>
       </div>
     </div>

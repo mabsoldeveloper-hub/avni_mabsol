@@ -138,7 +138,6 @@ export async function POST(request: NextRequest) {
         // 4. Device Binding & Multi-Device Validation
         const authorizedDevices: any[] = Array.isArray(config.authorizedDevices) ? config.authorizedDevices : [];
         const deviceEntry = deviceId ? authorizedDevices.find((d: any) => d.deviceId === deviceId && d.status === "active") : null;
-        const keyEntry = authorizedDevices.find((d: any) => d.licenseKey === licenseKey && d.status === "active");
 
         if (deviceEntry) {
           // Check if this specific device license is expired
@@ -157,51 +156,60 @@ export async function POST(request: NextRequest) {
             { _id: config._id, "authorizedDevices.deviceId": deviceId },
             { $set: { "authorizedDevices.$.lastSeenAt": new Date(), "authorizedDevices.$.deviceName": deviceName || deviceEntry.deviceName } }
           ).catch(() => {});
-        } else if (keyEntry && deviceId && keyEntry.deviceId && keyEntry.deviceId !== deviceId) {
+        } else if (deviceId && config.boundDeviceId === deviceId) {
+          // Primary bound machine - ensure in authorizedDevices
+          await VfpConfig.updateOne(
+            { _id: config._id },
+            {
+              $addToSet: {
+                authorizedDevices: {
+                  deviceId,
+                  deviceName: deviceName || config.boundDeviceName || "Primary Machine",
+                  licenseKey,
+                  activatedAt: config.boundAt || new Date(),
+                  expiresAt: config.licenseExpiresAt,
+                  lastSeenAt: new Date(),
+                  status: "active",
+                  activationEmail: user.email,
+                },
+              },
+            }
+          );
+        } else if (deviceId && !config.boundDeviceId && authorizedDevices.length === 0) {
+          // First device to use this key -> Bind it!
+          await VfpConfig.updateOne(
+            { _id: config._id },
+            {
+              $set: {
+                boundDeviceId: deviceId,
+                boundDeviceName: deviceName || "Operator Machine",
+                boundAt: new Date(),
+              },
+              $addToSet: {
+                authorizedDevices: {
+                  deviceId,
+                  deviceName: deviceName || "Operator Machine",
+                  licenseKey,
+                  activatedAt: new Date(),
+                  expiresAt: config.licenseExpiresAt,
+                  lastSeenAt: new Date(),
+                  status: "active",
+                  activationEmail: user.email,
+                },
+              },
+            }
+          );
+        } else if (deviceId) {
+          // Unverified device trying to sync with this license key!
           return NextResponse.json(
             {
               success: false,
               deviceMismatch: true,
-              error: `This license key is locked to machine "${keyEntry.deviceName || keyEntry.deviceId}". Please verify your email with OTP in the desktop agent to activate this computer.`,
+              requiresVerification: true,
+              error: `Machine "${deviceName || deviceId}" is not yet authorized for this license key. Please verify your email with the verification code in the desktop agent before syncing.`,
             },
             { status: 403 }
           );
-        } else if (deviceId) {
-          if (!config.boundDeviceId) {
-            // First device to use this key -> Bind it!
-            await VfpConfig.updateOne(
-              { _id: config._id },
-              {
-                $set: {
-                  boundDeviceId: deviceId,
-                  boundDeviceName: deviceName || "Operator Machine",
-                  boundAt: new Date(),
-                },
-                $addToSet: {
-                  authorizedDevices: {
-                    deviceId,
-                    deviceName: deviceName || "Operator Machine",
-                    licenseKey,
-                    activatedAt: new Date(),
-                    expiresAt: config.licenseExpiresAt,
-                    lastSeenAt: new Date(),
-                    status: "active",
-                    activationEmail: user.email,
-                  }
-                }
-              }
-            );
-          } else if (config.boundDeviceId !== deviceId) {
-            // Another device trying to use the same key without being authorized!
-            return NextResponse.json(
-              {
-                success: false,
-                deviceMismatch: true,
-                error: `This machine is not yet authorized for sync. Please enter the verification code sent to your email to activate this device.`,
-              },
-              { status: 403 }
-            );
-          }
         }
 
         // Keep user config's license aligned so future operations know this user is using this license

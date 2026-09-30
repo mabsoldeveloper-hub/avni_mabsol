@@ -20,6 +20,7 @@ export async function POST(request: NextRequest) {
     const deviceId = (body.deviceId || request.headers.get("x-device-id") || "").trim();
     const deviceName = (body.deviceName || request.headers.get("x-device-name") || "Operator Machine").trim();
     let email = (body.email || body.userEmail || "").trim().toLowerCase();
+    const licenseKey = (body.licenseKey || request.headers.get("x-license-key") || "").trim();
 
     // Check JWT Bearer token if available
     let tokenUser: any = null;
@@ -46,12 +47,15 @@ export async function POST(request: NextRequest) {
 
     // Locate company sync config
     let config: any = null;
-    if (email) {
+    if (licenseKey) {
+      config = await VfpConfig.findOne({ license: licenseKey });
+    }
+    if (!config && email) {
       config =
         (await VfpConfig.findOne({ email })) ||
         (await VfpConfig.findOne({ key: "vfp_sync_config_" + email })) ||
         (await VfpConfig.findOne({ key: "vfp_sync_config" }));
-    } else {
+    } else if (!config) {
       config = await VfpConfig.findOne({ key: "vfp_sync_config" });
     }
 
@@ -61,6 +65,11 @@ export async function POST(request: NextRequest) {
           success: false,
           isNewDevice: true,
           authorized: false,
+          requiresVerification: true,
+          deviceId,
+          deviceName,
+          email,
+          licenseKey,
           message: "No sync configuration found for this account. Email OTP verification required to activate device.",
         },
         { status: 200 }
@@ -150,16 +159,20 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    // 3. New Machine Detected!
+    // 3. New / Unverified Machine Detected!
     return NextResponse.json({
       success: true,
       authorized: false,
       isNewDevice: true,
+      requiresVerification: true,
       deviceId,
       deviceName,
       email: config.email || email,
+      licenseKey: config.license || licenseKey,
+      boundDeviceName: config.boundDeviceName || "Another Machine",
       companyName: config.companyName || "",
-      message: `New machine detected: "${deviceName}". Please verify your email with an OTP to activate syncing on this computer.`,
+      companyCode: config.companyCode || "DEFAULT",
+      message: `Machine "${deviceName}" requires verification. Please verify your email with an OTP to activate syncing on this computer.`,
     });
   } catch (err: any) {
     return NextResponse.json({ success: false, error: err.message || "Device check failed" }, { status: 500 });

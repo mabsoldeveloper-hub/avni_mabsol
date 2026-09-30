@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import dbConnect from "@/lib/mongodb";
 import User from "@/models/User";
 import Otp from "@/models/Otp";
+import VfpConfig from "@/models/VfpConfig";
 import { sendOtpEmail } from "@/lib/sendEmail";
 
 export const runtime = "nodejs";
@@ -16,9 +17,17 @@ export async function POST(request: NextRequest) {
       body = await request.json();
     } catch {}
 
-    const email = (body.email || body.userEmail || "").trim().toLowerCase();
+    let email = (body.email || body.userEmail || "").trim().toLowerCase();
     const deviceId = (body.deviceId || "").trim();
     const deviceName = (body.deviceName || "Desktop Agent").trim();
+    const licenseKey = (body.licenseKey || "").trim();
+
+    if (!email && licenseKey) {
+      const cfg: any = await VfpConfig.findOne({ license: licenseKey }).lean();
+      if (cfg?.email) {
+        email = cfg.email.toLowerCase();
+      }
+    }
 
     if (!email || !email.includes("@")) {
       return NextResponse.json(

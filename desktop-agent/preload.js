@@ -55,5 +55,10 @@ contextBridge.exposeInMainWorld("electronAPI", {
     const handler = (_event, data) => callback(data);
     ipcRenderer.on("auth:session-revoked", handler);
     return () => ipcRenderer.removeListener("auth:session-revoked", handler);
+  },
+  onVerificationRequired: (callback) => {
+    const handler = (_event, data) => callback(data);
+    ipcRenderer.on("license:verification-required", handler);
+    return () => ipcRenderer.removeListener("license:verification-required", handler);
   }
 });

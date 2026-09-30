@@ -29,6 +29,7 @@ export async function POST(request: NextRequest) {
     const deviceId = (body.deviceId || "").trim();
     const deviceName = (body.deviceName || "Desktop Agent").trim();
     const otp = (body.otp || "").trim();
+    const licenseKey = (body.licenseKey || "").trim();
 
     if (!email || !email.includes("@")) {
       return NextResponse.json({ success: false, error: "Account email is required." }, { status: 400 });
@@ -85,24 +86,41 @@ export async function POST(request: NextRequest) {
     // 2. Fetch User and Company info
     const user = await User.findOne({ email });
 
-    // 3. Generate 30-Day Device License Key
-    const now = new Date();
-    const validityDays = 30;
-    const expiresAt = new Date(now.getTime() + validityDays * 24 * 60 * 60 * 1000);
-    const newLicenseKey = generateFormattedKey();
+    // 3. Find existing VfpConfig
+    let config: any = null;
+    if (licenseKey) {
+      config = await VfpConfig.findOne({ license: licenseKey });
+    }
+    if (!config && email) {
+      config =
+        (await VfpConfig.findOne({ email })) ||
+        (await VfpConfig.findOne({ key: "vfp_sync_config_" + email })) ||
+        (await VfpConfig.findOne({ key: "vfp_sync_config" }));
+    } else if (!config) {
+      config = await VfpConfig.findOne({ key: "vfp_sync_config" });
+    }
 
-    // 4. Find or Create VfpConfig
-    let config: any =
-      (await VfpConfig.findOne({ email })) ||
-      (await VfpConfig.findOne({ key: "vfp_sync_config_" + email })) ||
-      (await VfpConfig.findOne({ key: "vfp_sync_config" }));
+    // 4. Determine License Key to authorize:
+    // Reuse existing account/server license key so the same key works across verified devices!
+    const now = new Date();
+    let targetLicenseKey = (config?.license && config.license.trim()) || (licenseKey && licenseKey.trim()) || "";
+    let targetExpiresAt = config?.licenseExpiresAt ? new Date(config.licenseExpiresAt) : null;
+
+    if (!targetLicenseKey) {
+      targetLicenseKey = generateFormattedKey();
+    }
+    if (!targetExpiresAt || now > targetExpiresAt) {
+      targetExpiresAt = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
+    }
+
+    const validityDays = Math.max(1, Math.ceil((targetExpiresAt.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)));
 
     const deviceEntry = {
       deviceId,
       deviceName,
-      licenseKey: newLicenseKey,
+      licenseKey: targetLicenseKey,
       activatedAt: now,
-      expiresAt,
+      expiresAt: targetExpiresAt,
       lastSeenAt: now,
       status: "active",
       activationEmail: email,
@@ -114,9 +132,9 @@ export async function POST(request: NextRequest) {
         email,
         companyName: user?.companyName || "Organization",
         companyCode: user?.companyCode || "DEFAULT",
-        license: newLicenseKey,
+        license: targetLicenseKey,
         licenseIssuedAt: now,
-        licenseExpiresAt: expiresAt,
+        licenseExpiresAt: targetExpiresAt,
         licenseStatus: "active",
         boundDeviceId: deviceId,
         boundDeviceName: deviceName,
@@ -130,10 +148,10 @@ export async function POST(request: NextRequest) {
       if (existingIdx >= 0) {
         authorizedDevices[existingIdx] = {
           ...authorizedDevices[existingIdx],
-          licenseKey: newLicenseKey,
+          licenseKey: targetLicenseKey,
           deviceName,
           activatedAt: now,
-          expiresAt,
+          expiresAt: targetExpiresAt,
           lastSeenAt: now,
           status: "active",
           activationEmail: email,
@@ -144,12 +162,10 @@ export async function POST(request: NextRequest) {
 
       config.authorizedDevices = authorizedDevices;
       config.email = config.email || email;
-      // Update primary license pointer if unset or expired
-      if (!config.license || (config.licenseExpiresAt && now > new Date(config.licenseExpiresAt))) {
-        config.license = newLicenseKey;
-        config.licenseIssuedAt = now;
-        config.licenseExpiresAt = expiresAt;
-        config.licenseStatus = "active";
+      config.license = targetLicenseKey;
+      config.licenseExpiresAt = targetExpiresAt;
+      config.licenseStatus = "active";
+      if (!config.boundDeviceId) {
         config.boundDeviceId = deviceId;
         config.boundDeviceName = deviceName;
         config.boundAt = now;
@@ -157,16 +173,36 @@ export async function POST(request: NextRequest) {
       await config.save();
     }
 
+    // Propagate authorizedDevices to all related VfpConfig representations
+    const syncData = {
+      authorizedDevices: config.authorizedDevices,
+      license: targetLicenseKey,
+      licenseExpiresAt: targetExpiresAt,
+      licenseStatus: "active",
+    };
+
+    await VfpConfig.updateMany(
+      { key: { $in: ["vfp_sync_config", "vfp_sync_config_" + email] } },
+      { $set: syncData }
+    );
+    if (email) {
+      await VfpConfig.updateMany(
+        { email },
+        { $set: syncData }
+      );
+    }
+
     return NextResponse.json({
       success: true,
-      licenseKey: newLicenseKey,
-      expiresAt,
+      authorized: true,
+      licenseKey: targetLicenseKey,
+      expiresAt: targetExpiresAt,
       daysRemaining: validityDays,
       deviceId,
       deviceName,
       companyName: config.companyName || user?.companyName || "",
       companyCode: config.companyCode || "DEFAULT",
-      message: `Machine "${deviceName}" activated successfully with a 30-day sync license!`,
+      message: `Machine "${deviceName}" verified and authorized successfully! You can now sync and convert files with this license key.`,
     });
   } catch (err: any) {
     console.error("[License Activate Device Error]:", err);

@@ -734,23 +734,24 @@
       <div class="modal-content" style="max-width: 480px;">
         <div class="modal-header">
           <span class="modal-icon">💻</span>
-          <h3>Activate Sync on This Machine</h3>
-          <p id="deviceActivationSub">This computer needs authorization before it can sync data with your cloud workspace.</p>
+          <h3 id="devActTitle">Authorize Machine for Sync</h3>
+          <p id="deviceActivationSub">This machine requires email verification before syncing data or converting files with your license key.</p>
         </div>
 
         <div style="background: rgba(15, 23, 42, 0.6); border: 1px solid rgba(255,255,255,0.08); border-radius: 8px; padding: 12px 16px; margin-bottom: 16px; font-size: 12px; line-height: 1.6; text-align: left;">
           <div><span style="color: #94a3b8;">Machine Name:</span> <strong id="devActMachineName" style="color: #38bdf8;">Detecting...</strong></div>
           <div><span style="color: #94a3b8;">Hardware ID:</span> <span id="devActDeviceId" style="font-family: monospace; color: #a5b4fc;">...</span></div>
-          <div><span style="color: #94a3b8;">Registered Email:</span> <strong id="devActEmail" style="color: #f8fafc;">...</strong></div>
+          <div><span style="color: #94a3b8;">Account Email:</span> <strong id="devActEmail" style="color: #f8fafc;">...</strong></div>
+          <div id="devActLicenseRow"><span style="color: #94a3b8;">License Key:</span> <strong id="devActLicenseKey" style="font-family: monospace; color: #34d399;">...</strong></div>
         </div>
 
         <!-- Step A: Send OTP Button -->
         <div id="devActSendSection">
           <p style="font-size: 12.5px; color: #94a3b8; margin-bottom: 14px;">
-            A 6-digit verification code will be dispatched to your account email to issue a new 30-day sync license for this PC.
+            A 6-digit verification code will be sent to your account email to authorize this machine for syncing.
           </p>
           <button type="button" id="btnDevActSendOtp" class="btn-primary" style="width: 100%;">
-            <span class="btn-text">📧 Send Activation Code</span>
+            <span class="btn-text">📧 Send Verification Code</span>
             <span class="spinner hidden"></span>
           </button>
         </div>
@@ -773,10 +774,10 @@
           <div id="devActError" class="clean-field-error hidden" style="margin-bottom: 12px;"></div>
           <div class="modal-actions" style="margin-top: 0;">
             <button type="button" id="btnDevActConfirm" class="btn-primary" disabled>
-              <span class="btn-text">Verify &amp; Activate Machine ✓</span>
+              <span class="btn-text">Verify &amp; Authorize Machine ✓</span>
               <span class="spinner hidden"></span>
             </button>
-            <button type="button" id="btnDevActResend" class="btn-secondary" style="font-size: 11px;">Resend OTP</button>
+            <button type="button" id="btnDevActResend" class="btn-secondary" style="font-size: 11px;">Resend Code</button>
           </div>
         </div>
 

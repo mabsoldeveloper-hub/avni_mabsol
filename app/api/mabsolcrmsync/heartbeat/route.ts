@@ -77,14 +77,24 @@ export async function POST(request: NextRequest) {
         );
       }
       if (deviceId) {
-        if (!config.boundDeviceId) {
+        const authorizedDevices: any[] = Array.isArray(config.authorizedDevices) ? config.authorizedDevices : [];
+        const isDeviceAuthorized =
+          authorizedDevices.some((d: any) => d.deviceId === deviceId && d.status === "active") ||
+          config.boundDeviceId === deviceId;
+
+        if (!config.boundDeviceId && authorizedDevices.length === 0) {
           await VfpConfig.updateOne(
             { _id: config._id },
             { $set: { boundDeviceId: deviceId, boundDeviceName: deviceName || "Operator Machine", boundAt: new Date() } }
           );
-        } else if (config.boundDeviceId !== deviceId) {
+        } else if (!isDeviceAuthorized) {
           return NextResponse.json(
-            { success: false, deviceMismatch: true, error: `License key already bound to machine: ${config.boundDeviceName || "First Device"}` },
+            {
+              success: false,
+              deviceMismatch: true,
+              requiresVerification: true,
+              error: `Machine "${deviceName || deviceId}" is not authorized. Please verify with email OTP.`,
+            },
             { status: 403 }
           );
         }

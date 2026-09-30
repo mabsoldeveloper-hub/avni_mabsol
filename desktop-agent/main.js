@@ -850,6 +850,7 @@ ipcMain.handle("config:save", async (_event, newCfg) => {
 
   // If a license key is provided, verify and bind to this hardware device
   let licenseWarning = null;
+  let requiresVerification = false;
   if (merged.licenseKey && merged.licenseKey.trim()) {
     try {
       const bindUrl = `${cloudUrl}/api/mabsolcrmsync/license/bind`;
@@ -874,22 +875,34 @@ ipcMain.handle("config:save", async (_event, newCfg) => {
 
       if (!bindRes.data || !bindRes.data.success) {
         licenseWarning = bindRes.data?.error || "License key could not be verified on server.";
+        requiresVerification = Boolean(bindRes.data?.requiresVerification || bindRes.data?.deviceMismatch);
         emitLog("warn", `Settings saved locally, but license check returned: ${licenseWarning}`);
       } else {
         merged.isLicenseVerified = true;
         merged.lastVerifiedLicense = merged.licenseKey.trim();
         saveConfig(merged);
-        emitLog("success", `License verified & locked to this machine: ${getMachineName()}`);
+        emitLog("success", `License verified & authorized for this machine: ${getMachineName()}`);
       }
     } catch (bindErr) {
-      licenseWarning = bindErr.response?.data?.error || bindErr.message || "License verification failed.";
+      const errData = bindErr.response?.data;
+      licenseWarning = errData?.error || bindErr.message || "License verification failed.";
+      requiresVerification = Boolean(errData?.requiresVerification || errData?.deviceMismatch);
       emitLog("warn", `Settings saved locally. Server response: ${licenseWarning}`);
     }
   }
 
   emitLog("info", "Configuration saved successfully.");
   if (licenseWarning) {
-    return { success: true, licenseWarning, message: `Configuration saved! Notice: ${licenseWarning}` };
+    return {
+      success: true,
+      licenseWarning,
+      requiresVerification,
+      licenseKey: merged.licenseKey,
+      email: merged.userEmail || session?.email || "",
+      deviceName: getMachineName(),
+      deviceId: getMachineIdentifier(),
+      message: `Configuration saved! Notice: ${licenseWarning}`
+    };
   }
   return { success: true, message: "Configuration saved successfully." };
 });
@@ -920,19 +933,22 @@ ipcMain.handle("license:check-device", async (_event, payload) => {
   const cloudUrl = resolveCloudUrl(payload?.cloudUrl || current.cloudUrl || getDefaultCloudUrl());
   const session = loadSession();
   const email = payload?.email || session?.email || current.userEmail || "";
+  const licenseKey = payload?.licenseKey || current.licenseKey || "";
   try {
     const res = await axios.post(
       `${cloudUrl}/api/mabsolcrmsync/license/device-check`,
       {
         deviceId: getMachineIdentifier(),
         deviceName: getMachineName(),
-        email
+        email,
+        licenseKey
       },
       {
         headers: {
           ...(session?.token ? { Authorization: `Bearer ${session.token}` } : {}),
           "x-device-id": getMachineIdentifier(),
-          "x-device-name": getMachineName()
+          "x-device-name": getMachineName(),
+          ...(licenseKey ? { "x-license-key": licenseKey } : {})
         },
         timeout: 10000
       }
@@ -951,19 +967,22 @@ ipcMain.handle("license:send-device-otp", async (_event, payload) => {
   const cloudUrl = resolveCloudUrl(payload?.cloudUrl || current.cloudUrl || getDefaultCloudUrl());
   const session = loadSession();
   const email = payload?.email || session?.email || current.userEmail || "";
+  const licenseKey = payload?.licenseKey || current.licenseKey || "";
   try {
     const res = await axios.post(
       `${cloudUrl}/api/mabsolcrmsync/license/send-device-otp`,
       {
         deviceId: getMachineIdentifier(),
         deviceName: getMachineName(),
-        email
+        email,
+        licenseKey
       },
       {
         headers: {
           ...(session?.token ? { Authorization: `Bearer ${session.token}` } : {}),
           "x-device-id": getMachineIdentifier(),
-          "x-device-name": getMachineName()
+          "x-device-name": getMachineName(),
+          ...(licenseKey ? { "x-license-key": licenseKey } : {})
         },
         timeout: 15000
       }
@@ -982,6 +1001,7 @@ ipcMain.handle("license:activate-device", async (_event, payload) => {
   const cloudUrl = resolveCloudUrl(payload?.cloudUrl || current.cloudUrl || getDefaultCloudUrl());
   const session = loadSession();
   const email = payload?.email || session?.email || current.userEmail || "";
+  const licenseKey = payload?.licenseKey || current.licenseKey || "";
   try {
     const res = await axios.post(
       `${cloudUrl}/api/mabsolcrmsync/license/activate-device`,
@@ -989,13 +1009,15 @@ ipcMain.handle("license:activate-device", async (_event, payload) => {
         deviceId: getMachineIdentifier(),
         deviceName: getMachineName(),
         email,
+        licenseKey,
         otp: payload?.otp
       },
       {
         headers: {
           ...(session?.token ? { Authorization: `Bearer ${session.token}` } : {}),
           "x-device-id": getMachineIdentifier(),
-          "x-device-name": getMachineName()
+          "x-device-name": getMachineName(),
+          ...(licenseKey ? { "x-license-key": licenseKey } : {})
         },
         timeout: 15000
       }
@@ -1008,7 +1030,7 @@ ipcMain.handle("license:activate-device", async (_event, payload) => {
       if (res.data.companyName && !current.companyName) current.companyName = res.data.companyName;
       if (res.data.companyCode && !current.companyCode) current.companyCode = res.data.companyCode;
       saveConfig(current);
-      emitLog("success", `New device activated! License key ${res.data.licenseKey} assigned.`);
+      emitLog("success", `Machine authorized! License key ${res.data.licenseKey} activated for ${getMachineName()}.`);
     }
 
     return res.data;
@@ -1231,10 +1253,20 @@ async function executeDecryptionAndSync(triggerReason = "manual") {
 
       if (!bindRes.data || !bindRes.data.success) {
         const errMsg = bindRes.data?.error || "License key validation failed.";
-        emitLog("error", `[License Rejected] ${errMsg} — Extraction ABORTED. Files will NOT be converted.`);
+        const needsVerification = Boolean(bindRes.data?.requiresVerification || bindRes.data?.deviceMismatch);
+        emitLog("error", `[License Blocked] ${errMsg} — Extraction ABORTED. Files will NOT be converted.`);
         isSyncing = false;
         emitStatus({ isSyncing: false, error: errMsg });
-        return { success: false, message: errMsg };
+        if (needsVerification && mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.webContents.send("license:verification-required", {
+            email: userEmail || session?.email || "",
+            deviceId: getMachineIdentifier(),
+            deviceName: getMachineName(),
+            licenseKey,
+            error: errMsg
+          });
+        }
+        return { success: false, requiresVerification: needsVerification, message: errMsg };
       }
 
       config.isLicenseVerified = true;
@@ -1242,11 +1274,22 @@ async function executeDecryptionAndSync(triggerReason = "manual") {
       saveConfig(config);
       emitLog("info", "Cloud connection active. License verified. Converted data will sync directly to server.");
     } catch (licErr) {
-      const errMsg = licErr.response?.data?.error || licErr.message || "Invalid license key.";
-      emitLog("error", `[License Rejected] ${errMsg} — Extraction ABORTED. Files will NOT be converted.`);
+      const errData = licErr.response?.data;
+      const errMsg = errData?.error || licErr.message || "Invalid license key.";
+      const needsVerification = Boolean(errData?.requiresVerification || errData?.deviceMismatch);
+      emitLog("error", `[License Blocked] ${errMsg} — Extraction ABORTED. Files will NOT be converted.`);
       isSyncing = false;
       emitStatus({ isSyncing: false, error: errMsg });
-      return { success: false, message: errMsg };
+      if (needsVerification && mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send("license:verification-required", {
+          email: userEmail || session?.email || "",
+          deviceId: getMachineIdentifier(),
+          deviceName: getMachineName(),
+          licenseKey,
+          error: errMsg
+        });
+      }
+      return { success: false, requiresVerification: needsVerification, message: errMsg };
     }
   } else {
     // Offline mode: do NOT convert files if license was never validated online
@@ -1521,7 +1564,7 @@ async function executeDecryptionAndSync(triggerReason = "manual") {
       }
 
       // If license failed at upload time, purge extracted tables immediately - do not store in offline vault!
-      if (uploadResult.licenseInvalid || uploadResult.licenseExpired || uploadResult.deviceMismatch) {
+      if (uploadResult.licenseInvalid || uploadResult.licenseExpired || uploadResult.deviceMismatch || uploadResult.requiresVerification) {
         emitLog("error", `Sync rejected for [${compCode}] (${uploadResult.error}). Staging files purged.`);
         try {
           for (const file of dbfFiles) {
@@ -1734,10 +1777,19 @@ async function uploadDbfBatch(cloudUrl, destDir, dbfFiles, token, email, license
       emitLog("error", `License Error: ${licMsg}`);
       return { success: false, error: licMsg, licenseInvalid: true };
     }
-    if (err.response?.status === 403 && err.response?.data?.deviceMismatch) {
-      const devMsg = err.response?.data?.error || "License key is bound to another device. Only 1 device allowed per key.";
-      emitLog("error", `Device Binding Notice: ${devMsg}`);
-      return { success: false, error: devMsg, deviceMismatch: true };
+    if (err.response?.status === 403 && (err.response?.data?.deviceMismatch || err.response?.data?.requiresVerification)) {
+      const devMsg = err.response?.data?.error || "Device verification required for this license key.";
+      emitLog("error", `Device Verification Notice: ${devMsg}`);
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send("license:verification-required", {
+          email,
+          deviceId: getMachineIdentifier(),
+          deviceName: getMachineName(),
+          licenseKey,
+          error: devMsg
+        });
+      }
+      return { success: false, error: devMsg, deviceMismatch: true, requiresVerification: true };
     }
     const msg = err.response?.data?.error || err.message;
     return { success: false, error: msg };

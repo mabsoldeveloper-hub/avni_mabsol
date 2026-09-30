@@ -731,7 +731,9 @@
     <!-- MODAL: NEW DEVICE LICENSE ACTIVATION (OTP)                        -->
     <!-- ================================================================= -->
     <div id="deviceActivationModal" class="modal-overlay hidden">
-      <div class="modal-content" style="max-width: 480px;">
+      <div class="modal-content" style="max-width: 480px; position: relative;">
+        <button type="button" id="btnXCloseDevActModal" title="Close" style="position: absolute; top: 12px; right: 16px; background: transparent; border: none; color: #94a3b8; font-size: 20px; cursor: pointer; padding: 4px 8px; line-height: 1;">✕</button>
+
         <div class="modal-header">
           <span class="modal-icon">💻</span>
           <h3 id="devActTitle">Authorize Machine for Sync</h3>
@@ -756,20 +758,15 @@
           </button>
         </div>
 
-        <!-- Step B: Enter OTP Section -->
+        <!-- Step B: Enter OTP Section (Together in single input box) -->
         <div id="devActVerifySection" class="hidden" style="margin-top: 12px;">
           <div style="font-size: 12px; color: #cbd5e1; margin-bottom: 8px;">
             Enter 6-digit code sent to <strong id="devActSentToEmail" style="color: #38bdf8;"></strong>:
           </div>
-          <div class="otp-compact-row" style="justify-content: center; margin-bottom: 14px;">
-            <div class="otp-square-grid" id="devActSquareGrid">
-              <input type="text" maxlength="1" class="otp-square-input" data-idx="0">
-              <input type="text" maxlength="1" class="otp-square-input" data-idx="1">
-              <input type="text" maxlength="1" class="otp-square-input" data-idx="2">
-              <input type="text" maxlength="1" class="otp-square-input" data-idx="3">
-              <input type="text" maxlength="1" class="otp-square-input" data-idx="4">
-              <input type="text" maxlength="1" class="otp-square-input" data-idx="5">
-            </div>
+          <div style="margin-bottom: 14px; text-align: center;">
+            <input type="text" id="devActOtpInput" maxlength="6" pattern="[0-9]{6}" placeholder="••••••" autocomplete="one-time-code"
+              style="width: 240px; box-sizing: border-box; text-align: center; font-size: 24px; font-weight: 700; letter-spacing: 8px; padding: 10px 14px; border-radius: 8px; border: 1.5px solid #38bdf8; background: rgba(15, 23, 42, 0.9); color: #38bdf8; outline: none; font-family: monospace;">
+            <div style="font-size: 11px; color: #94a3b8; margin-top: 6px;">Type or paste the 6-digit code together</div>
           </div>
           <div id="devActError" class="clean-field-error hidden" style="margin-bottom: 12px;"></div>
           <div class="modal-actions" style="margin-top: 0;">
@@ -778,11 +775,12 @@
               <span class="spinner hidden"></span>
             </button>
             <button type="button" id="btnDevActResend" class="btn-secondary" style="font-size: 11px;">Resend Code</button>
+            <button type="button" id="btnDevActBack" class="btn-secondary" style="font-size: 11px;">← Back</button>
           </div>
         </div>
 
         <div style="margin-top: 14px; text-align: center;">
-          <button type="button" id="btnCloseDevActModal" class="btn-secondary" style="font-size: 11px; padding: 4px 12px; background: transparent; border: none; color: #64748b;">Dismiss for now</button>
+          <button type="button" id="btnCloseDevActModal" class="btn-secondary" style="font-size: 11.5px; padding: 5px 16px; background: transparent; border: 1px solid rgba(255,255,255,0.15); border-radius: 6px; color: #cbd5e1; cursor: pointer;">Dismiss for now</button>
         </div>
       </div>
     </div>

@@ -2526,23 +2526,34 @@ const deviceActivationModal = document.getElementById("deviceActivationModal");
 const devActMachineName = document.getElementById("devActMachineName");
 const devActDeviceId = document.getElementById("devActDeviceId");
 const devActEmail = document.getElementById("devActEmail");
+const devActLicenseKey = document.getElementById("devActLicenseKey");
 const devActSendSection = document.getElementById("devActSendSection");
 const devActVerifySection = document.getElementById("devActVerifySection");
 const btnDevActSendOtp = document.getElementById("btnDevActSendOtp");
-const devActSquareGrid = document.getElementById("devActSquareGrid");
+const devActOtpInput = document.getElementById("devActOtpInput");
 const btnDevActConfirm = document.getElementById("btnDevActConfirm");
 const btnDevActResend = document.getElementById("btnDevActResend");
+const btnDevActBack = document.getElementById("btnDevActBack");
 const btnCloseDevActModal = document.getElementById("btnCloseDevActModal");
+const btnXCloseDevActModal = document.getElementById("btnXCloseDevActModal");
 const devActError = document.getElementById("devActError");
 const devActSentToEmail = document.getElementById("devActSentToEmail");
 
-let devActOtpCode = "";
 let devActTargetEmail = "";
 
-const devActGridHelper = setupSquareOtpGrid(devActSquareGrid, (code) => {
-  devActOtpCode = code;
+// Unified OTP Input: listen for typing or pasting 6 digits together
+devActOtpInput?.addEventListener("input", () => {
+  const val = devActOtpInput.value.replace(/\D/g, "").slice(0, 6);
+  devActOtpInput.value = val;
   if (btnDevActConfirm) {
-    btnDevActConfirm.disabled = code.length !== 6;
+    btnDevActConfirm.disabled = val.length !== 6;
+  }
+});
+
+devActOtpInput?.addEventListener("keydown", (e) => {
+  if (e.key === "Enter" && devActOtpInput.value.length === 6) {
+    e.preventDefault();
+    btnDevActConfirm?.click();
   }
 });
 
@@ -2553,15 +2564,14 @@ function openDeviceActivationModal(data) {
   if (devActMachineName) devActMachineName.textContent = data?.deviceName || "This Computer";
   if (devActDeviceId) devActDeviceId.textContent = data?.deviceId || "...";
   if (devActSentToEmail) devActSentToEmail.textContent = devActTargetEmail;
-  const devActLicenseEl = document.getElementById("devActLicenseKey");
-  if (devActLicenseEl) {
-    devActLicenseEl.textContent = targetLicense || "Account License";
-  }
+  if (devActLicenseKey) devActLicenseKey.textContent = targetLicense || "Account License";
 
-  // Reset modal sections
+  // Reset modal sections & input
   devActSendSection?.classList.remove("hidden");
   devActVerifySection?.classList.add("hidden");
   if (devActError) devActError.classList.add("hidden");
+  if (devActOtpInput) devActOtpInput.value = "";
+  if (btnDevActConfirm) btnDevActConfirm.disabled = true;
   deviceActivationModal?.classList.remove("hidden");
 }
 
@@ -2612,8 +2622,11 @@ btnDevActSendOtp?.addEventListener("click", async () => {
       devActSendSection?.classList.add("hidden");
       devActVerifySection?.classList.remove("hidden");
       if (devActSentToEmail) devActSentToEmail.textContent = email;
-      devActGridHelper?.clear();
-      devActGridHelper?.focusFirst();
+      if (devActOtpInput) {
+        devActOtpInput.value = "";
+        setTimeout(() => devActOtpInput.focus(), 100);
+      }
+      if (btnDevActConfirm) btnDevActConfirm.disabled = true;
       showToast(`Verification code sent to ${email}`, "success");
     } else {
       const msg = res?.error || "Failed to send verification code.";
@@ -2633,9 +2646,17 @@ btnDevActResend?.addEventListener("click", () => {
   btnDevActSendOtp?.click();
 });
 
+// Back button from verify section to send section
+btnDevActBack?.addEventListener("click", () => {
+  devActVerifySection?.classList.add("hidden");
+  devActSendSection?.classList.remove("hidden");
+  if (devActError) devActError.classList.add("hidden");
+});
+
 // Confirm Device Activation
 btnDevActConfirm?.addEventListener("click", async () => {
-  if (devActOtpCode.length !== 6) return;
+  const otpVal = devActOtpInput ? devActOtpInput.value.trim() : "";
+  if (otpVal.length !== 6) return;
   setButtonLoading(btnDevActConfirm, true);
   if (devActError) devActError.classList.add("hidden");
 
@@ -2647,7 +2668,7 @@ btnDevActConfirm?.addEventListener("click", async () => {
       email,
       cloudUrl,
       licenseKey,
-      otp: devActOtpCode
+      otp: otpVal
     });
     setButtonLoading(btnDevActConfirm, false);
 
@@ -2663,7 +2684,7 @@ btnDevActConfirm?.addEventListener("click", async () => {
       // Reload dashboard config
       await loadAndDisplayConfig();
     } else {
-      const msg = res?.error || "Activation failed. Please check the OTP.";
+      const msg = res?.error || "Activation failed. Please check the code.";
       if (devActError) { devActError.textContent = msg; devActError.classList.remove("hidden"); }
       showToast(msg, "error");
     }
@@ -2675,6 +2696,9 @@ btnDevActConfirm?.addEventListener("click", async () => {
   }
 });
 
-btnCloseDevActModal?.addEventListener("click", () => {
+// Dismiss / Close Modal
+const dismissDeviceActivationModal = () => {
   deviceActivationModal?.classList.add("hidden");
-});
+};
+btnCloseDevActModal?.addEventListener("click", dismissDeviceActivationModal);
+btnXCloseDevActModal?.addEventListener("click", dismissDeviceActivationModal);

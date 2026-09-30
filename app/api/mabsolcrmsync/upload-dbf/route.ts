@@ -135,8 +135,38 @@ export async function POST(request: NextRequest) {
           );
         }
 
-        // 4. Single-Device Binding: 1 key can only be used on 1 machine!
-        if (deviceId) {
+        // 4. Device Binding & Multi-Device Validation
+        const authorizedDevices: any[] = Array.isArray(config.authorizedDevices) ? config.authorizedDevices : [];
+        const deviceEntry = deviceId ? authorizedDevices.find((d: any) => d.deviceId === deviceId && d.status === "active") : null;
+        const keyEntry = authorizedDevices.find((d: any) => d.licenseKey === licenseKey && d.status === "active");
+
+        if (deviceEntry) {
+          // Check if this specific device license is expired
+          if (deviceEntry.expiresAt && new Date() > new Date(deviceEntry.expiresAt)) {
+            return NextResponse.json(
+              {
+                success: false,
+                licenseExpired: true,
+                error: `License for machine "${deviceEntry.deviceName || deviceId}" has expired. Please verify your email with OTP in the desktop agent to renew.`,
+              },
+              { status: 403 }
+            );
+          }
+          // Update last seen timestamp
+          VfpConfig.updateOne(
+            { _id: config._id, "authorizedDevices.deviceId": deviceId },
+            { $set: { "authorizedDevices.$.lastSeenAt": new Date(), "authorizedDevices.$.deviceName": deviceName || deviceEntry.deviceName } }
+          ).catch(() => {});
+        } else if (keyEntry && deviceId && keyEntry.deviceId && keyEntry.deviceId !== deviceId) {
+          return NextResponse.json(
+            {
+              success: false,
+              deviceMismatch: true,
+              error: `This license key is locked to machine "${keyEntry.deviceName || keyEntry.deviceId}". Please verify your email with OTP in the desktop agent to activate this computer.`,
+            },
+            { status: 403 }
+          );
+        } else if (deviceId) {
           if (!config.boundDeviceId) {
             // First device to use this key -> Bind it!
             await VfpConfig.updateOne(
@@ -147,15 +177,27 @@ export async function POST(request: NextRequest) {
                   boundDeviceName: deviceName || "Operator Machine",
                   boundAt: new Date(),
                 },
+                $addToSet: {
+                  authorizedDevices: {
+                    deviceId,
+                    deviceName: deviceName || "Operator Machine",
+                    licenseKey,
+                    activatedAt: new Date(),
+                    expiresAt: config.licenseExpiresAt,
+                    lastSeenAt: new Date(),
+                    status: "active",
+                    activationEmail: user.email,
+                  }
+                }
               }
             );
           } else if (config.boundDeviceId !== deviceId) {
-            // Another device trying to use the same key!
+            // Another device trying to use the same key without being authorized!
             return NextResponse.json(
               {
                 success: false,
                 deviceMismatch: true,
-                error: `This license key is already bound to another machine (${config.boundDeviceName || "First Device"}). Each license key can only be activated on 1 device. Please generate a separate license key.`,
+                error: `This machine is not yet authorized for sync. Please enter the verification code sent to your email to activate this device.`,
               },
               { status: 403 }
             );
@@ -227,9 +269,20 @@ export async function POST(request: NextRequest) {
         const arrayBuffer = await file.arrayBuffer();
         const buffer = Buffer.from(arrayBuffer);
         const fileName = path.basename(file.name);
+        const targetPath = path.join(uploadDir, fileName);
+
+        // Safe write: clear Windows ReadOnly attribute or lock on existing file
+        if (fs.existsSync(targetPath)) {
+          try {
+            fs.chmodSync(targetPath, 0o666);
+          } catch {}
+          try {
+            fs.unlinkSync(targetPath);
+          } catch {}
+        }
         
-        // Write file to temporary upload directory for immediate parsing and sync
-        fs.writeFileSync(path.join(uploadDir, fileName), buffer);
+        // Write file to upload directory for immediate parsing and sync
+        fs.writeFileSync(targetPath, buffer);
         uploadedFileNames.push(fileName);
       }
     }

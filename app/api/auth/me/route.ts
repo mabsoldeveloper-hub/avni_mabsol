@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import jwt from "jsonwebtoken";
 import { getCurrentUser } from "@/lib/auth";
 import Company from "@/models/Company";
 import Tenant from "@/models/Tenant";
@@ -49,6 +50,22 @@ export async function GET() {
     userObj.role = "SuperAdmin";
     userObj.roleName = "SuperAdmin";
   } else {
+    const isAdmin = Boolean(
+      roleName === "admin" ||
+      roleName.includes("admin") ||
+      roleType === "admin" ||
+      role === "admin" ||
+      userObj.isAdmin === true ||
+      userObj.dashboardType === "admin"
+    );
+
+    if (isAdmin) {
+      userObj.roleType = "Admin";
+      userObj.roleName = "Admin";
+      userObj.role = "Admin";
+      userObj.isAdmin = true;
+    }
+
     // Non-super-admin: verify if active and approved
     const statusLower = String(userObj.status || "").trim().toLowerCase();
     const isSuspendedOrInactive =
@@ -119,7 +136,7 @@ export async function GET() {
     }
   } catch {}
 
-  return NextResponse.json(
+  const response = NextResponse.json(
     {
       success: true,
       user: userObj,
@@ -130,4 +147,34 @@ export async function GET() {
       },
     }
   );
+
+  // If user is Admin, ensure cookie has the normalized Admin roleType to eliminate stale MR tokens
+  if (userObj.roleType === "Admin" || userObj.roleName === "Admin" || isSuperAdmin) {
+    try {
+      const activeRoleType = isSuperAdmin ? "SuperAdmin" : "Admin";
+      const token = jwt.sign(
+        {
+          id: userObj._id,
+          email: userObj.email,
+          tenantId: userObj.tenantId,
+          roleId: userObj.roleId?._id || userObj.roleId,
+          roleName: activeRoleType,
+          roleType: activeRoleType,
+          companyId: userObj.companyId?._id || userObj.companyId,
+          isSuperAdmin: Boolean(isSuperAdmin),
+        },
+        process.env.JWT_SECRET || "mabsol_super_secret_jwt_key_2026",
+        { expiresIn: "30d" }
+      );
+      response.cookies.set("token", token, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === "production",
+        sameSite: "lax",
+        path: "/",
+        maxAge: 30 * 24 * 60 * 60,
+      });
+    } catch {}
+  }
+
+  return response;
 }

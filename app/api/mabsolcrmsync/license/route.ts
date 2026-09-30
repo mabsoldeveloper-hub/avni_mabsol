@@ -69,6 +69,23 @@ export async function GET(request: NextRequest) {
       daysRemaining = Math.max(0, Math.ceil(diffMs / (1000 * 60 * 60 * 24)));
     }
 
+    const authorizedDevices = Array.isArray(config?.authorizedDevices)
+      ? config.authorizedDevices.map((d: any) => ({
+          deviceId: d.deviceId ? `${d.deviceId.substring(0, 8)}...` : "",
+          fullDeviceId: d.deviceId || "",
+          deviceName: d.deviceName || "Desktop Agent",
+          licenseKey: d.licenseKey || "",
+          activatedAt: d.activatedAt,
+          expiresAt: d.expiresAt,
+          lastSeenAt: d.lastSeenAt,
+          status: d.status || "active",
+          isExpired: d.expiresAt ? now > new Date(d.expiresAt) : false,
+          daysRemaining: d.expiresAt && now < new Date(d.expiresAt)
+            ? Math.max(0, Math.ceil((new Date(d.expiresAt).getTime() - now.getTime()) / (1000 * 60 * 60 * 24)))
+            : 0,
+        }))
+      : [];
+
     return NextResponse.json({
       success: true,
       license,
@@ -79,6 +96,9 @@ export async function GET(request: NextRequest) {
       boundDeviceId: boundDeviceId ? `${boundDeviceId.substring(0, 8)}...` : "",
       boundDeviceName: boundDeviceName || (boundDeviceId ? "Activated Machine" : "Not yet activated"),
       isBound: Boolean(boundDeviceId),
+      authorizedDevices,
+      companyName: config?.companyName || (user as any)?.companyName || "",
+      companyCode: config?.companyCode || "",
     });
   } catch (err: any) {
     return NextResponse.json({ success: false, error: err.message }, { status: 500 });

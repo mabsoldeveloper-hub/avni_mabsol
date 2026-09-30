@@ -214,7 +214,11 @@ export default function Topbar({
 
   useEffect(() => {
     fetchNotifications();
-    const interval = setInterval(fetchNotifications, 60000);
+    const interval = setInterval(() => {
+      if (typeof document !== "undefined" && !document.hidden) {
+        fetchNotifications();
+      }
+    }, 180000); // 3 minutes, only when tab is visible
     return () => clearInterval(interval);
   }, []);
 
@@ -738,19 +742,31 @@ export default function Topbar({
               </div>
 
               <div className="py-1">
-                <a
-                  href="/dashboard/profile"
-                  className="block px-3.5 py-2 text-[13px] text-gray-700 dark:text-slate-300 hover:bg-indigo-50 dark:hover:bg-slate-800 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors duration-150 font-medium"
-                >
-                  My Profile
-                </a>
+                {(() => {
+                  const rolePath = checkIsSuperAdmin(user)
+                    ? "super-admin"
+                    : ((user?.roleId?.roleName || (user as any)?.roleType || (user as any)?.role || "admin"))
+                        .toLowerCase()
+                        .trim()
+                        .replace(/[\s_]+/g, "-");
+                  return (
+                    <>
+                      <a
+                        href={`/dashboard/${rolePath}/profile`}
+                        className="block px-3.5 py-2 text-[13px] text-gray-700 dark:text-slate-300 hover:bg-indigo-50 dark:hover:bg-slate-800 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors duration-150 font-medium"
+                      >
+                        My Profile
+                      </a>
 
-                <a
-                  href="/dashboard/settings"
-                  className="block px-3.5 py-2 text-[13px] text-gray-700 dark:text-slate-300 hover:bg-indigo-50 dark:hover:bg-slate-800 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors duration-150 font-medium"
-                >
-                  Settings
-                </a>
+                      <a
+                        href={`/dashboard/${rolePath}/settings`}
+                        className="block px-3.5 py-2 text-[13px] text-gray-700 dark:text-slate-300 hover:bg-indigo-50 dark:hover:bg-slate-800 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors duration-150 font-medium"
+                      >
+                        Settings
+                      </a>
+                    </>
+                  );
+                })()}
               </div>
 
               <div className="px-3 py-1.5">

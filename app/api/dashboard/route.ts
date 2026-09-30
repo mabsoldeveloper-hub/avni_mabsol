@@ -227,11 +227,60 @@ export async function GET(req: Request) {
     : combineFilters({ $or: [{ TRANSFER: "P" }, { TYPE: "P" }] }, dateMatchMDIS, companyVfpMatch);
 
   const today = todayStr();
-  const monthStart = monthStartStr();
+  const calendarMonthStart = monthStartStr();
   const yearStart = yearStartStr();
 
-  const todayMatch = buildFYDateQuery("DATE", today, today);
-  const monthMatch = buildFYDateQuery("DATE", monthStart, today);
+  /*
+   * IMPORTANT:
+   * The dashboard must never use a calendar-month/date filter outside the
+   * selected Financial Year. The old code called buildFYDateQuery(today,today)
+   * and buildFYDateQuery(monthStart,today), which did NOT restrict those
+   * periods to the selected FY.
+   *
+   * Example:
+   * Active FY = 2025-26 (01-04-2025 to 31-03-2026)
+   * Today      = 2026-09-29
+   *
+   * Today Sales and Monthly Sales must therefore be 0 because the current
+   * date/month is outside the selected FY.
+   */
+  const noDateMatch = { _id: { $exists: false } };
+
+  const isTodayInsideFY =
+    !!startDate &&
+    !!endDate &&
+    today >= startDate &&
+    today <= endDate;
+
+  const todayMatch =
+    startDate && endDate
+      ? isTodayInsideFY
+        ? buildFYDateQuery("DATE", today, today)
+        : noDateMatch
+      : buildFYDateQuery("DATE", today, today);
+
+  /*
+   * Monthly Sales = current calendar month intersected with the selected FY.
+   * If there is no intersection, force a no-match query instead of returning
+   * {} (because {} would incorrectly sum every sales record).
+   */
+  let monthMatch: Record<string, any>;
+
+  if (startDate && endDate) {
+    const monthRangeStart =
+      calendarMonthStart > startDate ? calendarMonthStart : startDate;
+    const monthRangeEnd =
+      today < endDate ? today : endDate;
+
+    monthMatch =
+      monthRangeStart <= monthRangeEnd
+        ? buildFYDateQuery("DATE", monthRangeStart, monthRangeEnd)
+        : noDateMatch;
+  } else {
+    // "ALL" FY: retain the previous calendar-month behavior.
+    monthMatch = buildFYDateQuery("DATE", calendarMonthStart, today);
+  }
+
   const yearMatch = startDate && endDate
     ? buildFYDateQuery("DATE", startDate, endDate)
     : buildFYDateQuery("DATE", yearStart, today);
@@ -603,13 +652,43 @@ export async function GET(req: Request) {
       },
     ]),
 
-    // Last month sales, for Monthly Growth %
+    // Last month sales, for Monthly Growth %.
+    // Also keep this inside the selected FY so growth cannot compare the
+    // current FY with a different FY by accident.
     (async () => {
       const d = new Date();
       d.setMonth(d.getMonth() - 1);
-      const lmStart = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-01`;
-      const lmEnd = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-31`;
-      return sumField(SalesMdis, combineFilters(mdisSaleFilter, { DATE: { $gte: lmStart, $lte: lmEnd } }), "FINAL");
+
+      const lmYear = d.getFullYear();
+      const lmMonth = d.getMonth() + 1;
+      const lmStart = `${lmYear}-${String(lmMonth).padStart(2, "0")}-01`;
+      const lastDay = new Date(Date.UTC(lmYear, lmMonth, 0)).getUTCDate();
+      const lmEnd = `${lmYear}-${String(lmMonth).padStart(2, "0")}-${String(lastDay).padStart(2, "0")}`;
+
+      if (startDate && endDate) {
+        const rangeStart = lmStart > startDate ? lmStart : startDate;
+        const rangeEnd = lmEnd < endDate ? lmEnd : endDate;
+
+        if (rangeStart > rangeEnd) return 0;
+
+        return sumField(
+          SalesMdis,
+          combineFilters(
+            mdisSaleFilter,
+            buildFYDateQuery("DATE", rangeStart, rangeEnd)
+          ),
+          "FINAL"
+        );
+      }
+
+      return sumField(
+        SalesMdis,
+        combineFilters(
+          mdisSaleFilter,
+          buildFYDateQuery("DATE", lmStart, lmEnd)
+        ),
+        "FINAL"
+      );
     })(),
   ]);
 

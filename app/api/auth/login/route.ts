@@ -10,6 +10,7 @@ import User from "@/models/User";
 import Company from "@/models/Company";
 import Tenant from "@/models/Tenant";
 import VfpConfig from "@/models/VfpConfig";
+import Role from "@/models/Role";
 import {
   ensureSuperAdminUser,
   isSuperAdminUser,
@@ -85,13 +86,42 @@ export async function POST(req: Request) {
     const isAgent = Boolean(isDesktopAgent);
     const sessionTiming = getUserSessionDuration(user);
 
+    let effectiveRoleType = isSuperAdmin ? "SuperAdmin" : (user.roleType || "Admin");
+    if (!isSuperAdmin && user.roleId) {
+      try {
+        const roleDoc: any = await Role.findById(user.roleId).lean();
+        if (roleDoc?.roleName) {
+          effectiveRoleType = roleDoc.roleName;
+        }
+      } catch {}
+    }
+    const isAdmin =
+      effectiveRoleType?.toLowerCase() === "admin" ||
+      user.roleName?.toLowerCase() === "admin" ||
+      user.roleType?.toLowerCase() === "admin" ||
+      user.dashboardType === "admin";
+
+    if (isAdmin) {
+      effectiveRoleType = "Admin";
+    } else {
+      // Check if user is the owner/creator of the company
+      const ownedCompany = await Company.findOne({
+        $or: [{ createdBy: user._id }, { email: user.email }],
+      }).lean();
+      if (ownedCompany) {
+        effectiveRoleType = "Admin";
+      }
+    }
+
     const token = jwt.sign(
       {
         id: user._id,
+        email: user.email,
         tenantId: user.tenantId,
         roleId: user.roleId,
+        roleName: effectiveRoleType,
         companyId: user.companyId,
-        roleType: user.roleType || (isSuperAdmin ? "SuperAdmin" : "Admin"),
+        roleType: effectiveRoleType,
         isSuperAdmin,
       },
       process.env.JWT_SECRET || "mabsol_super_secret_jwt_key_2026",

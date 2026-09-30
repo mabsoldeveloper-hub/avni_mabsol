@@ -192,12 +192,61 @@ export async function importSingleDbfFile(
     const baseNameWithoutExt = filePath.slice(0, -ext.length);
     const fptPath = baseNameWithoutExt + (ext === ext.toUpperCase() ? ".FPT" : ".fpt");
     const hasFpt = fs.existsSync(fptPath);
+    const fptBuffer = hasFpt && fs.existsSync(fptPath) ? fs.readFileSync(fptPath) : null;
+
+    // Handle empty DBF files or tables with 0 records safely
+    if (stats.size < 32 || recordCount === 0 || fields.length === 0) {
+      await VfpTableMap.updateOne(
+        { fileName, email },
+        {
+          $set: {
+            fileName,
+            email,
+            filePath,
+            targetCollection,
+            primaryKeyFields: [],
+            columns: fields,
+            recordCount: 0,
+            lastFileMtimeMs: stats.mtimeMs,
+            lastDiscoveredAt: new Date(),
+            enabled: true,
+          },
+        },
+        { upsert: true }
+      );
+      await VfpSyncState.updateOne(
+        { tableName, email },
+        {
+          $set: {
+            status: "success",
+            lastSyncedAt: new Date(),
+            lastSyncedDate: getSyncDateLabel(new Date()),
+            lastFileMtimeMs: stats.mtimeMs,
+            lastRecordCount: 0,
+            lastImportedCount: 0,
+            lastSkippedCount: 0,
+            lastHash: `${stats.mtimeMs}-0`,
+            lastError: "",
+          },
+        },
+        { upsert: true }
+      );
+      await VfpSyncLog.findByIdAndUpdate(runningTableLog._id, {
+        $set: {
+          status: "success",
+          importedCount: 0,
+          message: `Imported ${fileName} (0 rows - empty table).`,
+          finishedAt: new Date(),
+        },
+      });
+      return { importedCount: 0, error: undefined };
+    }
 
     // Sample up to 2000 rows for guessing primary key candidate fields efficiently
     const sampleLimit = Math.min(recordCount, 2000);
     const sampleRows: any[] = [];
     for (let index = 0; index < sampleLimit; index++) {
-      const row = parseRowFromBuffer(buffer, index, headerLength, recordLength, fields, hasFpt, fptPath);
+      const row = parseRowFromBuffer(buffer, index, headerLength, recordLength, fields, hasFpt, fptBuffer);
       if (row) sampleRows.push(row);
     }
     const primaryKeyFields = guessPrimaryKeyFields(fields, sampleRows);
@@ -245,10 +294,9 @@ export async function importSingleDbfFile(
       }
     }
 
-    const fptBuffer = hasFpt && fs.existsSync(fptPath) ? fs.readFileSync(fptPath) : null;
     const seenCounts = new Map<string, number>();
     let importedCount = 0;
-    const BATCH_SIZE = 2000;
+    const BATCH_SIZE = 5000;
     const syncedAt = new Date();
 
     // Stream-process rows in chunks of 2000 directly from the buffer with zero file-descriptor leaks
@@ -384,13 +432,16 @@ function isValidTableFile(fileName: string) {
 }
 
 export function parseDbfHeader(buffer: Buffer) {
+  if (!buffer || buffer.length < 32) {
+    return { fields: [], recordCount: 0, headerLength: 0, recordLength: 0 };
+  }
   const recordCount = buffer.readUInt32LE(4);
   const headerLength = buffer.readUInt16LE(8);
   const recordLength = buffer.readUInt16LE(10);
   const fields: any[] = [];
 
   for (let offset = 32; offset < headerLength; offset += 32) {
-    if (buffer[offset] === 0x0d) break;
+    if (offset >= buffer.length || buffer[offset] === 0x0d) break;
 
     const name = decodeText(buffer.subarray(offset, offset + 11)).replace(/\0/g, "").trim();
     const type = String.fromCharCode(buffer[offset + 11]);

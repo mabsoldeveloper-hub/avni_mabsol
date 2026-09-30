@@ -787,7 +787,7 @@ export default function RegisterPage() {
   // ==========================================
   // STEP TRANSITIONS & SUBMISSION
   // ==========================================
-  function goToNextStep() {
+  async function goToNextStep() {
     setErrorBanner(null);
 
     if (currentStep === 1) {
@@ -815,12 +815,21 @@ export default function RegisterPage() {
         showToast(msg, "error");
         return;
       }
-      if (!mobileVerified) {
-        const msg = "Please verify your phone number with the OTP before continuing";
-        setErrorBanner(msg);
-        showToast(msg, "error");
-        return;
-      }
+
+      try {
+        const checkMobRes = await fetch(API.CHECK_EXISTS, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ mobile: cleanMobile }),
+        });
+        const checkMobJson = await checkMobRes.json();
+        if (checkMobJson.exists) {
+          const msg = checkMobJson.message || "This phone number is already registered in the system.";
+          setErrorBanner(msg);
+          showToast(msg, "error");
+          return;
+        }
+      } catch {}
 
       if (!email.trim() || !email.includes("@")) {
         const msg = "Please enter a valid email address";
@@ -1243,7 +1252,6 @@ export default function RegisterPage() {
                     <label>
                       <span className="req-star">*</span> Phone Number
                     </label>
-                    {mobileVerified && <span className="verified-badge">✓ Phone Verified</span>}
                   </div>
                   <div className="clean-input-row">
                     <input
@@ -1251,50 +1259,13 @@ export default function RegisterPage() {
                       placeholder="10-digit phone number"
                       maxLength={10}
                       value={mobile}
-                      disabled={mobileVerified}
                       onChange={(e) => setMobile(e.target.value.replace(/\D/g, ""))}
                       onBlur={handleMobileBlur}
                       required
                     />
-                    <button
-                      type="button"
-                      className={`clean-inline-btn ${mobileVerified ? "is-verified" : ""}`}
-                      disabled={mobileVerified || mobileSending || mobileCountdown > 0 || mobile.replace(/\D/g, "").length !== 10}
-                      onClick={handleSendMobileOtp}
-                    >
-                      {mobileVerified
-                        ? "✓ Verified"
-                        : mobileSending
-                        ? "Sending…"
-                        : mobileCountdown > 0
-                        ? `Resend in ${mobileCountdown}s`
-                        : "Send OTP"}
-                    </button>
                   </div>
                 </div>
               </div>
-
-              {mobileOtpSent && !mobileVerified && (
-                <div className="clean-otp-box">
-                  <label>Enter 6-digit WhatsApp OTP sent to +91 {mobile}</label>
-                  <div className="otp-compact-row">
-                    <SquareOtpInput
-                      idPrefix="mobile-otp"
-                      value={mobileOtp}
-                      onChange={setMobileOtp}
-                      disabled={mobileVerifying}
-                    />
-                    <button
-                      type="button"
-                      className="clean-otp-confirm-btn"
-                      disabled={mobileVerifying || mobileOtp.length < 6}
-                      onClick={handleVerifyMobileOtp}
-                    >
-                      {mobileVerifying ? "Verifying…" : "Confirm OTP ✓"}
-                    </button>
-                  </div>
-                </div>
-              )}
 
               {/* Row 6: Email Address with OTP */}
               <div className="clean-field">
@@ -1948,7 +1919,7 @@ export default function RegisterPage() {
                   <span className="rev-val">{email}</span>
                 </div>
                 <div className="review-item">
-                  <span className="rev-label">Verified Phone Number</span>
+                  <span className="rev-label">Phone Number</span>
                   <span className="rev-val mono-font">+91 {mobile}</span>
                 </div>
 

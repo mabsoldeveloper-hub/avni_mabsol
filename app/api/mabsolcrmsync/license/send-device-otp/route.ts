@@ -4,6 +4,7 @@ import User from "@/models/User";
 import Otp from "@/models/Otp";
 import VfpConfig from "@/models/VfpConfig";
 import { sendOtpEmail } from "@/lib/sendEmail";
+import jwt from "jsonwebtoken";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -18,14 +19,27 @@ export async function POST(request: NextRequest) {
     } catch {}
 
     let email = (body.email || body.userEmail || "").trim().toLowerCase();
-    const deviceId = (body.deviceId || "").trim();
-    const deviceName = (body.deviceName || "Desktop Agent").trim();
-    const licenseKey = (body.licenseKey || "").trim();
+    const deviceId = (body.deviceId || request.headers.get("x-device-id") || "").trim();
+    const deviceName = (body.deviceName || request.headers.get("x-device-name") || "Desktop Agent").trim();
+    const licenseKey = (body.licenseKey || request.headers.get("x-license-key") || "").trim();
+
+    if (!email) {
+      const authHeader = request.headers.get("authorization");
+      if (authHeader && authHeader.startsWith("Bearer ")) {
+        try {
+          const token = authHeader.substring(7).trim();
+          const payload = jwt.verify(token, process.env.JWT_SECRET || "MabsolCRM@2026SecretKey") as any;
+          if (payload?.email) {
+            email = payload.email.toLowerCase().trim();
+          }
+        } catch {}
+      }
+    }
 
     if (!email && licenseKey) {
       const cfg: any = await VfpConfig.findOne({ license: licenseKey }).lean();
       if (cfg?.email) {
-        email = cfg.email.toLowerCase();
+        email = cfg.email.toLowerCase().trim();
       }
     }
 
@@ -43,11 +57,20 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Verify user exists
-    const user = await User.findOne({ email });
-    if (!user) {
+    // Verify user exists (case-insensitive and fallback to VfpConfig)
+    const escapedEmail = email.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const user = await User.findOne({ email: { $regex: new RegExp(`^${escapedEmail}$`, "i") } });
+    const cfg = !user ? await VfpConfig.findOne({
+      $or: [
+        { email: { $regex: new RegExp(`^${escapedEmail}$`, "i") } },
+        { key: "vfp_sync_config_" + email },
+        { "authorizedDevices.activationEmail": { $regex: new RegExp(`^${escapedEmail}$`, "i") } },
+      ],
+    }) : null;
+
+    if (!user && !cfg) {
       return NextResponse.json(
-        { success: false, error: `No active account found for ${email}. Please check your email or sign up.` },
+        { success: false, error: `No active account or sync configuration found for ${email}. Please check your email or sign up.` },
         { status: 404 }
       );
     }

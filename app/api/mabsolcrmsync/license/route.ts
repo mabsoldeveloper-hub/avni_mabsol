@@ -42,7 +42,9 @@ export async function GET(request: NextRequest) {
 
     let config: any = null;
     if (userEmail) {
-      config = await VfpConfig.findOne({ email: userEmail });
+      config =
+        (await VfpConfig.findOne({ email: userEmail })) ||
+        (await VfpConfig.findOne({ key: "vfp_sync_config_" + userEmail }));
     }
     if (!config && licenseHeader) {
       config = await VfpConfig.findOne({ license: licenseHeader.trim() });
@@ -74,7 +76,8 @@ export async function GET(request: NextRequest) {
           deviceId: d.deviceId ? `${d.deviceId.substring(0, 8)}...` : "",
           fullDeviceId: d.deviceId || "",
           deviceName: d.deviceName || "Desktop Agent",
-          licenseKey: d.licenseKey || "",
+          licenseKey: d.licenseKey || config.license || "",
+          activationEmail: d.activationEmail || config?.email || userEmail || "Account Email",
           activatedAt: d.activatedAt,
           expiresAt: d.expiresAt,
           lastSeenAt: d.lastSeenAt,
@@ -85,6 +88,22 @@ export async function GET(request: NextRequest) {
             : 0,
         }))
       : [];
+
+    if (authorizedDevices.length === 0 && boundDeviceId) {
+      authorizedDevices.push({
+        deviceId: `${boundDeviceId.substring(0, 8)}...`,
+        fullDeviceId: boundDeviceId,
+        deviceName: boundDeviceName || "Primary Machine",
+        licenseKey: license || "",
+        activationEmail: config?.email || userEmail || "Account Email",
+        activatedAt: config?.boundAt || licenseIssuedAt,
+        expiresAt: licenseExpiresAt,
+        lastSeenAt: config?.boundAt || now,
+        status: "active",
+        isExpired,
+        daysRemaining,
+      });
+    }
 
     return NextResponse.json({
       success: true,
@@ -97,6 +116,7 @@ export async function GET(request: NextRequest) {
       boundDeviceName: boundDeviceName || (boundDeviceId ? "Activated Machine" : "Not yet activated"),
       isBound: Boolean(boundDeviceId),
       authorizedDevices,
+      totalDevicesCount: authorizedDevices.length,
       companyName: config?.companyName || (user as any)?.companyName || "",
       companyCode: config?.companyCode || "",
     });

@@ -4,6 +4,7 @@ import dbConnect from "@/lib/mongodb";
 import VfpConfig from "@/models/VfpConfig";
 import User from "@/models/User";
 import Otp from "@/models/Otp";
+import jwt from "jsonwebtoken";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -25,11 +26,33 @@ export async function POST(request: NextRequest) {
       body = await request.json();
     } catch {}
 
-    const email = (body.email || body.userEmail || "").trim().toLowerCase();
-    const deviceId = (body.deviceId || "").trim();
-    const deviceName = (body.deviceName || "Desktop Agent").trim();
-    const otp = (body.otp || "").trim();
-    const licenseKey = (body.licenseKey || "").trim();
+    let email = (body.email || body.userEmail || "").trim().toLowerCase();
+    const deviceId = (body.deviceId || request.headers.get("x-device-id") || "").trim();
+    const deviceName = (body.deviceName || request.headers.get("x-device-name") || "Desktop Agent").trim();
+    const otp = String(body.otp || "").trim();
+    const licenseKey = (body.licenseKey || request.headers.get("x-license-key") || "").trim();
+
+    // Fallback: extract email from Bearer token
+    if (!email) {
+      const authHeader = request.headers.get("authorization");
+      if (authHeader && authHeader.startsWith("Bearer ")) {
+        try {
+          const token = authHeader.substring(7).trim();
+          const payload = jwt.verify(token, process.env.JWT_SECRET || "MabsolCRM@2026SecretKey") as any;
+          if (payload?.email) {
+            email = payload.email.toLowerCase().trim();
+          }
+        } catch {}
+      }
+    }
+
+    // Fallback: find email from licenseKey in VfpConfig
+    if (!email && licenseKey) {
+      const cfg: any = await VfpConfig.findOne({ license: licenseKey }).lean();
+      if (cfg?.email) {
+        email = cfg.email.toLowerCase().trim();
+      }
+    }
 
     if (!email || !email.includes("@")) {
       return NextResponse.json({ success: false, error: "Account email is required." }, { status: 400 });
@@ -43,17 +66,17 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: "A valid 6-digit OTP code is required." }, { status: 400 });
     }
 
-    // 1. Verify OTP record
-    const otpRecord = await Otp.findOne({ email, type: "email" });
+    // 1. Verify OTP record (get freshest OTP for this email)
+    const otpRecord = await Otp.findOne({ email }).sort({ updatedAt: -1, createdAt: -1 });
     if (!otpRecord) {
       return NextResponse.json(
-        { success: false, error: "No verification code requested for this email. Please request a new OTP." },
+        { success: false, error: "No verification code found for this email. Please click 'Send Verification Code' first." },
         { status: 400 }
       );
     }
 
     if (new Date() > new Date(otpRecord.expiresAt)) {
-      await Otp.deleteOne({ _id: otpRecord._id });
+      await Otp.deleteMany({ email });
       return NextResponse.json(
         { success: false, error: "Verification code has expired. Please request a new code." },
         { status: 400 }
@@ -62,14 +85,14 @@ export async function POST(request: NextRequest) {
 
     const MAX_ATTEMPTS = 5;
     if (otpRecord.attempts >= MAX_ATTEMPTS) {
-      await Otp.deleteOne({ _id: otpRecord._id });
+      await Otp.deleteMany({ email });
       return NextResponse.json(
         { success: false, error: "Too many failed attempts. Please request a new verification code." },
         { status: 400 }
       );
     }
 
-    if (otpRecord.otp !== otp) {
+    if (String(otpRecord.otp).trim() !== otp) {
       otpRecord.attempts = (otpRecord.attempts || 0) + 1;
       await otpRecord.save();
       const remaining = MAX_ATTEMPTS - otpRecord.attempts;
@@ -79,9 +102,8 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Mark OTP verified and clean up
-    otpRecord.verified = true;
-    await otpRecord.save();
+    // Mark OTP verified and clean up all OTP records for this email
+    await Otp.deleteMany({ email });
 
     // 2. Fetch User and Company info
     const user = await User.findOne({ email });
@@ -142,8 +164,11 @@ export async function POST(request: NextRequest) {
         authorizedDevices: [deviceEntry],
       });
     } else {
+      const cleanDevId = deviceId.trim().toLowerCase();
       let authorizedDevices: any[] = Array.isArray(config.authorizedDevices) ? config.authorizedDevices : [];
-      const existingIdx = authorizedDevices.findIndex((d: any) => d.deviceId === deviceId);
+      const existingIdx = authorizedDevices.findIndex(
+        (d: any) => (d.deviceId || "").trim().toLowerCase() === cleanDevId
+      );
 
       if (existingIdx >= 0) {
         authorizedDevices[existingIdx] = {
@@ -165,32 +190,36 @@ export async function POST(request: NextRequest) {
       config.license = targetLicenseKey;
       config.licenseExpiresAt = targetExpiresAt;
       config.licenseStatus = "active";
-      if (!config.boundDeviceId) {
-        config.boundDeviceId = deviceId;
-        config.boundDeviceName = deviceName;
-        config.boundAt = now;
-      }
+      config.boundDeviceId = deviceId;
+      config.boundDeviceName = deviceName;
+      config.boundAt = now;
       await config.save();
     }
 
-    // Propagate authorizedDevices to all related VfpConfig representations
+    // Propagate authorizedDevices and primary binding to all related VfpConfig representations
     const syncData = {
       authorizedDevices: config.authorizedDevices,
       license: targetLicenseKey,
       licenseExpiresAt: targetExpiresAt,
       licenseStatus: "active",
+      boundDeviceId: deviceId,
+      boundDeviceName: deviceName,
+      boundAt: now,
     };
 
+    const queryConditions: any[] = [];
+    if (targetLicenseKey) queryConditions.push({ license: targetLicenseKey });
+    if (licenseKey && licenseKey !== targetLicenseKey) queryConditions.push({ license: licenseKey });
+    if (email) {
+      queryConditions.push({ email });
+      queryConditions.push({ key: "vfp_sync_config_" + email });
+    }
+    queryConditions.push({ key: "vfp_sync_config" });
+
     await VfpConfig.updateMany(
-      { key: { $in: ["vfp_sync_config", "vfp_sync_config_" + email] } },
+      { $or: queryConditions },
       { $set: syncData }
     );
-    if (email) {
-      await VfpConfig.updateMany(
-        { email },
-        { $set: syncData }
-      );
-    }
 
     return NextResponse.json({
       success: true,

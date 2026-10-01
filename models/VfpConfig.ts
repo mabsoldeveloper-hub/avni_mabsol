@@ -6,7 +6,9 @@ const VfpConfigSchema = new mongoose.Schema(
       type: String,
       required: true,
       unique: true,
-      default: "vfp_sync_config",
+      default: function () {
+        return (this as any)?.email ? `vfp_sync_config_${(this as any).email}` : "vfp_sync_config";
+      },
     },
     email: {
       type: String,

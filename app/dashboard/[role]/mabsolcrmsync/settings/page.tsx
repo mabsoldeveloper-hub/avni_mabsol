@@ -16,6 +16,9 @@ import {
   Lock,
   AppWindow,
   FileCode2,
+  Trash2,
+  Laptop,
+  ShieldCheck,
 } from "lucide-react";
 
 interface AuthorizedDevice {
@@ -23,6 +26,7 @@ interface AuthorizedDevice {
   fullDeviceId: string;
   deviceName: string;
   licenseKey: string;
+  activationEmail?: string;
   activatedAt: string;
   expiresAt: string;
   lastSeenAt: string;
@@ -48,6 +52,7 @@ export default function VfpSettingsPage() {
   const [loading, setLoading] = useState(false);
   const [generatingKey, setGeneratingKey] = useState(false);
   const [copiedKey, setCopiedKey] = useState(false);
+  const [revokingDeviceId, setRevokingDeviceId] = useState<string | null>(null);
 
   // License Details State
   const [licenseInfo, setLicenseInfo] = useState<LicenseDetails>({
@@ -140,6 +145,31 @@ export default function VfpSettingsPage() {
       console.error("Failed to load license details:", err);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleRevokeDevice = async (deviceId: string, devName: string) => {
+    if (!confirm(`Are you sure you want to unlink machine "${devName}"? It will require OTP verification before syncing again.`)) {
+      return;
+    }
+    setRevokingDeviceId(deviceId);
+    try {
+      const res = await fetch("/api/mabsolcrmsync/license/revoke-device", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ deviceId, licenseKey: licenseInfo.license }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        toast.success(data.message || `Access revoked for ${devName}.`);
+        await loadLicense();
+      } else {
+        toast.error(data.error || "Failed to unlink machine.");
+      }
+    } catch (err: any) {
+      toast.error(err.message || "Network error.");
+    } finally {
+      setRevokingDeviceId(null);
     }
   };
 
@@ -403,54 +433,88 @@ export default function VfpSettingsPage() {
             </div>
 
             {/* Multi-Device Sync Authorized Machines */}
-            <div className="bg-slate-50 border border-slate-200/90 rounded-lg p-2.5 space-y-2">
+            <div className="bg-slate-50 border border-slate-200/90 rounded-lg p-3 space-y-2.5">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-1.5 text-xs font-bold text-slate-800">
-                  <Monitor size={13} className="text-slate-600" />
-                  <span>Authorized Machines ({licenseInfo.authorizedDevices?.length || (licenseInfo.isBound ? 1 : 0)})</span>
+                  <Laptop size={14} className="text-blue-600" />
+                  <span>Attached &amp; Logged-in Devices</span>
+                  <span className="ml-1 px-2.5 py-0.5 text-[11px] font-bold rounded-full bg-blue-100 text-blue-800 border border-blue-200">
+                    {licenseInfo.authorizedDevices?.length || (licenseInfo.isBound ? 1 : 0)} Machines Using this Key
+                  </span>
                 </div>
-                <span className="text-[10px] text-blue-600 bg-blue-50 px-2 py-0.5 rounded font-medium border border-blue-200">
-                  Multi-Device Enabled
-                </span>
+                <div className="flex items-center gap-1">
+                  <span className="flex h-2 w-2 relative">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                  </span>
+                  <span className="text-[10px] text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded font-medium border border-emerald-200">
+                    Multi-Device Sync Enabled
+                  </span>
+                </div>
               </div>
 
               {licenseInfo.authorizedDevices && licenseInfo.authorizedDevices.length > 0 ? (
-                <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1">
+                <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
                   {licenseInfo.authorizedDevices.map((dev, idx) => (
-                    <div key={idx} className="bg-white border border-slate-200/80 rounded-md p-2 flex items-center justify-between text-xs">
-                      <div>
-                        <div className="font-bold text-slate-900 flex items-center gap-1.5">
-                          <span>{dev.deviceName}</span>
-                          <span className={`text-[9px] px-1.5 py-0.2 rounded font-semibold ${dev.isExpired ? 'bg-rose-50 text-rose-600 border border-rose-200' : 'bg-emerald-50 text-emerald-700 border border-emerald-200'}`}>
-                            {dev.isExpired ? 'Expired' : `${dev.daysRemaining}d left`}
-                          </span>
+                    <div key={idx} className="bg-white border border-slate-200/90 rounded-lg p-2.5 flex items-center justify-between text-xs shadow-2xs hover:border-blue-300 transition-colors">
+                      <div className="flex items-start gap-2.5">
+                        <div className="w-8 h-8 rounded-md bg-blue-50 border border-blue-100 flex items-center justify-center text-blue-600 shrink-0 mt-0.5">
+                          <Monitor size={16} />
                         </div>
-                        <div className="text-[10.5px] font-mono text-slate-400 mt-0.5">
-                          ID: {dev.deviceId} • Key: {dev.licenseKey}
+                        <div>
+                          <div className="font-bold text-slate-900 flex items-center gap-2">
+                            <span>{dev.deviceName}</span>
+                            <span className={`text-[9.5px] px-2 py-0.5 rounded font-semibold ${dev.isExpired ? 'bg-rose-50 text-rose-600 border border-rose-200' : 'bg-emerald-50 text-emerald-700 border border-emerald-200'}`}>
+                              {dev.isExpired ? 'Expired' : `${dev.daysRemaining} days left`}
+                            </span>
+                          </div>
+                          {dev.activationEmail && (
+                            <div className="text-[11px] text-blue-800 bg-blue-50/80 border border-blue-200/70 rounded px-1.5 py-0.5 mt-0.5 inline-flex items-center gap-1 font-medium">
+                              <span>👤 Attached User: <strong>{dev.activationEmail}</strong></span>
+                            </div>
+                          )}
+                          <div className="text-[11px] font-mono text-slate-500 mt-0.5 flex items-center gap-2">
+                            <span>ID: <strong className="text-slate-700">{dev.deviceId || dev.fullDeviceId?.substring(0, 8)}</strong></span>
+                            <span>•</span>
+                            <span>Key: <strong className="text-emerald-600 font-semibold">{dev.licenseKey || licenseInfo.license}</strong></span>
+                          </div>
+                          <div className="text-[10.5px] text-slate-400 mt-0.5">
+                            {dev.lastSeenAt ? `Last active: ${new Date(dev.lastSeenAt).toLocaleString()}` : 'Authorized & Ready'}
+                          </div>
                         </div>
                       </div>
-                      <div className="text-[10.5px] text-slate-400 text-right">
-                        {dev.lastSeenAt ? `Seen ${new Date(dev.lastSeenAt).toLocaleDateString()}` : 'Active'}
+
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => handleRevokeDevice(dev.fullDeviceId || dev.deviceId, dev.deviceName)}
+                          disabled={revokingDeviceId === (dev.fullDeviceId || dev.deviceId)}
+                          title="Unlink this machine from the license key"
+                          className="px-2 py-1 text-[11px] font-medium text-rose-600 hover:text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded-md transition-colors flex items-center gap-1 cursor-pointer disabled:opacity-50"
+                        >
+                          <Trash2 size={12} />
+                          <span>{revokingDeviceId === (dev.fullDeviceId || dev.deviceId) ? "Revoking..." : "Unlink"}</span>
+                        </button>
                       </div>
                     </div>
                   ))}
                 </div>
               ) : (
-                <div className="text-[11px] text-slate-500 bg-white border border-slate-200/80 rounded-md p-2">
+                <div className="text-[11px] text-slate-500 bg-white border border-slate-200/80 rounded-md p-2.5 text-center">
                   {licenseInfo.isBound
                     ? `Primary Machine: ${licenseInfo.boundDeviceName || "Bound"}`
-                    : "No machines activated yet. Start the Desktop EXE on any computer to activate."}
+                    : "No machines attached yet. Start the Desktop EXE on any computer to link and sync."}
                 </div>
               )}
 
-              <p className="text-[10px] text-slate-500 m-0">
-                💡 <strong>Need to run sync on another computer?</strong> Open the Desktop EXE on that computer and log in with your email. You will receive an OTP code to instantly activate a new 30-day device license key for that machine.
-              </p>
+              <div className="bg-blue-50/70 border border-blue-200/80 rounded-md p-2 text-[10.5px] text-blue-900 leading-relaxed">
+                💡 <strong>Sync across multiple computers:</strong> Any user with your account email can use this same license key on multiple PCs. Opening the Desktop EXE on another computer will prompt for a 6-digit OTP code sent to your email to verify and authorize the new machine.
+              </div>
             </div>
 
             {/* Policy disclaimer */}
             <p className="text-[10.5px] text-slate-400 leading-normal m-0 pt-0.5">
-              Policy: each computer receives a hardware-bound license. Additional computers can be authorized via email OTP verification.
+              Security Policy: Verified computers share your sync license. You can unlink any machine at any time above.
             </p>
           </div>
 

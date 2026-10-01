@@ -50,6 +50,7 @@ const sourceDirInput = document.getElementById("sourceDirInput");
 const sourceDirStatusBadge = document.getElementById("sourceDirStatusBadge");
 const destDirInput = document.getElementById("destDirInput");
 const licenseKeyInput = document.getElementById("licenseKeyInput");
+const btnVerifyLicenseKeyManual = document.getElementById("btnVerifyLicenseKeyManual");
 const licenseCountdownBadge = document.getElementById("licenseCountdownBadge");
 const licenseCountdownText = document.getElementById("licenseCountdownText");
 const licenseCountdownDetail = document.getElementById("licenseCountdownDetail");
@@ -103,6 +104,34 @@ const terminalBody = document.getElementById("terminalBody");
 const clearLogBtn = document.getElementById("clearLogBtn");
 
 let currentAuthEmail = "";
+
+// ---------------------------------------------------------------------------
+// Global Utilities: HTML Escaping & Toast Notifications
+// ---------------------------------------------------------------------------
+function escapeHtml(str) {
+  return String(str || "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+}
+
+function showToast(message, type = "info") {
+  const container = document.getElementById("toastContainer");
+  if (!container) return;
+  const item = document.createElement("div");
+  item.className = `toast-item toast-${type}`;
+  const icon = type === "success" ? "✓" : type === "error" ? "✕" : type === "warning" ? "⚠️" : "ℹ️";
+  item.innerHTML = `<span style="font-size:14px; font-weight:bold;">${icon}</span><span>${escapeHtml(String(message || ""))}</span>`;
+  container.appendChild(item);
+  setTimeout(() => {
+    item.style.opacity = "0";
+    item.style.transform = "translateX(20px)";
+    item.style.transition = "all 0.3s ease";
+    setTimeout(() => item.remove(), 300);
+  }, 4500);
+}
+window.escapeHtml = escapeHtml;
+window.showToast = showToast;
 
 function updateActiveServerButtons(url) {
   const normalized = (url || "").trim().toLowerCase().replace(/\/+$/, "");
@@ -204,8 +233,11 @@ async function loadAndDisplayConfig() {
     const cfg = await window.electronAPI.getConfig();
     if (cfg) {
       if (cfg.cloudUrl) cloudUrlInput.value = cfg.cloudUrl;
-      const session = await window.electronAPI.getSession();
-      const compNameFromUser = session?.user?.companyName || session?.user?.companyId?.companyName || "";
+      let compNameFromUser = "";
+      try {
+        const sessionRes = await window.electronAPI.checkSession();
+        compNameFromUser = sessionRes?.session?.user?.companyName || sessionRes?.session?.user?.companyId?.companyName || "";
+      } catch {}
       if (cfg.companyName && cfg.companyName.toLowerCase() !== "test") {
         companyNameInput.value = cfg.companyName;
       } else if (compNameFromUser) {
@@ -378,7 +410,7 @@ async function fetchAndShowLicenseDetails() {
       } else {
         updateLicenseCountdown(null);
       }
-      if (res.license) {
+      if (res.license && !isMachineLocallyAuthorized) {
         checkAndPromptDeviceLicense(currentAuthEmail, res.license);
       }
     } else {
@@ -498,21 +530,6 @@ function setupEventListeners() {
   // ---------------------------------------------------------------------------
   // Clean Onboarding & Multi-Branch Signup Wizard (Identical to Website)
   // ---------------------------------------------------------------------------
-  function showToast(message, type = "info") {
-    const container = document.getElementById("toastContainer");
-    if (!container) return;
-    const item = document.createElement("div");
-    item.className = `toast-item toast-${type}`;
-    const icon = type === "success" ? "✓" : type === "error" ? "✕" : "ℹ️";
-    item.innerHTML = `<span style="font-size:14px; font-weight:bold;">${icon}</span><span>${escapeHtml(message)}</span>`;
-    container.appendChild(item);
-    setTimeout(() => {
-      item.style.opacity = "0";
-      item.style.transform = "translateX(20px)";
-      item.style.transition = "all 0.3s ease";
-      setTimeout(() => item.remove(), 300);
-    }, 4500);
-  }
 
   // Wizard State
   const signupWizardState = {
@@ -1990,6 +2007,7 @@ function setupEventListeners() {
 
   // Logout Button
   logoutBtn.addEventListener("click", async () => {
+    isMachineLocallyAuthorized = false;
     await window.electronAPI.logout();
     currentAuthEmail = "";
     showLogin();
@@ -2084,6 +2102,20 @@ function setupEventListeners() {
   // Click "Edit Configuration" -> Unlocks form fields immediately for direct editing!
   editConfigBtn.addEventListener("click", () => {
     setFormLocked(false);
+  });
+
+  // Click "Verify Key with OTP" button
+  btnVerifyLicenseKeyManual?.addEventListener("click", () => {
+    isMachineLocallyAuthorized = false;
+    openDeviceActivationModal({
+      email: currentAuthEmail || (emailInput ? emailInput.value.trim() : ""),
+      licenseKey: licenseKeyInput ? licenseKeyInput.value.trim() : ""
+    });
+  });
+
+  // When user edits license key, reset authorization state
+  licenseKeyInput?.addEventListener("input", () => {
+    isMachineLocallyAuthorized = false;
   });
 
   // Switch between OTP and Password in Unlock Modal
@@ -2209,30 +2241,80 @@ function setupEventListeners() {
       userEmail: currentAuthEmail || emailInput.value.trim()
     };
 
+    // Before saving the config, if a license key is entered, verify email OTP first!
+    if (newCfg.licenseKey && !isMachineLocallyAuthorized && window.electronAPI?.checkDeviceLicense) {
+      try {
+        const checkRes = await window.electronAPI.checkDeviceLicense({
+          email: newCfg.userEmail,
+          cloudUrl: newCfg.cloudUrl,
+          licenseKey: newCfg.licenseKey
+        });
+        if (checkRes && (!checkRes.authorized || checkRes.requiresVerification || checkRes.isNewDevice)) {
+          setButtonLoading(saveConfigBtn, false);
+          saveConfigBtn.disabled = false;
+          pendingConfigToSave = newCfg;
+          const warnMsg = checkRes.message || "Email OTP verification required before saving license key.";
+          saveNotice.textContent = warnMsg;
+          saveNotice.className = "save-notice warning";
+          saveNotice.classList.remove("hidden");
+          openDeviceActivationModal({
+            email: checkRes.email || newCfg.userEmail,
+            deviceName: checkRes.deviceName,
+            deviceId: checkRes.deviceId,
+            licenseKey: newCfg.licenseKey,
+            error: warnMsg,
+            autoSend: true
+          });
+          showToast("Please verify the OTP code sent to your email before saving.", "warning");
+          return;
+        } else if (checkRes && checkRes.authorized && !checkRes.isExpired) {
+          isMachineLocallyAuthorized = true;
+        }
+      } catch (checkErr) {
+        console.warn("Pre-save license check error:", checkErr);
+      }
+    }
+
     try {
       const res = await window.electronAPI.saveConfig(newCfg);
       setButtonLoading(saveConfigBtn, false);
       saveConfigBtn.disabled = false;
 
-        if (res && res.success) {
-          saveNotice.textContent = res.message || "Configuration saved successfully!";
-          saveNotice.className = res.licenseWarning ? "save-notice warning" : "save-notice";
-          saveNotice.classList.remove("hidden");
-          setTimeout(() => saveNotice.classList.add("hidden"), 4000);
-          setFormLocked(true); // Re-locks after successful save!
-          fetchAndShowLicenseDetails();
-          updateFolderValidation(newCfg.sourceDir, newCfg.companyCode);
+      const needsDevVerification = Boolean(
+        res?.requiresVerification ||
+        res?.deviceMismatch ||
+        (!res?.success && (res?.licenseWarning || res?.error)) ||
+        (res?.licenseWarning && (res.licenseWarning.includes("locked to machine") || res.licenseWarning.includes("not authorized") || res.licenseWarning.includes("requires") || res.licenseWarning.includes("Verification Required"))) ||
+        (typeof res?.error === "string" && (res.error.includes("locked to machine") || res.error.includes("not authorized") || res.error.includes("requires")))
+      );
 
-          if (res.requiresVerification) {
-            openDeviceActivationModal({
-              email: res.email || newCfg.userEmail,
-              deviceName: res.deviceName,
-              deviceId: res.deviceId,
-              licenseKey: res.licenseKey || newCfg.licenseKey
-            });
-            showToast("This machine must be verified with an OTP code to authorize syncing.", "warning");
-          }
-        } else {
+      if (needsDevVerification) {
+        isMachineLocallyAuthorized = false;
+        pendingConfigToSave = newCfg;
+        const warnMsg = res?.message || res?.licenseWarning || res?.error || "License verification required to authorize this machine.";
+        saveNotice.textContent = warnMsg;
+        saveNotice.className = "save-notice warning";
+        saveNotice.classList.remove("hidden");
+        appendLogEntry("warn", `[License Verification Required] ${warnMsg}`);
+        openDeviceActivationModal({
+          email: res?.email || newCfg.userEmail || currentAuthEmail,
+          deviceName: res?.deviceName,
+          deviceId: res?.deviceId,
+          licenseKey: res?.licenseKey || newCfg.licenseKey,
+          error: warnMsg,
+          autoSend: true
+        });
+        showToast("Please verify the OTP code sent to your email to authorize this machine.", "warning");
+        return;
+      } else if (res && res.success) {
+        saveNotice.textContent = res.message || "Configuration saved successfully!";
+        saveNotice.className = "save-notice";
+        saveNotice.classList.remove("hidden");
+        setTimeout(() => saveNotice.classList.add("hidden"), 4000);
+        setFormLocked(true); // Re-locks after successful save!
+        fetchAndShowLicenseDetails();
+        updateFolderValidation(newCfg.sourceDir, newCfg.companyCode);
+      } else {
         const errorText = sanitizeMessage(res?.error || "Failed to save configuration.");
         saveNotice.textContent = errorText;
         saveNotice.className = "save-notice error";
@@ -2323,11 +2405,17 @@ function setupEventListeners() {
       const res = await window.electronAPI.startSync();
       if (!res.success) {
         statLastStatus.textContent = "Error";
-        statLastStatus.style.color = "#f87171";
-        if (res.requiresVerification) {
+        const needsDevVerification = Boolean(
+          res.requiresVerification ||
+          res.deviceMismatch ||
+          (typeof res.message === "string" && (res.message.includes("locked to machine") || res.message.includes("not authorized") || res.message.includes("License Blocked") || res.message.includes("requires")))
+        );
+        if (needsDevVerification) {
+          isMachineLocallyAuthorized = false;
           openDeviceActivationModal({
             email: currentAuthEmail || (emailInput ? emailInput.value.trim() : ""),
-            licenseKey: licenseKeyInput ? licenseKeyInput.value.trim() : ""
+            licenseKey: licenseKeyInput ? licenseKeyInput.value.trim() : "",
+            error: res.message
           });
           showToast("Verification code required to authorize this machine before sync.", "warning");
         }
@@ -2376,8 +2464,9 @@ function setupIpcListeners() {
   // Device license verification prompt from server / sync attempt
   if (window.electronAPI.onVerificationRequired) {
     window.electronAPI.onVerificationRequired((data) => {
+      isMachineLocallyAuthorized = false;
       openDeviceActivationModal(data);
-      showToast("Verification code required to authorize this machine for syncing.", "warning");
+      showToast(data?.error || "Verification code required to authorize this machine for syncing.", "warning");
     });
   }
 }
@@ -2512,13 +2601,6 @@ function setSyncButtonLoading(isLoading) {
   }
 }
 
-function escapeHtml(str) {
-  return String(str)
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;");
-}
-
 // ---------------------------------------------------------------------------
 // Multi-Device License Check & Activation Modal
 // ---------------------------------------------------------------------------
@@ -2539,7 +2621,9 @@ const btnXCloseDevActModal = document.getElementById("btnXCloseDevActModal");
 const devActError = document.getElementById("devActError");
 const devActSentToEmail = document.getElementById("devActSentToEmail");
 
+let isMachineLocallyAuthorized = false;
 let devActTargetEmail = "";
+let pendingConfigToSave = null;
 
 // Unified OTP Input: listen for typing or pasting 6 digits together
 devActOtpInput?.addEventListener("input", () => {
@@ -2557,22 +2641,50 @@ devActOtpInput?.addEventListener("keydown", (e) => {
   }
 });
 
-function openDeviceActivationModal(data) {
-  devActTargetEmail = data?.email || currentAuthEmail || (emailInput ? emailInput.value.trim() : "");
+async function openDeviceActivationModal(data) {
+  isMachineLocallyAuthorized = false;
+  let email = (data?.email || currentAuthEmail || (emailInput ? emailInput.value.trim() : "")).trim().toLowerCase();
+  if (!email && window.electronAPI?.getConfig) {
+    try {
+      const cfg = await window.electronAPI.getConfig();
+      if (cfg?.userEmail) email = cfg.userEmail.trim().toLowerCase();
+    } catch {}
+  }
+  if (!email && window.electronAPI?.checkSession) {
+    try {
+      const sess = await window.electronAPI.checkSession();
+      if (sess?.session?.email) email = sess.session.email.trim().toLowerCase();
+    } catch {}
+  }
+  devActTargetEmail = email;
   const targetLicense = data?.licenseKey || (licenseKeyInput ? licenseKeyInput.value.trim() : "");
-  if (devActEmail) devActEmail.textContent = devActTargetEmail;
+  if (devActEmail) devActEmail.textContent = devActTargetEmail || "Account Email";
   if (devActMachineName) devActMachineName.textContent = data?.deviceName || "This Computer";
   if (devActDeviceId) devActDeviceId.textContent = data?.deviceId || "...";
-  if (devActSentToEmail) devActSentToEmail.textContent = devActTargetEmail;
+  if (devActSentToEmail) devActSentToEmail.textContent = devActTargetEmail || "your email";
   if (devActLicenseKey) devActLicenseKey.textContent = targetLicense || "Account License";
 
   // Reset modal sections & input
   devActSendSection?.classList.remove("hidden");
   devActVerifySection?.classList.add("hidden");
-  if (devActError) devActError.classList.add("hidden");
+  if (devActError) {
+    if (data?.error) {
+      devActError.textContent = sanitizeMessage(data.error);
+      devActError.classList.remove("hidden");
+    } else {
+      devActError.textContent = "";
+      devActError.classList.add("hidden");
+    }
+  }
   if (devActOtpInput) devActOtpInput.value = "";
   if (btnDevActConfirm) btnDevActConfirm.disabled = true;
   deviceActivationModal?.classList.remove("hidden");
+
+  if (data?.autoSend) {
+    setTimeout(() => {
+      btnDevActSendOtp?.click();
+    }, 150);
+  }
 }
 
 async function checkAndPromptDeviceLicense(userEmail, explicitLicenseKey) {
@@ -2584,21 +2696,25 @@ async function checkAndPromptDeviceLicense(userEmail, explicitLicenseKey) {
     const res = await window.electronAPI.checkDeviceLicense({ email, cloudUrl, licenseKey });
 
     if (res && res.success) {
-      if (res.isNewDevice || !res.authorized) {
-        openDeviceActivationModal({
-          email: res.email || email,
-          deviceName: res.deviceName,
-          deviceId: res.deviceId,
-          licenseKey: res.licenseKey || licenseKey
-        });
-      } else if (res.authorized && res.licenseKey) {
-        // Machine is already authorized!
-        if (licenseKeyInput && !licenseKeyInput.value) {
+      if (res.authorized && !res.isExpired) {
+        // Machine is authorized!
+        isMachineLocallyAuthorized = true;
+        deviceActivationModal?.classList.add("hidden");
+        if (licenseKeyInput && !licenseKeyInput.value && res.licenseKey) {
           licenseKeyInput.value = res.licenseKey;
         }
         if (res.expiresAt) {
           updateLicenseCountdown(res.expiresAt);
         }
+      } else if (res.isNewDevice || !res.authorized || res.requiresVerification) {
+        isMachineLocallyAuthorized = false;
+        openDeviceActivationModal({
+          email: res.email || email,
+          deviceName: res.deviceName,
+          deviceId: res.deviceId,
+          licenseKey: res.licenseKey || licenseKey,
+          error: res.message
+        });
       }
     }
   } catch (err) {
@@ -2612,7 +2728,13 @@ btnDevActSendOtp?.addEventListener("click", async () => {
   if (devActError) devActError.classList.add("hidden");
 
   try {
-    const email = devActTargetEmail || currentAuthEmail || (emailInput ? emailInput.value.trim() : "");
+    let email = devActTargetEmail || currentAuthEmail || (emailInput ? emailInput.value.trim() : "");
+    if (!email && window.electronAPI?.getConfig) {
+      try {
+        const cfg = await window.electronAPI.getConfig();
+        if (cfg?.userEmail) email = cfg.userEmail.trim();
+      } catch {}
+    }
     const cloudUrl = cloudUrlInput ? cloudUrlInput.value.trim() : "";
     const licenseKey = licenseKeyInput ? licenseKeyInput.value.trim() : "";
     const res = await window.electronAPI.sendDeviceOtp({ email, cloudUrl, licenseKey });
@@ -2621,13 +2743,15 @@ btnDevActSendOtp?.addEventListener("click", async () => {
     if (res && res.success) {
       devActSendSection?.classList.add("hidden");
       devActVerifySection?.classList.remove("hidden");
-      if (devActSentToEmail) devActSentToEmail.textContent = email;
+      const targetEmail = res.email || email;
+      devActTargetEmail = targetEmail;
+      if (devActSentToEmail) devActSentToEmail.textContent = targetEmail;
       if (devActOtpInput) {
         devActOtpInput.value = "";
         setTimeout(() => devActOtpInput.focus(), 100);
       }
       if (btnDevActConfirm) btnDevActConfirm.disabled = true;
-      showToast(`Verification code sent to ${email}`, "success");
+      showToast(`Verification code sent to ${targetEmail}`, "success");
     } else {
       const msg = res?.error || "Failed to send verification code.";
       if (devActError) { devActError.textContent = msg; devActError.classList.remove("hidden"); }
@@ -2656,12 +2780,21 @@ btnDevActBack?.addEventListener("click", () => {
 // Confirm Device Activation
 btnDevActConfirm?.addEventListener("click", async () => {
   const otpVal = devActOtpInput ? devActOtpInput.value.trim() : "";
-  if (otpVal.length !== 6) return;
+  if (otpVal.length !== 6) {
+    showToast("Please enter the complete 6-digit code.", "warning");
+    return;
+  }
   setButtonLoading(btnDevActConfirm, true);
   if (devActError) devActError.classList.add("hidden");
 
   try {
-    const email = devActTargetEmail || currentAuthEmail || (emailInput ? emailInput.value.trim() : "");
+    let email = devActTargetEmail || currentAuthEmail || (emailInput ? emailInput.value.trim() : "");
+    if (!email && window.electronAPI?.getConfig) {
+      try {
+        const cfg = await window.electronAPI.getConfig();
+        if (cfg?.userEmail) email = cfg.userEmail.trim();
+      } catch {}
+    }
     const cloudUrl = cloudUrlInput ? cloudUrlInput.value.trim() : "";
     const licenseKey = licenseKeyInput ? licenseKeyInput.value.trim() : "";
     const res = await window.electronAPI.activateDevice({
@@ -2673,6 +2806,7 @@ btnDevActConfirm?.addEventListener("click", async () => {
     setButtonLoading(btnDevActConfirm, false);
 
     if (res && res.success) {
+      isMachineLocallyAuthorized = true;
       showToast(res.message || "Machine authorized successfully!", "success");
       if (licenseKeyInput && res.licenseKey) {
         licenseKeyInput.value = res.licenseKey;
@@ -2681,8 +2815,29 @@ btnDevActConfirm?.addEventListener("click", async () => {
         updateLicenseCountdown(res.expiresAt);
       }
       deviceActivationModal?.classList.add("hidden");
-      // Reload dashboard config
-      await loadAndDisplayConfig();
+
+      // If configuration was waiting for email OTP verification, save it now!
+      if (pendingConfigToSave) {
+        pendingConfigToSave.licenseKey = res.licenseKey || pendingConfigToSave.licenseKey;
+        await window.electronAPI.saveConfig(pendingConfigToSave);
+        pendingConfigToSave = null;
+      }
+
+      setFormLocked(true); // Lock form after save
+      saveNotice.textContent = "Configuration saved and license verified!";
+      saveNotice.className = "save-notice";
+      saveNotice.classList.remove("hidden");
+      setTimeout(() => saveNotice.classList.add("hidden"), 4000);
+
+      if (statLastStatus && (statLastStatus.textContent === "Error" || statLastStatus.textContent === "Failed")) {
+        statLastStatus.textContent = "Ready";
+        statLastStatus.style.color = "#10b981";
+      }
+      try {
+        await loadAndDisplayConfig();
+      } catch (reloadErr) {
+        console.warn("Post-activation config display warning:", reloadErr);
+      }
     } else {
       const msg = res?.error || "Activation failed. Please check the code.";
       if (devActError) { devActError.textContent = msg; devActError.classList.remove("hidden"); }

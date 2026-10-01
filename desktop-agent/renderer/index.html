@@ -573,10 +573,15 @@
               <div class="form-group">
                 <div class="license-header-row">
                   <label for="licenseKeyInput">License Key</label>
-                  <span id="licenseCountdownBadge" class="license-countdown-badge hidden">
-                    <span class="countdown-pulse-dot"></span>
-                    <span id="licenseCountdownText">--</span>
-                  </span>
+                  <div style="display: flex; align-items: center; gap: 8px;">
+                    <button type="button" id="btnVerifyLicenseKeyManual" class="btn-secondary" style="font-size: 11px; padding: 2px 9px; border-radius: 4px; display: inline-flex; align-items: center; gap: 4px; color: #38bdf8; border: 1px solid rgba(56, 189, 248, 0.4); background: rgba(56, 189, 248, 0.08); cursor: pointer;" title="Verify or authorize this computer with OTP">
+                      🔐 Verify Key with OTP
+                    </button>
+                    <span id="licenseCountdownBadge" class="license-countdown-badge hidden">
+                      <span class="countdown-pulse-dot"></span>
+                      <span id="licenseCountdownText">--</span>
+                    </span>
+                  </div>
                 </div>
                 <input type="password" id="licenseKeyInput" placeholder="MAB-XXXX-XXXX-XXXX" disabled readonly>
                 <div id="licenseCountdownDetail" class="license-countdown-detail hidden">

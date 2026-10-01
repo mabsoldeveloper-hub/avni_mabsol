@@ -77,10 +77,11 @@ export async function POST(request: NextRequest) {
         );
       }
       if (deviceId) {
+        const cleanDevId = deviceId.trim().toLowerCase();
         const authorizedDevices: any[] = Array.isArray(config.authorizedDevices) ? config.authorizedDevices : [];
         const isDeviceAuthorized =
-          authorizedDevices.some((d: any) => d.deviceId === deviceId && d.status === "active") ||
-          config.boundDeviceId === deviceId;
+          authorizedDevices.some((d: any) => (d.deviceId || "").trim().toLowerCase() === cleanDevId && d.status === "active") ||
+          (config.boundDeviceId || "").trim().toLowerCase() === cleanDevId;
 
         if (!config.boundDeviceId && authorizedDevices.length === 0) {
           await VfpConfig.updateOne(

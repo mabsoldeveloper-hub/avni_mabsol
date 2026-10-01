@@ -2046,6 +2046,10 @@ button:disabled, .btn-browse:disabled {
   border-left: 4px solid #0ea5e9;
 }
 
+.toast-item.toast-warning {
+  border-left: 4px solid #f59e0b;
+}
+
 /* Real-Time Password Criteria Box */
 .password-criteria-box {
   display: flex;

@@ -334,8 +334,17 @@ export async function importSingleDbfFile(
       }
 
       if (ops.length > 0) {
-        await collection.bulkWrite(ops, { ordered: false, bypassDocumentValidation: true });
-        importedCount += ops.length;
+        try {
+          const res = await collection.bulkWrite(ops, { ordered: false, bypassDocumentValidation: true });
+          importedCount += (res.upsertedCount || 0) + (res.modifiedCount || 0) + (res.matchedCount || 0) || ops.length;
+        } catch (bwErr: any) {
+          if (bwErr?.code === 11000 || bwErr?.name === "MongoBulkWriteError" || bwErr?.message?.includes("E11000")) {
+            const inserted = (bwErr.result?.nUpserted || 0) + (bwErr.result?.nModified || 0) + (bwErr.result?.nMatched || 0);
+            importedCount += (inserted || Math.max(0, ops.length - (bwErr.writeErrors?.length || 0)));
+          } else {
+            throw bwErr;
+          }
+        }
       }
     }
 

@@ -29,8 +29,25 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Try finding by exact license first, then by company sync config, then by user email
-    let config: any = await VfpConfig.findOne({ license: licenseKey }).lean();
+    const cleanDevId = deviceId.trim().toLowerCase();
+    const queryConditions: any[] = [];
+    if (licenseKey) queryConditions.push({ license: licenseKey });
+    if (userEmail) {
+      queryConditions.push({ email: userEmail });
+      queryConditions.push({ key: "vfp_sync_config_" + userEmail });
+    }
+    queryConditions.push({ key: "vfp_sync_config" });
+
+    // Try finding config where this device is already active first
+    let config: any = await VfpConfig.findOne({
+      $or: queryConditions,
+      "authorizedDevices.deviceId": { $regex: new RegExp(`^${cleanDevId}$`, "i") },
+      "authorizedDevices.status": "active",
+    }).lean();
+
+    if (!config && licenseKey) {
+      config = await VfpConfig.findOne({ license: licenseKey }).lean();
+    }
     if (!config) {
       config = await VfpConfig.findOne({ key: "vfp_sync_config" }).lean();
     }
@@ -76,12 +93,12 @@ export async function POST(request: NextRequest) {
     const authorizedDevices: any[] = Array.isArray(config.authorizedDevices) ? config.authorizedDevices : [];
     const isDeviceAuthorized =
       authorizedDevices.some(
-        (d: any) => d.deviceId === deviceId && d.status === "active" && (!d.expiresAt || new Date(d.expiresAt) > now)
-      ) || (config.boundDeviceId && config.boundDeviceId === deviceId);
+        (d: any) => (d.deviceId || "").trim().toLowerCase() === cleanDevId && d.status === "active" && (!d.expiresAt || new Date(d.expiresAt) > now)
+      ) || ((config.boundDeviceId || "").trim().toLowerCase() === cleanDevId);
 
     if (deviceId) {
       if (isDeviceAuthorized) {
-        // Machine is already authorized! Update last seen timestamp & device name
+        // Machine is already authorized! Update last seen timestamp & device name across all matching configs
         const updatePayload = {
           license: licenseKey,
           licenseExpiresAt: config.licenseExpiresAt,
@@ -90,7 +107,10 @@ export async function POST(request: NextRequest) {
         };
 
         await VfpConfig.updateMany(
-          { _id: config._id, "authorizedDevices.deviceId": deviceId },
+          {
+            $or: queryConditions,
+            "authorizedDevices.deviceId": { $regex: new RegExp(`^${cleanDevId}$`, "i") },
+          },
           {
             $set: {
               "authorizedDevices.$.lastSeenAt": now,
@@ -102,24 +122,21 @@ export async function POST(request: NextRequest) {
         );
 
         // If not in authorizedDevices but was boundDeviceId, add to authorizedDevices
-        const inArray = authorizedDevices.some((d: any) => d.deviceId === deviceId);
+        const inArray = authorizedDevices.some((d: any) => (d.deviceId || "").trim().toLowerCase() === cleanDevId);
         if (!inArray) {
-          await VfpConfig.updateOne(
-            { _id: config._id },
-            {
-              $addToSet: {
-                authorizedDevices: {
-                  deviceId,
-                  deviceName: deviceName || config.boundDeviceName || "Operator Machine",
-                  licenseKey,
-                  activatedAt: config.boundAt || now,
-                  expiresAt: config.licenseExpiresAt,
-                  lastSeenAt: now,
-                  status: "active",
-                  activationEmail: config.email || userEmail,
-                },
-              },
-            }
+          const newEntry = {
+            deviceId,
+            deviceName: deviceName || config.boundDeviceName || "Operator Machine",
+            licenseKey,
+            activatedAt: config.boundAt || now,
+            expiresAt: config.licenseExpiresAt,
+            lastSeenAt: now,
+            status: "active",
+            activationEmail: config.email || userEmail,
+          };
+          await VfpConfig.updateMany(
+            { $or: queryConditions },
+            { $addToSet: { authorizedDevices: newEntry } }
           );
         }
 

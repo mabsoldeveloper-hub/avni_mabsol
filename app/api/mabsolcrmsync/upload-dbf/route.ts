@@ -136,8 +136,11 @@ export async function POST(request: NextRequest) {
         }
 
         // 4. Device Binding & Multi-Device Validation
+        const cleanDeviceId = (deviceId || "").trim().toLowerCase();
         const authorizedDevices: any[] = Array.isArray(config.authorizedDevices) ? config.authorizedDevices : [];
-        const deviceEntry = deviceId ? authorizedDevices.find((d: any) => d.deviceId === deviceId && d.status === "active") : null;
+        const deviceEntry = cleanDeviceId
+          ? authorizedDevices.find((d: any) => (d.deviceId || "").trim().toLowerCase() === cleanDeviceId && d.status === "active")
+          : null;
 
         if (deviceEntry) {
           // Check if this specific device license is expired
@@ -153,10 +156,10 @@ export async function POST(request: NextRequest) {
           }
           // Update last seen timestamp
           VfpConfig.updateOne(
-            { _id: config._id, "authorizedDevices.deviceId": deviceId },
+            { _id: config._id, "authorizedDevices.deviceId": { $regex: new RegExp(`^${cleanDeviceId}$`, "i") } },
             { $set: { "authorizedDevices.$.lastSeenAt": new Date(), "authorizedDevices.$.deviceName": deviceName || deviceEntry.deviceName } }
           ).catch(() => {});
-        } else if (deviceId && config.boundDeviceId === deviceId) {
+        } else if (cleanDeviceId && (config.boundDeviceId || "").trim().toLowerCase() === cleanDeviceId) {
           // Primary bound machine - ensure in authorizedDevices
           await VfpConfig.updateOne(
             { _id: config._id },
@@ -175,7 +178,7 @@ export async function POST(request: NextRequest) {
               },
             }
           );
-        } else if (deviceId && !config.boundDeviceId && authorizedDevices.length === 0) {
+        } else if (cleanDeviceId && !config.boundDeviceId && authorizedDevices.length === 0) {
           // First device to use this key -> Bind it!
           await VfpConfig.updateOne(
             { _id: config._id },
@@ -213,21 +216,40 @@ export async function POST(request: NextRequest) {
         }
 
         // Keep user config's license aligned so future operations know this user is using this license
-        if (user?.email && (!config.email || config.email !== user.email)) {
-          await VfpConfig.updateOne(
-            { email: user.email },
-            {
-              $set: {
-                license: licenseKey,
-                licenseExpiresAt: config.licenseExpiresAt,
-                licenseIssuedAt: config.licenseIssuedAt,
-                licenseStatus: "active",
-                boundDeviceId: deviceId || config.boundDeviceId,
-                boundDeviceName: deviceName || config.boundDeviceName,
+        if (user?.email) {
+          const userKey = "vfp_sync_config_" + user.email;
+          try {
+            await VfpConfig.updateOne(
+              { key: userKey },
+              {
+                $set: {
+                  key: userKey,
+                  email: user.email,
+                  license: licenseKey,
+                  licenseExpiresAt: config.licenseExpiresAt,
+                  licenseIssuedAt: config.licenseIssuedAt,
+                  licenseStatus: "active",
+                  boundDeviceId: deviceId || config.boundDeviceId,
+                  boundDeviceName: deviceName || config.boundDeviceName,
+                },
               },
-            },
-            { upsert: true }
-          );
+              { upsert: true }
+            );
+          } catch (_cfgErr) {
+            await VfpConfig.updateOne(
+              { email: user.email },
+              {
+                $set: {
+                  license: licenseKey,
+                  licenseExpiresAt: config.licenseExpiresAt,
+                  licenseIssuedAt: config.licenseIssuedAt,
+                  licenseStatus: "active",
+                  boundDeviceId: deviceId || config.boundDeviceId,
+                  boundDeviceName: deviceName || config.boundDeviceName,
+                },
+              }
+            ).catch(() => {});
+          }
         }
       } else {
         return NextResponse.json(
@@ -303,32 +325,51 @@ export async function POST(request: NextRequest) {
     const currentEnabled: string[] = existingConfig?.enabledFiles || [];
     const mergedEnabledFiles = Array.from(new Set([...currentEnabled, ...allUploadDbfFiles]));
 
-    // Save uploaded folder location and merged enabled files in VfpConfig
-    await VfpConfig.updateOne(
-      { email: user.email },
-      {
-        $set: {
-          email: user.email,
-          consoleSyncDir: uploadDir,
-          dataDir: uploadDir,
-          companyCode: companyCode,
-          enabledFiles: mergedEnabledFiles,
+    // Save uploaded folder location and merged enabled files in VfpConfig safely
+    const userKey = "vfp_sync_config_" + user.email;
+    try {
+      await VfpConfig.updateOne(
+        { key: userKey },
+        {
+          $set: {
+            key: userKey,
+            email: user.email,
+            consoleSyncDir: uploadDir,
+            dataDir: uploadDir,
+            companyCode: companyCode,
+            enabledFiles: mergedEnabledFiles,
+          },
         },
-      },
-      { upsert: true }
-    );
-    await VfpConfig.updateOne(
-      { key: "vfp_sync_config" },
-      {
-        $set: {
-          consoleSyncDir: uploadDir,
-          dataDir: uploadDir,
-          companyCode: companyCode,
-          enabledFiles: mergedEnabledFiles,
+        { upsert: true }
+      );
+    } catch (_err) {
+      await VfpConfig.updateOne(
+        { email: user.email },
+        {
+          $set: {
+            consoleSyncDir: uploadDir,
+            dataDir: uploadDir,
+            companyCode: companyCode,
+            enabledFiles: mergedEnabledFiles,
+          },
+        }
+      ).catch(() => {});
+    }
+
+    try {
+      await VfpConfig.updateOne(
+        { key: "vfp_sync_config" },
+        {
+          $set: {
+            consoleSyncDir: uploadDir,
+            dataDir: uploadDir,
+            companyCode: companyCode,
+            enabledFiles: mergedEnabledFiles,
+          },
         },
-      },
-      { upsert: true }
-    );
+        { upsert: true }
+      );
+    } catch (_err) {}
 
     const isDirectSync = formData.get("directSync") === "true";
 

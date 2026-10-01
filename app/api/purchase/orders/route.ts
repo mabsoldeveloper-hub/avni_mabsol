@@ -1,7 +1,11 @@
 import { NextResponse } from "next/server";
 import connectDB from "@/lib/mongodb";
 import PurchaseOrder from "@/models/PurchaseOrder";
+import SalesMdis from "@/models/SalesMdis";
+import SalesDis from "@/models/SalesDis";
 import { consumeNextVoucherNumber, peekNextVoucherNumber } from "@/lib/voucherSeriesHelper";
+import { getFYDateRange, buildFYDateQuery } from "@/lib/financialYearHelper";
+import { getCompanyVfpFilter, combineFilters } from "@/lib/companyVfpHelper";
 
 export const dynamic = "force-dynamic";
 
@@ -24,7 +28,22 @@ export async function GET(req: Request) {
     const search = (searchParams.get("search") || searchParams.get("q") || "").trim();
 
     if (poId) {
-      const po = await PurchaseOrder.findById(poId).lean();
+      let po = await PurchaseOrder.findById(poId).lean();
+      if (!po) {
+        const mdis: any = await SalesMdis.findById(poId).lean();
+        if (mdis) {
+          po = {
+            _id: mdis._id,
+            poNumber: mdis.VCN || mdis.VOUCHER || "N/A",
+            poDate: mdis.DATE ? String(mdis.DATE).slice(0, 10) : "",
+            vendorName: mdis.NAME || mdis.PARNAM || mdis.CODEP || "Supplier",
+            netTotal: Math.abs(Number(mdis.FINAL || 0)),
+            status: "Pending",
+            items: [],
+            isLegacy: true,
+          } as any;
+        }
+      }
       if (!po) {
         return NextResponse.json({ success: false, message: "Purchase order not found" }, { status: 404 });
       }
@@ -63,12 +82,63 @@ export async function GET(req: Request) {
       ];
     }
 
-    const orders = await PurchaseOrder.find(query).sort({ createdAt: -1 }).lean();
+    const webOrders = await PurchaseOrder.find(query).sort({ createdAt: -1 }).lean();
+
+    // Fetch Marg VFP Orders (TYPE: 'W' or 'PO')
+    const companyVfpMatch = await getCompanyVfpFilter(searchParams);
+    const fyRange = await getFYDateRange(searchParams);
+    const dateMatchDate = buildFYDateQuery("DATE", fyRange.startDate, fyRange.endDate);
+
+    const mdisOrderFilter: any = combineFilters(
+      { TYPE: { $in: ["W", "PO"] } },
+      dateMatchDate,
+      companyVfpMatch
+    );
+
+    if (search) {
+      const sReg = new RegExp(search, "i");
+      mdisOrderFilter.$or = [
+        { VCN: sReg },
+        { VOUCHER: sReg },
+        { NAME: sReg },
+        { PARNAM: sReg },
+        { CODEP: sReg },
+      ];
+    }
+
+    const mdisOrders = await SalesMdis.find(mdisOrderFilter).sort({ DATE: -1 }).limit(100).lean();
+
+    const seenPoNos = new Set<string>();
+    webOrders.forEach((o: any) => {
+      if (o.poNumber) seenPoNos.add(String(o.poNumber).trim().toUpperCase());
+    });
+
+    const legacyOrders: any[] = [];
+    mdisOrders.forEach((m: any) => {
+      const poNo = String(m.VCN || m.VOUCHER || "").trim();
+      const poUpper = poNo.toUpperCase();
+      if (poUpper && seenPoNos.has(poUpper)) return;
+      if (poUpper) seenPoNos.add(poUpper);
+
+      legacyOrders.push({
+        _id: m._id,
+        poNumber: poNo || "N/A",
+        poDate: m.DATE ? String(m.DATE).slice(0, 10) : "",
+        vendorName: m.NAME || m.PARNAM || m.CODEP || "Supplier",
+        vendorCode: m.CODEP || "",
+        netTotal: Math.abs(Number(m.FINAL || 0)),
+        status: "Pending",
+        items: [],
+        isLegacy: true,
+      });
+    });
+
+    const allOrders = [...webOrders, ...legacyOrders];
 
     return NextResponse.json({
       success: true,
-      count: orders.length,
-      orders,
+      count: allOrders.length,
+      orders: allOrders,
     });
   } catch (error: any) {
     console.error("GET Purchase Orders Error:", error);
@@ -207,6 +277,67 @@ export async function POST(req: Request) {
       remarks: remarks || "",
     });
 
+    // -------------------------------------------------------------
+    // SAVE TO MARG VFP TABLES: SalesMdis (Header), SalesDis (Items)
+    // -------------------------------------------------------------
+    try {
+      const vfpDate = poDate || new Date().toISOString().slice(0, 10);
+      const vfpVendorCode = String(vendorCode || vendorId || "SUPP001").trim().toUpperCase();
+
+      await SalesMdis.create({
+        VOUCHER: poNumber,
+        VCN: poNumber,
+        TYPE: "W",
+        CODEP: vfpVendorCode,
+        NAME: vendorName,
+        PARNAM: vendorName,
+        DATE: vfpDate,
+        FINAL: netTotal,
+        NETAMT: netTotal,
+        AMOUNT: subtotal,
+        DISCOUNT: totalDiscount,
+        TAXAMO: totalTax,
+        FREIGHT: freight,
+        PONO: poNumber,
+        companyId: companyId || "",
+        companyCode: companyCode || "",
+        fyId: fyId || "",
+        fyCode: fyCode || "",
+        _vfpTable: "mdis",
+        _vfpSourceKey: `W_${poNumber}`,
+      });
+
+      for (let i = 0; i < processedItems.length; i++) {
+        const item: any = processedItems[i];
+        await SalesDis.create({
+          VOUCHER: poNumber,
+          VCN: poNumber,
+          TYPE: "W",
+          CODE: item.productCode || item.productId || `P${i + 1}`,
+          BATCH: item.batchNo || "",
+          QTY: Number(item.qty || 0),
+          FREE: Number(item.freeQty || 0),
+          RATE: Number(item.rate || 0),
+          MRP: Number(item.mrp || 0),
+          EXP: item.expDate || "",
+          DISC1: Number(item.discountPercent || 0),
+          CGST: cgst ? cgst : 0,
+          SSTA: sgst ? sgst : 0,
+          IGST: igst ? igst : 0,
+          AMMMWOD: Number(item.taxableAmount || 0),
+          AMMMOUNT: Number(item.total || 0),
+          companyId: companyId || "",
+          companyCode: companyCode || "",
+          fyId: fyId || "",
+          fyCode: fyCode || "",
+          _vfpTable: "dis",
+          _vfpSourceKey: `W_${poNumber}_${item.productCode || i}`,
+        });
+      }
+    } catch (margErr) {
+      console.error("Error saving Purchase Order to Marg VFP tables (SalesMdis/SalesDis):", margErr);
+    }
+
     return NextResponse.json({
       success: true,
       message: "Purchase Order created successfully",
@@ -217,3 +348,4 @@ export async function POST(req: Request) {
     return NextResponse.json({ success: false, message: error?.message || "Failed to create PO" }, { status: 500 });
   }
 }
+

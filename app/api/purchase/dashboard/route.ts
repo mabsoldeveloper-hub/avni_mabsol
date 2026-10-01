@@ -123,9 +123,13 @@ export async function GET(req: Request) {
       }
     });
 
+    const seenKeys = new Set<string>();
+
     // Process Web Purchase Bills
     let webPurchasesTotal = 0;
     newBills.forEach((b: any) => {
+      const key = String(b.billNumber || b.supplierInvoiceNo || "").trim().toUpperCase();
+      if (key) seenKeys.add(key);
       webPurchasesTotal += Number(b.netAmount || 0);
       if (b.vendorName) supplierSet.add(b.vendorName);
 
@@ -148,7 +152,13 @@ export async function GET(req: Request) {
       }
     });
 
-    // Process Legacy SalesMdis (Purchases & Returns)
+    // Process Web Returns to seed seenKeys
+    newReturns.forEach((r: any) => {
+      const key = String(r.vcn || r.originalBillNo || "").trim().toUpperCase();
+      if (key) seenKeys.add(key);
+    });
+
+    // Process Legacy SalesMdis (Purchases & Returns) - skip if already in web collections
     let vfpPurchasesTotal = 0;
     let vfpReturnsTotal = 0;
 
@@ -157,7 +167,11 @@ export async function GET(req: Request) {
     const recentBills: any[] = [];
 
     salesMdisRows.forEach((row: any) => {
-      const finalAmt = Math.abs(Number(row.FINAL || 0));
+      const vcn = String(row.VCN || row.VOUCHER || row.PM || "").trim().toUpperCase();
+      if (vcn && seenKeys.has(vcn)) return;
+      if (vcn) seenKeys.add(vcn);
+
+      const finalAmt = Math.abs(Number(row.FINAL || row.NETAMT || 0));
       const type = String(row.TYPE || "").toUpperCase();
       const isReturn = type === "D" || type === "PR" || type === "DEBIT_NOTE";
       const suppName = row.NAME || row.PARNAM || row.CODEP || "Supplier";

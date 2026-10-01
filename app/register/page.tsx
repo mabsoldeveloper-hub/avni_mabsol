@@ -163,6 +163,7 @@ export default function RegisterPage() {
   const [drugLicenseNo, setDrugLicenseNo] = useState("");
 
   const [name, setName] = useState("");
+  const [mobile, setMobile] = useState("");
 
   const [email, setEmail] = useState("");
   const [emailOtp, setEmailOtp] = useState("");
@@ -385,6 +386,7 @@ export default function RegisterPage() {
     city.trim() &&
     state.trim() &&
     pincode.trim().length === 6 &&
+    mobile.replace(/\D/g, "").length === 10 &&
     email.trim().includes("@") &&
     emailVerified &&
     password &&
@@ -599,6 +601,26 @@ export default function RegisterPage() {
       const json = await res.json();
       if (json.exists) {
         showToast(json.message || "This email address is already registered.", "error");
+      }
+    } catch {
+      // Ignore
+    }
+  }
+
+  // Real-time phone duplicate check
+  async function handleMobileBlur() {
+    const cleanMob = mobile.replace(/\D/g, "");
+    if (cleanMob.length !== 10) return;
+
+    try {
+      const res = await fetch(API.CHECK_EXISTS, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ mobile: cleanMob }),
+      });
+      const json = await res.json();
+      if (json.exists) {
+        showToast(json.message || "This phone number is already registered.", "error");
       }
     } catch {
       // Ignore
@@ -843,7 +865,7 @@ export default function RegisterPage() {
       const payload = {
         name: adminName,
         email: email.trim().toLowerCase(),
-        mobile: "",
+        mobile: mobile.replace(/\D/g, ""),
         password,
         role: "Admin",
         companyName: companyName.trim(),
@@ -851,6 +873,7 @@ export default function RegisterPage() {
         drugLicenseNo: drugLicenseNo.trim(),
         address: address.trim(),
         city: city.trim(),
+        state: state.trim(),
         pincode: pincode.trim(),
         additionalGstins: branchCount > 0 ? additionalGsts.slice(0, branchCount) : [],
         termsAccepted: true,

@@ -45,7 +45,7 @@ export async function sendOtpEmail(email: string, otp: string) {
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Mabsol CRM Verification Code</title>
+    <title>MabsolCrm Verification Code</title>
   </head>
   <body style="margin:0; padding:0; background:${SURFACE}; font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
     <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:${SURFACE}; padding:32px 16px;">

@@ -164,7 +164,7 @@ export async function POST(request: NextRequest) {
         let prgLines = [
           "SET SAFETY OFF",
           "SET TALK OFF",
-          'WAIT WINDOW "MabsolCrm - Starting Import..." TIMEOUT 1',
+          'WAIT WINDOW "MabsolCrm - Starting MabsolCRM Import..." TIMEOUT 1',
           ""
         ];
 

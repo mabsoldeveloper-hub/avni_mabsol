@@ -124,7 +124,12 @@ export default function VfpConfigWizard({
         setAvailableFiles(data.dbfFiles || []);
         setStep(2); // Proceed to selecting files
       } else {
-        setError(data.error || "Failed to load database files.");
+        const errorMsg = data.error || "Failed to load database files.";
+        if (errorMsg.includes("does not exist") || errorMsg.includes("not a directory")) {
+          setError(`${errorMsg}. Tip: If this ERP folder is on your local PC, run the MabsolSyncAgent Desktop App on that PC to sync your files directly to the cloud.`);
+        } else {
+          setError(errorMsg);
+        }
       }
     } catch {
       setError("An error occurred during database file scan.");

@@ -7,6 +7,10 @@ import { sendOtpEmail } from "@/lib/sendEmail";
 import { sendWhatsAppOTP } from "@/lib/whatsapp";
 import Otp from "@/models/Otp";
 import User from "@/models/User";
+import Company from "@/models/Company";
+import Tenant from "@/models/Tenant";
+import VfpConfig from "@/models/VfpConfig";
+import Role from "@/models/Role";
 import {
   ensureSuperAdminUser,
   isSuperAdminUser,
@@ -82,24 +86,70 @@ export async function POST(req: Request) {
     const isAgent = Boolean(isDesktopAgent);
     const sessionTiming = getUserSessionDuration(user);
 
+    let effectiveRoleType = isSuperAdmin ? "SuperAdmin" : (user.roleType || "Admin");
+    if (!isSuperAdmin && user.roleId) {
+      try {
+        const roleDoc: any = await Role.findById(user.roleId).lean();
+        if (roleDoc?.roleName) {
+          effectiveRoleType = roleDoc.roleName;
+        }
+      } catch {}
+    }
+    const isAdmin =
+      effectiveRoleType?.toLowerCase() === "admin" ||
+      user.roleName?.toLowerCase() === "admin" ||
+      user.roleType?.toLowerCase() === "admin" ||
+      user.dashboardType === "admin";
+
+    if (isAdmin) {
+      effectiveRoleType = "Admin";
+    } else {
+      // Check if user is the owner/creator of the company
+      const ownedCompany = await Company.findOne({
+        $or: [{ createdBy: user._id }, { email: user.email }],
+      }).lean();
+      if (ownedCompany) {
+        effectiveRoleType = "Admin";
+      }
+    }
+
     const token = jwt.sign(
       {
         id: user._id,
+        email: user.email,
         tenantId: user.tenantId,
         roleId: user.roleId,
+        roleName: effectiveRoleType,
         companyId: user.companyId,
-        roleType: user.roleType || (isSuperAdmin ? "SuperAdmin" : "Admin"),
+        roleType: effectiveRoleType,
         isSuperAdmin,
       },
       process.env.JWT_SECRET || "mabsol_super_secret_jwt_key_2026",
       { expiresIn: (isAgent ? "30d" : sessionTiming.jwtExpiry) as any }
     );
 
+    let companyName = "";
+    try {
+      if (user.companyId) {
+        const comp: any = await Company.findById(user.companyId).lean();
+        if (comp) companyName = comp.companyName || comp.name || "";
+      }
+      if (!companyName && user.tenantId) {
+        const tenant: any = await Tenant.findOne({ tenantId: user.tenantId }).lean();
+        if (tenant) companyName = tenant.companyName || tenant.name || "";
+      }
+      if (!companyName) {
+        const vfp: any = await VfpConfig.findOne({ email: user.email }).lean();
+        if (vfp) companyName = vfp.companyName || "";
+      }
+    } catch {}
+
     const userResponse = {
       _id: user._id,
       tenantId: user.tenantId,
       name: user.name,
       email: user.email,
+      companyName,
       roleId: user.roleId,
       roleType: user.roleType,
       companyId: user.companyId,
@@ -110,9 +160,14 @@ export async function POST(req: Request) {
       accessValidUntil: user.accessValidUntil,
     };
 
+    const roleSlug = user.roleType
+      ? String(user.roleType).toLowerCase().trim().replace(/[\s_]+/g, "-")
+      : "admin";
+
     const redirectUrl = isSuperAdmin || user.roleType === "SuperAdmin"
       ? "/dashboard/super-admin"
-      : "/dashboard";
+      : `/dashboard/${roleSlug}`;
+
 
     const response = NextResponse.json({
       success: true,

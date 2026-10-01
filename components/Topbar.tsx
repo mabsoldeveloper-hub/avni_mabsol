@@ -214,7 +214,11 @@ export default function Topbar({
 
   useEffect(() => {
     fetchNotifications();
-    const interval = setInterval(fetchNotifications, 60000);
+    const interval = setInterval(() => {
+      if (typeof document !== "undefined" && !document.hidden) {
+        fetchNotifications();
+      }
+    }, 180000); // 3 minutes, only when tab is visible
     return () => clearInterval(interval);
   }, []);
 
@@ -335,7 +339,7 @@ export default function Topbar({
                 style={{ borderRadius: "9999px" }}
                 title="Select Financial Year"
               >
-                {fyList.map((fy) => (
+                {/* {fyList.map((fy) => (
                   <option key={fy._id} value={fy._id} className="text-slate-900 font-medium">
                     {fy.isAll
                       ? fy.fyName
@@ -343,7 +347,17 @@ export default function Topbar({
                         ? `${fy.fyCode} - FY ${fy.fyName}`
                         : `FY ${fy.fyName}`}
                   </option>
-                ))}
+                ))} */}
+                {fyList.map((fy) => (
+                <option
+                  key={fy._id}
+                  value={fy._id}
+                  className="text-slate-900"
+                >
+                  {fy.isAll ? "All FYs" : fy.fyName}
+                </option>
+              ))}
+
               </select>
             </div>
           </div>
@@ -386,13 +400,23 @@ export default function Topbar({
                 className="topbar-pill-btn w-full pl-6 pr-2 py-1 rounded-full bg-emerald-50 dark:bg-emerald-950/80 text-emerald-900 dark:text-emerald-200 text-[10px] font-bold border border-emerald-200 dark:border-emerald-800/60 focus:outline-none cursor-pointer truncate"
                 style={{ borderRadius: "9999px" }}
               >
-                {fyList.map((fy) => (
+                {/* {fyList.map((fy) => (
                   <option key={fy._id} value={fy._id} className="text-slate-900">
                     {fy.isAll
                       ? "All FYs"
-                      : fy.fyCode
-                        ? `${fy.fyCode}`
+                      : fy.fyCode ? `${fy.fyCode}`
                         : `FY ${fy.fyName}`}
+                  </option>
+                ))} */}
+                {fyList.map((fy) => (
+                  <option
+                    key={fy._id}
+                    value={fy._id}
+                    className="text-slate-900"
+                  >
+                    {fy.isAll
+                      ? "All FYs"
+                      : `${fy.fyName}`}
                   </option>
                 ))}
               </select>
@@ -738,19 +762,31 @@ export default function Topbar({
               </div>
 
               <div className="py-1">
-                <a
-                  href="/dashboard/profile"
-                  className="block px-3.5 py-2 text-[13px] text-gray-700 dark:text-slate-300 hover:bg-indigo-50 dark:hover:bg-slate-800 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors duration-150 font-medium"
-                >
-                  My Profile
-                </a>
+                {(() => {
+                  const rolePath = checkIsSuperAdmin(user)
+                    ? "super-admin"
+                    : ((user?.roleId?.roleName || (user as any)?.roleType || (user as any)?.role || "admin"))
+                        .toLowerCase()
+                        .trim()
+                        .replace(/[\s_]+/g, "-");
+                  return (
+                    <>
+                      <a
+                        href={`/dashboard/${rolePath}/profile`}
+                        className="block px-3.5 py-2 text-[13px] text-gray-700 dark:text-slate-300 hover:bg-indigo-50 dark:hover:bg-slate-800 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors duration-150 font-medium"
+                      >
+                        My Profile
+                      </a>
 
-                <a
-                  href="/dashboard/settings"
-                  className="block px-3.5 py-2 text-[13px] text-gray-700 dark:text-slate-300 hover:bg-indigo-50 dark:hover:bg-slate-800 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors duration-150 font-medium"
-                >
-                  Settings
-                </a>
+                      <a
+                        href={`/dashboard/${rolePath}/settings`}
+                        className="block px-3.5 py-2 text-[13px] text-gray-700 dark:text-slate-300 hover:bg-indigo-50 dark:hover:bg-slate-800 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors duration-150 font-medium"
+                      >
+                        Settings
+                      </a>
+                    </>
+                  );
+                })()}
               </div>
 
               <div className="px-3 py-1.5">

@@ -494,7 +494,7 @@ export default function CreateCompanyPage() {
             </div>
             <div className="cw-brand-text">
               <span className="cw-brand-name" style={{ fontFamily: "var(--font-display)" }}>MabsolCrm</span>
-              <span className="cw-brand-sub">Register a New Pharma Enterprise</span>
+              <span className="cw-brand-sub">Register a New Enterprise</span>
             </div>
           </div>
 
@@ -726,7 +726,7 @@ export default function CreateCompanyPage() {
                       <circle cx="12" cy="9" r="2.5" stroke="currentColor" strokeWidth="1.8"/>
                     </svg>
                   </span>
-                  <textarea rows={2} placeholder="e.g. Plot 17, GIDC Pharma SEZ, Sector 28, Near Water Tank" value={address} onChange={(e) => setAddress(e.target.value)} />
+                  <textarea rows={2} placeholder="e.g. Plot 17, GIDC SEZ, Sector 28, Near Water Tank" value={address} onChange={(e) => setAddress(e.target.value)} />
                 </div>
               </div>
 

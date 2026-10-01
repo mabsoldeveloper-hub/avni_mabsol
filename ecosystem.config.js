@@ -2,7 +2,7 @@ module.exports = {
   apps: [
    
     // ==========================================
-    // CONFIGURATION (avni.mabsolinfotech.cloud)
+    // CONFIGURATION (anvi.mabsolinfotech.cloud)
     // Runs on Port 3004 to prevent conflicts with other services
     // ==========================================
     {
@@ -16,10 +16,6 @@ module.exports = {
       autorestart: true,
       exp_backoff_restart_delay: 100,
       env: {
-        NODE_ENV: "production",
-        PORT: 3004,
-      },
-      env_production: {
         NODE_ENV: "production",
         PORT: 3004,
       },

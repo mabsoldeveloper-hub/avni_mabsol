@@ -10,6 +10,7 @@ export default function AiPurchaseBillEntryPage() {
         </div>
       }
     >
+      
       <AiPurchaseBillEntry />
     </Suspense>
   );

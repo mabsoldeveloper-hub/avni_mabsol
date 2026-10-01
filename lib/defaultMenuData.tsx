@@ -372,6 +372,26 @@ export function renderMenuIcon(iconName: string): React.ReactNode {
       return <FaLayerGroup />;
   }
 }
+const VALID_ROLES = new Set([
+  "admin",
+  "super-admin",
+  "reception",
+  "manager",
+  "sales-executive",
+  "mr",
+  "asm",
+  "rsm",
+  "zsm",
+  "nsm",
+  "vp",
+  "director",
+  "md",
+  "telecaller",
+  "operator",
+  "accountant",
+  "user",
+]);
+
 export function getRoleBasedHref(
   href: string | undefined,
   role: string | undefined
@@ -386,11 +406,7 @@ export function getRoleBasedHref(
   }
 
   // Clean and normalize role (e.g. "Super Admin" -> "super-admin", "MR" -> "mr")
-  const cleanRole = (role || "").toLowerCase().trim().replace(/[\s_]+/g, "-");
-
-  if (!cleanRole) {
-    return href;
-  }
+  const cleanRole = (role || "").toLowerCase().trim().replace(/[\s_]+/g, "-") || "admin";
 
   // Root /dashboard or /dashboard/ -> /dashboard/${cleanRole}
   if (href === "/dashboard" || href === "/dashboard/") {
@@ -399,14 +415,16 @@ export function getRoleBasedHref(
 
   if (href.startsWith("/dashboard/")) {
     const afterDashboard = href.slice("/dashboard/".length);
+    const segments = afterDashboard.split("/").filter(Boolean);
+    const firstSegment = segments[0]?.toLowerCase();
 
-    // If role is already present at the start of the path:
-    // e.g. href = "/dashboard/admin/sales", role = "admin"
-    // or href = "/dashboard/super-admin/accounts", role = "super-admin"
-    if (afterDashboard === cleanRole || afterDashboard.startsWith(`${cleanRole}/`)) {
-      return href;
+    if (VALID_ROLES.has(firstSegment)) {
+      // First segment is already a valid role. Replace with target cleanRole
+      segments[0] = cleanRole;
+      return `/dashboard/${segments.join("/")}`;
     }
 
+    // First segment is not a role (e.g. "sales/invoice", "mabsolcrmsync", "settings")
     return `/dashboard/${cleanRole}/${afterDashboard}`;
   }
 

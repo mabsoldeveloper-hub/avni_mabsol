@@ -40,6 +40,23 @@ const VfpConfigSchema = new mongoose.Schema(
       required: false,
       default: 10,
     },
+    companyCode: {
+      type: String,
+      required: false,
+      default: "DEFAULT",
+    },
+    lastSyncedAt: {
+      type: Date,
+      required: false,
+    },
+    lastCheckedAt: {
+      type: Date,
+      required: false,
+    },
+    lastAutoSyncResult: {
+      type: mongoose.Schema.Types.Mixed,
+      required: false,
+    },
     useVfpEngine: {
       type: Boolean,
       required: false,
@@ -97,6 +114,22 @@ const VfpConfigSchema = new mongoose.Schema(
       type: Date,
       required: false,
     },
+    authorizedDevices: {
+      type: [
+        {
+          deviceId: { type: String, required: true },
+          deviceName: { type: String, default: "Client PC" },
+          licenseKey: { type: String, required: true },
+          activatedAt: { type: Date, default: Date.now },
+          expiresAt: { type: Date },
+          lastSeenAt: { type: Date, default: Date.now },
+          status: { type: String, enum: ["active", "revoked"], default: "active" },
+          activationEmail: { type: String, default: "" },
+        },
+      ],
+      required: false,
+      default: [],
+    },
     usedLicenses: {
       type: [
         {
@@ -152,6 +185,7 @@ const VfpConfigSchema = new mongoose.Schema(
     },
   },
   {
+    strict: false,
     timestamps: true,
   }
 );

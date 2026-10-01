@@ -18,6 +18,19 @@ import {
   FileCode2,
 } from "lucide-react";
 
+interface AuthorizedDevice {
+  deviceId: string;
+  fullDeviceId: string;
+  deviceName: string;
+  licenseKey: string;
+  activatedAt: string;
+  expiresAt: string;
+  lastSeenAt: string;
+  status: string;
+  isExpired: boolean;
+  daysRemaining: number;
+}
+
 interface LicenseDetails {
   license: string;
   licenseExpiresAt: string | null;
@@ -27,6 +40,7 @@ interface LicenseDetails {
   boundDeviceId: string;
   boundDeviceName: string;
   isBound: boolean;
+  authorizedDevices?: AuthorizedDevice[];
 }
 
 export default function VfpSettingsPage() {
@@ -208,11 +222,11 @@ export default function VfpSettingsPage() {
             </button>
 
             <a
-              href="/api/mabsolcrmsync/download-agent?type=portable"
+              href="/api/mabsolcrmsync/download-agent?type=zip"
               className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-semibold shadow-xs transition-colors"
             >
               <Download size={13} />
-              <span>Download agent (.EXE)</span>
+              <span>Download agent (.ZIP)</span>
             </a>
           </div>
         </div>
@@ -388,9 +402,55 @@ export default function VfpSettingsPage() {
               )}
             </div>
 
+            {/* Multi-Device Sync Authorized Machines */}
+            <div className="bg-slate-50 border border-slate-200/90 rounded-lg p-2.5 space-y-2">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-1.5 text-xs font-bold text-slate-800">
+                  <Monitor size={13} className="text-slate-600" />
+                  <span>Authorized Machines ({licenseInfo.authorizedDevices?.length || (licenseInfo.isBound ? 1 : 0)})</span>
+                </div>
+                <span className="text-[10px] text-blue-600 bg-blue-50 px-2 py-0.5 rounded font-medium border border-blue-200">
+                  Multi-Device Enabled
+                </span>
+              </div>
+
+              {licenseInfo.authorizedDevices && licenseInfo.authorizedDevices.length > 0 ? (
+                <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1">
+                  {licenseInfo.authorizedDevices.map((dev, idx) => (
+                    <div key={idx} className="bg-white border border-slate-200/80 rounded-md p-2 flex items-center justify-between text-xs">
+                      <div>
+                        <div className="font-bold text-slate-900 flex items-center gap-1.5">
+                          <span>{dev.deviceName}</span>
+                          <span className={`text-[9px] px-1.5 py-0.2 rounded font-semibold ${dev.isExpired ? 'bg-rose-50 text-rose-600 border border-rose-200' : 'bg-emerald-50 text-emerald-700 border border-emerald-200'}`}>
+                            {dev.isExpired ? 'Expired' : `${dev.daysRemaining}d left`}
+                          </span>
+                        </div>
+                        <div className="text-[10.5px] font-mono text-slate-400 mt-0.5">
+                          ID: {dev.deviceId} • Key: {dev.licenseKey}
+                        </div>
+                      </div>
+                      <div className="text-[10.5px] text-slate-400 text-right">
+                        {dev.lastSeenAt ? `Seen ${new Date(dev.lastSeenAt).toLocaleDateString()}` : 'Active'}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-[11px] text-slate-500 bg-white border border-slate-200/80 rounded-md p-2">
+                  {licenseInfo.isBound
+                    ? `Primary Machine: ${licenseInfo.boundDeviceName || "Bound"}`
+                    : "No machines activated yet. Start the Desktop EXE on any computer to activate."}
+                </div>
+              )}
+
+              <p className="text-[10px] text-slate-500 m-0">
+                💡 <strong>Need to run sync on another computer?</strong> Open the Desktop EXE on that computer and log in with your email. You will receive an OTP code to instantly activate a new 30-day device license key for that machine.
+              </p>
+            </div>
+
             {/* Policy disclaimer */}
             <p className="text-[10.5px] text-slate-400 leading-normal m-0 pt-0.5">
-              Policy: one key per machine. Once generated, a key cannot be replaced until its 30-day validity period expires.
+              Policy: each computer receives a hardware-bound license. Additional computers can be authorized via email OTP verification.
             </p>
           </div>
 
@@ -407,7 +467,7 @@ export default function VfpSettingsPage() {
               </span>
             </div>
 
-            {/* Download Option 1: Portable Client */}
+            {/* Download Option 1: Portable Client (ZIP - Recommended) */}
             <div className="rounded-lg border-2 border-blue-500/80 bg-blue-50/20 p-2.5 sm:p-3 flex items-center justify-between gap-3">
               <div className="flex items-center gap-2.5">
                 <div className="w-8 h-8 rounded-md bg-white border border-blue-200 flex items-center justify-center text-slate-700 shrink-0">
@@ -416,14 +476,39 @@ export default function VfpSettingsPage() {
                 <div>
                   <div className="flex items-center gap-1.5">
                     <strong className="text-xs sm:text-sm font-bold text-slate-900">
-                      Portable client
+                      Portable client (.ZIP)
                     </strong>
                     <span className="text-[9.5px] uppercase font-bold tracking-wider px-1.5 py-0.2 rounded-full bg-blue-600 text-white">
                       Recommended
                     </span>
                   </div>
                   <span className="text-[11px] text-slate-500 block mt-0.5">
-                    Direct run • no installation • 76.4 MB
+                    Clean download • No Chrome warning • 76.3 MB
+                  </span>
+                </div>
+              </div>
+
+              <a
+                href="/api/mabsolcrmsync/download-agent?type=zip"
+                title="Download Portable ZIP"
+                className="w-8 h-8 rounded-lg bg-blue-600 hover:bg-blue-700 text-white flex items-center justify-center shadow-xs transition-colors shrink-0"
+              >
+                <Download size={14} />
+              </a>
+            </div>
+
+            {/* Download Option 2: Direct Standalone EXE */}
+            <div className="rounded-lg border border-slate-200 bg-white p-2.5 sm:p-3 flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-md bg-slate-50 border border-slate-200 flex items-center justify-center text-slate-700 shrink-0">
+                  <AppWindow size={16} />
+                </div>
+                <div>
+                  <strong className="text-xs sm:text-sm font-bold text-slate-900 block">
+                    Direct portable (.EXE)
+                  </strong>
+                  <span className="text-[11px] text-slate-500 block mt-0.5">
+                    Standalone executable without ZIP • 76.4 MB
                   </span>
                 </div>
               </div>
@@ -431,13 +516,13 @@ export default function VfpSettingsPage() {
               <a
                 href="/api/mabsolcrmsync/download-agent?type=portable"
                 title="Download Portable EXE"
-                className="w-8 h-8 rounded-lg bg-blue-600 hover:bg-blue-700 text-white flex items-center justify-center shadow-xs transition-colors shrink-0"
+                className="w-8 h-8 rounded-lg bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-700 flex items-center justify-center transition-colors shrink-0"
               >
                 <Download size={14} />
               </a>
             </div>
 
-            {/* Download Option 2: Windows Installer */}
+            {/* Download Option 3: Windows Installer */}
             <div className="rounded-lg border border-slate-200 bg-white p-2.5 sm:p-3 flex items-center justify-between gap-3">
               <div className="flex items-center gap-2.5">
                 <div className="w-8 h-8 rounded-md bg-slate-50 border border-slate-200 flex items-center justify-center text-slate-700 shrink-0">

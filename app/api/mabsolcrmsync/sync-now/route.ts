@@ -104,7 +104,50 @@ export async function POST(request: NextRequest) {
     }
 
     if (resolvedDataDir) {
-      // Execute direct server-side sync in background so HTTP connection does not time out
+      // Check if files in resolvedDataDir actually need syncing or if they are already fully synced
+      let hasChanges = false;
+      const dbfFiles = fs.existsSync(resolvedDataDir)
+        ? fs.readdirSync(resolvedDataDir).filter((f) => f.toLowerCase().endsWith(".dbf"))
+        : [];
+
+      if (dbfFiles.length > 0) {
+        const states = await VfpSyncState.find({ email: user.email }).lean();
+        const stateMap = new Map<string, any>(
+          states.map((s: any) => [s.fileName?.toLowerCase() || s.tableName?.toLowerCase(), s])
+        );
+
+        for (const fileName of dbfFiles) {
+          const filePath = path.join(resolvedDataDir, fileName);
+          try {
+            const stats = fs.statSync(filePath);
+            const baseName = fileName.replace(/\.dbf$/i, "").toLowerCase();
+            const state = stateMap.get(fileName.toLowerCase()) || stateMap.get(baseName);
+            if (!state || state.status !== "success" || !state.lastFileMtimeMs || Math.abs(state.lastFileMtimeMs - stats.mtimeMs) > 1000) {
+              hasChanges = true;
+              break;
+            }
+          } catch {
+            hasChanges = true;
+            break;
+          }
+        }
+      }
+
+      if (!hasChanges && dbfFiles.length > 0) {
+        return NextResponse.json({
+          success: true,
+          queued: false,
+          alreadySynced: true,
+          message: `All ${dbfFiles.length} table(s) are already synced and up to date in the database.`,
+          result: {
+            importedTables: dbfFiles.length,
+            importedRows: 0,
+            alreadySynced: true,
+          },
+        });
+      }
+
+      // Execute direct server-side sync in background only when changes are detected
       performDirectServerSync(user.email, resolvedDataDir).catch((err) => {
         console.error("Direct server sync background error:", err);
       });

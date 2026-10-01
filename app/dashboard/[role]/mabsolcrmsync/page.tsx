@@ -229,6 +229,8 @@ export default async function VfpDashboardPage({
           lastSyncedAt={status.lastSyncedAt}
           pendingCommandCount={status.pendingCommandCount || 0}
           userEmail={user.email}
+          companyCode={status.companyCode || "DEFAULT"}
+          companyName={status.companyName || "Default Company"}
         />
 
         {/* Sync Activity Logs Card - Only accessible to Admin users */}

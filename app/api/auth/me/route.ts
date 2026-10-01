@@ -1,5 +1,9 @@
 import { NextResponse } from "next/server";
+import jwt from "jsonwebtoken";
 import { getCurrentUser } from "@/lib/auth";
+import Company from "@/models/Company";
+import Tenant from "@/models/Tenant";
+import VfpConfig from "@/models/VfpConfig";
 
 export const dynamic = "force-dynamic";
 
@@ -46,6 +50,22 @@ export async function GET() {
     userObj.role = "SuperAdmin";
     userObj.roleName = "SuperAdmin";
   } else {
+    const isAdmin = Boolean(
+      roleName === "admin" ||
+      roleName.includes("admin") ||
+      roleType === "admin" ||
+      role === "admin" ||
+      userObj.isAdmin === true ||
+      userObj.dashboardType === "admin"
+    );
+
+    if (isAdmin) {
+      userObj.roleType = "Admin";
+      userObj.roleName = "Admin";
+      userObj.role = "Admin";
+      userObj.isAdmin = true;
+    }
+
     // Non-super-admin: verify if active and approved
     const statusLower = String(userObj.status || "").trim().toLowerCase();
     const isSuspendedOrInactive =
@@ -99,7 +119,24 @@ export async function GET() {
     }
   }
 
-  return NextResponse.json(
+  try {
+    if (!userObj.companyName) {
+      if (userObj.companyId) {
+        const comp: any = await Company.findById(userObj.companyId).lean();
+        if (comp) userObj.companyName = comp.companyName || comp.name || "";
+      }
+      if (!userObj.companyName && userObj.tenantId) {
+        const tenant: any = await Tenant.findOne({ tenantId: userObj.tenantId }).lean();
+        if (tenant) userObj.companyName = tenant.companyName || tenant.name || "";
+      }
+      if (!userObj.companyName) {
+        const vfp: any = await VfpConfig.findOne({ email: userObj.email }).lean();
+        if (vfp) userObj.companyName = vfp.companyName || "";
+      }
+    }
+  } catch {}
+
+  const response = NextResponse.json(
     {
       success: true,
       user: userObj,
@@ -110,4 +147,34 @@ export async function GET() {
       },
     }
   );
+
+  // If user is Admin, ensure cookie has the normalized Admin roleType to eliminate stale MR tokens
+  if (userObj.roleType === "Admin" || userObj.roleName === "Admin" || isSuperAdmin) {
+    try {
+      const activeRoleType = isSuperAdmin ? "SuperAdmin" : "Admin";
+      const token = jwt.sign(
+        {
+          id: userObj._id,
+          email: userObj.email,
+          tenantId: userObj.tenantId,
+          roleId: userObj.roleId?._id || userObj.roleId,
+          roleName: activeRoleType,
+          roleType: activeRoleType,
+          companyId: userObj.companyId?._id || userObj.companyId,
+          isSuperAdmin: Boolean(isSuperAdmin),
+        },
+        process.env.JWT_SECRET || "mabsol_super_secret_jwt_key_2026",
+        { expiresIn: "30d" }
+      );
+      response.cookies.set("token", token, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === "production",
+        sameSite: "lax",
+        path: "/",
+        maxAge: 30 * 24 * 60 * 60,
+      });
+    } catch {}
+  }
+
+  return response;
 }

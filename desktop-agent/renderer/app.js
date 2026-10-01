@@ -44,12 +44,18 @@ const logoutBtn = document.getElementById("logoutBtn");
 
 // DOM Elements - Config Form
 const configForm = document.getElementById("configForm");
+const operatorNameInput = document.getElementById("operatorNameInput");
+const operatorEmailInput = document.getElementById("operatorEmailInput");
+const operatorStatusBadge = document.getElementById("operatorStatusBadge");
+const termsConsentCheckbox = document.getElementById("termsConsentCheckbox");
+const termsNoticeWarning = document.getElementById("termsNoticeWarning");
 const companyNameInput = document.getElementById("companyNameInput");
 const companyCodeInput = document.getElementById("companyCodeInput");
 const sourceDirInput = document.getElementById("sourceDirInput");
 const sourceDirStatusBadge = document.getElementById("sourceDirStatusBadge");
 const destDirInput = document.getElementById("destDirInput");
 const licenseKeyInput = document.getElementById("licenseKeyInput");
+const productKeyInput = document.getElementById("productKeyInput");
 const btnVerifyLicenseKeyManual = document.getElementById("btnVerifyLicenseKeyManual");
 const licenseCountdownBadge = document.getElementById("licenseCountdownBadge");
 const licenseCountdownText = document.getElementById("licenseCountdownText");
@@ -133,6 +139,31 @@ function showToast(message, type = "info") {
 window.escapeHtml = escapeHtml;
 window.showToast = showToast;
 
+function updateTermsState(isAgreed) {
+  if (syncNowBtn) {
+    if (isAgreed) {
+      syncNowBtn.classList.remove("terms-disabled");
+    } else {
+      syncNowBtn.classList.add("terms-disabled");
+    }
+  }
+  if (saveConfigBtn) {
+    if (isAgreed) {
+      saveConfigBtn.classList.remove("terms-disabled");
+    } else {
+      saveConfigBtn.classList.add("terms-disabled");
+    }
+  }
+  if (termsNoticeWarning && isAgreed) {
+    termsNoticeWarning.classList.add("hidden");
+  }
+  const box = document.querySelector(".terms-consent-box");
+  if (box && isAgreed) {
+    box.classList.remove("has-warning");
+  }
+}
+window.updateTermsState = updateTermsState;
+
 function updateActiveServerButtons(url) {
   const normalized = (url || "").trim().toLowerCase().replace(/\/+$/, "");
   const buttons = [
@@ -207,11 +238,18 @@ async function showDashboard(session) {
   authView.classList.add("hidden");
   dashboardView.classList.remove("hidden");
 
-  // Populate user pill
+  // Populate user pill and top operator fields
   const userName = session.user?.name || session.email || "Operator";
   navUserName.textContent = userName;
   navUserInitial.textContent = userName.charAt(0).toUpperCase();
   currentAuthEmail = session.email || "";
+
+  if (operatorNameInput && (!operatorNameInput.value || operatorNameInput.value === "Operator")) {
+    operatorNameInput.value = userName;
+  }
+  if (operatorEmailInput && !operatorEmailInput.value) {
+    operatorEmailInput.value = currentAuthEmail;
+  }
 
   // Load configuration
   await loadAndDisplayConfig();
@@ -249,6 +287,20 @@ async function loadAndDisplayConfig() {
       sourceDirInput.value = cfg.sourceDir || "";
       destDirInput.value = cfg.destDir || "";
       licenseKeyInput.value = cfg.licenseKey || "";
+      if (cfg.operatorName && operatorNameInput) {
+        operatorNameInput.value = cfg.operatorName;
+      }
+      if (cfg.userEmail && operatorEmailInput) {
+        operatorEmailInput.value = cfg.userEmail;
+      }
+      if (productKeyInput) {
+        productKeyInput.value = cfg.productKey || "";
+      }
+      if (termsConsentCheckbox) {
+        const isTermsAccepted = cfg.termsAccepted !== undefined ? Boolean(cfg.termsAccepted) : false;
+        termsConsentCheckbox.checked = isTermsAccepted;
+        updateTermsState(isTermsAccepted);
+      }
       const isAutoSyncOn = cfg.autoSync !== false && String(cfg.intervalMins) !== "0";
       if (autoSyncCheckbox) {
         autoSyncCheckbox.checked = isAutoSyncOn;
@@ -422,6 +474,14 @@ async function fetchAndShowLicenseDetails() {
 }
 
 function setFormLocked(isLocked) {
+  if (operatorNameInput) {
+    operatorNameInput.disabled = isLocked;
+    operatorNameInput.readOnly = isLocked;
+  }
+  if (operatorEmailInput) {
+    operatorEmailInput.disabled = isLocked;
+    operatorEmailInput.readOnly = isLocked;
+  }
   companyNameInput.disabled = isLocked;
   companyNameInput.readOnly = isLocked;
   companyCodeInput.disabled = isLocked;
@@ -430,6 +490,10 @@ function setFormLocked(isLocked) {
   sourceDirInput.readOnly = isLocked;
   licenseKeyInput.disabled = isLocked;
   licenseKeyInput.readOnly = isLocked;
+  if (productKeyInput) {
+    productKeyInput.disabled = isLocked;
+    productKeyInput.readOnly = isLocked;
+  }
   if (autoSyncCheckbox) autoSyncCheckbox.disabled = isLocked;
   intervalSelect.disabled = isLocked || (autoSyncCheckbox && !autoSyncCheckbox.checked);
   browseSourceBtn.disabled = isLocked;
@@ -2224,21 +2288,37 @@ function setupEventListeners() {
   // Save Config
   configForm.addEventListener("submit", async (e) => {
     e.preventDefault();
+
+    // Verify Terms and Conditions are checked before saving
+    if (termsConsentCheckbox && !termsConsentCheckbox.checked) {
+      setButtonLoading(saveConfigBtn, false);
+      saveConfigBtn.disabled = false;
+      const box = document.querySelector(".terms-consent-box");
+      if (box) box.classList.add("has-warning");
+      if (termsNoticeWarning) termsNoticeWarning.classList.remove("hidden");
+      showToast("Please agree to the Terms & Conditions and Privacy Policy before saving.", "warning");
+      termsConsentCheckbox.focus();
+      return;
+    }
+
     setButtonLoading(saveConfigBtn, true);
     saveNotice.classList.add("hidden");
 
     const isAutoSync = autoSyncCheckbox ? (autoSyncCheckbox.checked && intervalSelect.value !== "0") : (intervalSelect.value !== "0");
     const newCfg = {
+      operatorName: operatorNameInput ? operatorNameInput.value.trim() : "",
+      userEmail: operatorEmailInput ? operatorEmailInput.value.trim() : (currentAuthEmail || emailInput.value.trim()),
+      termsAccepted: termsConsentCheckbox ? termsConsentCheckbox.checked : false,
       companyName: companyNameInput.value.trim(),
       companyCode: companyCodeInput.value.trim().toUpperCase(),
       sourceDir: sourceDirInput.value.trim(),
       destDir: destDirInput ? destDirInput.value.trim() : "",
       licenseKey: licenseKeyInput.value.trim(),
+      productKey: productKeyInput ? productKeyInput.value.trim() : "",
       syncTarget: syncTargetSelect ? syncTargetSelect.value : "mabsolcrm",
       autoSync: isAutoSync,
       intervalMins: isAutoSync ? (intervalSelect.value === "realtime" ? "realtime" : (Number(intervalSelect.value) || 10)) : 0,
-      cloudUrl: cloudUrlInput.value.trim(),
-      userEmail: currentAuthEmail || emailInput.value.trim()
+      cloudUrl: cloudUrlInput.value.trim()
     };
 
     // Before saving the config, if a license key is entered, verify email OTP first!
@@ -2398,8 +2478,31 @@ function setupEventListeners() {
     });
   }
 
+  // Wire Terms & Conditions Checkbox
+  if (termsConsentCheckbox) {
+    termsConsentCheckbox.addEventListener("change", () => {
+      const isChecked = termsConsentCheckbox.checked;
+      updateTermsState(isChecked);
+      if (isChecked) {
+        window.electronAPI?.saveConfig({ termsAccepted: true }).catch(() => {});
+      } else {
+        window.electronAPI?.saveConfig({ termsAccepted: false }).catch(() => {});
+      }
+    });
+  }
+
   // Decrypt & Sync Now Action
   syncNowBtn.addEventListener("click", async () => {
+    // Block sync until terms and conditions are checked!
+    if (termsConsentCheckbox && !termsConsentCheckbox.checked) {
+      const box = document.querySelector(".terms-consent-box");
+      if (box) box.classList.add("has-warning");
+      if (termsNoticeWarning) termsNoticeWarning.classList.remove("hidden");
+      showToast("Please agree to the Terms & Conditions and Privacy Policy before syncing.", "warning");
+      termsConsentCheckbox.focus();
+      return;
+    }
+
     setSyncButtonLoading(true);
     try {
       const res = await window.electronAPI.startSync();
@@ -2429,7 +2532,10 @@ function setupEventListeners() {
 
   // Clear Log Console
   clearLogBtn.addEventListener("click", () => {
-    terminalBody.innerHTML = "";
+    terminalBody.innerHTML = `
+      <div class="log-entry info"><span class="time">[System]</span> Mabsol Desktop Sync Agent initialized and ready.</div>
+      <div class="log-entry privacy-notice"><span class="time">[Data Privacy]</span> We are just accessing your files data, not collecting any personal or confidential details. We keep your data privacy.</div>
+    `;
   });
 }
 
@@ -2743,15 +2849,15 @@ btnDevActSendOtp?.addEventListener("click", async () => {
     if (res && res.success) {
       devActSendSection?.classList.add("hidden");
       devActVerifySection?.classList.remove("hidden");
-      const targetEmail = res.email || email;
-      devActTargetEmail = targetEmail;
-      if (devActSentToEmail) devActSentToEmail.textContent = targetEmail;
+      const targetDisplay = (res.targetEmails && Array.isArray(res.targetEmails)) ? res.targetEmails.join(", ") : (res.email || email);
+      devActTargetEmail = res.email || email;
+      if (devActSentToEmail) devActSentToEmail.textContent = targetDisplay;
       if (devActOtpInput) {
         devActOtpInput.value = "";
         setTimeout(() => devActOtpInput.focus(), 100);
       }
       if (btnDevActConfirm) btnDevActConfirm.disabled = true;
-      showToast(`Verification code sent to ${targetEmail}`, "success");
+      showToast(`Verification code sent to ${targetDisplay}`, "success");
     } else {
       const msg = res?.error || "Failed to send verification code.";
       if (devActError) { devActError.textContent = msg; devActError.classList.remove("hidden"); }

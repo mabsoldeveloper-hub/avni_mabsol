@@ -642,6 +642,175 @@ button:disabled, .btn-browse:disabled {
   overflow-y: auto;
 }
 
+/* Logged-in Operator Profile Card at Top of Sync Details */
+.sync-operator-card {
+  background: rgba(14, 165, 233, 0.05);
+  border: 1px solid rgba(14, 165, 233, 0.2);
+  border-radius: 10px;
+  padding: 12px 14px;
+  margin-bottom: 6px;
+  transition: border-color 0.2s;
+}
+
+.sync-operator-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid rgba(14, 165, 233, 0.12);
+}
+
+.operator-header-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.operator-badge-icon {
+  font-size: 15px;
+  background: rgba(14, 165, 233, 0.15);
+  border-radius: 6px;
+  padding: 4px;
+  display: inline-flex;
+}
+
+.operator-section-title {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: #38bdf8;
+  letter-spacing: -0.01em;
+}
+
+.operator-section-sub {
+  font-size: 10.5px;
+  color: #94a3b8;
+}
+
+.operator-status-badge {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(34, 197, 94, 0.15);
+  color: #4ade80;
+  border: 1px solid rgba(34, 197, 94, 0.3);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+/* Terms and Conditions Checkbox */
+.terms-consent-box {
+  background: rgba(15, 23, 42, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  padding: 10px 14px;
+  margin-top: 4px;
+  margin-bottom: 4px;
+  transition: all 0.2s ease;
+}
+
+.terms-consent-box:hover {
+  border-color: rgba(56, 189, 248, 0.3);
+}
+
+.terms-consent-box.has-warning {
+  border-color: #f59e0b;
+  background: rgba(245, 158, 11, 0.08);
+  animation: termsPulse 1.5s infinite;
+}
+
+@keyframes termsPulse {
+  0% { box-shadow: 0 0 0 0 rgba(245, 158, 11, 0.4); }
+  70% { box-shadow: 0 0 0 6px rgba(245, 158, 11, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(245, 158, 11, 0); }
+}
+
+.terms-consent-label {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.terms-consent-label input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  margin-top: 2px;
+  cursor: pointer;
+  accent-color: #0ea5e9;
+  flex-shrink: 0;
+}
+
+.terms-consent-text {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.terms-consent-main {
+  font-size: 12px;
+  font-weight: 600;
+  color: #f1f5f9;
+  line-height: 1.35;
+}
+
+.terms-consent-sub {
+  font-size: 11px;
+  color: #94a3b8;
+  line-height: 1.4;
+}
+
+.terms-notice-warning {
+  margin-top: 8px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #fbbf24;
+  background: rgba(245, 158, 11, 0.1);
+  border: 1px solid rgba(245, 158, 11, 0.25);
+  padding: 4px 8px;
+  border-radius: 4px;
+}
+
+/* Disabled state when terms not accepted */
+.btn-sync-action.terms-disabled,
+.btn-save.terms-disabled {
+  opacity: 0.45 !important;
+  filter: grayscale(60%) !important;
+  cursor: not-allowed !important;
+}
+
+/* Terminal Privacy Banner & Pill */
+.terminal-privacy-pill {
+  font-size: 10px;
+  font-weight: 700;
+  color: #38bdf8;
+  background: rgba(56, 189, 248, 0.12);
+  border: 1px solid rgba(56, 189, 248, 0.3);
+  padding: 1px 7px;
+  border-radius: 4px;
+}
+
+.terminal-privacy-banner {
+  background: rgba(14, 165, 233, 0.08);
+  border-bottom: 1px solid rgba(14, 165, 233, 0.18);
+  padding: 6px 14px;
+  font-size: 11px;
+  font-weight: 500;
+  color: #7dd3fc;
+  line-height: 1.4;
+}
+
+.log-entry.privacy-notice {
+  color: #38bdf8;
+  font-weight: 600;
+  background: rgba(14, 165, 233, 0.08);
+  padding: 4px 8px;
+  border-radius: 4px;
+  border-left: 2px solid #38bdf8;
+}
+
 .form-actions {
   display: flex;
   align-items: center;

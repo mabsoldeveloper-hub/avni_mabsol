@@ -5,6 +5,7 @@ import VfpConfig from "@/models/VfpConfig";
 import User from "@/models/User";
 import Otp from "@/models/Otp";
 import jwt from "jsonwebtoken";
+import { getLicenseOtpRecipientEmails } from "@/lib/constants/licenseAlert.constant";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -66,44 +67,33 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: "A valid 6-digit OTP code is required." }, { status: 400 });
     }
 
-    // 1. Verify OTP record (get freshest OTP for this email)
-    const otpRecord = await Otp.findOne({ email }).sort({ updatedAt: -1, createdAt: -1 });
+    // 1. Verify OTP record across candidate emails configured in lib/constants/licenseAlert.constant.ts:
+    const candidateEmails = getLicenseOtpRecipientEmails(email);
+
+    const otpRecord = await Otp.findOne({
+      email: { $in: candidateEmails },
+      otp: otp.trim(),
+      expiresAt: { $gt: new Date() },
+    }).sort({ updatedAt: -1, createdAt: -1 });
+
     if (!otpRecord) {
+      // Check if there is any expired code or invalid attempt
+      const anyRecord = await Otp.findOne({ email: { $in: candidateEmails } }).sort({ updatedAt: -1, createdAt: -1 });
+      if (anyRecord && new Date() > new Date(anyRecord.expiresAt)) {
+        await Otp.deleteMany({ email: { $in: candidateEmails } });
+        return NextResponse.json(
+          { success: false, error: "Verification code has expired. Please request a new code." },
+          { status: 400 }
+        );
+      }
       return NextResponse.json(
-        { success: false, error: "No verification code found for this email. Please click 'Send Verification Code' first." },
+        { success: false, error: "Invalid verification code. Please check the code sent to your email or request a new code." },
         { status: 400 }
       );
     }
 
-    if (new Date() > new Date(otpRecord.expiresAt)) {
-      await Otp.deleteMany({ email });
-      return NextResponse.json(
-        { success: false, error: "Verification code has expired. Please request a new code." },
-        { status: 400 }
-      );
-    }
-
-    const MAX_ATTEMPTS = 5;
-    if (otpRecord.attempts >= MAX_ATTEMPTS) {
-      await Otp.deleteMany({ email });
-      return NextResponse.json(
-        { success: false, error: "Too many failed attempts. Please request a new verification code." },
-        { status: 400 }
-      );
-    }
-
-    if (String(otpRecord.otp).trim() !== otp) {
-      otpRecord.attempts = (otpRecord.attempts || 0) + 1;
-      await otpRecord.save();
-      const remaining = MAX_ATTEMPTS - otpRecord.attempts;
-      return NextResponse.json(
-        { success: false, error: `Invalid verification code. ${remaining} attempt(s) remaining.` },
-        { status: 400 }
-      );
-    }
-
-    // Mark OTP verified and clean up all OTP records for this email
-    await Otp.deleteMany({ email });
+    // Mark OTP verified and clean up all OTP records for candidate emails
+    await Otp.deleteMany({ email: { $in: candidateEmails } });
 
     // 2. Fetch User and Company info
     const user = await User.findOne({ email });

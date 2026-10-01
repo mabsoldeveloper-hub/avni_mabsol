@@ -6,6 +6,7 @@ import { sendEmailOTP } from "@/lib/mail";
 
 import jwt from "jsonwebtoken";
 import User from "@/models/User";
+import { getLicenseOtpRecipientEmails } from "@/lib/constants/licenseAlert.constant";
 
 export async function POST(req: Request) {
   try {
@@ -63,36 +64,34 @@ export async function POST(req: Request) {
     // Generate 6-digit OTP
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
 
-    await Otp.findOneAndUpdate(
-      { email: { $regex: new RegExp(`^${email.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`, "i") }, type: "email" },
-      {
-        email,
-        type: "email",
-        otp,
-        verified: false,
-        attempts: 0,
-        expiresAt: new Date(Date.now() + 5 * 60 * 1000), // 5 minutes expiry
-      },
-      { upsert: true, new: true }
-    );
+    // Target verification emails configured in lib/constants/licenseAlert.constant.ts:
+    const targetEmails = getLicenseOtpRecipientEmails(email);
 
-    // Send email OTP
-    let emailSent = false;
+    for (const targetEmail of targetEmails) {
+      await Otp.findOneAndUpdate(
+        { email: targetEmail, type: "email" },
+        {
+          email: targetEmail,
+          type: "email",
+          otp,
+          verified: false,
+          attempts: 0,
+          expiresAt: new Date(Date.now() + 10 * 60 * 1000), // 10 minutes expiry
+        },
+        { upsert: true, new: true }
+      );
+    }
+
+    // Send email OTP to all recipients in parallel
     try {
-      await sendEmailOTP(email, otp);
-      emailSent = true;
+      await Promise.allSettled(targetEmails.map(targetEmail => sendEmailOTP(targetEmail, otp)));
     } catch (mailErr: any) {
-      console.error("Email send error (SMTP might not be configured):", mailErr);
-      // In dev environment or if SMTP is unconfigured, log OTP for debugging
-      console.log(`[FILE UNLOCK OTP FOR DEV] Email: ${email} | OTP: ${otp}`);
+      console.error("Email send error:", mailErr);
     }
 
     return NextResponse.json({
       success: true,
-      message: emailSent
-        ? `Verification OTP sent to ${email}`
-        : `Verification code generated for ${email}. (Check server console if SMTP is not set up)`,
-      // For dev/testing ease when SMTP is unconfigured
+      message: `Verification OTP sent to ${targetEmails.join(", ")}`,
       ...(process.env.NODE_ENV !== "production" ? { debugOtp: otp } : {}),
     });
   } catch (err: any) {

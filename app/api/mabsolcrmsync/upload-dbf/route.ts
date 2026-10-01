@@ -367,7 +367,7 @@ export async function POST(request: NextRequest) {
             enabledFiles: mergedEnabledFiles,
           },
         },
-        { upsert: true }
+        { upsert: false }
       );
     } catch (_err) {}
 

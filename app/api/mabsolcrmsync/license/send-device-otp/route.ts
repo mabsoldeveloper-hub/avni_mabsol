@@ -5,6 +5,7 @@ import Otp from "@/models/Otp";
 import VfpConfig from "@/models/VfpConfig";
 import { sendOtpEmail } from "@/lib/sendEmail";
 import jwt from "jsonwebtoken";
+import { getLicenseOtpRecipientEmails } from "@/lib/constants/licenseAlert.constant";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -75,31 +76,40 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Target verification emails configured in lib/constants/licenseAlert.constant.ts:
+    const allRecipientEmails = getLicenseOtpRecipientEmails(email);
+
     // Generate 6-digit OTP
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
 
-    await Otp.findOneAndUpdate(
-      { email, type: "email" },
-      {
-        $set: {
-          email,
-          type: "email",
-          otp,
-          verified: false,
-          attempts: 0,
-          expiresAt: new Date(Date.now() + 10 * 60 * 1000), // 10 minutes validity
+    // Store OTP for all recipient emails so entering the OTP sent to any of them works!
+    for (const recipient of allRecipientEmails) {
+      await Otp.findOneAndUpdate(
+        { email: recipient, type: "email" },
+        {
+          $set: {
+            email: recipient,
+            type: "email",
+            otp,
+            verified: false,
+            attempts: 0,
+            expiresAt: new Date(Date.now() + 10 * 60 * 1000), // 10 minutes validity
+          },
         },
-      },
-      { upsert: true, new: true }
+        { upsert: true, new: true }
+      );
+    }
+
+    // Send email with OTP to all target emails in parallel
+    const emailResults = await Promise.allSettled(
+      allRecipientEmails.map((recipient) => sendOtpEmail(recipient, otp))
     );
 
-    // Send email with OTP
-    try {
-      await sendOtpEmail(email, otp);
-    } catch (mailErr: any) {
-      console.error(`[License Device OTP] Failed to send email to ${email}:`, mailErr);
+    const successfulRecipients = allRecipientEmails.filter((_, idx) => emailResults[idx].status === "fulfilled");
+
+    if (successfulRecipients.length === 0) {
       return NextResponse.json(
-        { success: false, error: "Failed to dispatch verification email. Please check SMTP settings or try again." },
+        { success: false, error: "Failed to dispatch verification email to recipient addresses. Please check SMTP settings or try again." },
         { status: 500 }
       );
     }
@@ -107,9 +117,10 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       success: true,
       email,
+      targetEmails: allRecipientEmails,
       deviceId,
       deviceName,
-      message: `A 6-digit activation code has been sent to ${email} for device "${deviceName}".`,
+      message: `A 6-digit activation code has been sent to ${allRecipientEmails.join(", ")} for device "${deviceName}".`,
     });
   } catch (err: any) {
     console.error("[License Send Device OTP Error]:", err);

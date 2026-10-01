@@ -496,8 +496,7 @@
             <span class="shield-icon">🛡️</span>
             <div>
               <strong>Security Protocol Active:</strong>
-              <span>Extraction security core is permanently purged in real-time immediately after each
-                synchronization.</span>
+              <span>We are just accessing your files data, not collecting any personal or confidential details. We keep your data privacy.</span>
             </div>
           </div>
           <div class="banner-right">
@@ -515,6 +514,56 @@
             </div>
 
             <form id="configForm">
+              <!-- Logged-in Operator & License Profile Card at Top of Sync Details -->
+              <div class="sync-operator-card">
+                <div class="sync-operator-header">
+                  <div class="operator-header-left">
+                    <span class="operator-badge-icon">👤</span>
+                    <div>
+                      <div class="operator-section-title">Logged-in Operator &amp; License</div>
+                      <div class="operator-section-sub">Identity and authorized sync key for this workstation</div>
+                    </div>
+                  </div>
+                  <span class="operator-status-badge" id="operatorStatusBadge">Authorized</span>
+                </div>
+
+                <div class="form-row" style="margin-bottom: 12px;">
+                  <div class="form-group flex-1" style="margin-bottom: 0;">
+                    <label for="operatorNameInput">Operator Name <span class="req">*</span></label>
+                    <input type="text" id="operatorNameInput" placeholder="Operator Name" disabled readonly>
+                  </div>
+                  <div class="form-group flex-1" style="margin-bottom: 0;">
+                    <label for="operatorEmailInput">Account Email <span class="req">*</span></label>
+                    <input type="email" id="operatorEmailInput" placeholder="operator@mabsolinfotech.com" disabled readonly>
+                  </div>
+                </div>
+
+                <div class="form-group" style="margin-bottom: 0;">
+                  <div class="license-header-row">
+                    <label for="licenseKeyInput">License Key <span class="req">*</span></label>
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                      <button type="button" id="btnVerifyLicenseKeyManual" class="btn-secondary" style="font-size: 11px; padding: 2px 9px; border-radius: 4px; display: inline-flex; align-items: center; gap: 4px; color: #38bdf8; border: 1px solid rgba(56, 189, 248, 0.4); background: rgba(56, 189, 248, 0.08); cursor: pointer;" title="Verify or authorize this computer with OTP">
+                        🔐 Verify Key with OTP
+                      </button>
+                      <span id="licenseCountdownBadge" class="license-countdown-badge hidden">
+                        <span class="countdown-pulse-dot"></span>
+                        <span id="licenseCountdownText">--</span>
+                      </span>
+                    </div>
+                  </div>
+                  <input type="password" id="licenseKeyInput" placeholder="Enter License Key (e.g. MAB-XXXX-XXXX-XXXX)" disabled readonly>
+                  <div id="licenseCountdownDetail" class="license-countdown-detail hidden">
+                    <span id="licenseExpiryNotice">--</span>
+                  </div>
+                </div>
+
+                <div class="form-group" style="margin-top: 12px; margin-bottom: 0;">
+                  <label for="productKeyInput">Serial Key / Product Key</label>
+                  <input type="text" id="productKeyInput" placeholder="Enter Serial Key / Product Key (e.g. PRD-XXXX-XXXX-XXXX)" disabled readonly>
+                  <span class="helper" style="font-size: 10.5px; color: #94a3b8; margin-top: 3px;">Workstation product key or software serial key</span>
+                </div>
+              </div>
+
               <div class="form-row">
                 <div class="form-group flex-1">
                   <label for="companyNameInput">Company Name</label>
@@ -570,22 +619,17 @@
                 </div>
               </div>
 
-              <div class="form-group">
-                <div class="license-header-row">
-                  <label for="licenseKeyInput">License Key</label>
-                  <div style="display: flex; align-items: center; gap: 8px;">
-                    <button type="button" id="btnVerifyLicenseKeyManual" class="btn-secondary" style="font-size: 11px; padding: 2px 9px; border-radius: 4px; display: inline-flex; align-items: center; gap: 4px; color: #38bdf8; border: 1px solid rgba(56, 189, 248, 0.4); background: rgba(56, 189, 248, 0.08); cursor: pointer;" title="Verify or authorize this computer with OTP">
-                      🔐 Verify Key with OTP
-                    </button>
-                    <span id="licenseCountdownBadge" class="license-countdown-badge hidden">
-                      <span class="countdown-pulse-dot"></span>
-                      <span id="licenseCountdownText">--</span>
-                    </span>
-                  </div>
-                </div>
-                <input type="password" id="licenseKeyInput" placeholder="MAB-XXXX-XXXX-XXXX" disabled readonly>
-                <div id="licenseCountdownDetail" class="license-countdown-detail hidden">
-                  <span id="licenseExpiryNotice">--</span>
+              <!-- Terms & Conditions and Privacy Checkbox -->
+              <div class="terms-consent-box">
+                <label class="terms-consent-label" for="termsConsentCheckbox">
+                  <input type="checkbox" id="termsConsentCheckbox">
+                  <span class="terms-consent-text">
+                    <span class="terms-consent-main">I agree to the <strong>Terms &amp; Conditions</strong> and authorize local data synchronization.</span>
+                    <span class="terms-consent-sub">We are just accessing your files data, not collecting any personal or confidential details. We keep your data privacy.</span>
+                  </span>
+                </label>
+                <div id="termsNoticeWarning" class="terms-notice-warning hidden">
+                  ⚠️ Please accept the Terms &amp; Conditions to enable synchronization and save settings.
                 </div>
               </div>
 
@@ -622,7 +666,7 @@
                   <div class="sync-btn-content">
                     <svg class="sync-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
                       stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-                      <polyline points="23 4 23 10 17 10"></polyline>
+                        <polyline points="23 4 23 10 17 10"></polyline>
                       <polyline points="1 20 1 14 7 14"></polyline>
                       <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
                     </svg>
@@ -656,12 +700,18 @@
             <!-- Real-Time Activity Log Console -->
             <div class="terminal-container">
               <div class="terminal-header">
-                <span>Agent Activity Console</span>
+                <div style="display: flex; align-items: center; gap: 8px;">
+                  <span>Agent Activity Console</span>
+                  <span class="terminal-privacy-pill">🔒 Privacy Protected</span>
+                </div>
                 <button id="clearLogBtn" class="btn-clear-log">Clear</button>
               </div>
+              <div class="terminal-privacy-banner">
+                <span>🛡️ We are just accessing your files data, not collecting any personal or confidential details. We keep your data privacy.</span>
+              </div>
               <div id="terminalBody" class="terminal-body">
-                <div class="log-entry info"><span class="time">[System]</span> Mabsol Desktop Sync Agent initialized and
-                  ready.</div>
+                <div class="log-entry info"><span class="time">[System]</span> Mabsol Desktop Sync Agent initialized and ready.</div>
+                <div class="log-entry privacy-notice"><span class="time">[Data Privacy]</span> We are just accessing your files data, not collecting any personal or confidential details. We keep your data privacy.</div>
               </div>
             </div>
           </div>

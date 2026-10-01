@@ -339,7 +339,7 @@ export default function Topbar({
                 style={{ borderRadius: "9999px" }}
                 title="Select Financial Year"
               >
-                {fyList.map((fy) => (
+                {/* {fyList.map((fy) => (
                   <option key={fy._id} value={fy._id} className="text-slate-900 font-medium">
                     {fy.isAll
                       ? fy.fyName
@@ -347,7 +347,17 @@ export default function Topbar({
                         ? `${fy.fyCode} - FY ${fy.fyName}`
                         : `FY ${fy.fyName}`}
                   </option>
-                ))}
+                ))} */}
+                {fyList.map((fy) => (
+                <option
+                  key={fy._id}
+                  value={fy._id}
+                  className="text-slate-900"
+                >
+                  {fy.isAll ? "All FYs" : fy.fyName}
+                </option>
+              ))}
+
               </select>
             </div>
           </div>
@@ -390,13 +400,23 @@ export default function Topbar({
                 className="topbar-pill-btn w-full pl-6 pr-2 py-1 rounded-full bg-emerald-50 dark:bg-emerald-950/80 text-emerald-900 dark:text-emerald-200 text-[10px] font-bold border border-emerald-200 dark:border-emerald-800/60 focus:outline-none cursor-pointer truncate"
                 style={{ borderRadius: "9999px" }}
               >
-                {fyList.map((fy) => (
+                {/* {fyList.map((fy) => (
                   <option key={fy._id} value={fy._id} className="text-slate-900">
                     {fy.isAll
                       ? "All FYs"
-                      : fy.fyCode
-                        ? `${fy.fyCode}`
+                      : fy.fyCode ? `${fy.fyCode}`
                         : `FY ${fy.fyName}`}
+                  </option>
+                ))} */}
+                {fyList.map((fy) => (
+                  <option
+                    key={fy._id}
+                    value={fy._id}
+                    className="text-slate-900"
+                  >
+                    {fy.isAll
+                      ? "All FYs"
+                      : `${fy.fyName}`}
                   </option>
                 ))}
               </select>

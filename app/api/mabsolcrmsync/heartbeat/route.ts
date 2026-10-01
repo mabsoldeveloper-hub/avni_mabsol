@@ -52,12 +52,15 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Fetch user's active VfpConfig from MongoDB to get dynamic SELECTED FILES FOLDER LOCATION
-    const config = (await VfpConfig.findOne({ email: targetEmail })) || (await VfpConfig.findOne({ key: "vfp_sync_config" }));
-
     const licenseKey = (body.licenseKey as string) || request.headers.get("x-license-key");
     const deviceId = (body.deviceId as string) || request.headers.get("x-device-id");
     const deviceName = (body.deviceName as string) || request.headers.get("x-device-name");
+
+    // Fetch user's active VfpConfig from MongoDB
+    const config =
+      (licenseKey ? await VfpConfig.findOne({ license: licenseKey }) : null) ||
+      (await VfpConfig.findOne({ email: targetEmail })) ||
+      (await VfpConfig.findOne({ key: "vfp_sync_config" }));
 
     if (config && licenseKey) {
       const isReusedOrRetired = (config.usedLicenses || []).some((u: any) => u.key === licenseKey);

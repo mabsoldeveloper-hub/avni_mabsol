@@ -271,6 +271,8 @@ export async function getVfpStatus(filter: VfpStatusFilter = {}, email?: string)
     conflictCount,
     pendingOutboundCount,
     pendingCommandCount,
+    companyCode: config?.companyCode || "DEFAULT",
+    companyName: config?.companyName || "Default Company",
     fileCount,
     storedFileCount,
     failedFileCount,

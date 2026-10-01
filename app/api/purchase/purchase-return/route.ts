@@ -4,6 +4,8 @@ import PurchaseReturn from "@/models/PurchaseReturn";
 import PurchaseBill from "@/models/PurchaseBill";
 import Product from "@/models/Product";
 import ProductBatch from "@/models/ProductBatch";
+import SalesMdis from "@/models/SalesMdis";
+import SalesDis from "@/models/SalesDis";
 import { consumeNextVoucherNumber, peekNextVoucherNumber } from "@/lib/voucherSeriesHelper";
 import { getCurrentUser } from "@/lib/auth";
 import { applyStockMovement } from "@/lib/stockService";
@@ -272,6 +274,65 @@ export async function POST(req: NextRequest) {
       status: "Approved",
       createdBy: "Admin",
     });
+
+    // Save to Marg VFP tables: SalesMdis & SalesDis for Debit Note
+    try {
+      const vfpDate = returnDate || todayStr();
+      const vfpVendorCode = String(vendorCode || vendorId || "SUPP001").trim().toUpperCase();
+
+      await SalesMdis.create({
+        VOUCHER: vcn,
+        VCN: vcn,
+        TYPE: "D",
+        CODEP: vfpVendorCode,
+        NAME: vendorName,
+        PARNAM: vendorName,
+        DATE: vfpDate,
+        FINAL: Number(netAmount) || 0,
+        NETAMT: Number(netAmount) || 0,
+        AMOUNT: Number(subtotal) || 0,
+        DISCOUNT: Number(totalDiscount) || 0,
+        TAXAMO: Number(totalTax) || 0,
+        ROUND: Number(roundOff) || 0,
+        PM: originalBillNo || "",
+        companyId: companyId || "",
+        companyCode: companyCode || "",
+        fyId: fyId || "",
+        fyCode: fyCode || "",
+        _vfpTable: "mdis",
+        _vfpSourceKey: `D_${vcn}`,
+      });
+
+      for (let i = 0; i < cleanedItems.length; i++) {
+        const item: any = cleanedItems[i];
+        await SalesDis.create({
+          VOUCHER: vcn,
+          VCN: vcn,
+          TYPE: "D",
+          CODE: item.productCode || item.productId || `P${i + 1}`,
+          BATCH: item.batchNo || "",
+          QTY: Number(item.qty || 0),
+          RATE: Number(item.rate || 0),
+          EXP: item.expDate || "",
+          DISC1: Number(item.discountPercent || 0),
+          CGST: item.gstPercent ? Number(item.gstPercent) / 2 : 0,
+          SSTA: item.gstPercent ? Number(item.gstPercent) / 2 : 0,
+          IGST: 0,
+          CGSTAMO: item.gstAmount ? Number(item.gstAmount) / 2 : 0,
+          SSTAAMO: item.gstAmount ? Number(item.gstAmount) / 2 : 0,
+          AMMMWOD: Number(item.taxableAmount || 0),
+          AMMMOUNT: Number(item.total || 0),
+          companyId: companyId || "",
+          companyCode: companyCode || "",
+          fyId: fyId || "",
+          fyCode: fyCode || "",
+          _vfpTable: "dis",
+          _vfpSourceKey: `D_${vcn}_${item.productCode || i}`,
+        });
+      }
+    } catch (margErr) {
+      console.error("Error saving Purchase Return to Marg VFP tables (SalesMdis/SalesDis):", margErr);
+    }
 
     // 1. Update linked PurchaseBill balance & returned status
     if (existingBill) {

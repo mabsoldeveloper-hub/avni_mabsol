@@ -163,6 +163,7 @@ export default function RegisterPage() {
   const [drugLicenseNo, setDrugLicenseNo] = useState("");
 
   const [name, setName] = useState("");
+  const [mobile, setMobile] = useState("");
 
   const [email, setEmail] = useState("");
   const [emailOtp, setEmailOtp] = useState("");
@@ -385,6 +386,7 @@ export default function RegisterPage() {
     city.trim() &&
     state.trim() &&
     pincode.trim().length === 6 &&
+    mobile.replace(/\D/g, "").length === 10 &&
     email.trim().includes("@") &&
     emailVerified &&
     password &&
@@ -605,6 +607,26 @@ export default function RegisterPage() {
     }
   }
 
+  // Real-time phone duplicate check
+  async function handleMobileBlur() {
+    const cleanMob = mobile.replace(/\D/g, "");
+    if (cleanMob.length !== 10) return;
+
+    try {
+      const res = await fetch(API.CHECK_EXISTS, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ mobile: cleanMob }),
+      });
+      const json = await res.json();
+      if (json.exists) {
+        showToast(json.message || "This phone number is already registered.", "error");
+      }
+    } catch {
+      // Ignore
+    }
+  }
+
 
 
   // ==========================================
@@ -683,7 +705,7 @@ export default function RegisterPage() {
   // ==========================================
   // STEP TRANSITIONS & SUBMISSION
   // ==========================================
-  function goToNextStep() {
+  async function goToNextStep() {
     setErrorBanner(null);
 
     if (currentStep === 1) {
@@ -703,7 +725,30 @@ export default function RegisterPage() {
         return;
       }
 
-      // Validate Email
+      // Validate Mobile & Email
+      const cleanMobile = mobile.replace(/\D/g, "");
+      if (cleanMobile.length !== 10) {
+        const msg = "Please enter a valid 10-digit phone number";
+        setErrorBanner(msg);
+        showToast(msg, "error");
+        return;
+      }
+
+      try {
+        const checkMobRes = await fetch(API.CHECK_EXISTS, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ mobile: cleanMobile }),
+        });
+        const checkMobJson = await checkMobRes.json();
+        if (checkMobJson.exists) {
+          const msg = checkMobJson.message || "This phone number is already registered in the system.";
+          setErrorBanner(msg);
+          showToast(msg, "error");
+          return;
+        }
+      } catch {}
+
       if (!email.trim() || !email.includes("@")) {
         const msg = "Please enter a valid email address";
         setErrorBanner(msg);
@@ -820,7 +865,7 @@ export default function RegisterPage() {
       const payload = {
         name: adminName,
         email: email.trim().toLowerCase(),
-        mobile: "",
+        mobile: mobile.replace(/\D/g, ""),
         password,
         role: "Admin",
         companyName: companyName.trim(),
@@ -828,6 +873,7 @@ export default function RegisterPage() {
         drugLicenseNo: drugLicenseNo.trim(),
         address: address.trim(),
         city: city.trim(),
+        state: state.trim(),
         pincode: pincode.trim(),
         additionalGstins: branchCount > 0 ? additionalGsts.slice(0, branchCount) : [],
         termsAccepted: true,
@@ -894,7 +940,7 @@ export default function RegisterPage() {
             </div>
             <div className="brand-text-col">
               <span className="brand-name">MabsolCrm</span>
-              <span className="brand-tagline">Enterprise CRM Onboarding</span>
+              <span className="brand-tagline">Pharmaceutical Enterprise Onboarding</span>
             </div>
           </div>
 
@@ -1104,6 +1150,25 @@ export default function RegisterPage() {
                       value={pincode}
                       onChange={(e) => setPincode(e.target.value.replace(/\D/g, ""))}
                       onBlur={handlePincodeBlur}
+                      required
+                    />
+                  </div>
+                </div>
+
+                <div className="clean-field">
+                  <div className="clean-label-row">
+                    <label>
+                      <span className="req-star">*</span> Phone Number
+                    </label>
+                  </div>
+                  <div className="clean-input-row">
+                    <input
+                      type="tel"
+                      placeholder="10-digit phone number"
+                      maxLength={10}
+                      value={mobile}
+                      onChange={(e) => setMobile(e.target.value.replace(/\D/g, ""))}
+                      onBlur={handleMobileBlur}
                       required
                     />
                   </div>
@@ -1717,6 +1782,10 @@ export default function RegisterPage() {
                 <div className="review-item">
                   <span className="rev-label">Verified Email Address</span>
                   <span className="rev-val">{email}</span>
+                </div>
+                <div className="review-item">
+                  <span className="rev-label">Phone Number</span>
+                  <span className="rev-val mono-font">+91 {mobile}</span>
                 </div>
 
                 {/* Terms and Conditions Checkbox */}

@@ -40,6 +40,7 @@ import {
   FaUndoAlt,
 } from "react-icons/fa";
 
+
 interface PendingBill {
   _id: string;
   billNumber: string;
@@ -106,6 +107,10 @@ function PurchasePaymentContent() {
   const [paymentMode, setPaymentMode] = useState<"Bank Transfer" | "Cash" | "UPI" | "Cheque" | "Draft">("Bank Transfer");
   const [refNo, setRefNo] = useState("");
   const [bankName, setBankName] = useState("HDFC Current Bank A/C");
+  // Marg ledger code for the selected bank/cash account.
+  // HDFC is the known Marg ledger from the imported data; other accounts
+  // can be entered when their Marg ledger code is configured.
+  const [bankLedgerCode, setBankLedgerCode] = useState("#6123");
   const [discountReceived, setDiscountReceived] = useState<number | "">("");
   const [remarks, setRemarks] = useState("");
 
@@ -125,7 +130,11 @@ function PurchasePaymentContent() {
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
 
   // Fetch Vendor Pending Bills
-  const fetchVendorBills = useCallback(async (vId: string, vName: string) => {
+  const fetchVendorBills = useCallback(async (
+    vId: string,
+    vName: string,
+    vCode: string = ""
+  ) => {
     if (!vId && !vName) {
       setPendingBills([]);
       return;
@@ -135,6 +144,10 @@ function PurchasePaymentContent() {
       const params = new URLSearchParams();
       if (vId) params.set("vendorId", vId);
       if (vName) params.set("vendorName", vName);
+      if (vCode) params.set("vendorCode", vCode);
+      if (selectedCompany?._id) params.set("companyId", selectedCompany._id);
+      if (selectedFY?._id) params.set("fyId", selectedFY._id);
+      if (selectedFY?.fyCode) params.set("fyCode", selectedFY.fyCode);
 
       const res = await fetch(`/api/purchase/payment?action=vendorBills&${params.toString()}`);
       if (res.ok) {
@@ -167,7 +180,7 @@ function PurchasePaymentContent() {
     } finally {
       setFetchingBills(false);
     }
-  }, [urlBillId]);
+  }, [urlBillId, selectedCompany?._id, selectedFY?._id, selectedFY?.fyCode]);
 
   const fetchNextVcn = async () => {
     try {
@@ -272,10 +285,10 @@ function PurchasePaymentContent() {
         setVendorGst(supp.gst);
         setVendorPhone(supp.phone);
         setVendorCity(supp.city);
-        fetchVendorBills(supp.id, supp.name);
+        fetchVendorBills(supp.id, supp.name, supp.code);
       } else if (urlVendorName) {
         setVendorName(urlVendorName);
-        fetchVendorBills("", urlVendorName);
+        fetchVendorBills("", urlVendorName, "");
       }
     }
   }, [suppliers, urlVendorId, urlVendorName, fetchVendorBills]);
@@ -302,7 +315,7 @@ function PurchasePaymentContent() {
       setVendorGst(supp.gst);
       setVendorPhone(supp.phone);
       setVendorCity(supp.city);
-      fetchVendorBills(supp.id, supp.name);
+      fetchVendorBills(supp.id, supp.name, supp.code);
     } else {
       setVendorId("");
       setVendorCode("");
@@ -764,6 +777,19 @@ function PurchasePaymentContent() {
                   <option value="SBI Current A/C">SBI Current A/C (..5512)</option>
                   <option value="Petty Cash Account">Petty Cash Account</option>
                 </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1">
+                  Marg Bank/Cash Ledger Code
+                </label>
+                <input
+                  type="text"
+                  value={bankLedgerCode}
+                  onChange={(e) => setBankLedgerCode(e.target.value)}
+                  placeholder="#6123"
+                  className="w-full px-3.5 py-2.5 rounded-xl text-xs bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 font-mono font-bold text-emerald-600 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                />
               </div>
 
               <div>

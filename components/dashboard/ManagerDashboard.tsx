@@ -57,54 +57,48 @@ export default function ManagerDashboard({ user, selectedCompany }: ManagerDashb
     try {
       setLoading(true);
 
-      // 1. Fetch team users
-      const usersRes = await fetch("/api/users");
-      const usersJson = await usersRes.json();
-      const rawUsers: any[] = Array.isArray(usersJson) ? usersJson : (usersJson?.users || []);
+      const todayStr = new Date().toISOString().slice(0, 10);
+      const params = new URLSearchParams();
+      if (selectedCompany?._id) params.set("companyId", selectedCompany._id);
 
-      // Filter field reps / subordinates (MRs, RSMs, etc.)
+      // Fetch all 4 data sources in parallel
+      const [usersRes, targetsRes, dcrRes, dashRes] = await Promise.all([
+        fetch("/api/users").catch(() => null),
+        fetch("/api/targets").catch(() => null),
+        fetch(`/api/mr-reporting/dcr?startDate=${todayStr}`).catch(() => null),
+        fetch(`/api/dashboard?${params.toString()}`).catch(() => null),
+      ]);
+
+      // 1. Process team users
+      let rawUsers: any[] = [];
+      if (usersRes && usersRes.ok) {
+        const usersJson = await usersRes.json();
+        rawUsers = Array.isArray(usersJson) ? usersJson : (usersJson?.users || []);
+      }
       const fieldReps = rawUsers.filter((u: any) => {
         const rt = String(u.roleType || "").toUpperCase();
         const rn = String(u.roleName || u.roleId?.roleName || "").toLowerCase();
         return rt === "MR" || rt === "RSM" || rn.includes("sales") || rn.includes("mr") || rn.includes("rep");
       });
 
-      // 2. Fetch targets
+      // 2. Process targets
       let targetsList: any[] = [];
-      try {
-        const targetsRes = await fetch("/api/targets");
-        if (targetsRes.ok) {
-          const targetsJson = await targetsRes.json();
-          targetsList = Array.isArray(targetsJson) ? targetsJson : (targetsJson?.targets || []);
-        }
-      } catch (err) {
-        console.error("Failed to load targets:", err);
+      if (targetsRes && targetsRes.ok) {
+        const targetsJson = await targetsRes.json();
+        targetsList = Array.isArray(targetsJson) ? targetsJson : (targetsJson?.targets || []);
       }
 
-      // 3. Fetch DCRs for today/recent calls
+      // 3. Process DCRs
       let dcrsList: any[] = [];
-      try {
-        const todayStr = new Date().toISOString().slice(0, 10);
-        const dcrRes = await fetch(`/api/mr-reporting/dcr?startDate=${todayStr}`);
-        if (dcrRes.ok) {
-          const dcrJson = await dcrRes.json();
-          dcrsList = Array.isArray(dcrJson?.data) ? dcrJson.data : (Array.isArray(dcrJson) ? dcrJson : []);
-        }
-      } catch (err) {
-        console.error("Failed to load DCRs:", err);
+      if (dcrRes && dcrRes.ok) {
+        const dcrJson = await dcrRes.json();
+        dcrsList = Array.isArray(dcrJson?.data) ? dcrJson.data : (Array.isArray(dcrJson) ? dcrJson : []);
       }
 
-      // 4. Fetch dashboard overview for regional overdue & sales
+      // 4. Process dashboard overview
       let dashOverview: any = null;
-      try {
-        const params = new URLSearchParams();
-        if (selectedCompany?._id) params.set("companyId", selectedCompany._id);
-        const dashRes = await fetch(`/api/dashboard?${params.toString()}`);
-        if (dashRes.ok) {
-          dashOverview = await dashRes.json();
-        }
-      } catch (err) {
-        console.error("Failed to load dashboard overview:", err);
+      if (dashRes && dashRes.ok) {
+        dashOverview = await dashRes.json();
       }
 
       // Build consolidated metrics per team member
@@ -153,9 +147,9 @@ export default function ManagerDashboard({ user, selectedCompany }: ManagerDashb
         grandAchieved += m.achieved;
       });
 
-      const dashSales = Number(dashOverview?.kpis?.sales?.totalSales || 0);
-      const dashOverdue = Number(dashOverview?.kpis?.credit?.totalOverdue || 0);
-      const overdueLedgers = Number(dashOverview?.kpis?.credit?.overdueCount || 0);
+      const dashSales = Number(dashOverview?.kpis?.totalSales ?? dashOverview?.kpis?.sales?.totalSales ?? 0);
+      const dashOverdue = Number(dashOverview?.kpis?.overdueAmount ?? dashOverview?.kpis?.credit?.totalOverdue ?? 0);
+      const overdueLedgers = Number(dashOverview?.kpis?.overdueCount ?? dashOverview?.kpis?.credit?.overdueCount ?? dashOverview?.charts?.topOverdueDebtors?.length ?? 0);
 
       const computedTotalSales = grandAchieved > 0 ? grandAchieved : dashSales;
       const overallQuota = grandTarget > 0 ? Math.round((grandAchieved / grandTarget) * 100) : (computedTotalSales > 0 ? 100 : 0);

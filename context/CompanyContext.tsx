@@ -1,6 +1,6 @@
 "use client";
 
-import React, { createContext, useContext, useEffect, useState, useCallback } from "react";
+import React, { createContext, useContext, useEffect, useState, useCallback, useRef } from "react";
 import { useUser } from "./UserContext";
 
 export interface CompanyType {
@@ -61,6 +61,8 @@ export function CompanyProvider({ children }: { children: React.ReactNode }) {
   });
 
   const userCompId = user?.companyId?._id || (typeof user?.companyId === "string" ? user?.companyId : null);
+  const userCompIdRef = useRef(userCompId);
+  userCompIdRef.current = userCompId;
 
   const fetchCompanies = useCallback(async () => {
     try {
@@ -94,8 +96,9 @@ export function CompanyProvider({ children }: { children: React.ReactNode }) {
       }
 
       // Fallback 1: User's assigned company from UserContext
-      if (!chosen && userCompId) {
-        const userMatch = data.find((c) => c._id === userCompId);
+      const currentAssignedId = userCompIdRef.current;
+      if (!chosen && currentAssignedId) {
+        const userMatch = data.find((c) => c._id === currentAssignedId);
         if (userMatch) chosen = userMatch;
       }
 
@@ -121,7 +124,7 @@ export function CompanyProvider({ children }: { children: React.ReactNode }) {
     } finally {
       setLoading(false);
     }
-  }, [userCompId]);
+  }, []);
 
   useEffect(() => {
     fetchCompanies();

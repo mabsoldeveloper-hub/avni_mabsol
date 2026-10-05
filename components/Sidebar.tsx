@@ -66,8 +66,6 @@ export default function Sidebar({ collapsed, setCollapsed, mobile }: SidebarProp
 
   const [menuItems, setMenuItems] = useState<MenuItemConfig[]>(DEFAULT_MENU_ITEMS);
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({});
-  const [user, setUser] = useState<any>(null);
-  const [companySettings, setCompanySettings] = useState<any>(null);
 
   // Sidebar Theme Customization State
   const [sidebarTheme, setSidebarTheme] = useState<SidebarThemeId>("default");
@@ -209,23 +207,8 @@ export default function Sidebar({ collapsed, setCollapsed, mobile }: SidebarProp
     };
   }, [loadMenuAdjustments]);
 
-  // Fetch company settings & current user profile
-  useEffect(() => {
-    fetch("/api/company-settings")
-      .then((res) => res.json())
-      .then((data) => setCompanySettings(data))
-      .catch(() => {});
-
-    fetch("/api/auth/me")
-      .then((res) => res.json())
-      .then((data) => {
-        if (data?.user) setUser(data.user);
-      })
-      .catch(() => {});
-  }, []);
-
   const { user: ctxUser } = useUser();
-  const currentUser = ctxUser || user;
+  const currentUser = ctxUser;
   const isSuperAdmin = checkIsSuperAdmin(currentUser);
 
   // Determine active role dynamically from URL or logged-in user
@@ -407,7 +390,7 @@ export default function Sidebar({ collapsed, setCollapsed, mobile }: SidebarProp
     return sectionsWithItems.filter((s) => s.items.length > 0);
   }, [visibleMenuItems]);
 
-  const logoUrl = selectedCompany?.logo || companySettings?.logo || "/mabsol_logo.ico";
+  const logoUrl = selectedCompany?.logo || "/mabsol_logo.ico";
 
   return (
     <>

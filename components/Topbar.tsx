@@ -172,16 +172,17 @@ export default function Topbar({
     }
 
     const rawId = typeof raw === "string" ? raw : raw?._id;
-    if (!rawId) return;
-
-    fetch("/api/company-master")
-      .then((res) => res.json())
-      .then((companies: any[]) => {
-        const match = companies?.find((c) => c._id === rawId);
-        if (match?.companyName) setCompanyName(match.companyName);
-      })
-      .catch(() => { });
-  }, [user]);
+    if (rawId && companies?.length) {
+      const match = companies.find((c: any) => c._id === rawId);
+      if (match?.companyName) {
+        setCompanyName(match.companyName);
+        return;
+      }
+    }
+    if (selectedCompany?.companyName) {
+      setCompanyName(selectedCompany.companyName);
+    }
+  }, [user, companies, selectedCompany]);
 
 
   useEffect(() => {

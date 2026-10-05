@@ -42,7 +42,29 @@ export async function getFYDateRange(
 
     if (fyDoc && fyDoc.startDate && fyDoc.endDate) {
       const s = new Date(fyDoc.startDate).toISOString().slice(0, 10);
-      const e = new Date(fyDoc.endDate).toISOString().slice(0, 10);
+      let e = new Date(fyDoc.endDate).toISOString().slice(0, 10);
+
+      // Dynamic sanity clamp: Ensure a financial year does not span more than 1 year (12 months)
+      const nameMatch = String(fyDoc.fyName || "").match(/(\d{2,4})\s*[-/]\s*(\d{2,4})/);
+      if (nameMatch) {
+        let endYr = parseInt(nameMatch[2], 10);
+        if (endYr < 100) endYr += 2000;
+        const calculatedEnd = `${endYr}-03-31`;
+        if (e > calculatedEnd) {
+          e = calculatedEnd;
+        }
+      } else {
+        const startD = new Date(fyDoc.startDate);
+        const maxEnd = new Date(startD);
+        maxEnd.setFullYear(maxEnd.getFullYear() + 1);
+        maxEnd.setDate(maxEnd.getDate() + 1);
+        if (new Date(fyDoc.endDate) > maxEnd) {
+          const oneYearEnd = new Date(startD);
+          oneYearEnd.setFullYear(oneYearEnd.getFullYear() + 1);
+          oneYearEnd.setDate(oneYearEnd.getDate() - 1);
+          e = oneYearEnd.toISOString().slice(0, 10);
+        }
+      }
 
       return {
         isAll: false,
@@ -68,7 +90,29 @@ export async function getFYDateRange(
 
   if (currentFY && currentFY.startDate && currentFY.endDate) {
     const s = new Date(currentFY.startDate).toISOString().slice(0, 10);
-    const e = new Date(currentFY.endDate).toISOString().slice(0, 10);
+    let e = new Date(currentFY.endDate).toISOString().slice(0, 10);
+
+    // Dynamic sanity clamp: Ensure a financial year does not span more than 1 year (12 months)
+    const nameMatch = String(currentFY.fyName || "").match(/(\d{2,4})\s*[-/]\s*(\d{2,4})/);
+    if (nameMatch) {
+      let endYr = parseInt(nameMatch[2], 10);
+      if (endYr < 100) endYr += 2000;
+      const calculatedEnd = `${endYr}-03-31`;
+      if (e > calculatedEnd) {
+        e = calculatedEnd;
+      }
+    } else {
+      const startD = new Date(currentFY.startDate);
+      const maxEnd = new Date(startD);
+      maxEnd.setFullYear(maxEnd.getFullYear() + 1);
+      maxEnd.setDate(maxEnd.getDate() + 1);
+      if (new Date(currentFY.endDate) > maxEnd) {
+        const oneYearEnd = new Date(startD);
+        oneYearEnd.setFullYear(oneYearEnd.getFullYear() + 1);
+        oneYearEnd.setDate(oneYearEnd.getDate() - 1);
+        e = oneYearEnd.toISOString().slice(0, 10);
+      }
+    }
 
     return {
       isAll: false,

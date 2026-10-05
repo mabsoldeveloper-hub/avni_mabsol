@@ -72,6 +72,7 @@ export function getHierarchyDisplayRole(user: any, hierarchy?: any | null): stri
 export function resolveHierarchyRole(user: any, hierarchy?: any | null): HierarchyRole {
   const candidates = [
     hierarchy?.roleLevel,
+    user?.role,
     user?.roleId?.roleName,
     user?.designation,
     user?.roleType,

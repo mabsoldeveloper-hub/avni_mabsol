@@ -104,16 +104,19 @@ export default function ExecutiveAIDashboardContent() {
 
             const queryString = params.toString();
             const url = queryString ? `/api/dashboard?${queryString}` : "/api/dashboard";
+            const creditUrl = queryString ? `/api/dashboard/credit-risk?${queryString}` : "/api/dashboard/credit-risk";
 
-            const res = await fetch(url);
+            const [res, creditRes] = await Promise.all([
+                fetch(url),
+                fetch(creditUrl).catch(() => null),
+            ]);
+
             if (res.ok) {
                 const json = await res.json();
                 setData(json);
             }
 
-            // Fetch credit risk matrix data
-            const creditRes = await fetch(queryString ? `/api/dashboard/credit-risk?${queryString}` : "/api/dashboard/credit-risk");
-            if (creditRes.ok) {
+            if (creditRes && creditRes.ok) {
                 const creditJson = await creditRes.json();
                 setCreditData(creditJson);
             }
@@ -123,7 +126,7 @@ export default function ExecutiveAIDashboardContent() {
             setLoading(false);
             setRefreshing(false);
         }
-    }, [selectedCompany?._id, selectedFY?._id, data]);
+    }, [selectedCompany?._id, selectedFY?._id, selectedFY?.startDate, selectedFY?.endDate]);
 
     const handleManualRefresh = () => {
         setRefreshing(true);

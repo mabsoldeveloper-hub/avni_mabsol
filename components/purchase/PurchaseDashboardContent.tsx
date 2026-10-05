@@ -100,8 +100,14 @@ export default function PurchaseDashboardContent() {
   // Quick View Recent Activity Modal
   const [selectedRecentBill, setSelectedRecentBill] = useState<any | null>(null);
 
+  const [refreshing, setRefreshing] = useState<boolean>(false);
+
   const fetchPurchaseDashboard = useCallback(async () => {
-    setLoading(true);
+    setData((prev) => {
+      if (!prev) setLoading(true);
+      else setRefreshing(true);
+      return prev;
+    });
     try {
       const params = new URLSearchParams();
       if (selectedCompany?._id) params.set("companyId", selectedCompany._id);
@@ -119,8 +125,9 @@ export default function PurchaseDashboardContent() {
       console.error("Purchase Dashboard Error:", err);
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
-  }, [selectedCompany, selectedFY, period]);
+  }, [selectedCompany?._id, selectedFY?._id, period]);
 
   useEffect(() => {
     fetchPurchaseDashboard();

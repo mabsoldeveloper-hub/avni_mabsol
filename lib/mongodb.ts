@@ -101,6 +101,39 @@ async function dbConnect() {
     }
   }
 
+  // Ensure high-performance indexes for VFP tables in background
+  const globalForIndexes = globalThis as typeof globalThis & {
+    vfpIndexesEnsured?: boolean;
+  };
+  if (!globalForIndexes.vfpIndexesEnsured) {
+    globalForIndexes.vfpIndexesEnsured = true;
+    (async () => {
+      try {
+        const db = cached.conn?.connection?.db;
+        if (db) {
+          await Promise.all([
+            db.collection("vfp_new_folder_mdis").createIndex({ DATE: 1, COMPANY: 1 }, { background: true }).catch(() => {}),
+            db.collection("vfp_new_folder_mdis").createIndex({ TYPE: 1, DATE: 1 }, { background: true }).catch(() => {}),
+            db.collection("vfp_new_folder_mdis").createIndex({ CODEP: 1 }, { background: true }).catch(() => {}),
+            db.collection("vfp_new_folder_gledger").createIndex({ DATE: 1, COMPANY: 1 }, { background: true }).catch(() => {}),
+            db.collection("vfp_new_folder_gledger").createIndex({ BOOK: 1, CD: 1, DATE: 1 }, { background: true }).catch(() => {}),
+            db.collection("vfp_new_folder_gledger").createIndex({ CODE: 1 }, { background: true }).catch(() => {}),
+            db.collection("vfp_new_folder_dis").createIndex({ DATE: 1, COMPANY: 1 }, { background: true }).catch(() => {}),
+            db.collection("vfp_new_folder_dis").createIndex({ CODE: 1 }, { background: true }).catch(() => {}),
+            db.collection("vfp_new_folder_pend").createIndex({ DDATE: 1, COMPANY: 1 }, { background: true }).catch(() => {}),
+            db.collection("vfp_new_folder_pend").createIndex({ ACGROUP: 1, INVTYPE: 1 }, { background: true }).catch(() => {}),
+            db.collection("vfp_new_folder_pend").createIndex({ ORD: 1 }, { background: true }).catch(() => {}),
+            db.collection("vfp_new_folder_order").createIndex({ ORDNO: 1 }, { background: true }).catch(() => {}),
+            db.collection("vfp_new_folder_order").createIndex({ SALDR: 1 }, { background: true }).catch(() => {}),
+            db.collection("vfp_new_folder_pro").createIndex({ CODE: 1 }, { background: true }).catch(() => {}),
+            db.collection("vfp_new_folder_pro").createIndex({ COMPANY: 1 }, { background: true }).catch(() => {}),
+            db.collection("vfp_new_folder_probat").createIndex({ EXP: 1, BALANCE: 1 }, { background: true }).catch(() => {}),
+          ]);
+        }
+      } catch {}
+    })();
+  }
+
   return cached.conn;
 }
 

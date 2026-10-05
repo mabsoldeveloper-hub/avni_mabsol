@@ -50,6 +50,8 @@ export async function getCompanyVfpFilter(searchParams: URLSearchParams): Promis
   // 2. Resolve Financial Year Codes strictly per selection (DO NOT mix years together!)
   const targetCompanyId = compDoc?._id || (companyId && companyId !== "ALL" ? companyId : null);
 
+  const fyIds = searchParams.get("fyIds");
+
   if (fyId === "ALL") {
     // User explicitly requested ALL financial years: include codes for all FYs of this company
     try {
@@ -78,8 +80,27 @@ export async function getCompanyVfpFilter(searchParams: URLSearchParams): Promis
     } catch (e) {
       console.error("Error matching specific fyId in getCompanyVfpFilter:", e);
     }
+  } else if (fyIds) {
+    // User requested MULTIPLE specific financial years (e.g. FY comparison)
+    try {
+      const fyIdsList = fyIds.split(",").map((s) => s.trim()).filter(Boolean);
+      const validObjIds = fyIdsList.filter((id) => mongoose.Types.ObjectId.isValid(id));
+      const codeList = fyIdsList.filter((id) => !mongoose.Types.ObjectId.isValid(id));
+      const orList: any[] = [];
+      if (validObjIds.length > 0) orList.push({ _id: { $in: validObjIds } });
+      if (codeList.length > 0) orList.push({ fyCode: { $in: codeList.map((c) => new RegExp(`^${c}$`, "i")) } });
+
+      if (orList.length > 0) {
+        const fyDocs = await FinancialYear.find(orList.length > 1 ? { $or: orList } : orList[0], { fyCode: 1 }).lean();
+        for (const fy of fyDocs) {
+          if (fy.fyCode) addCode(fy.fyCode);
+        }
+      }
+    } catch (e) {
+      console.error("Error matching multiple fyIds in getCompanyVfpFilter:", e);
+    }
   } else {
-    // No fyId parameter passed: Default strictly to CURRENT active financial year
+    // No fyId or fyIds parameter passed: Default strictly to CURRENT active financial year
     try {
       let currentFy = await FinancialYear.findOne(
         targetCompanyId ? { companyId: targetCompanyId, isCurrent: true } : { isCurrent: true }
@@ -106,29 +127,33 @@ export async function getCompanyVfpFilter(searchParams: URLSearchParams): Promis
     addCode(compDoc.code);
   }
 
-  // 4. Auto-detect VFP folder/table suffixes from synced files (e.g. "_F18.DBF" -> "F18")
-  try {
-    const db = mongoose.connection.db;
-    if (db) {
-      const configDocs = await db.collection("vfpconfigs").find({}).toArray();
-      for (const cfg of configDocs) {
-        if (Array.isArray(cfg.enabledFiles)) {
-          for (const f of cfg.enabledFiles) {
-            const m = String(f).match(/_([A-Za-z0-9]+)\.DBF$/i);
+  // 4. Auto-detect VFP folder/table suffixes from synced files
+  // IMPORTANT: Only auto-detect if the user explicitly requested fyId === "ALL" and NO specific codes were found.
+  // When a specific FY is selected or defaulted to current FY, we MUST NEVER mix in suffixes of other FYs.
+  if (fyId === "ALL" && codesToMatch.size === 0) {
+    try {
+      const db = mongoose.connection.db;
+      if (db) {
+        const configDocs = await db.collection("vfpconfigs").find({}).toArray();
+        for (const cfg of configDocs) {
+          if (Array.isArray(cfg.enabledFiles)) {
+            for (const f of cfg.enabledFiles) {
+              const m = String(f).match(/_([A-Za-z0-9]+)\.DBF$/i);
+              if (m && m[1]) addCode(m[1]);
+            }
+          }
+        }
+        const tableMaps = await db.collection("vfptablemaps").find({}, { projection: { fileName: 1 } }).limit(30).toArray();
+        for (const tm of tableMaps) {
+          if (tm.fileName) {
+            const m = String(tm.fileName).match(/_([A-Za-z0-9]+)\.DBF$/i);
             if (m && m[1]) addCode(m[1]);
           }
         }
       }
-      const tableMaps = await db.collection("vfptablemaps").find({}, { projection: { fileName: 1 } }).limit(30).toArray();
-      for (const tm of tableMaps) {
-        if (tm.fileName) {
-          const m = String(tm.fileName).match(/_([A-Za-z0-9]+)\.DBF$/i);
-          if (m && m[1]) addCode(m[1]);
-        }
-      }
+    } catch (e) {
+      console.error("Error auto-detecting VFP table suffix in getCompanyVfpFilter:", e);
     }
-  } catch (e) {
-    console.error("Error auto-detecting VFP table suffix in getCompanyVfpFilter:", e);
   }
 
   // 5. Build MongoDB Query

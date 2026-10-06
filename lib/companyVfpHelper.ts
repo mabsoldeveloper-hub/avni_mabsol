@@ -2,9 +2,14 @@ import mongoose from "mongoose";
 import connectDB from "@/lib/mongodb";
 import Company from "@/models/Company";
 import FinancialYear from "@/models/FinancialYear";
+import { getCurrentUser } from "@/lib/auth";
 
 export async function getCompanyVfpFilter(searchParams: URLSearchParams): Promise<Record<string, any>> {
   await connectDB();
+
+  const currentUser = await getCurrentUser();
+  const userCompany = currentUser?.companyId ? await Company.findById(currentUser.companyId).lean() : null;
+  const isChildBranchUser = Boolean(userCompany && !userCompany.isHeadOffice);
 
   const companyId = searchParams.get("companyId");
   const fyId = searchParams.get("fyId");
@@ -25,7 +30,10 @@ export async function getCompanyVfpFilter(searchParams: URLSearchParams): Promis
 
   // 1. Resolve Company
   let compDoc: any = null;
-  if (companyId && companyId !== "ALL") {
+  if (isChildBranchUser && userCompany) {
+    // Child branch user is strictly isolated to their own company
+    compDoc = userCompany;
+  } else if (companyId && companyId !== "ALL") {
     try {
       if (mongoose.Types.ObjectId.isValid(companyId)) {
         compDoc = await Company.findById(companyId).lean();
@@ -35,16 +43,8 @@ export async function getCompanyVfpFilter(searchParams: URLSearchParams): Promis
     } catch (e) {
       console.error("Error matching companyId in getCompanyVfpFilter:", e);
     }
-  } else {
-    // If no companyId or "ALL", check if there is a single active company
-    try {
-      const companyCount = await Company.countDocuments({ status: { $ne: "Inactive" } });
-      if (companyCount === 1) {
-        compDoc = await Company.findOne({ status: { $ne: "Inactive" } }).lean();
-      }
-    } catch (e) {
-      console.error("Error detecting single company in getCompanyVfpFilter:", e);
-    }
+  } else if (userCompany) {
+    compDoc = userCompany;
   }
 
   // 2. Resolve Financial Year Codes strictly per selection (DO NOT mix years together!)
@@ -173,6 +173,11 @@ export async function getCompanyVfpFilter(searchParams: URLSearchParams): Promis
       vfpOrList.push({ companyId: new mongoose.Types.ObjectId(compStr) });
     }
     vfpOrList.push({ companyId: compStr });
+  }
+
+  // If this was a child branch or a specific company query, NEVER fall back to all data if empty!
+  if (isChildBranchUser || (companyId && companyId !== "ALL") || compDoc) {
+    return vfpOrList.length > 0 ? { $or: vfpOrList } : { _id: null };
   }
 
   return vfpOrList.length > 0 ? { $or: vfpOrList } : {};

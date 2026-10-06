@@ -311,34 +311,29 @@ export default function Sidebar({ collapsed, setCollapsed, mobile }: SidebarProp
     return menuItems.filter((item) => {
       if (item.isVisible === false) return false;
 
-      // Module-level company permission check
-      if (enabledModules && Array.isArray(enabledModules) && enabledModules.length > 0) {
-        const isAlwaysAllowed =
-          item.id === "standard-dashboard" ||
-          item.id === "executive-ai" ||
-          item.href === "/dashboard";
-
-        if (!isAlwaysAllowed) {
-          const itemHref = item.href || (item.subItems && item.subItems[0]?.href) || "";
-          const isEnabled = enabledModules.some((modKey: string) => {
-            if (item.id === modKey || item.id.includes(modKey)) return true;
-            if (itemHref.includes(`/dashboard/${modKey}`)) return true;
-            const mappedIds = MODULE_KEY_MAP[modKey] || [];
-            if (mappedIds.includes(item.id)) return true;
-            if (
-              item.subItems?.some(
-                (sub) =>
-                  mappedIds.includes(sub.id) ||
-                  sub.id.includes(modKey) ||
-                  sub.href?.includes(modKey)
-              )
+      // Module-level company permission check: strictly respect company's enabledModules
+      if (enabledModules && Array.isArray(enabledModules) && enabledModules.length > 0 && !isSuperAdmin) {
+        const itemHref = item.href || (item.subItems && item.subItems[0]?.href) || "";
+        const isEnabled = enabledModules.some((modKey: string) => {
+          if (item.id === modKey) return true;
+          const mappedIds = MODULE_KEY_MAP[modKey] || [];
+          if (mappedIds.includes(item.id)) return true;
+          if (itemHref === `/dashboard/${modKey}` || itemHref.startsWith(`/dashboard/${modKey}/`)) return true;
+          if (
+            item.subItems?.some(
+              (sub) =>
+                mappedIds.includes(sub.id) ||
+                sub.id === modKey ||
+                sub.href === `/dashboard/${modKey}` ||
+                sub.href?.startsWith(`/dashboard/${modKey}/`)
             )
-              return true;
-            return false;
-          });
+          ) {
+            return true;
+          }
+          return false;
+        });
 
-          if (!isEnabled) return false;
-        }
+        if (!isEnabled) return false;
       }
 
       // User role permission check for main item

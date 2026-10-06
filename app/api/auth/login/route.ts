@@ -81,10 +81,49 @@ export async function POST(req: Request) {
       );
     }
 
-    // ── Direct Login for All Users (OTP Disabled) ───────────────────────────
+    // ── Direct Login for Web Users; OTP Verification Enforced for Desktop Agent (EXE) ──
     const isSuperAdmin = isSuperAdminUser(user);
     const isAgent = Boolean(isDesktopAgent);
     const sessionTiming = getUserSessionDuration(user);
+
+    // In Desktop EXE: Enforce multi-factor account verification (OTP)
+    if (isAgent) {
+      const rawOtp = Math.floor(100000 + Math.random() * 900000).toString();
+      const hashedOtp = await bcrypt.hash(rawOtp, 10);
+
+      await Otp.deleteMany({ email: user.email });
+      await Otp.create({
+        email: user.email,
+        type: "email",
+        otp: hashedOtp,
+        createdAt: new Date(),
+        expiresAt: new Date(Date.now() + OTP_TTL_MS),
+      });
+
+      console.log(`[DESKTOP AGENT LOGIN OTP] Verification code for ${user.email}: ${rawOtp}`);
+
+      try {
+        await sendOtpEmail(user.email, rawOtp);
+      } catch (mailErr) {
+        console.warn("Failed to send desktop verification email:", mailErr);
+      }
+
+      const targetPhone = user.phone || user.mobile;
+      if (targetPhone) {
+        try {
+          await sendWhatsAppOTP(targetPhone, rawOtp);
+        } catch (waErr) {
+          console.warn("Failed to send desktop verification WhatsApp OTP:", waErr);
+        }
+      }
+
+      return NextResponse.json({
+        success: true,
+        otpRequired: true,
+        email: user.email,
+        message: "Desktop account verification required. Verification code sent to your registered email & phone.",
+      });
+    }
 
     let effectiveRoleType = isSuperAdmin ? "SuperAdmin" : (user.roleType || "Admin");
     if (!isSuperAdmin && user.roleId) {

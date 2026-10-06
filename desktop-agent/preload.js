@@ -20,10 +20,20 @@ contextBridge.exposeInMainWorld("electronAPI", {
   // Config & License
   getConfig: () => ipcRenderer.invoke("config:get"),
   saveConfig: (cfg) => ipcRenderer.invoke("config:save", cfg),
+  setCloudUrl: (url) => ipcRenderer.invoke("config:set-cloud-url", url),
   getLicenseDetails: () => ipcRenderer.invoke("license:get-details"),
   checkDeviceLicense: (payload) => ipcRenderer.invoke("license:check-device", payload),
   sendDeviceOtp: (payload) => ipcRenderer.invoke("license:send-device-otp", payload),
   activateDevice: (payload) => ipcRenderer.invoke("license:activate-device", payload),
+  generateNewLicenseKey: (payload) => ipcRenderer.invoke("license:generate-key", payload),
+  requestAgentPin: (payload) => ipcRenderer.invoke("license:request-agent-pin", payload),
+  checkAgentPinStatus: (payload) => ipcRenderer.invoke("license:check-agent-pin-status", payload),
+
+  // Branch & Multi-Company Profile Operations
+  fetchBranches: (payload) => ipcRenderer.invoke("config:fetch-branches", payload),
+  switchBranchProfile: (companyCode) => ipcRenderer.invoke("config:switch-branch", companyCode),
+  saveBranchProfile: (branchData) => ipcRenderer.invoke("config:save-branch-profile", branchData),
+  startMultiBranchSync: () => ipcRenderer.invoke("sync:start-all-branches"),
 
   // File dialogs & validation
   selectFolder: (title) => ipcRenderer.invoke("dialog:select-folder", title),

@@ -45,7 +45,7 @@ const VfpConfigSchema = new mongoose.Schema(
     companyCode: {
       type: String,
       required: false,
-      default: "DEFAULT",
+      default: "",
     },
     lastSyncedAt: {
       type: Date,

@@ -50,6 +50,7 @@ const operatorStatusBadge = document.getElementById("operatorStatusBadge");
 const termsConsentCheckbox = document.getElementById("termsConsentCheckbox");
 const termsNoticeWarning = document.getElementById("termsNoticeWarning");
 const companyNameInput = document.getElementById("companyNameInput");
+const crmCompanyCodeInput = document.getElementById("crmCompanyCodeInput");
 const companyCodeInput = document.getElementById("companyCodeInput");
 const sourceDirInput = document.getElementById("sourceDirInput");
 const sourceDirStatusBadge = document.getElementById("sourceDirStatusBadge");
@@ -57,10 +58,13 @@ const destDirInput = document.getElementById("destDirInput");
 const licenseKeyInput = document.getElementById("licenseKeyInput");
 const productKeyInput = document.getElementById("productKeyInput");
 const btnVerifyLicenseKeyManual = document.getElementById("btnVerifyLicenseKeyManual");
+const licenseVerifiedBadge = document.getElementById("licenseVerifiedBadge");
+const btnChangeLicenseKey = document.getElementById("btnChangeLicenseKey");
 const licenseCountdownBadge = document.getElementById("licenseCountdownBadge");
 const licenseCountdownText = document.getElementById("licenseCountdownText");
 const licenseCountdownDetail = document.getElementById("licenseCountdownDetail");
 const licenseExpiryNotice = document.getElementById("licenseExpiryNotice");
+let isMachineLocallyAuthorized = false;
 const intervalSelect = document.getElementById("intervalSelect");
 const browseSourceBtn = document.getElementById("browseSourceBtn");
 const browseDestBtn = document.getElementById("browseDestBtn");
@@ -100,6 +104,14 @@ const verifyPasswordUnlockBtn = document.getElementById("verifyPasswordUnlockBtn
 const closeUnlockPasswordModalBtn = document.getElementById("closeUnlockPasswordModalBtn");
 const switchToPasswordBtn = document.getElementById("switchToPasswordBtn");
 const switchToOtpBtn = document.getElementById("switchToOtpBtn");
+
+// DOM Elements - Branch & Multi-Company Selector
+const branchSelectDropdown = document.getElementById("branchSelectDropdown");
+const btnRefreshBranches = document.getElementById("btnRefreshBranches");
+const btnAddBranchProfile = document.getElementById("btnAddBranchProfile");
+const branchBadgeStatus = document.getElementById("branchBadgeStatus");
+const syncAllBranchesBtn = document.getElementById("syncAllBranchesBtn");
+let currentBranchProfiles = [];
 
 // DOM Elements - Action & Stats & Terminal
 const syncNowBtn = document.getElementById("syncNowBtn");
@@ -208,7 +220,18 @@ document.addEventListener("DOMContentLoaded", async () => {
       currentAuthEmail = sessionRes.session.email || "";
       showDashboard(sessionRes.session);
     } else {
-      if (sessionRes?.accountSuspended) {
+      if (sessionRes?.isExeChanged) {
+        if (sessionRes.email) emailInput.value = sessionRes.email;
+        loginError.textContent = "New desktop agent executable detected. Please sign in and verify your account.";
+        loginError.classList.remove("hidden");
+        // Clear prefilled fields so newly downloaded/installed EXE starts completely clean
+        if (operatorNameInput) operatorNameInput.value = "";
+        if (companyNameInput) companyNameInput.value = "";
+        if (companyCodeInput) companyCodeInput.value = "";
+        if (sourceDirInput) sourceDirInput.value = "";
+        if (licenseKeyInput) licenseKeyInput.value = "";
+        if (productKeyInput) productKeyInput.value = "";
+      } else if (sessionRes?.accountSuspended) {
         if (sessionRes.email) emailInput.value = sessionRes.email;
         loginError.textContent = sessionRes.message || "Your account has been deactivated or suspended. Please contact administrator.";
         loginError.classList.remove("hidden");
@@ -276,14 +299,27 @@ async function loadAndDisplayConfig() {
         const sessionRes = await window.electronAPI.checkSession();
         compNameFromUser = sessionRes?.session?.user?.companyName || sessionRes?.session?.user?.companyId?.companyName || "";
       } catch {}
-      if (cfg.companyName && cfg.companyName.toLowerCase() !== "test") {
+      const isPlaceholderComp = (val) => {
+        if (!val) return true;
+        const s = String(val).trim().toLowerCase();
+        return s === "your organization" || s === "organization" || s === "default" || s === "test";
+      };
+
+      if (cfg.companyName && !isPlaceholderComp(cfg.companyName)) {
         companyNameInput.value = cfg.companyName;
-      } else if (compNameFromUser) {
+      } else if (compNameFromUser && !isPlaceholderComp(compNameFromUser)) {
         companyNameInput.value = compNameFromUser;
       } else {
-        companyNameInput.value = cfg.companyName || "";
+        companyNameInput.value = "";
       }
-      companyCodeInput.value = (cfg.companyCode || "").toUpperCase();
+      if (crmCompanyCodeInput) {
+        crmCompanyCodeInput.value = cfg.selectedCompanyCode || "";
+      }
+      if (cfg.companyCode && !isPlaceholderComp(cfg.companyCode)) {
+        companyCodeInput.value = (cfg.companyCode || "").toUpperCase();
+      } else {
+        companyCodeInput.value = "";
+      }
       sourceDirInput.value = cfg.sourceDir || "";
       destDirInput.value = cfg.destDir || "";
       licenseKeyInput.value = cfg.licenseKey || "";
@@ -328,9 +364,157 @@ async function loadAndDisplayConfig() {
 
       // Fetch active license validity & start live countdown timer
       fetchAndShowLicenseDetails();
+      updateSyncButtonRequirementState();
+      loadBranches();
     }
   } catch (err) {
     console.error("Failed to load config:", err);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Multi-Branch & Multi-Company Profile Operations
+// ---------------------------------------------------------------------------
+async function loadBranches(forceRefresh = false) {
+  if (!window.electronAPI?.fetchBranches) return;
+  try {
+    if (btnRefreshBranches) btnRefreshBranches.disabled = true;
+    const cfg = await window.electronAPI.getConfig();
+    const sessionRes = await window.electronAPI.checkSession().catch(() => null);
+    const email = cfg?.userEmail || sessionRes?.session?.user?.email || currentAuthEmail;
+    const token = sessionRes?.session?.token || "";
+
+    const res = await window.electronAPI.fetchBranches({ email, token, cloudUrl: cfg?.cloudUrl });
+    if (res && res.success && Array.isArray(res.branches)) {
+      currentBranchProfiles = res.branches;
+      renderBranchDropdown(res.branches, res.selectedCompanyCode || cfg?.selectedCompanyCode || cfg?.companyCode);
+    }
+  } catch (err) {
+    console.error("Failed to load branches:", err);
+  } finally {
+    if (btnRefreshBranches) btnRefreshBranches.disabled = false;
+  }
+}
+
+function renderBranchDropdown(branches, selectedCode) {
+  if (!branchSelectDropdown) return;
+  branchSelectDropdown.innerHTML = "";
+
+  if (!branches || branches.length === 0) {
+    const opt = document.createElement("option");
+    opt.value = "";
+    opt.textContent = "-- Click 'Fetch Branches' to load companies --";
+    branchSelectDropdown.appendChild(opt);
+    if (branchBadgeStatus) {
+      branchBadgeStatus.textContent = "Unconfigured";
+      branchBadgeStatus.style.borderColor = "rgba(148, 163, 184, 0.3)";
+      branchBadgeStatus.style.color = "#94a3b8";
+    }
+    return;
+  }
+
+  let matched = false;
+  branches.forEach(b => {
+    const opt = document.createElement("option");
+    const crmCode = b.crmCompanyCode || b.companyCode || "";
+    opt.value = crmCode;
+    const isSelected = selectedCode && crmCode.toUpperCase() === selectedCode.toUpperCase();
+    if (isSelected) matched = true;
+    opt.selected = isSelected;
+    const folderHint = b.sourceDir ? "📁 Linked" : "⚠️ No folder";
+    const decCode = b.decryptCode || (b.companyCode !== crmCode ? b.companyCode : "");
+    const decHint = decCode ? decCode : "";
+    opt.textContent = `${b.companyName || crmCode} [${crmCode}]${decHint} (${folderHint})`;
+    branchSelectDropdown.appendChild(opt);
+  });
+
+  if (!matched && branches.length > 0) {
+    branchSelectDropdown.selectedIndex = 0;
+  }
+
+  const activeVal = branchSelectDropdown.value || "";
+  const active = branches.find(b => (b.crmCompanyCode || b.companyCode || "").toUpperCase() === activeVal.toUpperCase());
+  if (branchBadgeStatus) {
+    if (active?.sourceDir) {
+      branchBadgeStatus.textContent = "Folder Linked ✓";
+      branchBadgeStatus.style.borderColor = "rgba(34, 197, 94, 0.4)";
+      branchBadgeStatus.style.color = "#4ade80";
+    } else {
+      branchBadgeStatus.textContent = "Needs Folder";
+      branchBadgeStatus.style.borderColor = "rgba(245, 158, 11, 0.4)";
+      branchBadgeStatus.style.color = "#fbbf24";
+    }
+  }
+}
+
+async function handleBranchChange(newCode) {
+  if (!newCode || !window.electronAPI?.switchBranchProfile) return;
+  try {
+    const res = await window.electronAPI.switchBranchProfile(newCode);
+    if (res && res.success && res.profile) {
+      const p = res.profile;
+      if (companyNameInput) companyNameInput.value = p.companyName || "";
+      if (crmCompanyCodeInput) crmCompanyCodeInput.value = p.crmCompanyCode || p.companyCode || "";
+      const extractVal = p.decryptCode || p.extractCode || (p.companyCode !== (p.crmCompanyCode || "") ? p.companyCode : "");
+      if (companyCodeInput) companyCodeInput.value = extractVal || "";
+      if (sourceDirInput) sourceDirInput.value = p.sourceDir || "";
+
+      if (p.sourceDir) {
+        updateFolderValidation(p.sourceDir, p.companyCode);
+        setFormLocked(true);
+      } else {
+        if (sourceDirStatusBadge) {
+          sourceDirStatusBadge.className = "source-dir-status-badge warning";
+          sourceDirStatusBadge.innerHTML = "<span>⚠️</span> <span>Please click Browse to select this branch's ERP Data folder.</span>";
+          sourceDirStatusBadge.classList.remove("hidden");
+        }
+        setFormLocked(false);
+      }
+      if (branchBadgeStatus) {
+        if (p.sourceDir) {
+          branchBadgeStatus.textContent = "Folder Linked ✓";
+          branchBadgeStatus.style.borderColor = "rgba(34, 197, 94, 0.4)";
+          branchBadgeStatus.style.color = "#4ade80";
+        } else {
+          branchBadgeStatus.textContent = "Needs Folder";
+          branchBadgeStatus.style.borderColor = "rgba(245, 158, 11, 0.4)";
+          branchBadgeStatus.style.color = "#fbbf24";
+        }
+      }
+      updateSyncButtonRequirementState();
+      showToast(`Switched active branch to ${p.companyName || p.companyCode}`, "info");
+    }
+  } catch (err) {
+    console.error("Failed to switch branch:", err);
+    showToast(`Error switching branch: ${err.message}`, "error");
+  }
+}
+
+async function handleAddNewBranchProfile() {
+  const code = prompt("Enter new Branch Company Code (e.g. B02 or A02):");
+  if (!code || !code.trim()) return;
+  const cleanCode = code.trim().toUpperCase();
+  const name = prompt(`Enter Branch Company Name for [${cleanCode}]:`, `Branch ${cleanCode}`);
+  if (name === null) return;
+
+  try {
+    const res = await window.electronAPI.saveBranchProfile({
+      companyCode: cleanCode,
+      companyName: (name || cleanCode).trim(),
+      sourceDir: ""
+    });
+    if (res && res.success) {
+      showToast(`Branch profile [${cleanCode}] created. Please select its ERP data folder.`, "success");
+      await loadBranches();
+      if (branchSelectDropdown) {
+        branchSelectDropdown.value = cleanCode;
+        await handleBranchChange(cleanCode);
+      }
+      setFormLocked(false);
+      if (browseSourceBtn) browseSourceBtn.focus();
+    }
+  } catch (err) {
+    showToast(`Failed to add branch: ${err.message}`, "error");
   }
 }
 
@@ -372,6 +556,98 @@ async function updateFolderValidation(folderPath, companyCode) {
   }
 }
 
+function isPlaceholderComp(val) {
+  if (!val) return true;
+  const s = String(val).trim().toLowerCase();
+  return s === "your organization" || s === "organization" || s === "default" || s === "test";
+}
+
+function updateLicenseStatusUI(isVerified, expiresAt) {
+  const verifiedBadge = document.getElementById("licenseVerifiedBadge");
+  const pinBtn = document.getElementById("btnGeneratePinAgent");
+  const newKeyBtn = document.getElementById("btnGenerateNewLicenseKey");
+  const verifyBtn = document.getElementById("btnVerifyLicenseKeyManual");
+  const changeBtn = document.getElementById("btnChangeLicenseKey");
+  const countdownBadge = document.getElementById("licenseCountdownBadge");
+
+  const keyVal = (licenseKeyInput?.value || "").trim();
+  const hasKey = Boolean(keyVal);
+  const isExpired = countdownBadge?.classList.contains("expired");
+
+  const isActuallyVerified = Boolean(isVerified && hasKey && !isExpired);
+
+  if (isActuallyVerified) {
+    if (verifiedBadge) verifiedBadge.classList.remove("hidden");
+    if (pinBtn) pinBtn.classList.add("hidden");
+    if (newKeyBtn) newKeyBtn.classList.add("hidden");
+    if (verifyBtn) verifyBtn.classList.add("hidden");
+
+    // Only show Change Key button if the form is currently in edit mode (unlocked)
+    const isEditMode = editConfigBtn && editConfigBtn.classList.contains("hidden");
+    if (changeBtn) {
+      if (isEditMode) {
+        changeBtn.classList.remove("hidden");
+      } else {
+        changeBtn.classList.add("hidden");
+      }
+    }
+  } else {
+    if (verifiedBadge) verifiedBadge.classList.add("hidden");
+    if (pinBtn) pinBtn.classList.remove("hidden");
+    if (newKeyBtn) newKeyBtn.classList.remove("hidden");
+    if (verifyBtn) verifyBtn.classList.remove("hidden");
+    if (changeBtn) changeBtn.classList.add("hidden");
+  }
+}
+
+function updateSyncButtonRequirementState() {
+  if (!syncNowBtn) return;
+
+  const licenseKey = (licenseKeyInput?.value || "").trim();
+  const companyCode = (companyCodeInput?.value || "").trim();
+  const sourceDir = (sourceDirInput?.value || "").trim();
+  const termsAccepted = Boolean(termsConsentCheckbox && termsConsentCheckbox.checked);
+
+  const missingFields = [];
+  if (!licenseKey) missingFields.push("License Key");
+  if (!companyCode || isPlaceholderComp(companyCode)) missingFields.push("Company Code");
+  if (!sourceDir) missingFields.push("Encrypted Data Folder");
+  if (!termsAccepted) missingFields.push("Terms & Conditions");
+
+  const allFilled = missingFields.length === 0;
+
+  if (allFilled) {
+    syncNowBtn.disabled = false;
+    syncNowBtn.classList.remove("terms-disabled", "btn-disabled-requirements");
+    syncNowBtn.title = "Extract & Sync Now";
+    if (toggleAutoSyncBtn) {
+      toggleAutoSyncBtn.classList.remove("terms-disabled", "btn-disabled-requirements");
+      toggleAutoSyncBtn.title = "Pause or Resume Automatic Synchronization";
+    }
+  } else {
+    syncNowBtn.disabled = true;
+    syncNowBtn.classList.add("terms-disabled", "btn-disabled-requirements");
+    syncNowBtn.title = `Sync disabled: Please fill all required fields (${missingFields.join(", ")})`;
+    if (toggleAutoSyncBtn) {
+      toggleAutoSyncBtn.classList.add("terms-disabled", "btn-disabled-requirements");
+      toggleAutoSyncBtn.title = `Sync disabled: Please fill all required fields (${missingFields.join(", ")})`;
+    }
+  }
+
+  if (syncAllBranchesBtn) {
+    if (licenseKey && termsAccepted) {
+      syncAllBranchesBtn.disabled = false;
+      syncAllBranchesBtn.classList.remove("terms-disabled", "btn-disabled-requirements");
+      syncAllBranchesBtn.title = "Sync all configured branch folders sequentially";
+    } else {
+      syncAllBranchesBtn.disabled = true;
+      syncAllBranchesBtn.classList.add("terms-disabled", "btn-disabled-requirements");
+      syncAllBranchesBtn.title = "Batch sync disabled: Please verify License Key and accept Terms";
+    }
+  }
+}
+window.updateSyncButtonRequirementState = updateSyncButtonRequirementState;
+
 let licenseCountdownInterval = null;
 
 function updateLicenseCountdown(expiresAtStr) {
@@ -383,6 +659,8 @@ function updateLicenseCountdown(expiresAtStr) {
   if (!expiresAtStr) {
     if (licenseCountdownBadge) licenseCountdownBadge.classList.add("hidden");
     if (licenseCountdownDetail) licenseCountdownDetail.classList.add("hidden");
+    updateLicenseStatusUI(false, null);
+    updateSyncButtonRequirementState();
     return;
   }
 
@@ -402,6 +680,8 @@ function updateLicenseCountdown(expiresAtStr) {
         licenseCountdownDetail.classList.remove("hidden");
         if (licenseExpiryNotice) licenseExpiryNotice.textContent = "License key expired. Please renew from Web Settings.";
       }
+      updateLicenseStatusUI(false, null);
+      updateSyncButtonRequirementState();
       if (licenseCountdownInterval) {
         clearInterval(licenseCountdownInterval);
         licenseCountdownInterval = null;
@@ -433,6 +713,8 @@ function updateLicenseCountdown(expiresAtStr) {
         licenseExpiryNotice.textContent = `${days} days remaining in 30-day term`;
       }
     }
+
+    updateLicenseStatusUI(true, expiresAtStr);
   }
 
   tick();
@@ -445,31 +727,36 @@ async function fetchAndShowLicenseDetails() {
     const res = await window.electronAPI.getLicenseDetails();
     if (res && res.success) {
       // Auto-fill company information & license key from cloud server if not yet populated
-      if (res.license && (!licenseKeyInput.value || !licenseKeyInput.value.trim())) {
+      if (res.license) {
         licenseKeyInput.value = res.license;
       }
-      if (res.companyName && (!companyNameInput.value || !companyNameInput.value.trim() || companyNameInput.value.toLowerCase() === "test")) {
+      if (res.companyName && !isPlaceholderComp(res.companyName) && (!companyNameInput.value || isPlaceholderComp(companyNameInput.value))) {
         companyNameInput.value = res.companyName;
       }
-      if (res.companyCode && (!companyCodeInput.value || !companyCodeInput.value.trim())) {
+      if (res.companyCode && !isPlaceholderComp(res.companyCode) && (!companyCodeInput.value || isPlaceholderComp(companyCodeInput.value))) {
         companyCodeInput.value = res.companyCode.toUpperCase();
         if (sourceDirInput.value) {
           updateFolderValidation(sourceDirInput.value, res.companyCode);
         }
       }
-      if (res.licenseExpiresAt) {
+      if (res.licenseExpiresAt && res.license && !res.isExpired) {
         updateLicenseCountdown(res.licenseExpiresAt);
+        updateLicenseStatusUI(true, res.licenseExpiresAt);
       } else {
         updateLicenseCountdown(null);
+        updateLicenseStatusUI(false, null);
       }
       if (res.license && !isMachineLocallyAuthorized) {
         checkAndPromptDeviceLicense(currentAuthEmail, res.license);
       }
     } else {
       updateLicenseCountdown(null);
+      updateLicenseStatusUI(false, null);
     }
   } catch (err) {
     console.error("Failed to query license details:", err);
+  } finally {
+    updateSyncButtonRequirementState();
   }
 }
 
@@ -484,6 +771,10 @@ function setFormLocked(isLocked) {
   }
   companyNameInput.disabled = isLocked;
   companyNameInput.readOnly = isLocked;
+  if (crmCompanyCodeInput) {
+    crmCompanyCodeInput.disabled = true;
+    crmCompanyCodeInput.readOnly = true;
+  }
   companyCodeInput.disabled = isLocked;
   companyCodeInput.readOnly = isLocked;
   sourceDirInput.disabled = isLocked;
@@ -506,6 +797,7 @@ function setFormLocked(isLocked) {
     editConfigBtn.classList.remove("hidden");
     saveConfigBtn.classList.add("hidden");
     cancelEditBtn.classList.add("hidden");
+    if (btnChangeLicenseKey) btnChangeLicenseKey.classList.add("hidden");
   } else {
     sourceDirInput.type = "text";
     licenseKeyInput.type = "text";
@@ -514,7 +806,13 @@ function setFormLocked(isLocked) {
     editConfigBtn.classList.add("hidden");
     saveConfigBtn.classList.remove("hidden");
     cancelEditBtn.classList.remove("hidden");
+    // If license key is verified in edit mode, show Change Key button
+    const hasKey = Boolean(licenseKeyInput && licenseKeyInput.value.trim());
+    if (hasKey && licenseVerifiedBadge && !licenseVerifiedBadge.classList.contains("hidden")) {
+      if (btnChangeLicenseKey) btnChangeLicenseKey.classList.remove("hidden");
+    }
   }
+  updateSyncButtonRequirementState();
 }
 
 // ---------------------------------------------------------------------------
@@ -2083,11 +2381,13 @@ function setupEventListeners() {
     if (selected) {
       sourceDirInput.value = selected;
       updateFolderValidation(selected, companyCodeInput.value);
+      updateSyncButtonRequirementState();
     }
   });
 
   // Live input validation on typing or pasting path/code
   sourceDirInput.addEventListener("input", () => {
+    updateSyncButtonRequirementState();
     if (folderValidateTimer) clearTimeout(folderValidateTimer);
     folderValidateTimer = setTimeout(() => {
       updateFolderValidation(sourceDirInput.value, companyCodeInput.value);
@@ -2095,12 +2395,33 @@ function setupEventListeners() {
   });
 
   companyCodeInput.addEventListener("input", () => {
+    updateSyncButtonRequirementState();
     if (folderValidateTimer) clearTimeout(folderValidateTimer);
     folderValidateTimer = setTimeout(() => {
       if (sourceDirInput.value) {
         updateFolderValidation(sourceDirInput.value, companyCodeInput.value);
       }
     }, 400);
+  });
+
+  licenseKeyInput?.addEventListener("input", () => {
+    updateSyncButtonRequirementState();
+    const hasKey = Boolean(licenseKeyInput.value.trim());
+    if (!hasKey) {
+      updateLicenseStatusUI(false);
+    }
+  });
+
+  companyNameInput?.addEventListener("input", () => {
+    updateSyncButtonRequirementState();
+  });
+
+  btnChangeLicenseKey?.addEventListener("click", () => {
+    updateLicenseStatusUI(false);
+    licenseKeyInput.readOnly = false;
+    licenseKeyInput.disabled = false;
+    licenseKeyInput.focus();
+    licenseKeyInput.select();
   });
 
   // Browse Destination Folder (Optional/Legacy)
@@ -2394,6 +2715,7 @@ function setupEventListeners() {
         setFormLocked(true); // Re-locks after successful save!
         fetchAndShowLicenseDetails();
         updateFolderValidation(newCfg.sourceDir, newCfg.companyCode);
+        loadBranches();
       } else {
         const errorText = sanitizeMessage(res?.error || "Failed to save configuration.");
         saveNotice.textContent = errorText;
@@ -2493,13 +2815,20 @@ function setupEventListeners() {
 
   // Decrypt & Sync Now Action
   syncNowBtn.addEventListener("click", async () => {
-    // Block sync until terms and conditions are checked!
-    if (termsConsentCheckbox && !termsConsentCheckbox.checked) {
-      const box = document.querySelector(".terms-consent-box");
-      if (box) box.classList.add("has-warning");
-      if (termsNoticeWarning) termsNoticeWarning.classList.remove("hidden");
-      showToast("Please agree to the Terms & Conditions and Privacy Policy before syncing.", "warning");
-      termsConsentCheckbox.focus();
+    const licenseKey = (licenseKeyInput?.value || "").trim();
+    const companyCode = (companyCodeInput?.value || "").trim();
+    const sourceDir = (sourceDirInput?.value || "").trim();
+    const termsAccepted = Boolean(termsConsentCheckbox && termsConsentCheckbox.checked);
+
+    if (!licenseKey || !companyCode || isPlaceholderComp(companyCode) || !sourceDir || !termsAccepted) {
+      updateSyncButtonRequirementState();
+      if (!termsAccepted) {
+        const box = document.querySelector(".terms-consent-box");
+        if (box) box.classList.add("has-warning");
+        if (termsNoticeWarning) termsNoticeWarning.classList.remove("hidden");
+        termsConsentCheckbox?.focus();
+      }
+      showToast("Please fill in all required fields (License Key, Company Code, Data Folder, Terms) before syncing.", "warning");
       return;
     }
 
@@ -2529,6 +2858,61 @@ function setupEventListeners() {
       setSyncButtonLoading(false);
     }
   });
+
+  // Branch & Multi-Company Selector Events
+  if (branchSelectDropdown) {
+    branchSelectDropdown.addEventListener("change", (e) => {
+      handleBranchChange(e.target.value);
+    });
+  }
+
+  if (btnRefreshBranches) {
+    btnRefreshBranches.addEventListener("click", () => {
+      showToast("Fetching linked branches from cloud...", "info");
+      loadBranches(true);
+    });
+  }
+
+  if (btnAddBranchProfile) {
+    btnAddBranchProfile.addEventListener("click", () => {
+      handleAddNewBranchProfile();
+    });
+  }
+
+  // Batch Multi-Branch Sync Action
+  if (syncAllBranchesBtn) {
+    syncAllBranchesBtn.addEventListener("click", async () => {
+      const licenseKey = (licenseKeyInput?.value || "").trim();
+      const termsAccepted = Boolean(termsConsentCheckbox && termsConsentCheckbox.checked);
+
+      if (!licenseKey || !termsAccepted) {
+        showToast("Please verify License Key and accept Terms & Conditions before syncing.", "warning");
+        return;
+      }
+
+      syncAllBranchesBtn.disabled = true;
+      syncNowBtn.disabled = true;
+      const textSpan = syncAllBranchesBtn.querySelector(".sync-all-text");
+      const originalText = textSpan ? textSpan.textContent : "Sync All Branches";
+      if (textSpan) textSpan.textContent = "Syncing All...";
+
+      appendLogEntry("info", "🔄 Initiating batch synchronization across all configured branch profiles...");
+      try {
+        const res = await window.electronAPI.startMultiBranchSync();
+        if (res && res.success) {
+          showToast("Batch multi-branch sync completed!", "success");
+          await loadBranches();
+        } else {
+          showToast(res?.message || "Multi-branch sync encountered an issue.", "warning");
+        }
+      } catch (err) {
+        showToast(`Sync failed: ${err.message}`, "error");
+      } finally {
+        if (textSpan) textSpan.textContent = originalText;
+        updateSyncButtonRequirementState();
+      }
+    });
+  }
 
   // Clear Log Console
   clearLogBtn.addEventListener("click", () => {
@@ -2704,6 +3088,7 @@ function setSyncButtonLoading(isLoading) {
   } else {
     content.classList.remove("hidden");
     spinner.classList.add("hidden");
+    updateSyncButtonRequirementState();
   }
 }
 
@@ -2727,7 +3112,174 @@ const btnXCloseDevActModal = document.getElementById("btnXCloseDevActModal");
 const devActError = document.getElementById("devActError");
 const devActSentToEmail = document.getElementById("devActSentToEmail");
 
-let isMachineLocallyAuthorized = false;
+// Web PIN Link Elements
+const tabDevActPin = document.getElementById("tabDevActPin");
+const tabDevActOtp = document.getElementById("tabDevActOtp");
+const devActPinSection = document.getElementById("devActPinSection");
+const devActOtpSection = document.getElementById("devActOtpSection");
+const devActPinInitial = document.getElementById("devActPinInitial");
+const devActPinActiveCard = document.getElementById("devActPinActiveCard");
+const devActPinDisplay = document.getElementById("devActPinDisplay");
+const btnDevActRequestPin = document.getElementById("btnDevActRequestPin");
+const btnCopyAgentPin = document.getElementById("btnCopyAgentPin");
+const btnDevActRegenPin = document.getElementById("btnDevActRegenPin");
+const btnDevActCheckPinNow = document.getElementById("btnDevActCheckPinNow");
+const btnGeneratePinAgent = document.getElementById("btnGeneratePinAgent");
+
+// Target Server Switcher Elements
+const devActServerSelect = document.getElementById("devActServerSelect");
+const serverEnvToggleBtn = document.getElementById("serverEnvToggleBtn");
+const serverEnvIcon = document.getElementById("serverEnvIcon");
+const serverEnvLabel = document.getElementById("serverEnvLabel");
+
+function updateServerEnvDisplay(url) {
+  const isLocal = Boolean(url && (url.includes("localhost") || url.includes("127.0.0.1")));
+  if (serverEnvLabel) serverEnvLabel.textContent = isLocal ? "Localhost (3000)" : "Cloud";
+  if (serverEnvIcon) serverEnvIcon.textContent = isLocal ? "💻" : "☁️";
+  if (devActServerSelect) {
+    devActServerSelect.value = isLocal ? "http://localhost:3000" : "https://phcrm.mabsolinfotech.cloud";
+  }
+}
+
+serverEnvToggleBtn?.addEventListener("click", async () => {
+  const currentVal = devActServerSelect?.value || (serverEnvLabel?.textContent?.includes("Local") ? "http://localhost:3000" : "https://phcrm.mabsolinfotech.cloud");
+  const nextVal = currentVal.includes("localhost") ? "https://phcrm.mabsolinfotech.cloud" : "http://localhost:3000";
+  if (window.electronAPI?.setCloudUrl) {
+    const res = await window.electronAPI.setCloudUrl(nextVal);
+    if (res?.success) {
+      updateServerEnvDisplay(nextVal);
+      showToast(`Target server set to ${nextVal.includes("localhost") ? "Local Dev (localhost:3000)" : "Cloud Production"}`, "info");
+    }
+  }
+});
+
+devActServerSelect?.addEventListener("change", async () => {
+  const chosen = devActServerSelect.value;
+  if (window.electronAPI?.setCloudUrl) {
+    await window.electronAPI.setCloudUrl(chosen);
+  }
+  updateServerEnvDisplay(chosen);
+  showToast(`Target server set to: ${chosen}`, "info");
+});
+
+let currentActiveAgentPin = "";
+let agentPinPollTimer = null;
+
+function switchDevActTab(mode) {
+  if (mode === "pin") {
+    if (tabDevActPin) { tabDevActPin.style.background = "#2563eb"; tabDevActPin.style.color = "#fff"; }
+    if (tabDevActOtp) { tabDevActOtp.style.background = "transparent"; tabDevActOtp.style.color = "#94a3b8"; }
+    devActPinSection?.classList.remove("hidden");
+    devActOtpSection?.classList.add("hidden");
+  } else {
+    if (tabDevActOtp) { tabDevActOtp.style.background = "#2563eb"; tabDevActOtp.style.color = "#fff"; }
+    if (tabDevActPin) { tabDevActPin.style.background = "transparent"; tabDevActPin.style.color = "#94a3b8"; }
+    devActOtpSection?.classList.remove("hidden");
+    devActPinSection?.classList.add("hidden");
+  }
+}
+
+tabDevActPin?.addEventListener("click", () => switchDevActTab("pin"));
+tabDevActOtp?.addEventListener("click", () => switchDevActTab("otp"));
+
+function stopPinPolling() {
+  if (agentPinPollTimer) {
+    clearInterval(agentPinPollTimer);
+    agentPinPollTimer = null;
+  }
+}
+
+async function requestAndDisplayAgentPin() {
+  stopPinPolling();
+  setButtonLoading(btnDevActRequestPin, true);
+  try {
+    let email = devActTargetEmail || currentAuthEmail || (emailInput ? emailInput.value.trim() : "");
+    const cloudUrl = devActServerSelect?.value || (cloudUrlInput ? cloudUrlInput.value.trim() : "");
+    const res = await window.electronAPI.requestAgentPin({ cloudUrl, email });
+    setButtonLoading(btnDevActRequestPin, false);
+    if (res && res.success && res.pin) {
+      if (res.cloudUrl) {
+        updateServerEnvDisplay(res.cloudUrl);
+      }
+      currentActiveAgentPin = res.pin;
+      if (devActPinDisplay) devActPinDisplay.textContent = res.pin;
+      devActPinInitial?.classList.add("hidden");
+      devActPinActiveCard?.classList.remove("hidden");
+      startPinPolling(res.pin);
+      showToast(`Agent PIN generated: ${res.pin}. Enter this on Web CRM!`, "success");
+    } else {
+      showToast(res?.error || "Failed to generate Agent PIN.", "error");
+    }
+  } catch (err) {
+    setButtonLoading(btnDevActRequestPin, false);
+    showToast(err.message || "Failed to generate PIN.", "error");
+  }
+}
+
+btnDevActRequestPin?.addEventListener("click", requestAndDisplayAgentPin);
+btnDevActRegenPin?.addEventListener("click", requestAndDisplayAgentPin);
+
+btnGeneratePinAgent?.addEventListener("click", () => {
+  openDeviceActivationModal({
+    email: currentAuthEmail,
+    licenseKey: licenseKeyInput ? licenseKeyInput.value.trim() : ""
+  });
+  switchDevActTab("pin");
+  requestAndDisplayAgentPin();
+});
+
+btnCopyAgentPin?.addEventListener("click", () => {
+  if (currentActiveAgentPin) {
+    navigator.clipboard.writeText(currentActiveAgentPin);
+    showToast(`PIN ${currentActiveAgentPin} copied to clipboard!`, "success");
+  }
+});
+
+async function checkPinStatusOnce() {
+  if (!currentActiveAgentPin) return;
+  try {
+    const cloudUrl = devActServerSelect?.value || (cloudUrlInput ? cloudUrlInput.value.trim() : "");
+    const res = await window.electronAPI.checkAgentPinStatus({
+      pin: currentActiveAgentPin,
+      cloudUrl
+    });
+
+    if (res && res.success && res.status === "activated" && res.licenseKey) {
+      stopPinPolling();
+      isMachineLocallyAuthorized = true;
+      if (licenseKeyInput) licenseKeyInput.value = res.licenseKey;
+      if (res.companyName && companyNameInput && !isPlaceholderComp(res.companyName) && (!companyNameInput.value || isPlaceholderComp(companyNameInput.value))) {
+        companyNameInput.value = res.companyName;
+      }
+      if (res.companyCode && companyCodeInput && !isPlaceholderComp(res.companyCode) && (!companyCodeInput.value || isPlaceholderComp(companyCodeInput.value))) {
+        companyCodeInput.value = res.companyCode;
+      }
+      if (res.expiresAt) {
+        updateLicenseCountdown(res.expiresAt);
+        updateLicenseStatusUI(true, res.expiresAt);
+      }
+      dismissDeviceActivationModal();
+      showToast(`🎉 Machine authorized from Web CRM! License key ${res.licenseKey} activated!`, "success");
+      await loadAndDisplayConfig();
+      updateSyncButtonRequirementState();
+    }
+  } catch (err) {
+    console.warn("PIN poll check warning:", err);
+  }
+}
+
+function startPinPolling(pin) {
+  stopPinPolling();
+  currentActiveAgentPin = pin;
+  agentPinPollTimer = setInterval(checkPinStatusOnce, 3000);
+}
+
+btnDevActCheckPinNow?.addEventListener("click", async () => {
+  showToast("Checking Web verification status...", "info");
+  await checkPinStatusOnce();
+});
+
+isMachineLocallyAuthorized = false;
 let devActTargetEmail = "";
 let pendingConfigToSave = null;
 
@@ -2769,6 +3321,17 @@ async function openDeviceActivationModal(data) {
   if (devActDeviceId) devActDeviceId.textContent = data?.deviceId || "...";
   if (devActSentToEmail) devActSentToEmail.textContent = devActTargetEmail || "your email";
   if (devActLicenseKey) devActLicenseKey.textContent = targetLicense || "Account License";
+  if (window.electronAPI?.getConfig) {
+    try {
+      const cfg = await window.electronAPI.getConfig();
+      if (cfg?.cloudUrl) {
+        updateServerEnvDisplay(cfg.cloudUrl);
+      }
+    } catch {}
+  }
+
+  // Default to Web PIN tab
+  switchDevActTab("pin");
 
   // Reset modal sections & input
   devActSendSection?.classList.remove("hidden");
@@ -2786,7 +3349,13 @@ async function openDeviceActivationModal(data) {
   if (btnDevActConfirm) btnDevActConfirm.disabled = true;
   deviceActivationModal?.classList.remove("hidden");
 
+  // Auto request PIN if not yet displayed
+  if (!currentActiveAgentPin) {
+    requestAndDisplayAgentPin();
+  }
+
   if (data?.autoSend) {
+    switchDevActTab("otp");
     setTimeout(() => {
       btnDevActSendOtp?.click();
     }, 150);
@@ -2811,9 +3380,13 @@ async function checkAndPromptDeviceLicense(userEmail, explicitLicenseKey) {
         }
         if (res.expiresAt) {
           updateLicenseCountdown(res.expiresAt);
+          updateLicenseStatusUI(true, res.expiresAt);
         }
+        updateSyncButtonRequirementState();
       } else if (res.isNewDevice || !res.authorized || res.requiresVerification) {
         isMachineLocallyAuthorized = false;
+        updateLicenseStatusUI(false, null);
+        updateSyncButtonRequirementState();
         openDeviceActivationModal({
           email: res.email || email,
           deviceName: res.deviceName,
@@ -2959,7 +3532,153 @@ btnDevActConfirm?.addEventListener("click", async () => {
 
 // Dismiss / Close Modal
 const dismissDeviceActivationModal = () => {
+  stopPinPolling();
   deviceActivationModal?.classList.add("hidden");
 };
 btnCloseDevActModal?.addEventListener("click", dismissDeviceActivationModal);
 btnXCloseDevActModal?.addEventListener("click", dismissDeviceActivationModal);
+
+// ---------------------------------------------------------------------------
+// Terms & Conditions Modal Handlers
+// ---------------------------------------------------------------------------
+const termsModal = document.getElementById("termsModal");
+const btnXCloseTermsModal = document.getElementById("btnXCloseTermsModal");
+const btnCloseTermsModal = document.getElementById("btnCloseTermsModal");
+const btnAcceptTermsModal = document.getElementById("btnAcceptTermsModal");
+const openTermsFromLogin = document.getElementById("openTermsFromLogin");
+const openTermsFromSignup = document.getElementById("openTermsFromSignup");
+const openTermsFromSettings = document.getElementById("openTermsFromSettings");
+
+function showTermsModal() {
+  if (termsModal) termsModal.classList.remove("hidden");
+}
+
+function hideTermsModal() {
+  if (termsModal) termsModal.classList.add("hidden");
+}
+
+openTermsFromLogin?.addEventListener("click", (e) => {
+  e.preventDefault();
+  showTermsModal();
+});
+
+openTermsFromSignup?.addEventListener("click", (e) => {
+  e.preventDefault();
+  showTermsModal();
+});
+
+openTermsFromSettings?.addEventListener("click", (e) => {
+  e.preventDefault();
+  showTermsModal();
+});
+
+btnXCloseTermsModal?.addEventListener("click", hideTermsModal);
+btnCloseTermsModal?.addEventListener("click", hideTermsModal);
+
+btnAcceptTermsModal?.addEventListener("click", () => {
+  if (termsConsentCheckbox) {
+    termsConsentCheckbox.checked = true;
+    updateTermsState(true);
+  }
+  const regTermsAccepted = document.getElementById("regTermsAccepted");
+  if (regTermsAccepted) {
+    regTermsAccepted.checked = true;
+  }
+  hideTermsModal();
+  showToast("Terms & Conditions and Data Privacy agreement accepted.", "success");
+});
+
+// ---------------------------------------------------------------------------
+// Resend Verification Code in Step 2 OTP screen
+// ---------------------------------------------------------------------------
+const resendOtpBtn = document.getElementById("resendOtpBtn");
+resendOtpBtn?.addEventListener("click", async (e) => {
+  e.preventDefault();
+  const cloudUrl = cloudUrlInput ? cloudUrlInput.value.trim() : "";
+  const email = currentAuthEmail || (emailInput ? emailInput.value.trim() : "");
+  if (!email) {
+    showToast("Email address missing. Please go back to login.", "error");
+    return;
+  }
+
+  showToast("Sending new verification code...", "info");
+  try {
+    const res = await window.electronAPI.resendOtp({ cloudUrl, email });
+    if (res && res.success) {
+      showToast(res.message || "Verification code resent successfully.", "success");
+    } else {
+      showToast(res?.message || "Failed to resend verification code.", "error");
+    }
+  } catch (err) {
+    showToast(err.message || "Network error while resending verification code.", "error");
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Generate New License Key Feature
+// ---------------------------------------------------------------------------
+const btnGenerateNewLicenseKey = document.getElementById("btnGenerateNewLicenseKey");
+const btnDevActGenerateKey = document.getElementById("btnDevActGenerateKey");
+
+async function handleGenerateNewLicenseKey() {
+  const cloudUrl = cloudUrlInput ? cloudUrlInput.value.trim() : "";
+  const email = currentAuthEmail || (operatorEmailInput ? operatorEmailInput.value.trim() : "") || (emailInput ? emailInput.value.trim() : "");
+
+  const confirmGen = confirm(
+    "Generate a new license key for this workstation?\n\n" +
+    "A brand new 30-day active license key will be generated from the cloud server and bound to this computer."
+  );
+  if (!confirmGen) return;
+
+  showToast("Generating new license key from cloud server...", "info");
+  if (btnGenerateNewLicenseKey) {
+    btnGenerateNewLicenseKey.disabled = true;
+    btnGenerateNewLicenseKey.textContent = "⏳ Generating...";
+  }
+
+  try {
+    const res = await window.electronAPI.generateNewLicenseKey({ cloudUrl, email });
+    if (res && res.success && res.license) {
+      showToast(`New license key generated: ${res.license}`, "success");
+
+      if (licenseKeyInput) {
+        licenseKeyInput.value = res.license;
+      }
+      if (devActLicenseKey) {
+        devActLicenseKey.textContent = res.license;
+      }
+      if (licenseCountdownBadge) {
+        licenseCountdownBadge.classList.remove("hidden");
+        if (licenseCountdownText) licenseCountdownText.textContent = `${res.daysRemaining || 30} Days Left`;
+      }
+      if (operatorStatusBadge) {
+        operatorStatusBadge.textContent = "Authorized";
+        operatorStatusBadge.className = "operator-status-badge authorized";
+      }
+
+      isMachineLocallyAuthorized = true;
+      updateLicenseStatusUI(true, res.expiresAt || new Date(Date.now() + 30 * 86400000).toISOString());
+      updateSyncButtonRequirementState();
+
+      // Close device activation modal if open
+      if (deviceActivationModal && !deviceActivationModal.classList.contains("hidden")) {
+        deviceActivationModal.classList.add("hidden");
+      }
+
+      await loadAndDisplayConfig();
+    } else {
+      const errMsg = res?.error || res?.message || "Could not generate new license key.";
+      showToast(errMsg, "error");
+    }
+  } catch (err) {
+    showToast(err.message || "Failed to generate new license key.", "error");
+  } finally {
+    if (btnGenerateNewLicenseKey) {
+      btnGenerateNewLicenseKey.disabled = false;
+      btnGenerateNewLicenseKey.textContent = "⚡ New Key Gen";
+    }
+  }
+}
+
+btnGenerateNewLicenseKey?.addEventListener("click", handleGenerateNewLicenseKey);
+btnDevActGenerateKey?.addEventListener("click", handleGenerateNewLicenseKey);

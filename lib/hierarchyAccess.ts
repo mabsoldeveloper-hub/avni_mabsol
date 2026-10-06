@@ -1,4 +1,5 @@
 import User from "@/models/User";
+import Company from "@/models/Company";
 import SalesHierarchy from "@/models/SalesHierarchy";
 import MrTerritory from "@/models/MrTerritory";
 import MrCustomerAssignment from "@/models/MrCustomerAssignment";
@@ -157,7 +158,11 @@ export async function getDescendantUsers(rootUser: any): Promise<any[]> {
   if (!rootUser?._id) return [];
 
   const baseFilter: any = { status: "Active" };
-  if (rootUser.tenantId) baseFilter.tenantId = rootUser.tenantId;
+  if (rootUser.companyId) {
+    baseFilter.companyId = rootUser.companyId;
+  } else if (rootUser.tenantId) {
+    baseFilter.tenantId = rootUser.tenantId;
+  }
 
   const users = await User.find(baseFilter)
     .select(
@@ -239,7 +244,20 @@ export async function getHierarchyAccess(currentUserArg?: any): Promise<Hierarch
       currentUser.email?.toLowerCase() === "mabsoldeveloper@gmail.com"
     );
     const tenantFilter: any = { status: "Active" };
-    if (!isSuper && currentUser.tenantId) tenantFilter.tenantId = currentUser.tenantId;
+    if (!isSuper && currentUser.companyId) {
+      try {
+        const userCompany = await Company.findById(currentUser.companyId).lean();
+        if (userCompany && !userCompany.isHeadOffice) {
+          tenantFilter.companyId = currentUser.companyId;
+        } else if (currentUser.tenantId) {
+          tenantFilter.tenantId = currentUser.tenantId;
+        }
+      } catch {
+        if (currentUser.tenantId) tenantFilter.tenantId = currentUser.tenantId;
+      }
+    } else if (!isSuper && currentUser.tenantId) {
+      tenantFilter.tenantId = currentUser.tenantId;
+    }
 
     const allUsers = await User.find(tenantFilter)
       .select(

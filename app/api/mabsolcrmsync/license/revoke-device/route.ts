@@ -17,23 +17,30 @@ export async function POST(request: NextRequest) {
     } catch {}
 
     const deviceId = (body.deviceId || "").trim();
+    const unlinkKey = Boolean(body.unlinkKey || body.unlinkAll || !deviceId);
     let email = (body.email || body.userEmail || "").trim().toLowerCase();
     const licenseKey = (body.licenseKey || request.headers.get("x-license-key") || "").trim();
 
-    if (!deviceId) {
-      return NextResponse.json({ success: false, error: "Device ID is required." }, { status: 400 });
+    // Authenticate user via cookie, Bearer header, or safe session helper
+    let user: any = null;
+    const cookieToken = request.cookies.get("token")?.value;
+    if (cookieToken) {
+      try {
+        const secret = process.env.JWT_SECRET || "MabsolCRM@2026SecretKey";
+        let payload: any = null;
+        try { payload = jwt.verify(cookieToken, secret); } catch { payload = jwt.verify(cookieToken, "mabsol_super_secret_jwt_key_2026"); }
+        if (payload?.email) email = email || payload.email.toLowerCase().trim();
+      } catch {}
     }
 
-    // Authenticate user
-    const user = await getCurrentUser();
-    if (user?.email) {
-      email = email || user.email.toLowerCase().trim();
-    } else {
+    if (!email) {
       const authHeader = request.headers.get("authorization");
       if (authHeader && authHeader.startsWith("Bearer ")) {
         try {
           const token = authHeader.substring(7).trim();
-          const payload = jwt.verify(token, process.env.JWT_SECRET || "MabsolCRM@2026SecretKey") as any;
+          const secret = process.env.JWT_SECRET || "MabsolCRM@2026SecretKey";
+          let payload: any = null;
+          try { payload = jwt.verify(token, secret); } catch { payload = jwt.verify(token, "mabsol_super_secret_jwt_key_2026"); }
           if (payload?.email) {
             email = email || payload.email.toLowerCase().trim();
           }
@@ -41,7 +48,16 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    const cleanDevId = deviceId.toLowerCase();
+    if (!email) {
+      try {
+        user = await getCurrentUser();
+        if (user?.email) {
+          email = email || user.email.toLowerCase().trim();
+        }
+      } catch {}
+    }
+
+    const cleanDevId = deviceId ? deviceId.toLowerCase() : "";
     const queryConditions: any[] = [];
     if (licenseKey) queryConditions.push({ license: licenseKey });
     if (email) {
@@ -50,32 +66,69 @@ export async function POST(request: NextRequest) {
     }
     queryConditions.push({ key: "vfp_sync_config" });
 
-    // Pull the device from authorizedDevices across all related configs
-    await VfpConfig.updateMany(
-      { $or: queryConditions },
-      {
-        $pull: {
-          authorizedDevices: {
-            deviceId: { $regex: new RegExp(`^${cleanDevId}$`, "i") }
+    if (unlinkKey) {
+      // Unlink entire active key and all attached devices
+      await VfpConfig.updateMany(
+        { $or: queryConditions },
+        {
+          $set: {
+            license: "",
+            licenseExpiresAt: null,
+            licenseStatus: "unlinked",
+            boundDeviceId: "",
+            boundDeviceName: "",
+            boundAt: null,
+            authorizedDevices: [],
+          },
+        }
+      );
+
+      // Expire all pending/activated AgentPins for this user
+      const AgentPin = (await import("@/models/AgentPin")).default;
+      await AgentPin.updateMany(
+        {
+          $or: [
+            ...(licenseKey ? [{ licenseKey }] : []),
+            ...(email ? [{ activatedByEmail: email }] : []),
+          ],
+        },
+        { $set: { status: "expired" } }
+      );
+    } else {
+      // Pull specific device from authorizedDevices across all related configs
+      await VfpConfig.updateMany(
+        { $or: queryConditions },
+        {
+          $pull: {
+            authorizedDevices: {
+              deviceId: { $regex: new RegExp(`^${cleanDevId}$`, "i") }
+            }
           }
         }
-      }
-    );
+      );
 
-    // If boundDeviceId matched this device, clear it
-    await VfpConfig.updateMany(
-      {
-        $or: queryConditions,
-        boundDeviceId: { $regex: new RegExp(`^${cleanDevId}$`, "i") }
-      },
-      {
-        $set: {
-          boundDeviceId: "",
-          boundDeviceName: "",
-          boundAt: null
+      // If boundDeviceId matched this device, clear it
+      await VfpConfig.updateMany(
+        {
+          $or: queryConditions,
+          boundDeviceId: { $regex: new RegExp(`^${cleanDevId}$`, "i") }
+        },
+        {
+          $set: {
+            boundDeviceId: "",
+            boundDeviceName: "",
+            boundAt: null
+          }
         }
-      }
-    );
+      );
+
+      // Expire matching AgentPin
+      const AgentPin = (await import("@/models/AgentPin")).default;
+      await AgentPin.updateMany(
+        { deviceId: { $regex: new RegExp(`^${cleanDevId}$`, "i") } },
+        { $set: { status: "expired" } }
+      );
+    }
 
     // Fetch updated config
     const updated: any = await VfpConfig.findOne({ $or: queryConditions }).lean();

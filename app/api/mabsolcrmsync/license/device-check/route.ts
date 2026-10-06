@@ -94,6 +94,13 @@ export async function POST(request: NextRequest) {
 
     const now = new Date();
 
+    const cleanComp = (val?: string) => {
+      if (!val) return "";
+      const lower = val.trim().toLowerCase();
+      if (lower === "default" || lower === "organization" || lower === "your organization" || lower === "test") return "";
+      return val.trim();
+    };
+
     // 1. Check if device is in authorizedDevices list (case-insensitive)
     const authorizedDevices: any[] = Array.isArray(config.authorizedDevices) ? config.authorizedDevices : [];
     const matchedDevice = authorizedDevices.find(
@@ -131,8 +138,8 @@ export async function POST(request: NextRequest) {
         expiresAt: matchedDevice.expiresAt || config.licenseExpiresAt,
         daysRemaining,
         deviceName: matchedDevice.deviceName || deviceName,
-        companyName: config.companyName || "",
-        companyCode: config.companyCode || "DEFAULT",
+        companyName: cleanComp(config.companyName),
+        companyCode: cleanComp(config.companyCode),
         message: isExpired ? "License expired for this machine." : "Machine is authorized and active.",
       });
     }
@@ -176,8 +183,8 @@ export async function POST(request: NextRequest) {
         expiresAt: config.licenseExpiresAt,
         daysRemaining,
         deviceName: config.boundDeviceName || deviceName,
-        companyName: config.companyName || "",
-        companyCode: config.companyCode || "DEFAULT",
+        companyName: cleanComp(config.companyName),
+        companyCode: cleanComp(config.companyCode),
         message: "Machine authorized via primary license.",
       });
     }
@@ -193,8 +200,8 @@ export async function POST(request: NextRequest) {
       email: config.email || email,
       licenseKey: config.license || licenseKey,
       boundDeviceName: config.boundDeviceName || "Another Machine",
-      companyName: config.companyName || "",
-      companyCode: config.companyCode || "DEFAULT",
+      companyName: cleanComp(config.companyName),
+      companyCode: cleanComp(config.companyCode),
       message: `Machine "${deviceName}" requires verification. Please verify your email with an OTP to activate syncing on this computer.`,
     });
   } catch (err: any) {

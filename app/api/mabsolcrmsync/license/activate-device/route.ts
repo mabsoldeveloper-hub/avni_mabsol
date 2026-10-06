@@ -92,9 +92,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Mark OTP verified and clean up all OTP records for candidate emails
-    await Otp.deleteMany({ email: { $in: candidateEmails } });
-
     // 2. Fetch User and Company info
     const user = await User.findOne({ email });
 
@@ -127,9 +124,28 @@ export async function POST(request: NextRequest) {
 
     const validityDays = Math.max(1, Math.ceil((targetExpiresAt.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)));
 
+    // Clean POJO mapping to prevent Mongoose subdocument circular reference stack overflow
+    const cleanDevId = deviceId.trim().toLowerCase();
+    const existingDevices = Array.isArray(config?.authorizedDevices)
+      ? config.authorizedDevices.map((d: any) => ({
+          deviceId: String(d.deviceId || ""),
+          deviceName: String(d.deviceName || "Desktop Agent"),
+          licenseKey: String(d.licenseKey || targetLicenseKey),
+          activatedAt: d.activatedAt ? new Date(d.activatedAt) : now,
+          expiresAt: d.expiresAt ? new Date(d.expiresAt) : targetExpiresAt,
+          lastSeenAt: d.lastSeenAt ? new Date(d.lastSeenAt) : now,
+          status: String(d.status || "active"),
+          activationEmail: String(d.activationEmail || email),
+        }))
+      : [];
+
+    const existingIdx = existingDevices.findIndex(
+      (d: any) => (d.deviceId || "").trim().toLowerCase() === cleanDevId
+    );
+
     const deviceEntry = {
       deviceId,
-      deviceName,
+      deviceName: deviceName || "Desktop Agent",
       licenseKey: targetLicenseKey,
       activatedAt: now,
       expiresAt: targetExpiresAt,
@@ -138,57 +154,18 @@ export async function POST(request: NextRequest) {
       activationEmail: email,
     };
 
-    if (!config) {
-      config = await VfpConfig.create({
-        key: "vfp_sync_config_" + email,
-        email,
-        companyName: user?.companyName || "Organization",
-        companyCode: user?.companyCode || "DEFAULT",
-        license: targetLicenseKey,
-        licenseIssuedAt: now,
-        licenseExpiresAt: targetExpiresAt,
-        licenseStatus: "active",
-        boundDeviceId: deviceId,
-        boundDeviceName: deviceName,
-        boundAt: now,
-        authorizedDevices: [deviceEntry],
-      });
+    if (existingIdx >= 0) {
+      existingDevices[existingIdx] = {
+        ...existingDevices[existingIdx],
+        ...deviceEntry,
+      };
     } else {
-      const cleanDevId = deviceId.trim().toLowerCase();
-      let authorizedDevices: any[] = Array.isArray(config.authorizedDevices) ? config.authorizedDevices : [];
-      const existingIdx = authorizedDevices.findIndex(
-        (d: any) => (d.deviceId || "").trim().toLowerCase() === cleanDevId
-      );
-
-      if (existingIdx >= 0) {
-        authorizedDevices[existingIdx] = {
-          ...authorizedDevices[existingIdx],
-          licenseKey: targetLicenseKey,
-          deviceName,
-          activatedAt: now,
-          expiresAt: targetExpiresAt,
-          lastSeenAt: now,
-          status: "active",
-          activationEmail: email,
-        };
-      } else {
-        authorizedDevices.push(deviceEntry);
-      }
-
-      config.authorizedDevices = authorizedDevices;
-      config.email = config.email || email;
-      config.license = targetLicenseKey;
-      config.licenseExpiresAt = targetExpiresAt;
-      config.licenseStatus = "active";
-      config.boundDeviceId = deviceId;
-      config.boundDeviceName = deviceName;
-      config.boundAt = now;
-      await config.save();
+      existingDevices.push(deviceEntry);
     }
 
-    // Propagate authorizedDevices and primary binding to all related VfpConfig representations
     const syncData = {
-      authorizedDevices: config.authorizedDevices,
+      authorizedDevices: existingDevices,
+      email: config?.email || email,
       license: targetLicenseKey,
       licenseExpiresAt: targetExpiresAt,
       licenseStatus: "active",
@@ -197,6 +174,22 @@ export async function POST(request: NextRequest) {
       boundAt: now,
     };
 
+    if (!config) {
+      config = await VfpConfig.create({
+        key: "vfp_sync_config_" + email,
+        companyName: user?.companyName || "",
+        companyCode: user?.companyCode || "",
+        licenseIssuedAt: now,
+        ...syncData,
+      });
+    } else {
+      await VfpConfig.updateOne(
+        { _id: config._id },
+        { $set: syncData }
+      );
+    }
+
+    // Propagate authorizedDevices and primary binding to all related VfpConfig representations
     const queryConditions: any[] = [];
     if (targetLicenseKey) queryConditions.push({ license: targetLicenseKey });
     if (licenseKey && licenseKey !== targetLicenseKey) queryConditions.push({ license: licenseKey });
@@ -211,6 +204,9 @@ export async function POST(request: NextRequest) {
       { $set: syncData }
     );
 
+    // Clean up OTP now that activation succeeded
+    await Otp.deleteMany({ email: { $in: candidateEmails } });
+
     return NextResponse.json({
       success: true,
       authorized: true,
@@ -220,7 +216,7 @@ export async function POST(request: NextRequest) {
       deviceId,
       deviceName,
       companyName: config.companyName || user?.companyName || "",
-      companyCode: config.companyCode || "DEFAULT",
+      companyCode: config.companyCode || user?.companyCode || "",
       message: `Machine "${deviceName}" verified and authorized successfully! You can now sync and convert files with this license key.`,
     });
   } catch (err: any) {

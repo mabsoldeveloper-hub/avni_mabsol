@@ -85,7 +85,22 @@ export function CompanyProvider({ children }: { children: React.ReactNode }) {
 
       let chosen: CompanyType | null = null;
 
-      if (savedStr) {
+      // 1. If user is assigned to a specific company (and not SuperAdmin), their assigned company takes precedence!
+      const currentAssignedId = userCompIdRef.current;
+      const isSuper = Boolean(
+        user?.isSuperAdmin ||
+        user?.roleType === "SuperAdmin" ||
+        user?.role === "SuperAdmin" ||
+        user?.email?.toLowerCase() === "mabsoldeveloper@gmail.com"
+      );
+
+      if (currentAssignedId && !isSuper) {
+        const userMatch = data.find((c) => String(c._id) === String(currentAssignedId));
+        if (userMatch) chosen = userMatch;
+      }
+
+      // 2. Check localStorage for saved company selection (SuperAdmin or Head Office switching)
+      if (!chosen && savedStr) {
         try {
           const parsed = JSON.parse(savedStr);
           const match = data.find((c) => c._id === parsed._id || c.companyCode === parsed.companyCode);
@@ -95,14 +110,13 @@ export function CompanyProvider({ children }: { children: React.ReactNode }) {
         } catch {}
       }
 
-      // Fallback 1: User's assigned company from UserContext
-      const currentAssignedId = userCompIdRef.current;
+      // 3. Fallback to assigned company if not yet chosen
       if (!chosen && currentAssignedId) {
-        const userMatch = data.find((c) => c._id === currentAssignedId);
+        const userMatch = data.find((c) => String(c._id) === String(currentAssignedId));
         if (userMatch) chosen = userMatch;
       }
 
-      // Fallback 2: Default company
+      // 4. Fallback to default company or first
       if (!chosen) {
         chosen =
           data.find((c) => c.isDefault) ||
@@ -124,11 +138,11 @@ export function CompanyProvider({ children }: { children: React.ReactNode }) {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [user]);
 
   useEffect(() => {
     fetchCompanies();
-  }, [fetchCompanies]);
+  }, [fetchCompanies, userCompId]);
 
   const changeSelectedCompany = useCallback((company: CompanyType) => {
     setSelectedCompanyState(company);

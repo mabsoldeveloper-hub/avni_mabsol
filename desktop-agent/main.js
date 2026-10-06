@@ -109,8 +109,12 @@ function loadProjectEnv() {
     path.join(__dirname, "..", ".env"),
     path.join(__dirname, ".env"),
     path.join(process.cwd(), ".env"),
-    path.join(USER_DATA_DIR, ".env")
+    path.join(USER_DATA_DIR, ".env"),
+    path.join(path.dirname(process.execPath), ".env")
   ];
+  if (process.env.PORTABLE_EXECUTABLE_DIR) {
+    envPaths.unshift(path.join(process.env.PORTABLE_EXECUTABLE_DIR, ".env"));
+  }
   for (const p of envPaths) {
     if (fs.existsSync(p)) {
       try {
@@ -151,6 +155,37 @@ function resolveCloudUrl(candidateUrl) {
   return url;
 }
 
+// Seamless Cloud Fallback: If primary cloud returns 404 (endpoint not deployed yet) or connection error,
+// check if local development server (http://localhost:3000) is running and handles the route.
+async function executeWithCloudFallback(primaryUrl, requestFn) {
+  let activeUrl = resolveCloudUrl(primaryUrl);
+  try {
+    return await requestFn(activeUrl);
+  } catch (err) {
+    const isFallBackEligible =
+      err.response?.status === 404 ||
+      err.response?.status === 401 ||
+      err.code === "ECONNREFUSED" ||
+      err.code === "ENOTFOUND" ||
+      err.code === "ETIMEDOUT";
+
+    if (activeUrl !== "http://localhost:3000" && isFallBackEligible) {
+      try {
+        emitLog("warn", `${activeUrl} returned ${err.response?.status || err.code || "error"}. Auto-checking local server (http://localhost:3000)...`);
+        const fallbackRes = await requestFn("http://localhost:3000");
+        const current = loadConfig();
+        current.cloudUrl = "http://localhost:3000";
+        saveConfig(current);
+        emitLog("success", `Connected to local server http://localhost:3000!`);
+        return fallbackRes;
+      } catch {
+        throw err;
+      }
+    }
+    throw err;
+  }
+}
+
 function sanitizeFolderPath(dir) {
   if (!dir) return "";
   let clean = String(dir).trim().replace(/^["'`]+|["'`]+$/g, "").trim();
@@ -173,6 +208,16 @@ function sanitizeFolderPath(dir) {
   return clean;
 }
 
+function getExeIdentifier() {
+  try {
+    const execPath = process.execPath;
+    const stats = fs.statSync(execPath);
+    return `${app.getVersion()}_${execPath}_${stats.size}_${Math.floor(stats.mtimeMs)}`;
+  } catch {
+    return `${app.getVersion()}_${process.execPath}`;
+  }
+}
+
 function loadConfig() {
   const defaultUrl = getDefaultCloudUrl();
   const defaults = {
@@ -183,10 +228,12 @@ function loadConfig() {
     destDir: path.join(USER_DATA_DIR, "staging"),
     autoSync: true,
     intervalMins: "realtime",
-    licenseKey: ""
+    licenseKey: "",
+    branchProfiles: {},
+    selectedCompanyCode: ""
   };
   if (!fs.existsSync(CONFIG_PATH)) {
-    return { ...defaults, isSourceDirValid: false };
+    return { ...defaults, isSourceDirValid: false, isExeChanged: true, isLicenseVerified: false };
   }
   try {
     const raw = fs.readFileSync(CONFIG_PATH, "utf8");
@@ -195,22 +242,114 @@ function loadConfig() {
     if (parsed.sourceDir) {
       parsed.sourceDir = sanitizeFolderPath(parsed.sourceDir);
     }
+    const currentExeId = getExeIdentifier();
+    const isNewOrChangedExe = !parsed.lastVerifiedExeId || (parsed.lastVerifiedExeId !== currentExeId);
+    if (isNewOrChangedExe) {
+      // New or updated EXE downloaded/installed:
+      // Always require verification and DO NOT prefill old/stale data
+      parsed.isExeChanged = true;
+      parsed.isLicenseVerified = false;
+      parsed.companyName = "";
+      parsed.companyCode = "";
+      parsed.sourceDir = "";
+      parsed.licenseKey = "";
+      parsed.productKey = "";
+      parsed.userEmail = "";
+    }
+    const isPlaceholderCompVal = (val) => {
+      if (!val) return true;
+      const s = String(val).trim().toLowerCase();
+      return s === "your organization" || s === "organization" || s === "default" || s === "test";
+    };
+
     const resolvedConfig = { ...defaults, ...parsed };
+    resolvedConfig.branchProfiles = resolvedConfig.branchProfiles || {};
+
+    if (isNewOrChangedExe) {
+      resolvedConfig.companyName = "";
+      resolvedConfig.companyCode = "";
+      resolvedConfig.sourceDir = "";
+      resolvedConfig.licenseKey = "";
+      resolvedConfig.productKey = "";
+      resolvedConfig.userEmail = "";
+    }
+    if (isPlaceholderCompVal(resolvedConfig.companyName)) {
+      resolvedConfig.companyName = "";
+    }
+    if (isPlaceholderCompVal(resolvedConfig.companyCode)) {
+      resolvedConfig.companyCode = "";
+    }
+
+    // Auto-seed branchProfiles from active fields if branchProfiles is empty
+    if (resolvedConfig.companyCode && Object.keys(resolvedConfig.branchProfiles).length === 0) {
+      const primaryCode = resolvedConfig.companyCode.split(/[,\s;]+/)[0].trim().toUpperCase();
+      resolvedConfig.branchProfiles[primaryCode] = {
+        companyCode: resolvedConfig.companyCode,
+        companyName: resolvedConfig.companyName || "",
+        sourceDir: resolvedConfig.sourceDir || ""
+      };
+      if (!resolvedConfig.selectedCompanyCode) {
+        resolvedConfig.selectedCompanyCode = primaryCode;
+      }
+    }
+
+    // If a branch is selected, sync active values from profile
+    if (resolvedConfig.selectedCompanyCode && resolvedConfig.branchProfiles[resolvedConfig.selectedCompanyCode]) {
+      const activeProf = resolvedConfig.branchProfiles[resolvedConfig.selectedCompanyCode];
+      // The companyCode field represents the user-entered ERP data code for decryption (e.g. A01)
+      if (activeProf.decryptCode || activeProf.companyCode) {
+        resolvedConfig.companyCode = activeProf.decryptCode || activeProf.companyCode;
+      }
+      if (activeProf.companyName) resolvedConfig.companyName = activeProf.companyName;
+      if (activeProf.sourceDir) resolvedConfig.sourceDir = activeProf.sourceDir;
+    }
+
     resolvedConfig.isSourceDirValid = Boolean(
       resolvedConfig.sourceDir && fs.existsSync(resolvedConfig.sourceDir)
     );
     return resolvedConfig;
   } catch {
-    return { ...defaults, isSourceDirValid: false };
+    return { ...defaults, isSourceDirValid: false, isExeChanged: true, isLicenseVerified: false };
   }
 }
 
 function saveConfig(cfg) {
   try {
     if (cfg) {
+      const isPlaceholderCompVal = (val) => {
+        if (!val) return true;
+        const s = String(val).trim().toLowerCase();
+        return s === "your organization" || s === "organization" || s === "default" || s === "test";
+      };
       if (cfg.cloudUrl) cfg.cloudUrl = resolveCloudUrl(cfg.cloudUrl);
       if (cfg.sourceDir) cfg.sourceDir = sanitizeFolderPath(cfg.sourceDir);
-      if (cfg.companyCode !== undefined) cfg.companyCode = (cfg.companyCode || "").trim().toUpperCase();
+      if (cfg.companyCode !== undefined) {
+        cfg.companyCode = (cfg.companyCode || "").trim().toUpperCase();
+      }
+      if (isPlaceholderCompVal(cfg.companyName)) cfg.companyName = "";
+      if (isPlaceholderCompVal(cfg.companyCode)) cfg.companyCode = "";
+
+      // Maintain branchProfiles synchronization with user-entered decrypt code
+      cfg.branchProfiles = cfg.branchProfiles || {};
+      if (cfg.selectedCompanyCode && cfg.branchProfiles[cfg.selectedCompanyCode]) {
+        const prof = cfg.branchProfiles[cfg.selectedCompanyCode];
+        prof.decryptCode = cfg.companyCode || "";
+        prof.companyCode = cfg.companyCode || "";
+        if (cfg.companyName) prof.companyName = cfg.companyName;
+        if (cfg.sourceDir) prof.sourceDir = cfg.sourceDir;
+      } else if (cfg.companyCode) {
+        const primaryCode = cfg.companyCode.split(/[,\s;]+/)[0].trim().toUpperCase();
+        if (primaryCode && !cfg.branchProfiles[primaryCode]) {
+          cfg.branchProfiles[primaryCode] = {
+            companyCode: cfg.companyCode,
+            decryptCode: cfg.companyCode,
+            crmCompanyCode: primaryCode,
+            companyName: cfg.companyName || "",
+            sourceDir: cfg.sourceDir || ""
+          };
+          if (!cfg.selectedCompanyCode) cfg.selectedCompanyCode = primaryCode;
+        }
+      }
     }
     fs.mkdirSync(USER_DATA_DIR, { recursive: true });
     fs.writeFileSync(CONFIG_PATH, JSON.stringify(cfg, null, 2), "utf8");
@@ -502,7 +641,12 @@ ipcMain.handle("auth:login", async (_event, { cloudUrl, email, password }) => {
         const cfg = loadConfig();
         cfg.userEmail = verifiedEmail;
         cfg.cloudUrl = cleanUrl;
-        if (autoCompName && (!cfg.companyName || cfg.companyName.trim() === "" || cfg.companyName.toLowerCase() === "test")) {
+        const isPlaceholderCompVal = (val) => {
+          if (!val) return true;
+          const s = String(val).trim().toLowerCase();
+          return s === "your organization" || s === "organization" || s === "default" || s === "test";
+        };
+        if (autoCompName && !isPlaceholderCompVal(autoCompName) && (!cfg.companyName || cfg.companyName.trim() === "")) {
           cfg.companyName = autoCompName;
         }
         saveConfig(cfg);
@@ -685,8 +829,36 @@ ipcMain.handle("auth:verify-otp", async (_event, { cloudUrl, email, otp }) => {
   }
 });
 
+ipcMain.handle("auth:resend-otp", async (_event, { cloudUrl, email }) => {
+  try {
+    emitLog("info", `Requesting new account verification code for ${email}...`);
+    const cleanUrl = resolveCloudUrl(cloudUrl);
+    const res = await axios.post(`${cleanUrl}/api/auth/resend-otp`, { email }, { timeout: 15000 });
+    if (res.data?.success) {
+      emitLog("success", `New verification code dispatched to ${email}.`);
+    }
+    return res.data;
+  } catch (err) {
+    const errorMsg = err.response?.data?.message || err.message || "Failed to resend verification code";
+    emitLog("error", `Resend OTP failed: ${errorMsg}`);
+    return { success: false, message: errorMsg };
+  }
+});
+
 ipcMain.handle("auth:check-session", async () => {
+  const cfg = loadConfig();
   const session = loadSession();
+
+  // If a new or changed EXE was installed, always require account verification
+  if (cfg.isExeChanged) {
+    emitLog("info", "New or updated desktop agent executable detected. Re-verification required.");
+    return {
+      authenticated: false,
+      isExeChanged: true,
+      email: session?.email || session?.user?.email || cfg.userEmail || ""
+    };
+  }
+
   if (!session || !session.user) return { authenticated: false };
   if (isTokenExpired(session.token)) {
     emitLog("warn", "Cloud session token has expired. Re-authentication available.");
@@ -864,35 +1036,42 @@ ipcMain.handle("config:save", async (_event, newCfg) => {
   if (merged.licenseKey && merged.licenseKey.trim()) {
     const key = merged.licenseKey.trim();
 
-    // 1. Check with device-check endpoint first (checks multi-device authorized list)
-    try {
-      const checkUrl = `${cloudUrl}/api/mabsolcrmsync/license/device-check`;
-      const checkRes = await axios.post(
-        checkUrl,
-        {
-          deviceId,
-          deviceName,
-          email: userEmail,
-          licenseKey: key
-        },
-        {
-          headers: {
-            ...(session?.token ? { Authorization: `Bearer ${session.token}` } : {}),
-            "x-license-key": key,
-            "x-device-id": deviceId,
-            "x-device-name": deviceName
+    // If new or updated EXE was installed, ALWAYS require OTP verification!
+    if (merged.isExeChanged) {
+      isAuthorizedOnDevice = false;
+      requiresVerification = true;
+      licenseWarning = `New or updated desktop agent installed. Machine "${deviceName}" must be verified with OTP before this license key can be used.`;
+    } else {
+      // 1. Check with device-check endpoint first (checks multi-device authorized list)
+      try {
+        const checkUrl = `${cloudUrl}/api/mabsolcrmsync/license/device-check`;
+        const checkRes = await axios.post(
+          checkUrl,
+          {
+            deviceId,
+            deviceName,
+            email: userEmail,
+            licenseKey: key
           },
-          timeout: 8000
+          {
+            headers: {
+              ...(session?.token ? { Authorization: `Bearer ${session.token}` } : {}),
+              "x-license-key": key,
+              "x-device-id": deviceId,
+              "x-device-name": deviceName
+            },
+            timeout: 8000
+          }
+        );
+        if (checkRes.data && checkRes.data.success && checkRes.data.authorized && !checkRes.data.isExpired) {
+          isAuthorizedOnDevice = true;
+        } else if (checkRes.data && (!checkRes.data.authorized || checkRes.data.requiresVerification || checkRes.data.isNewDevice)) {
+          requiresVerification = true;
+          licenseWarning = checkRes.data.message || `Machine "${deviceName}" requires OTP verification to authorize this license key.`;
         }
-      );
-      if (checkRes.data && checkRes.data.success && checkRes.data.authorized && !checkRes.data.isExpired) {
-        isAuthorizedOnDevice = true;
-      } else if (checkRes.data && (!checkRes.data.authorized || checkRes.data.requiresVerification || checkRes.data.isNewDevice)) {
-        requiresVerification = true;
-        licenseWarning = checkRes.data.message || `Machine "${deviceName}" requires OTP verification to authorize this license key.`;
+      } catch (_checkErr) {
+        // Fall through to bind
       }
-    } catch (_checkErr) {
-      // Fall through to bind
     }
 
     // 2. If not already confirmed authorized, attempt bind with cloud
@@ -981,17 +1160,143 @@ ipcMain.handle("config:save", async (_event, newCfg) => {
   return { success: true, message: "Configuration saved successfully." };
 });
 
+ipcMain.handle("config:set-cloud-url", async (_event, newUrl) => {
+  const current = loadConfig();
+  current.cloudUrl = resolveCloudUrl(newUrl);
+  saveConfig(current);
+  emitLog("info", `Target server updated to: ${current.cloudUrl}`);
+  return { success: true, cloudUrl: current.cloudUrl };
+});
+
+// ---------------------------------------------------------------------------
+// IPC Handlers: Branch & Multi-Company Profile Operations
+// ---------------------------------------------------------------------------
+ipcMain.handle("config:fetch-branches", async (_event, payload = {}) => {
+  const current = loadConfig();
+  const cloudUrl = resolveCloudUrl(payload.cloudUrl || current.cloudUrl || getDefaultCloudUrl());
+  const session = loadSession();
+  const token = payload.token || session?.token || "";
+  const email = payload.email || session?.email || current.userEmail || "";
+
+  try {
+    const res = await executeWithCloudFallback(cloudUrl, async (targetUrl) => {
+      return await axios.get(`${targetUrl}/api/mabsolcrmsync/branches`, {
+        headers: {
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          ...(current.licenseKey ? { "x-license-key": current.licenseKey.trim() } : {})
+        },
+        params: { email },
+        timeout: 10000
+      });
+    });
+
+    if (res.data && res.data.success && Array.isArray(res.data.branches)) {
+      const serverBranches = res.data.branches;
+      current.branchProfiles = current.branchProfiles || {};
+      for (const b of serverBranches) {
+        const crmKey = (b.companyCode || "").trim().toUpperCase();
+        if (!crmKey) continue;
+        const existing = current.branchProfiles[crmKey] || {};
+        current.branchProfiles[crmKey] = {
+          ...existing,
+          crmCompanyCode: crmKey,
+          companyName: b.companyName || existing.companyName || "",
+          companyCode: existing.decryptCode || existing.companyCode || "",
+          decryptCode: existing.decryptCode || existing.companyCode || "",
+          gstin: b.gstin || existing.gstin || "",
+          sourceDir: existing.sourceDir || "",
+          isHeadOffice: !!b.isHeadOffice
+        };
+      }
+      if (!current.selectedCompanyCode && serverBranches.length > 0) {
+        current.selectedCompanyCode = (serverBranches[0].companyCode || "").trim().toUpperCase();
+      }
+      if (current.selectedCompanyCode && current.branchProfiles[current.selectedCompanyCode]) {
+        const active = current.branchProfiles[current.selectedCompanyCode];
+        current.companyCode = active.decryptCode || active.companyCode || "";
+        current.companyName = active.companyName || current.companyName || "";
+        current.sourceDir = active.sourceDir || current.sourceDir || "";
+      }
+      saveConfig(current);
+      return {
+        success: true,
+        branches: Object.values(current.branchProfiles),
+        selectedCompanyCode: current.selectedCompanyCode
+      };
+    }
+    return {
+      success: true,
+      branches: Object.values(current.branchProfiles || {}),
+      selectedCompanyCode: current.selectedCompanyCode || ""
+    };
+  } catch (err) {
+    emitLog("warn", `Branch fetch notice: ${err.message}. Using locally stored branch profiles.`);
+    return {
+      success: true,
+      branches: Object.values(current.branchProfiles || {}),
+      selectedCompanyCode: current.selectedCompanyCode || "",
+      warning: err.message
+    };
+  }
+});
+
+ipcMain.handle("config:switch-branch", async (_event, companyCode) => {
+  const current = loadConfig();
+  const codeKey = (companyCode || "").trim().toUpperCase();
+  current.branchProfiles = current.branchProfiles || {};
+
+  if (codeKey && current.branchProfiles[codeKey]) {
+    const profile = current.branchProfiles[codeKey];
+    current.selectedCompanyCode = codeKey;
+    current.companyCode = profile.decryptCode || profile.companyCode || "";
+    current.companyName = profile.companyName || "";
+    current.sourceDir = profile.sourceDir || "";
+    saveConfig(current);
+    emitLog("info", `Switched active branch profile to: ${profile.companyName || codeKey} [${profile.crmCompanyCode || codeKey}]`);
+    return { success: true, profile, currentConfig: current };
+  }
+  return { success: false, message: `Profile for branch code "${codeKey}" not found.` };
+});
+
+ipcMain.handle("config:save-branch-profile", async (_event, branchData) => {
+  const current = loadConfig();
+  current.branchProfiles = current.branchProfiles || {};
+  const codeKey = (branchData.companyCode || "").trim().toUpperCase();
+  if (!codeKey) {
+    return { success: false, message: "Company code is required." };
+  }
+  const cleanDir = branchData.sourceDir ? sanitizeFolderPath(branchData.sourceDir) : (current.branchProfiles[codeKey]?.sourceDir || "");
+  current.branchProfiles[codeKey] = {
+    ...(current.branchProfiles[codeKey] || {}),
+    companyCode: codeKey,
+    companyName: (branchData.companyName || "").trim(),
+    sourceDir: cleanDir,
+    gstin: (branchData.gstin || "").trim()
+  };
+  if (current.selectedCompanyCode === codeKey || !current.selectedCompanyCode) {
+    current.selectedCompanyCode = codeKey;
+    current.companyCode = codeKey;
+    current.companyName = branchData.companyName || current.companyName;
+    current.sourceDir = cleanDir;
+  }
+  saveConfig(current);
+  emitLog("info", `Branch profile [${codeKey}] saved successfully.`);
+  return { success: true, branches: Object.values(current.branchProfiles), activeProfile: current.branchProfiles[codeKey] };
+});
+
 ipcMain.handle("license:get-details", async () => {
   const current = loadConfig();
   const cloudUrl = resolveCloudUrl(current.cloudUrl || getDefaultCloudUrl());
   const session = loadSession();
   try {
-    const res = await axios.get(`${cloudUrl}/api/mabsolcrmsync/license`, {
-      headers: {
-        ...(session?.token ? { Authorization: `Bearer ${session.token}` } : {}),
-        ...(current.licenseKey ? { "x-license-key": current.licenseKey.trim() } : {})
-      },
-      timeout: 8000
+    const res = await executeWithCloudFallback(cloudUrl, async (targetUrl) => {
+      return await axios.get(`${targetUrl}/api/mabsolcrmsync/license`, {
+        headers: {
+          ...(session?.token ? { Authorization: `Bearer ${session.token}` } : {}),
+          ...(current.licenseKey ? { "x-license-key": current.licenseKey.trim() } : {})
+        },
+        timeout: 8000
+      });
     });
     return res.data;
   } catch (err) {
@@ -1010,8 +1315,9 @@ ipcMain.handle("license:check-device", async (_event, payload) => {
   const email = (payload?.email || session?.email || current.userEmail || "").trim().toLowerCase();
   const licenseKey = (payload?.licenseKey || current.licenseKey || "").trim();
 
-  // ONLY treat as locally verified if current config was verified AND matches this exact license key!
+  // ONLY treat as locally verified if current config was verified AND matches this exact license key AND EXE has not changed!
   const isLocallyVerified = Boolean(
+    !current.isExeChanged &&
     current.isLicenseVerified &&
     current.lastVerifiedLicense &&
     licenseKey &&
@@ -1019,25 +1325,42 @@ ipcMain.handle("license:check-device", async (_event, payload) => {
     (!current.authorizedDeviceId || current.authorizedDeviceId === machineId)
   );
 
+  // If a new or changed EXE was installed, ALWAYS require verification for this executable!
+  if (current.isExeChanged || !current.isLicenseVerified) {
+    return {
+      success: true,
+      authorized: false,
+      isNewDevice: true,
+      requiresVerification: true,
+      deviceId: machineId,
+      deviceName: getMachineName(),
+      email,
+      licenseKey,
+      message: "Verification required for this installed desktop agent."
+    };
+  }
+
   try {
-    const res = await axios.post(
-      `${cloudUrl}/api/mabsolcrmsync/license/device-check`,
-      {
-        deviceId: machineId,
-        deviceName: getMachineName(),
-        email,
-        licenseKey
-      },
-      {
-        headers: {
-          ...(session?.token ? { Authorization: `Bearer ${session.token}` } : {}),
-          "x-device-id": machineId,
-          "x-device-name": getMachineName(),
-          ...(licenseKey ? { "x-license-key": licenseKey } : {})
+    const res = await executeWithCloudFallback(cloudUrl, async (targetUrl) => {
+      return await axios.post(
+        `${targetUrl}/api/mabsolcrmsync/license/device-check`,
+        {
+          deviceId: machineId,
+          deviceName: getMachineName(),
+          email,
+          licenseKey
         },
-        timeout: 10000
-      }
-    );
+        {
+          headers: {
+            ...(session?.token ? { Authorization: `Bearer ${session.token}` } : {}),
+            "x-device-id": machineId,
+            "x-device-name": getMachineName(),
+            ...(licenseKey ? { "x-license-key": licenseKey } : {})
+          },
+          timeout: 10000
+        }
+      );
+    });
 
     if (res.data && res.data.success) {
       if (res.data.authorized && !res.data.isExpired) {
@@ -1077,24 +1400,26 @@ ipcMain.handle("license:send-device-otp", async (_event, payload) => {
   const email = (payload?.email || session?.email || current.userEmail || "").trim().toLowerCase();
   const licenseKey = (payload?.licenseKey || current.licenseKey || "").trim();
   try {
-    const res = await axios.post(
-      `${cloudUrl}/api/mabsolcrmsync/license/send-device-otp`,
-      {
-        deviceId: getMachineIdentifier(),
-        deviceName: getMachineName(),
-        email,
-        licenseKey
-      },
-      {
-        headers: {
-          ...(session?.token ? { Authorization: `Bearer ${session.token}` } : {}),
-          "x-device-id": getMachineIdentifier(),
-          "x-device-name": getMachineName(),
-          ...(licenseKey ? { "x-license-key": licenseKey } : {})
+    const res = await executeWithCloudFallback(cloudUrl, async (targetUrl) => {
+      return await axios.post(
+        `${targetUrl}/api/mabsolcrmsync/license/send-device-otp`,
+        {
+          deviceId: getMachineIdentifier(),
+          deviceName: getMachineName(),
+          email,
+          licenseKey
         },
-        timeout: 15000
-      }
-    );
+        {
+          headers: {
+            ...(session?.token ? { Authorization: `Bearer ${session.token}` } : {}),
+            "x-device-id": getMachineIdentifier(),
+            "x-device-name": getMachineName(),
+            ...(licenseKey ? { "x-license-key": licenseKey } : {})
+          },
+          timeout: 15000
+        }
+      );
+    });
     return res.data;
   } catch (err) {
     return {
@@ -1112,29 +1437,33 @@ ipcMain.handle("license:activate-device", async (_event, payload) => {
   const licenseKey = (payload?.licenseKey || current.licenseKey || "").trim();
   const otp = String(payload?.otp || "").trim();
   try {
-    const res = await axios.post(
-      `${cloudUrl}/api/mabsolcrmsync/license/activate-device`,
-      {
-        deviceId: getMachineIdentifier(),
-        deviceName: getMachineName(),
-        email,
-        licenseKey,
-        otp
-      },
-      {
-        headers: {
-          ...(session?.token ? { Authorization: `Bearer ${session.token}` } : {}),
-          "x-device-id": getMachineIdentifier(),
-          "x-device-name": getMachineName(),
-          ...(licenseKey ? { "x-license-key": licenseKey } : {})
+    const res = await executeWithCloudFallback(cloudUrl, async (targetUrl) => {
+      return await axios.post(
+        `${targetUrl}/api/mabsolcrmsync/license/activate-device`,
+        {
+          deviceId: getMachineIdentifier(),
+          deviceName: getMachineName(),
+          email,
+          licenseKey,
+          otp
         },
-        timeout: 15000
-      }
-    );
+        {
+          headers: {
+            ...(session?.token ? { Authorization: `Bearer ${session.token}` } : {}),
+            "x-device-id": getMachineIdentifier(),
+            "x-device-name": getMachineName(),
+            ...(licenseKey ? { "x-license-key": licenseKey } : {})
+          },
+          timeout: 15000
+        }
+      );
+    });
 
     if (res.data && res.data.success && res.data.licenseKey) {
       current.licenseKey = res.data.licenseKey;
       current.isLicenseVerified = true;
+      current.isExeChanged = false;
+      current.lastVerifiedExeId = getExeIdentifier();
       current.lastVerifiedLicense = res.data.licenseKey;
       current.authorizedDeviceId = getMachineIdentifier();
       if (res.data.companyName && !current.companyName) current.companyName = res.data.companyName;
@@ -1148,6 +1477,139 @@ ipcMain.handle("license:activate-device", async (_event, payload) => {
     return {
       success: false,
       error: err.response?.data?.error || err.message || "Failed to activate device"
+    };
+  }
+});
+
+ipcMain.handle("license:generate-key", async (_event, payload) => {
+  const current = loadConfig();
+  const cloudUrl = resolveCloudUrl(payload?.cloudUrl || current.cloudUrl || getDefaultCloudUrl());
+  const session = loadSession();
+  const email = (payload?.email || session?.email || current.userEmail || "").trim().toLowerCase();
+  const machineId = getMachineIdentifier();
+  const machineName = getMachineName();
+
+  try {
+    emitLog("info", `Requesting new license key generation from ${cloudUrl}...`);
+    const res = await executeWithCloudFallback(cloudUrl, async (targetUrl) => {
+      return await axios.post(
+        `${targetUrl}/api/mabsolcrmsync/license`,
+        {
+          email,
+          regenerate: true,
+          isDesktopAgent: true,
+          deviceId: machineId,
+          deviceName: machineName
+        },
+        {
+          headers: {
+            ...(session?.token ? { Authorization: `Bearer ${session.token}` } : {}),
+            "x-device-id": machineId,
+            "x-device-name": machineName,
+            ...(current.licenseKey ? { "x-license-key": current.licenseKey } : {})
+          },
+          timeout: 15000
+        }
+      );
+    });
+
+    if (res.data && res.data.success && res.data.license) {
+      const newKey = res.data.license;
+      current.licenseKey = newKey;
+      current.lastVerifiedLicense = newKey;
+      saveConfig(current);
+      emitLog("info", `New license key generated: ${newKey}. Machine authorization required.`);
+    }
+
+    return res.data;
+  } catch (err) {
+    const errorMsg = err.response?.data?.error || err.response?.data?.message || err.message || "Failed to generate new license key";
+    emitLog("error", `License generation failed: ${errorMsg}`);
+    return {
+      success: false,
+      error: errorMsg
+    };
+  }
+});
+
+ipcMain.handle("license:request-agent-pin", async (_event, payload) => {
+  const current = loadConfig();
+  const cloudUrl = resolveCloudUrl(payload?.cloudUrl || current.cloudUrl || getDefaultCloudUrl());
+  const session = loadSession();
+  const email = (payload?.email || session?.email || current.userEmail || "").trim().toLowerCase();
+  const machineId = getMachineIdentifier();
+  const machineName = getMachineName();
+
+  try {
+    emitLog("info", `Requesting random 6-digit Agent PIN from ${cloudUrl}...`);
+    const res = await executeWithCloudFallback(cloudUrl, async (targetUrl) => {
+      return await axios.post(
+        `${targetUrl}/api/mabsolcrmsync/license/agent-pin/request`,
+        {
+          deviceId: machineId,
+          deviceName: machineName,
+          agentEmail: email
+        },
+        {
+          headers: {
+            ...(session?.token ? { Authorization: `Bearer ${session.token}` } : {}),
+            "x-device-id": machineId,
+            "x-device-name": machineName
+          },
+          timeout: 12000
+        }
+      );
+    });
+
+    if (res.data?.success) {
+      emitLog("success", `Generated 6-digit Agent PIN: ${res.data.pin}. Enter this on Web CRM to link license.`);
+    }
+    return { ...res.data, cloudUrl: current.cloudUrl };
+  } catch (err) {
+    const errorMsg = err.response?.data?.error || err.message || "Failed to generate Agent PIN";
+    emitLog("error", `PIN generation failed: ${errorMsg}`);
+    return { success: false, error: errorMsg };
+  }
+});
+
+ipcMain.handle("license:check-agent-pin-status", async (_event, payload) => {
+  const current = loadConfig();
+  const cloudUrl = resolveCloudUrl(payload?.cloudUrl || current.cloudUrl || getDefaultCloudUrl());
+  const pin = String(payload?.pin || "").trim();
+  const machineId = getMachineIdentifier();
+
+  try {
+    const res = await executeWithCloudFallback(cloudUrl, async (targetUrl) => {
+      return await axios.get(
+        `${targetUrl}/api/mabsolcrmsync/license/agent-pin/status`,
+        {
+          params: { pin, deviceId: machineId },
+          headers: {
+            "x-device-id": machineId
+          },
+          timeout: 8000
+        }
+      );
+    });
+
+    if (res.data && res.data.success && res.data.status === "activated" && res.data.licenseKey) {
+      current.licenseKey = res.data.licenseKey;
+      current.isLicenseVerified = true;
+      current.isExeChanged = false;
+      current.lastVerifiedExeId = getExeIdentifier();
+      current.lastVerifiedLicense = res.data.licenseKey;
+      current.authorizedDeviceId = machineId;
+      if (res.data.companyName && !current.companyName) current.companyName = res.data.companyName;
+      if (res.data.companyCode && !current.companyCode) current.companyCode = res.data.companyCode;
+      saveConfig(current);
+      emitLog("success", `Machine authorized via Web PIN! License key ${res.data.licenseKey} activated.`);
+    }
+
+    return res.data;
+  } catch (err) {
+    return {
+      success: false,
+      error: err.response?.data?.error || err.message || "Failed to check PIN status"
     };
   }
 });
@@ -1213,6 +1675,33 @@ ipcMain.handle("sync:start", async () => {
   return await executeDecryptionAndSync("manual");
 });
 
+ipcMain.handle("sync:start-all-branches", async () => {
+  if (isSyncing) return { success: false, message: "Sync is already in progress." };
+  const current = loadConfig();
+  const profiles = Object.values(current.branchProfiles || {});
+  const configuredProfiles = profiles.filter(p => p.companyCode && p.sourceDir && fs.existsSync(p.sourceDir));
+
+  if (configuredProfiles.length === 0) {
+    if (current.companyCode && current.sourceDir && fs.existsSync(current.sourceDir)) {
+      return await executeDecryptionAndSync("manual");
+    }
+    const msg = "No configured branch profiles found with an existing ERP data folder. Please configure branch folders in settings.";
+    emitLog("error", msg);
+    return { success: false, message: msg };
+  }
+
+  emitLog("info", `🚀 Starting sequential sync for ${configuredProfiles.length} configured branch profile(s)...`);
+  const results = [];
+  for (const prof of configuredProfiles) {
+    emitLog("info", `\n=== Processing Branch: ${prof.companyName || prof.companyCode} [${prof.companyCode}] ===`);
+    const res = await executeDecryptionAndSync("multi_branch", prof);
+    results.push({ companyCode: prof.companyCode, companyName: prof.companyName, result: res });
+    await new Promise(r => setTimeout(r, 1000));
+  }
+  emitLog("success", `🎉 Multi-Branch batch sync completed for ${configuredProfiles.length} branch(es).`);
+  return { success: true, results };
+});
+
 ipcMain.handle("sync:stop", async () => {
   stopAutoSync();
   isAutoSyncPaused = true;
@@ -1248,35 +1737,37 @@ ipcMain.handle("sync:status", async () => {
 });
 
 // ---------------------------------------------------------------------------
-// Core Decryption Engine & efWin11.fll Cleanup
+// Core Decryption Engine & Module Cleanup
 // ---------------------------------------------------------------------------
-async function executeDecryptionAndSync(triggerReason = "manual") {
-  if (isSyncing) return { success: false, message: "Sync already active." };
+async function executeDecryptionAndSync(triggerReason = "manual", targetProfile = null) {
+  if (isSyncing && triggerReason !== "multi_branch") return { success: false, message: "Sync already active." };
   isSyncing = true;
   emitStatus({ isSyncing: true, lastRunReason: triggerReason });
 
   const config = loadConfig();
   const session = loadSession();
-  const rawCodes = (config.companyCode || "").trim();
+  const rawCodes = ((targetProfile && (targetProfile.decryptCode || targetProfile.extractCode || targetProfile.companyCode)) || config.companyCode || "").trim();
   const companyCodes = rawCodes.split(/[,\s;]+/).map(c => c.trim().toUpperCase()).filter(Boolean);
   if (companyCodes.length === 0) {
-    const msg = "Company Code is not set. Please click Edit Configuration and enter your Company Code(s) (e.g. B01).";
+    const msg = "ERP Extract Code is not set. Please click Edit Configuration and enter your ERP Data Code(s) (e.g. A01 or B01).";
     emitLog("error", msg);
     isSyncing = false;
     emitStatus({ isSyncing: false, error: msg });
     return { success: false, message: msg };
   }
 
-  const sourceDir = sanitizeFolderPath(config.sourceDir);
+  const sourceDir = sanitizeFolderPath((targetProfile && targetProfile.sourceDir) || config.sourceDir);
+  const activeCompanyName = (targetProfile && targetProfile.companyName) || config.companyName || "";
+  const activeCrmCode = (targetProfile && targetProfile.crmCompanyCode) || config.selectedCompanyCode || "";
   // Destination staging folder is internal and automated! No need to configure manually.
   const baseStagingDir = config.destDir || path.join(USER_DATA_DIR, "staging");
 
-  emitLog("info", `=== Starting Secure Extraction & Cloud Sync (Companies: [${companyCodes.join(", ")}], Trigger: ${triggerReason}) ===`);
+  emitLog("info", `=== Starting Secure Extraction & Cloud Sync (${activeCompanyName ? activeCompanyName + " " : ""}${activeCrmCode ? `[Account: ${activeCrmCode}] ` : ""}[ERP Extract Code: ${companyCodes.join(", ")}], Trigger: ${triggerReason}) ===`);
   emitLog("info", "🛡️ [Privacy Assurance] We are just accessing your files data, not collecting any personal or confidential details. We keep your data privacy.");
 
   if (!sourceDir) {
-    const msg = "Encrypted Data Folder (Source) is not set. Please click Edit Configuration and browse to your ERP data folder on this computer.";
-    if (triggerReason === "manual") emitLog("warn", msg);
+    const msg = `Encrypted Data Folder (Source) is not set${activeCompanyName ? ` for ${activeCompanyName}` : ""}. Please click Edit Configuration and browse to your ERP data folder on this computer.`;
+    if (triggerReason === "manual" || triggerReason === "multi_branch") emitLog("warn", msg);
     isSyncing = false;
     emitStatus({ isSyncing: false, lastStatus: "unconfigured", message: msg });
     return { success: false, message: msg };
@@ -1335,14 +1826,33 @@ async function executeDecryptionAndSync(triggerReason = "manual") {
     return { success: false, message: msg };
   }
 
+  const devId = getMachineIdentifier();
+  const devName = getMachineName();
+
+  // 2. New or changed EXE check: always enforce OTP verification before conversion/sync
+  if (config.isExeChanged || !config.isLicenseVerified) {
+    const msg = "New or updated desktop agent executable detected. Machine OTP verification required before syncing.";
+    emitLog("error", `[Verification Required] ${msg} Extraction ABORTED.`);
+    isSyncing = false;
+    emitStatus({ isSyncing: false, error: msg });
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send("license:verification-required", {
+        email: userEmail || session?.email || "",
+        deviceId: devId,
+        deviceName: devName,
+        licenseKey,
+        error: msg
+      });
+    }
+    return { success: false, requiresVerification: true, message: msg };
+  }
+
   // Check connectivity right before processing:
   const isCloudReachable = await checkConnectivity(cloudUrl);
   emitNetwork(isCloudReachable);
 
-  // 2. Pre-validate License Key with Server BEFORE converting any files!
+  // 3. Pre-validate License Key with Server BEFORE converting any files!
   if (isCloudReachable) {
-    const devId = getMachineIdentifier();
-    const devName = getMachineName();
     let isPermitted = false;
 
     // Check device-check first for multi-device authorization
@@ -1694,7 +2204,8 @@ async function executeDecryptionAndSync(triggerReason = "manual") {
     // SCENARIO 1: ONLINE -> Upload directly from staging to Cloud Server
     if (isCloudReachable) {
       emitLog("info", `Uploading [${compCode}] tables directly to Cloud Server...`);
-      const uploadResult = await uploadDbfBatch(cloudUrl, compDestDir, dbfFiles, authToken, userEmail, licenseKey, compCode, config.companyName);
+      const activeCrmCode = (targetProfile && targetProfile.crmCompanyCode) || config.selectedCompanyCode || compCode;
+      const uploadResult = await uploadDbfBatch(cloudUrl, compDestDir, dbfFiles, authToken, userEmail, licenseKey, activeCrmCode, activeCompanyName);
 
       if (uploadResult.success) {
         lastSyncFileSignatures.set(compCode, sigKey);
@@ -1801,6 +2312,11 @@ async function executeDecryptionAndSync(triggerReason = "manual") {
 
   // If all were uploaded directly to server:
   saveQueue([]);
+  if (targetProfile && config.branchProfiles && config.branchProfiles[targetProfile.companyCode]) {
+    config.branchProfiles[targetProfile.companyCode].lastSyncAt = new Date().toISOString();
+    config.branchProfiles[targetProfile.companyCode].tablesCount = totalUploadedTables;
+    saveConfig(config);
+  }
   emitStatus({
     isSyncing: false,
     isOnline: true,

@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import mongoose from "mongoose";
 import dbConnect from "@/lib/mongodb";
 import { combineFilters, getCompanyVfpFilter } from "@/lib/companyVfpHelper";
 
@@ -207,18 +208,41 @@ export async function GET(req: Request) {
     30, // 30 seconds server-side cache
     async () => {
 
-  const userCountQuery: any = {};
-  if (currentUser?.tenantId) {
-    userCountQuery.tenantId = currentUser.tenantId;
-  } else if (currentUser?.companyId) {
-    userCountQuery.companyId = currentUser.companyId;
+  // Company & User Isolation
+  const userCompany = currentUser?.companyId ? await Company.findById(currentUser.companyId).lean() : null;
+  const isChildBranchUser = Boolean(userCompany && !userCompany.isHeadOffice);
+
+  // If logged-in user belongs to a child branch, lock to their company strictly.
+  // Otherwise, respect searchParams companyId if provided.
+  let targetCompanyId: string | null = null;
+  if (isChildBranchUser && userCompany) {
+    targetCompanyId = String(userCompany._id);
+  } else if (companyId && companyId !== "ALL") {
+    targetCompanyId = companyId;
+  } else if (currentUser?.companyId && !companyId) {
+    targetCompanyId = String(currentUser.companyId);
   }
 
+  const userCountQuery: any = {};
   const companyCountQuery: any = {};
-  if (currentUser?.tenantId) {
+
+  if (targetCompanyId) {
+    const targetObjId = mongoose.Types.ObjectId.isValid(targetCompanyId)
+      ? new mongoose.Types.ObjectId(targetCompanyId)
+      : targetCompanyId;
+    userCountQuery.companyId = targetObjId;
+    userCountQuery.status = { $ne: "Inactive" };
+    companyCountQuery._id = targetObjId;
+  } else if (userCompany?.isHeadOffice && (!companyId || companyId === "ALL")) {
+    const childCompanies = await Company.find({ parentCompanyId: userCompany._id }, { _id: 1 }).lean();
+    const allCompIds = [userCompany._id, ...childCompanies.map((c: any) => c._id)];
+    userCountQuery.companyId = { $in: allCompIds };
+    userCountQuery.status = { $ne: "Inactive" };
+    companyCountQuery._id = { $in: allCompIds };
+  } else if (currentUser?.tenantId) {
+    userCountQuery.tenantId = currentUser.tenantId;
+    userCountQuery.status = { $ne: "Inactive" };
     companyCountQuery.tenantId = currentUser.tenantId;
-  } else if (currentUser?.companyId) {
-    companyCountQuery._id = currentUser.companyId;
   }
 
   const companyVfpMatch = await getCompanyVfpFilter(searchParams);
@@ -1073,7 +1097,7 @@ export async function GET(req: Request) {
   const creditorAging = Object.entries(creditorAgingBuckets).map(([bucket, total]) => ({ bucket, total }));
 
   // ---- Analytics ----
-  const invCount = invoiceCountRaw[0]?.count || 1;
+  const invCount = invoiceCountRaw[0]?.count || 0;
   const avgInvoiceValue = totalSales / invCount;
   const dayOfMonth = new Date().getDate();
   const avgDailySales = monthlySales > 0

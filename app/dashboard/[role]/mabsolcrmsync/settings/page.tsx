@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import ProtectedPage from "@/components/ProtectedPage";
 import { useToast } from "@/context/ToastContext";
 import "./vfp-settings.css";
@@ -19,6 +19,7 @@ import {
   Trash2,
   Laptop,
   ShieldCheck,
+  KeyRound,
 } from "lucide-react";
 
 interface AuthorizedDevice {
@@ -45,6 +46,8 @@ interface LicenseDetails {
   boundDeviceName: string;
   isBound: boolean;
   authorizedDevices?: AuthorizedDevice[];
+  companyName?: string;
+  companyCode?: string;
 }
 
 export default function VfpSettingsPage() {
@@ -53,6 +56,12 @@ export default function VfpSettingsPage() {
   const [generatingKey, setGeneratingKey] = useState(false);
   const [copiedKey, setCopiedKey] = useState(false);
   const [revokingDeviceId, setRevokingDeviceId] = useState<string | null>(null);
+  const [agentPinInput, setAgentPinInput] = useState("");
+  const [verifyingPin, setVerifyingPin] = useState(false);
+
+  // Debouncing refs to prevent multiple simultaneous / duplicate API calls in console terminal
+  const isFetchingRef = useRef(false);
+  const lastFetchTimeRef = useRef(0);
 
   // License Details State
   const [licenseInfo, setLicenseInfo] = useState<LicenseDetails>({
@@ -120,20 +129,14 @@ export default function VfpSettingsPage() {
     return () => clearInterval(timer);
   }, [licenseInfo.licenseExpiresAt, licenseInfo.license]);
 
-  useEffect(() => {
-    loadLicense();
-
-    const handleFocus = () => loadLicense();
-    window.addEventListener("focus", handleFocus);
-    const interval = setInterval(loadLicense, 8000);
-
-    return () => {
-      window.removeEventListener("focus", handleFocus);
-      clearInterval(interval);
-    };
-  }, []);
-
-  const loadLicense = async () => {
+  const loadLicense = async (force = false) => {
+    const now = Date.now();
+    // Throttle duplicate calls: ignore if already running or called within 3.5s unless explicitly forced
+    if (!force && (isFetchingRef.current || now - lastFetchTimeRef.current < 3500)) {
+      return;
+    }
+    isFetchingRef.current = true;
+    lastFetchTimeRef.current = now;
     try {
       setLoading(true);
       const res = await fetch("/api/mabsolcrmsync/license");
@@ -145,11 +148,22 @@ export default function VfpSettingsPage() {
       console.error("Failed to load license details:", err);
     } finally {
       setLoading(false);
+      isFetchingRef.current = false;
     }
   };
 
-  const handleRevokeDevice = async (deviceId: string, devName: string) => {
-    if (!confirm(`Are you sure you want to unlink machine "${devName}"? It will require OTP verification before syncing again.`)) {
+  useEffect(() => {
+    loadLicense(true);
+    // Poll gently every 20 seconds; window focus listener removed to stop console spamming
+    const interval = setInterval(() => loadLicense(false), 20000);
+
+    return () => {
+      clearInterval(interval);
+    };
+  }, []);
+
+  const handleRevokeDevice = async (deviceId: string, devName: string, devKey?: string) => {
+    if (!confirm(`Are you sure you want to unlink machine "${devName}"? It will be disconnected from its license key and require re-linking.`)) {
       return;
     }
     setRevokingDeviceId(deviceId);
@@ -157,12 +171,12 @@ export default function VfpSettingsPage() {
       const res = await fetch("/api/mabsolcrmsync/license/revoke-device", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ deviceId, licenseKey: licenseInfo.license }),
+        body: JSON.stringify({ deviceId, licenseKey: devKey || licenseInfo.license }),
       });
       const data = await res.json();
       if (data.success) {
         toast.success(data.message || `Access revoked for ${devName}.`);
-        await loadLicense();
+        await loadLicense(true);
       } else {
         toast.error(data.error || "Failed to unlink machine.");
       }
@@ -183,7 +197,7 @@ export default function VfpSettingsPage() {
       const data = await res.json();
       if (data.success) {
         toast.success(data.message || "New 30-day license key generated!");
-        await loadLicense();
+        await loadLicense(true);
       } else {
         toast.error(data.error || "Failed to generate license key.");
       }
@@ -212,6 +226,34 @@ export default function VfpSettingsPage() {
       day: "numeric",
     });
   }
+
+  const handleVerifyAgentPin = async () => {
+    const cleanPin = agentPinInput.trim().replace(/\D/g, "");
+    if (cleanPin.length !== 6) {
+      toast.error("Please enter the complete 6-digit PIN from your Desktop Agent.");
+      return;
+    }
+    try {
+      setVerifyingPin(true);
+      const res = await fetch("/api/mabsolcrmsync/license/agent-pin/verify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ pin: cleanPin }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        toast.success(data.message || `Desktop Agent authorized successfully!`);
+        setAgentPinInput("");
+        await loadLicense(true);
+      } else {
+        toast.error(data.error || "Failed to verify PIN.");
+      }
+    } catch (err: any) {
+      toast.error(err.message || "Network error verifying PIN.");
+    } finally {
+      setVerifyingPin(false);
+    }
+  };
 
   const isKeyActive = Boolean(licenseInfo.license && !licenseInfo.isExpired);
   const daysLeft = licenseInfo.daysRemaining || 0;
@@ -244,7 +286,7 @@ export default function VfpSettingsPage() {
 
           <div className="flex items-center gap-2 shrink-0 self-end sm:self-auto">
             <button
-              onClick={loadLicense}
+              onClick={() => loadLicense(true)}
               title="Refresh"
               className="w-8 h-8 flex items-center justify-center bg-white hover:bg-slate-50 text-slate-600 border border-slate-200 rounded-lg transition-colors cursor-pointer"
             >
@@ -258,6 +300,56 @@ export default function VfpSettingsPage() {
               <Download size={13} />
               <span>Download agent (.ZIP)</span>
             </a>
+          </div>
+        </div>
+
+        {/* LINK DESKTOP AGENT VIA 6-DIGIT PIN CARD */}
+        <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-blue-950 rounded-xl p-4 sm:p-5 text-white shadow-md border border-indigo-500/30">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div className="space-y-1.5">
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="p-1.5 rounded-lg bg-blue-500/20 text-blue-400 border border-blue-400/30">
+                  <KeyRound size={18} />
+                </span>
+                <h2 className="text-sm sm:text-base font-bold text-white m-0">
+                  Link Desktop Agent via 6-Digit PIN
+                </h2>
+                <span className="text-[10px] bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 px-2 py-0.5 rounded-full font-semibold">
+                  Instant Authorization
+                </span>
+              </div>
+              <p className="text-xs text-slate-300 max-w-2xl m-0 leading-relaxed">
+                Enter the random 6-digit PIN generated inside your Desktop Agent (.exe). This will bind that computer to your organization's license cycle and activate syncing instantly.
+              </p>
+            </div>
+
+            {/* PIN Input and Verify Button */}
+            <div className="flex flex-col sm:flex-row items-center gap-2 shrink-0 w-full sm:w-auto">
+              <div className="relative w-full sm:w-auto">
+                <input
+                  type="text"
+                  maxLength={6}
+                  placeholder="000000"
+                  value={agentPinInput}
+                  onChange={(e) => setAgentPinInput(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && agentPinInput.trim().length === 6) {
+                      handleVerifyAgentPin();
+                    }
+                  }}
+                  className="w-full sm:w-44 text-center font-mono text-xl tracking-[0.3em] font-bold bg-white/10 text-white placeholder-white/30 border border-white/20 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-400 focus:bg-white/15"
+                />
+              </div>
+              <button
+                type="button"
+                onClick={handleVerifyAgentPin}
+                disabled={verifyingPin || agentPinInput.length !== 6}
+                className="w-full sm:w-auto px-4 py-2.5 bg-blue-600 hover:bg-blue-500 disabled:opacity-40 disabled:cursor-not-allowed text-white font-semibold text-xs rounded-lg shadow-sm transition-all flex items-center justify-center gap-1.5 cursor-pointer whitespace-nowrap"
+              >
+                <Sparkles size={14} className={verifyingPin ? "animate-spin" : ""} />
+                <span>{verifyingPin ? "Verifying PIN..." : "Verify & Generate License"}</span>
+              </button>
+            </div>
           </div>
         </div>
 
@@ -315,6 +407,25 @@ export default function VfpSettingsPage() {
               <div className="font-mono text-sm sm:text-base font-bold text-slate-900 tracking-wider select-all">
                 {licenseInfo.license || "No license generated"}
               </div>
+
+              {/* Dynamic Company Details Badge (filters out legacy static strings) */}
+              {licenseInfo.companyName &&
+                licenseInfo.companyName.toLowerCase() !== "" &&
+                licenseInfo.companyName.toLowerCase() !== "" && (
+                <div className="flex items-center justify-between bg-blue-50/70 border border-blue-200/70 rounded-md px-2.5 py-1.5 text-xs text-blue-900">
+                  <div className="flex items-center gap-1.5 truncate">
+                    <ShieldCheck size={13} className="text-blue-600 shrink-0" />
+                    <span className="text-[11px] text-slate-500">Company:</span>
+                    <strong className="text-slate-900 font-semibold truncate">{licenseInfo.companyName}</strong>
+                  </div>
+                  {licenseInfo.companyCode &&
+                    licenseInfo.companyCode.toUpperCase() !== "DEFAULT" && (
+                    <span className="font-mono text-[10.5px] bg-white border border-blue-200 text-blue-700 font-bold px-1.5 py-0.5 rounded shrink-0 ml-2">
+                      {licenseInfo.companyCode}
+                    </span>
+                  )}
+                </div>
+              )}
 
               {/* Validity Term & Live Countdown Timer */}
               <div className="space-y-2 pt-1">
@@ -408,7 +519,7 @@ export default function VfpSettingsPage() {
                 <Lock size={13} className="text-amber-700 shrink-0" />
                 <span>
                   {isKeyActive
-                    ? `Key is active for ${daysLeft} more days. Cannot regenerate until expired.`
+                    ? `Key is active for ${daysLeft} more days. Attached workstations can be unlinked individually below.`
                     : licenseInfo.isExpired
                     ? "Key expired. Click below to generate a new 30-day key."
                     : "Generate an initial 30-day single-device key."}
@@ -416,8 +527,8 @@ export default function VfpSettingsPage() {
               </div>
 
               {isKeyActive ? (
-                <span className="inline-block bg-white border border-amber-300/80 text-amber-900 text-[10px] font-semibold px-2 py-0.2 rounded shadow-3xs">
-                  Locked
+                <span className="inline-block bg-white border border-amber-300/80 text-amber-900 text-[10px] font-semibold px-2 py-0.5 rounded shadow-3xs">
+                  Active &amp; Bound
                 </span>
               ) : (
                 <button
@@ -487,9 +598,9 @@ export default function VfpSettingsPage() {
                       <div className="flex items-center gap-2">
                         <button
                           type="button"
-                          onClick={() => handleRevokeDevice(dev.fullDeviceId || dev.deviceId, dev.deviceName)}
+                          onClick={() => handleRevokeDevice(dev.fullDeviceId || dev.deviceId, dev.deviceName, dev.licenseKey)}
                           disabled={revokingDeviceId === (dev.fullDeviceId || dev.deviceId)}
-                          title="Unlink this machine from the license key"
+                          title="Unlink this machine from its license key"
                           className="px-2 py-1 text-[11px] font-medium text-rose-600 hover:text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded-md transition-colors flex items-center gap-1 cursor-pointer disabled:opacity-50"
                         >
                           <Trash2 size={12} />

@@ -11,7 +11,7 @@ import { getHierarchyAccess } from "@/lib/hierarchyAccess";
 
 export const dynamic = "force-dynamic";
 
-export async function fetchUsersList() {
+export async function fetchUsersList(req?: Request) {
   await connectDB();
 
   const currentUser = await getCurrentUser();
@@ -21,11 +21,59 @@ export async function fetchUsersList() {
     return { success: false, error: "Unauthorized", status: 401 };
   }
 
-  // Admin gets every active user in the tenant. Other roles get only their
-  // own user plus the complete recursive reportsTo subtree.
-  const userQuery: any = access.isAdmin
-    ? { ...(currentUser?.tenantId ? { tenantId: currentUser.tenantId } : {}) }
-    : { _id: { $in: access.accessibleUserIds.map(String) }, status: "Active" };
+  let requestedCompanyId: string | null = null;
+  if (req) {
+    try {
+      const url = new URL(req.url);
+      requestedCompanyId = url.searchParams.get("companyId");
+    } catch {}
+  }
+
+  const userCompany = currentUser?.companyId ? await Company.findById(currentUser.companyId).lean() : null;
+  const isChildBranchUser = Boolean(userCompany && !userCompany.isHeadOffice);
+
+  // If logged-in user belongs to a child branch, lock to their company strictly
+  let targetCompanyId: string | null = null;
+  if (isChildBranchUser && userCompany) {
+    targetCompanyId = String(userCompany._id);
+  } else if (requestedCompanyId && requestedCompanyId !== "ALL") {
+    targetCompanyId = requestedCompanyId;
+  } else if (currentUser?.companyId && !requestedCompanyId) {
+    targetCompanyId = String(currentUser.companyId);
+  }
+
+  let userQuery: any = {};
+  if (targetCompanyId) {
+    const targetObjId = mongoose.Types.ObjectId.isValid(targetCompanyId)
+      ? new mongoose.Types.ObjectId(targetCompanyId)
+      : targetCompanyId;
+
+    if (access.isAdmin) {
+      userQuery = { companyId: targetObjId, status: { $ne: "Inactive" } };
+    } else {
+      userQuery = {
+        _id: { $in: access.accessibleUserIds.map(String) },
+        companyId: targetObjId,
+        status: "Active",
+      };
+    }
+  } else if (userCompany?.isHeadOffice && (!requestedCompanyId || requestedCompanyId === "ALL")) {
+    const childCompanies = await Company.find({ parentCompanyId: userCompany._id }, { _id: 1 }).lean();
+    const allCompIds = [userCompany._id, ...childCompanies.map((c: any) => c._id)];
+    if (access.isAdmin) {
+      userQuery = { companyId: { $in: allCompIds }, status: { $ne: "Inactive" } };
+    } else {
+      userQuery = {
+        _id: { $in: access.accessibleUserIds.map(String) },
+        companyId: { $in: allCompIds },
+        status: "Active",
+      };
+    }
+  } else {
+    userQuery = access.isAdmin
+      ? { ...(currentUser?.tenantId ? { tenantId: currentUser.tenantId } : {}), status: { $ne: "Inactive" } }
+      : { _id: { $in: access.accessibleUserIds.map(String) }, status: "Active" };
+  }
 
   const users = await User.find(userQuery)
     .populate("companyId", "companyName")
@@ -81,9 +129,9 @@ export async function fetchUsersList() {
   };
 }
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   try {
-    const result = await fetchUsersList();
+    const result = await fetchUsersList(req);
     if (!result.success) {
       return NextResponse.json(
         { success: false, error: result.error },

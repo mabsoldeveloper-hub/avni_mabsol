@@ -16,21 +16,25 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // Limit to 5MB
+    if (file.size > 5 * 1024 * 1024) {
+      return NextResponse.json(
+        { success: false, message: "Logo file size must be less than 5MB" },
+        { status: 400 }
+      );
+    }
+
     const bytes = await file.arrayBuffer();
     const buffer = Buffer.from(bytes);
 
-    const ext = file.name.split(".").pop();
-
+    const ext = (file.name.split(".").pop() || "png").toLowerCase();
     const fileName = `${uuid()}.${ext}`;
 
-    const uploadPath = path.join(
-      process.cwd(),
-      "public",
-      "uploads",
-      "company",
-      fileName
-    );
+    const dirPath = path.join(process.cwd(), "public", "uploads", "company");
+    const { mkdir } = await import("fs/promises");
+    await mkdir(dirPath, { recursive: true });
 
+    const uploadPath = path.join(dirPath, fileName);
     await writeFile(uploadPath, buffer);
 
     return NextResponse.json({

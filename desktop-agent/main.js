@@ -141,49 +141,27 @@ function loadProjectEnv() {
 
 function getDefaultCloudUrl() {
   const env = loadProjectEnv();
-  if (env.CLOUD_URL) return env.CLOUD_URL.replace(/\/+$/, "");
-  if (env.NEXT_PUBLIC_APP_URL) return env.NEXT_PUBLIC_APP_URL.replace(/\/+$/, "");
-  if (!app.isPackaged) return "http://localhost:3000";
+  if (env.CLOUD_URL && !env.CLOUD_URL.includes("localhost") && !env.CLOUD_URL.includes("127.0.0.1")) {
+    return env.CLOUD_URL.replace(/\/+$/, "");
+  }
+  if (env.NEXT_PUBLIC_APP_URL && !env.NEXT_PUBLIC_APP_URL.includes("localhost") && !env.NEXT_PUBLIC_APP_URL.includes("127.0.0.1")) {
+    return env.NEXT_PUBLIC_APP_URL.replace(/\/+$/, "");
+  }
   return "https://phcrm.mabsolinfotech.cloud";
 }
 
 function resolveCloudUrl(candidateUrl) {
   let url = (candidateUrl || "").trim().replace(/\/+$/, "");
-  if (!url) {
+  if (!url || url.includes("localhost") || url.includes("127.0.0.1")) {
     return getDefaultCloudUrl();
   }
   return url;
 }
 
-// Seamless Cloud Fallback: If primary cloud returns 404 (endpoint not deployed yet) or connection error,
-// check if local development server (http://localhost:3000) is running and handles the route.
+// Execute request with resolved cloud URL
 async function executeWithCloudFallback(primaryUrl, requestFn) {
   let activeUrl = resolveCloudUrl(primaryUrl);
-  try {
-    return await requestFn(activeUrl);
-  } catch (err) {
-    const isFallBackEligible =
-      err.response?.status === 404 ||
-      err.response?.status === 401 ||
-      err.code === "ECONNREFUSED" ||
-      err.code === "ENOTFOUND" ||
-      err.code === "ETIMEDOUT";
-
-    if (activeUrl !== "http://localhost:3000" && isFallBackEligible) {
-      try {
-        emitLog("warn", `${activeUrl} returned ${err.response?.status || err.code || "error"}. Auto-checking local server (http://localhost:3000)...`);
-        const fallbackRes = await requestFn("http://localhost:3000");
-        const current = loadConfig();
-        current.cloudUrl = "http://localhost:3000";
-        saveConfig(current);
-        emitLog("success", `Connected to local server http://localhost:3000!`);
-        return fallbackRes;
-      } catch {
-        throw err;
-      }
-    }
-    throw err;
-  }
+  return await requestFn(activeUrl);
 }
 
 function sanitizeFolderPath(dir) {
@@ -1564,7 +1542,7 @@ ipcMain.handle("license:request-agent-pin", async (_event, payload) => {
     if (res.data?.success) {
       emitLog("success", `Generated 6-digit Agent PIN: ${res.data.pin}. Enter this on Web CRM to link license.`);
     }
-    return { ...res.data, cloudUrl: current.cloudUrl };
+    return { ...res.data, cloudUrl: cloudUrl };
   } catch (err) {
     const errorMsg = err.response?.data?.error || err.message || "Failed to generate Agent PIN";
     emitLog("error", `PIN generation failed: ${errorMsg}`);

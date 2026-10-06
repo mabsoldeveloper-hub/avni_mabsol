@@ -9,7 +9,6 @@ const loginForm = document.getElementById("loginForm");
 const cloudUrlInput = document.getElementById("cloudUrlInput");
 const btnServerPhcrm = document.getElementById("btnServerPhcrm");
 const btnServerMbh = document.getElementById("btnServerMbh");
-const btnServerLocal = document.getElementById("btnServerLocal");
 const emailInput = document.getElementById("emailInput");
 const passwordInput = document.getElementById("passwordInput");
 const loginBtn = document.getElementById("loginBtn");
@@ -180,8 +179,7 @@ function updateActiveServerButtons(url) {
   const normalized = (url || "").trim().toLowerCase().replace(/\/+$/, "");
   const buttons = [
     { btn: btnServerPhcrm, url: "https://phcrm.mabsolinfotech.cloud" },
-    { btn: btnServerMbh, url: "https://mbh.crm.mabsolinfotech.cloud" },
-    { btn: btnServerLocal, url: "http://localhost:3000" }
+    { btn: btnServerMbh, url: "https://mbh.crm.mabsolinfotech.cloud" }
   ];
 
   buttons.forEach(({ btn, url: targetUrl }) => {
@@ -834,7 +832,6 @@ function setupEventListeners() {
 
   bindServerBtn(btnServerPhcrm, "https://phcrm.mabsolinfotech.cloud");
   bindServerBtn(btnServerMbh, "https://mbh.crm.mabsolinfotech.cloud");
-  bindServerBtn(btnServerLocal, "http://localhost:3000");
 
   if (cloudUrlInput) {
     cloudUrlInput.addEventListener("input", () => {
@@ -3133,22 +3130,22 @@ const serverEnvIcon = document.getElementById("serverEnvIcon");
 const serverEnvLabel = document.getElementById("serverEnvLabel");
 
 function updateServerEnvDisplay(url) {
-  const isLocal = Boolean(url && (url.includes("localhost") || url.includes("127.0.0.1")));
-  if (serverEnvLabel) serverEnvLabel.textContent = isLocal ? "Localhost (3000)" : "Cloud";
-  if (serverEnvIcon) serverEnvIcon.textContent = isLocal ? "💻" : "☁️";
+  const isMbh = Boolean(url && url.includes("mbh.crm"));
+  if (serverEnvLabel) serverEnvLabel.textContent = isMbh ? "MBH Cloud" : "Cloud";
+  if (serverEnvIcon) serverEnvIcon.textContent = "☁️";
   if (devActServerSelect) {
-    devActServerSelect.value = isLocal ? "http://localhost:3000" : "https://phcrm.mabsolinfotech.cloud";
+    devActServerSelect.value = isMbh ? "https://mbh.crm.mabsolinfotech.cloud" : "https://phcrm.mabsolinfotech.cloud";
   }
 }
 
 serverEnvToggleBtn?.addEventListener("click", async () => {
-  const currentVal = devActServerSelect?.value || (serverEnvLabel?.textContent?.includes("Local") ? "http://localhost:3000" : "https://phcrm.mabsolinfotech.cloud");
-  const nextVal = currentVal.includes("localhost") ? "https://phcrm.mabsolinfotech.cloud" : "http://localhost:3000";
+  const currentVal = devActServerSelect?.value || "https://phcrm.mabsolinfotech.cloud";
+  const nextVal = currentVal.includes("mbh") ? "https://phcrm.mabsolinfotech.cloud" : "https://mbh.crm.mabsolinfotech.cloud";
   if (window.electronAPI?.setCloudUrl) {
     const res = await window.electronAPI.setCloudUrl(nextVal);
     if (res?.success) {
       updateServerEnvDisplay(nextVal);
-      showToast(`Target server set to ${nextVal.includes("localhost") ? "Local Dev (localhost:3000)" : "Cloud Production"}`, "info");
+      showToast(`Target server set to ${nextVal.includes("mbh") ? "MBH Cloud" : "Production Cloud"}`, "info");
     }
   }
 });
@@ -3192,26 +3189,34 @@ function stopPinPolling() {
 async function requestAndDisplayAgentPin() {
   stopPinPolling();
   setButtonLoading(btnDevActRequestPin, true);
+  if (btnDevActRegenPin) btnDevActRegenPin.disabled = true;
+  if (devActPinDisplay) devActPinDisplay.textContent = "⏳ ...";
   try {
     let email = devActTargetEmail || currentAuthEmail || (emailInput ? emailInput.value.trim() : "");
     const cloudUrl = devActServerSelect?.value || (cloudUrlInput ? cloudUrlInput.value.trim() : "");
     const res = await window.electronAPI.requestAgentPin({ cloudUrl, email });
     setButtonLoading(btnDevActRequestPin, false);
+    if (btnDevActRegenPin) btnDevActRegenPin.disabled = false;
     if (res && res.success && res.pin) {
       if (res.cloudUrl) {
         updateServerEnvDisplay(res.cloudUrl);
       }
       currentActiveAgentPin = res.pin;
       if (devActPinDisplay) devActPinDisplay.textContent = res.pin;
+      if (res.deviceId && devActDeviceId) devActDeviceId.textContent = res.deviceId;
+      if (res.deviceName && devActMachineName) devActMachineName.textContent = res.deviceName;
       devActPinInitial?.classList.add("hidden");
       devActPinActiveCard?.classList.remove("hidden");
       startPinPolling(res.pin);
       showToast(`Agent PIN generated: ${res.pin}. Enter this on Web CRM!`, "success");
     } else {
+      if (devActPinDisplay) devActPinDisplay.textContent = currentActiveAgentPin || "------";
       showToast(res?.error || "Failed to generate Agent PIN.", "error");
     }
   } catch (err) {
     setButtonLoading(btnDevActRequestPin, false);
+    if (btnDevActRegenPin) btnDevActRegenPin.disabled = false;
+    if (devActPinDisplay) devActPinDisplay.textContent = currentActiveAgentPin || "------";
     showToast(err.message || "Failed to generate PIN.", "error");
   }
 }
@@ -3225,7 +3230,6 @@ btnGeneratePinAgent?.addEventListener("click", () => {
     licenseKey: licenseKeyInput ? licenseKeyInput.value.trim() : ""
   });
   switchDevActTab("pin");
-  requestAndDisplayAgentPin();
 });
 
 btnCopyAgentPin?.addEventListener("click", () => {

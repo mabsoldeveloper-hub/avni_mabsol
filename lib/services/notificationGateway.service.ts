@@ -119,6 +119,197 @@ export class NotificationGatewayService {
   /**
    * Send Email Message (SMTP / Mock)
    */
+  // static async sendEmail({
+  //   to,
+  //   subject,
+  //   html,
+  //   text,
+  //   config,
+  // }: {
+  //   to: string;
+  //   subject: string;
+  //   html: string;
+  //   text?: string;
+  //   config?: INotificationGatewayConfig | null;
+  // }): Promise<ISendMessageResult> {
+  //   if (!to || !to.includes("@")) {
+  //     return {
+  //       success: false,
+  //       channel: "email",
+  //       recipient: to,
+  //       error: "Invalid email address",
+  //     };
+  //   }
+  
+  //   try {
+  //     const activeConfig =
+  //       config || (await this.getConfig());
+  
+  //     if (!activeConfig) {
+  //       return {
+  //         success: false,
+  //         channel: "email",
+  //         recipient: to,
+  //         error:
+  //           "Email gateway configuration not found",
+  //       };
+  //     }
+  
+  //     const emailConfig =
+  //       activeConfig.email;
+  
+  //     const provider =
+  //       emailConfig?.provider || "";
+  
+  //     /* =====================================================
+  //        SMTP EMAIL
+  //        ===================================================== */
+  
+  //     if (provider === "smtp") {
+  //       if (
+  //         !emailConfig?.smtpHost ||
+  //         !emailConfig?.smtpUser ||
+  //         !emailConfig?.smtpPass
+  //       ) {
+  //         return {
+  //           success: false,
+  //           channel: "email",
+  //           recipient: to,
+  //           error:
+  //             "SMTP configuration is incomplete. Please check SMTP host, username and password.",
+  //         };
+  //       }
+  
+  //       try {
+  //         const nodemailer =
+  //           require("nodemailer");
+  
+  //         const transporter =
+  //           nodemailer.createTransport({
+  //             host: emailConfig.smtpHost,
+  
+  //             port:
+  //               emailConfig.smtpPort || 587,
+  
+  //             secure:
+  //               !!emailConfig.smtpSecure,
+  
+  //             auth: {
+  //               user:
+  //                 emailConfig.smtpUser,
+  
+  //               pass:
+  //                 emailConfig.smtpPass,
+  //             },
+  
+  //             // Helps prevent hanging forever
+  //             connectionTimeout: 15000,
+  //             greetingTimeout: 15000,
+  //             socketTimeout: 20000,
+  //           });
+  
+  //         /* =================================================
+  //            VERIFY SMTP CONNECTION FIRST
+  //            ================================================= */
+  
+  //         await transporter.verify();
+  
+  //         /* =================================================
+  //            SEND EMAIL
+  //            ================================================= */
+  
+  //         const info =
+  //           await transporter.sendMail({
+  //             from: `"${emailConfig.fromName || "Mabsol Pharma"}" <${
+  //               emailConfig.fromEmail ||
+  //               emailConfig.smtpUser
+  //             }>`,
+  //             to,
+  //             subject,
+  //             text: text || subject,
+  //             html,
+  //           });
+  
+  //         console.log(
+  //           "[SMTP EMAIL SENT]",
+  //           {
+  //             to,
+  //             subject,
+  //             messageId:
+  //               info?.messageId,
+  //             accepted:
+  //               info?.accepted,
+  //             rejected:
+  //               info?.rejected,
+  //           }
+  //         );
+  
+  //         return {
+  //           success: true,
+  //           channel: "email",
+  //           recipient: to,
+  //           messageId:
+  //             info?.messageId ||
+  //             `smtp_${Date.now()}`,
+  //         };
+  //       } catch (smtpErr: any) {
+  //         console.error(
+  //           "[SMTP EMAIL ERROR]",
+  //           {
+  //             to,
+  //             subject,
+  //             error:
+  //               smtpErr?.message,
+  //             code:
+  //               smtpErr?.code,
+  //             command:
+  //               smtpErr?.command,
+  //             response:
+  //               smtpErr?.response,
+  //           }
+  //         );
+  
+  //         return {
+  //           success: false,
+  //           channel: "email",
+  //           recipient: to,
+  //           error:
+  //             smtpErr?.response ||
+  //             smtpErr?.message ||
+  //             "SMTP email sending failed",
+  //         };
+  //       }
+  //     }
+  
+  //     /* =====================================================
+  //        NO SMTP CONFIGURATION
+  //        ===================================================== */
+  
+  //     return {
+  //       success: false,
+  //       channel: "email",
+  //       recipient: to,
+  //       error:
+  //         `Email provider is not configured for SMTP. Current provider: ${
+  //           provider || "not configured"
+  //         }`,
+  //     };
+  //   } catch (err: any) {
+  //     console.error(
+  //       "Email Send Error:",
+  //       err
+  //     );
+  
+  //     return {
+  //       success: false,
+  //       channel: "email",
+  //       recipient: to,
+  //       error:
+  //         err?.message ||
+  //         "Failed to send email",
+  //     };
+  //   }
+  // }
   static async sendEmail({
     to,
     subject,

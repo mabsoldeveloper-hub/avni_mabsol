@@ -35,6 +35,8 @@ import AddCustomerModal from "@/components/customer/AddCustomerModal";
 import { useCompany } from "@/context/CompanyContext";
 import { useFinancialYear } from "@/context/FinancialYearContext";
 
+import PermissionButton from "@/components/PermissionButton";
+
 
 type MrTerritoryInfo = {
   isMrRestricted: boolean;
@@ -363,12 +365,16 @@ export default function CustomerPage() {
           <h2 className="text-2xl font-bold text-slate-800">Customer Master</h2>
           <p className="text-sm text-slate-500 mt-0.5">Manage all customers from one place</p>
         </div>
-        <button
-          onClick={() => setIsAddModalOpen(true)}
-          className="inline-flex items-center gap-2 rounded-xl bg-[#343872] text-white text-sm font-medium px-4 py-2.5 shadow-[0_4px_14px_rgba(52,56,114,0.35)] hover:bg-[#2a2d5c] transition-colors cursor-pointer"
-        >
-          <FaPlus size={12} /> Add Customer
-        </button>
+
+        <PermissionButton permission="customer.add.button"> 
+          <button
+            onClick={() => setIsAddModalOpen(true)}
+            className="inline-flex items-center gap-2 rounded-xl bg-[#343872] text-white text-sm font-medium px-4 py-2.5 shadow-[0_4px_14px_rgba(52,56,114,0.35)] hover:bg-[#2a2d5c] transition-colors cursor-pointer"
+          >
+            <FaPlus size={12} /> Add Customer
+          </button>
+        </PermissionButton> 
+
       </div>
 
       {/* KPI Cards */}
@@ -418,15 +424,25 @@ export default function CustomerPage() {
           </select>
 
           <div className="flex gap-2 ml-auto">
-            <button className="inline-flex items-center gap-1.5 rounded-xl bg-emerald-600/90 text-white text-xs font-medium px-3.5 py-2.5 hover:bg-emerald-700 transition-colors">
-              <FaFileExcel size={12} /> Excel
-            </button>
-            <button className="inline-flex items-center gap-1.5 rounded-xl bg-rose-600/90 text-white text-xs font-medium px-3.5 py-2.5 hover:bg-rose-700 transition-colors">
-              <FaFilePdf size={12} /> PDF
-            </button>
-            <button className="inline-flex items-center gap-1.5 rounded-xl bg-slate-600/90 text-white text-xs font-medium px-3.5 py-2.5 hover:bg-slate-700 transition-colors">
-              <FaPrint size={12} /> Print
-            </button>
+
+            <PermissionButton permission="customer.excel">
+              <button className="inline-flex items-center gap-1.5 rounded-xl bg-emerald-600/90 text-white text-xs font-medium px-3.5 py-2.5 hover:bg-emerald-700 transition-colors">
+                <FaFileExcel size={12} /> Excel
+              </button>
+            </PermissionButton>
+
+            <PermissionButton permission="customer.pdf">
+              <button className="inline-flex items-center gap-1.5 rounded-xl bg-rose-600/90 text-white text-xs font-medium px-3.5 py-2.5 hover:bg-rose-700 transition-colors">
+                <FaFilePdf size={12} /> PDF
+              </button>
+            </PermissionButton>
+
+            <PermissionButton permission="customer.print">
+              <button className="inline-flex items-center gap-1.5 rounded-xl bg-slate-600/90 text-white text-xs font-medium px-3.5 py-2.5 hover:bg-slate-700 transition-colors">
+                <FaPrint size={12} /> Print
+              </button>
+            </PermissionButton>
+
           </div>
         </div>
       </div>

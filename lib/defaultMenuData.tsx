@@ -465,6 +465,28 @@ export function isPathActive(
 }
 
 export const DEFAULT_MENU_ITEMS: MenuItemConfig[] = [
+
+  
+  {
+    id: "inventory-intelligence",
+    label: "Inventory Intelligence",
+    icon: "FaHeartbeat",
+    color: "violet",
+    isGroup: true,
+    permission: "inventory.view",
+    isVisible: true,
+    order: 12.5,
+    subItems: [
+      { id: "inventory-intelligence-dashboard", label: "Alert Dashboard", href: "/dashboard/inventory-intelligence", icon: "FaTachometerAlt", permission: "inventory.view", isVisible: true, order: 0 },
+      { id: "inventory-intelligence-near-expiry", label: "Near Expiry", href: "/dashboard/inventory-intelligence/near-expiry", icon: "FaBell", permission: "inventory.view", isVisible: true, order: 1 },
+      { id: "inventory-intelligence-dead-stock", label: "Dead / Dump Stock", href: "/dashboard/inventory-intelligence/dead-stock", icon: "FaWarehouse", permission: "inventory.view", isVisible: true, order: 2 },
+      { id: "inventory-intelligence-movement", label: "Fast / Slow Moving", href: "/dashboard/inventory-intelligence/movement", icon: "FaChartBar", permission: "inventory.view", isVisible: true, order: 3 },
+      { id: "inventory-intelligence-settings", label: "Alert Settings", href: "/dashboard/inventory-intelligence/settings", icon: "FaCogs", permission: "inventory.view", isVisible: true, order: 4 },
+    ],
+  },
+
+
+
   {
     id: "standard-dashboard",
     label: "Standard Dashboard",
@@ -1253,7 +1275,7 @@ export const DEFAULT_MENU_ITEMS: MenuItemConfig[] = [
     icon: "FaCog",
     color: "cyan",
     isGroup: true,
-    permission: "settings.edit",
+    permission: "settings.view",
     isVisible: true,
     order: 20,
     subItems: [
@@ -1262,7 +1284,7 @@ export const DEFAULT_MENU_ITEMS: MenuItemConfig[] = [
         label: "Company Settings",
         href: "/dashboard/settings",
         icon: "FaCog",
-        permission: "settings.edit",
+        permission: "settings.company.setting",
         isVisible: true,
         order: 0,
       },
@@ -1271,7 +1293,7 @@ export const DEFAULT_MENU_ITEMS: MenuItemConfig[] = [
         label: "Menu Adjustments",
         href: "/dashboard/settings/menu-adjustments",
         icon: "FaSlidersH",
-        permission: "settings.edit",
+        permission: "menu.adjustments",
         isVisible: true,
         order: 1,
       },
@@ -1280,7 +1302,7 @@ export const DEFAULT_MENU_ITEMS: MenuItemConfig[] = [
         label: "Voice AI 🎙️",
         href: "/dashboard/voice-settings",
         icon: "FaSlidersH",
-        permission: "settings.edit",
+        permission: "voice.settings",
         isVisible: true,
         order: 2,
       },
@@ -1298,7 +1320,7 @@ export const DEFAULT_MENU_ITEMS: MenuItemConfig[] = [
         label: "Backup & Restore Settings",
         href: "/dashboard/backup",
         icon: "FaEnvelope",
-        permission: "settings.edit",
+        permission: "backup.restore",
         isVisible: true,
         order: 4,
       },

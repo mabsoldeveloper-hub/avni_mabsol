@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useMemo, useRef } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { useCompany } from "@/context/CompanyContext";
 import { useFinancialYear } from "@/context/FinancialYearContext";
 import {
@@ -181,6 +181,8 @@ interface InvoiceItem {
 
 export default function CreateSaleInvoicePage() {
   const router = useRouter();
+  const routeParams = useParams();
+  const currentRole = (routeParams?.role as string) || "admin";
   const { selectedCompany } = useCompany();
   const { selectedFY } = useFinancialYear();
 
@@ -458,7 +460,8 @@ export default function CreateSaleInvoicePage() {
   const loadProformaInvoiceToConvert = async (vcnToConvert: string) => {
     try {
       setLoadingInitial(true);
-      const res = await fetch(`/api/sales/invoice/${encodeURIComponent(vcnToConvert)}`);
+      const enc = encodeURIComponent(vcnToConvert);
+      const res = await fetch(`/api/sales/invoice/${enc}?v=${enc}`);
       const data = await res.json();
       if (data.success && data.header) {
         setBillType("S");
@@ -814,7 +817,7 @@ export default function CreateSaleInvoicePage() {
 
       setSuccessMsg(`Sale Invoice #${data.data?.vcn || invoiceVcn} created successfully! Redirecting...`);
       setTimeout(() => {
-        router.push("/dashboard/sales/invoice");
+        router.push(`/dashboard/${currentRole}/sales/invoice`);
       }, 1200);
     } catch (err: any) {
       console.error("Submit Sale Invoice error:", err);
@@ -830,7 +833,7 @@ export default function CreateSaleInvoicePage() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div className="flex items-center gap-3">
           <Link
-            href="/dashboard/sales/invoice"
+            href={`/dashboard/${currentRole}/sales/invoice`}
             className="w-10 h-10 rounded-2xl bg-white border border-slate-200 flex items-center justify-center text-slate-600 hover:bg-slate-50 transition shadow-sm"
           >
             <FaArrowLeft />
@@ -877,13 +880,13 @@ export default function CreateSaleInvoicePage() {
           <FaChartLine className="text-orange-500" /> Dashboard
         </Link>
         <Link
-          href="/dashboard/sales/invoice"
+          href={`/dashboard/${currentRole}/sales/invoice`}
           className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-slate-600 hover:bg-white transition"
         >
           <FaFileInvoice className="text-orange-500" /> Invoices List
         </Link>
         <Link
-          href="/dashboard/sales/invoice/create"
+          href={`/dashboard/${currentRole}/sales/invoice/create`}
           className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-orange-600 text-white shadow-sm font-bold"
         >
           <FaPlus /> Create Bill
@@ -1361,7 +1364,7 @@ export default function CreateSaleInvoicePage() {
                                           </button>
                                         )}
                                       <Link
-                                        href={`/dashboard/sales/invoice/${encodeURIComponent(inv.vcn)}`}
+                                        href={`/dashboard/${currentRole}/sales/invoice/${encodeURIComponent(inv.vcn)}`}
                                         target="_blank"
                                         onClick={(e) => e.stopPropagation()}
                                         className="p-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-600 transition"
@@ -2210,7 +2213,7 @@ export default function CreateSaleInvoicePage() {
               </button>
 
               <Link
-                href="/dashboard/sales/invoice"
+                href={`/dashboard/${currentRole}/sales/invoice`}
                 className="block text-center py-2 px-4 rounded-2xl text-xs font-bold text-white/90 bg-white/10 border border-white/30 hover:bg-white/20 transition"
               >
                 Cancel

@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState, useCallback } from "react";
 import Link from "next/link";
+import { useParams } from "next/navigation";
 import {
   FaFileInvoiceDollar,
   FaRupeeSign,
@@ -41,6 +42,9 @@ type SalesOutstandingRow = {
 };
 
 export default function SalesOutstandingPage() {
+  const routeParams = useParams();
+  const currentRole = (routeParams?.role as string) || "admin";
+
   const [rows, setRows] = useState<SalesOutstandingRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
@@ -295,7 +299,7 @@ export default function SalesOutstandingPage() {
                       </td>
                       <td className="px-4 py-2.5 text-center">
                         <Link
-                          href={`/dashboard/sales/invoice/${encodeURIComponent(row.vcn)}`}
+                          href={`/dashboard/${currentRole}/sales/invoice/${encodeURIComponent(row.vcn)}`}
                           className="inline-flex items-center justify-center px-3 py-1 rounded-lg text-xs font-medium bg-gray-800 text-white hover:bg-gray-900 transition-colors"
                         >
                           View Bill

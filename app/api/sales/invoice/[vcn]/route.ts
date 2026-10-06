@@ -46,34 +46,63 @@ export async function GET(
 
         await connectDB();
 
-        const { vcn } = await params;
+        const { vcn: rawParamVcn } = await params;
+        const { searchParams } = new URL(req.url);
+        const queryVcn = searchParams.get("v") || searchParams.get("vcn") || "";
 
-        const escapedVcn = vcn.replace(/[-[\]{}()*+?.,\\^$|#\s]/g, "\\$&");
-        const vcnRegex = new RegExp(`^${escapedVcn}$`, "i");
+        // Collect all possible raw and decoded variations of the voucher identifier
+        const vcnCandidates = new Set<string>();
+        [rawParamVcn, queryVcn].filter(Boolean).forEach((tok) => {
+            const str = String(tok).trim();
+            if (!str) return;
+            vcnCandidates.add(str);
+            try {
+                const d1 = decodeURIComponent(str);
+                vcnCandidates.add(d1);
+                const d2 = decodeURIComponent(d1);
+                vcnCandidates.add(d2);
+            } catch {}
+            vcnCandidates.add(str.replace(/%2F/gi, "/"));
+            vcnCandidates.add(str.replace(/\//g, "%2F"));
+        });
+
+        const orConditions: any[] = [];
+        Array.from(vcnCandidates).forEach((c) => {
+            const escaped = c.replace(/[-[\]{}()*+?.,\\^$|#\s]/g, "\\$&");
+            const reg = new RegExp(`^${escaped}$`, "i");
+            orConditions.push({ VCN: c });
+            orConditions.push({ VCN: reg });
+        });
 
         // Step 1: Try exact VCN match first (prevents matching wrong bill by VOUCHER/BILLNO alias)
-        let header: any = await SalesMdis.findOne({
-            $or: [{ VCN: vcn }, { VCN: vcnRegex }],
-        }).lean();
+        let header: any = await SalesMdis.findOne({ $or: orConditions }).lean();
 
         // Step 2: Fallback to VOUCHER, BILLNO, INVNO if exact VCN is not found
         if (!header) {
-            header = await SalesMdis.findOne({
-                $or: [
-                    { VOUCHER: vcn },
-                    { VOUCHER: vcnRegex },
-                    { BILLNO: vcn },
-                    { BILLNO: vcnRegex },
-                    { INVNO: vcn },
-                    { INVNO: vcnRegex },
-                ],
-            }).lean();
+            const fallbackConditions: any[] = [];
+            Array.from(vcnCandidates).forEach((c) => {
+                const escaped = c.replace(/[-[\]{}()*+?.,\\^$|#\s]/g, "\\$&");
+                const reg = new RegExp(`^${escaped}$`, "i");
+                fallbackConditions.push({ VOUCHER: c });
+                fallbackConditions.push({ VOUCHER: reg });
+                fallbackConditions.push({ BILLNO: c });
+                fallbackConditions.push({ BILLNO: reg });
+                fallbackConditions.push({ INVNO: c });
+                fallbackConditions.push({ INVNO: reg });
+                const num = Number(c);
+                if (!isNaN(num) && num > 0) {
+                    fallbackConditions.push({ VOUCHER: num });
+                }
+            });
+            header = await SalesMdis.findOne({ $or: fallbackConditions }).lean();
         }
+
+        const displayVcn = Array.from(vcnCandidates).find((v) => v.includes("/")) || rawParamVcn || "";
 
         if (!header) {
             return NextResponse.json({
                 success: false,
-                message: `Invoice #${vcn} not found`,
+                message: `Invoice #${displayVcn} not found`,
             });
         }
 
@@ -83,7 +112,6 @@ export async function GET(
         }
 
         const currentUser: any = await getCurrentUser();
-        const { searchParams } = new URL(req.url);
         const companyId = String(searchParams.get("companyId") || "").trim();
         const fyId = String(searchParams.get("fyId") || "").trim();
         if (!currentUser) return NextResponse.json({ success:false, message:"Unauthorized" }, { status:401 });
@@ -97,8 +125,8 @@ export async function GET(
             return NextResponse.json({ success:false, message:"Invoice not found" }, { status:404 });
         }
 
-        const resolvedVcn = String(header.VCN || header.VOUCHER || vcn).trim();
-        const resolvedVoucher = String(header.VOUCHER || header.VCN || vcn).trim();
+        const resolvedVcn = String(header.VCN || header.VOUCHER || displayVcn).trim();
+        const resolvedVoucher = String(header.VOUCHER || header.VCN || displayVcn).trim();
         const resRegex = new RegExp(`^${resolvedVcn.replace(/[-[\]{}()*+?.,\\^$|#\s]/g, "\\$&")}$`, "i");
         const voucRegex = new RegExp(`^${resolvedVoucher.replace(/[-[\]{}()*+?.,\\^$|#\s]/g, "\\$&")}$`, "i");
 
@@ -120,8 +148,8 @@ export async function GET(
 
         // Invoice Items (SalesDis)
         const searchKeys = new Set<string>();
-        [header.VCN, header.VOUCHER, header.BILLNO, header.INVNO, vcn].forEach((k) => {
-            if (k) {
+        [header.VCN, header.VOUCHER, header.BILLNO, header.INVNO, ...Array.from(vcnCandidates)].forEach((k) => {
+            if (k !== undefined && k !== null) {
                 const s = String(k).trim();
                 if (s) {
                     searchKeys.add(s);
@@ -131,20 +159,24 @@ export async function GET(
             }
         });
 
-        const orConditions: any[] = [];
+        const itemConditions: any[] = [];
         searchKeys.forEach((key) => {
             const keyRegex = new RegExp(`^${key.replace(/[-[\]{}()*+?.,\\^$|#\s]/g, "\\$&")}$`, "i");
-            orConditions.push({ VCN: key });
-            orConditions.push({ VCN: keyRegex });
-            orConditions.push({ VOUCHER: key });
-            orConditions.push({ VOUCHER: keyRegex });
-            orConditions.push({ BILLNO: key });
-            orConditions.push({ BILLNO: keyRegex });
-            orConditions.push({ INVNO: key });
-            orConditions.push({ INVNO: keyRegex });
+            itemConditions.push({ VCN: key });
+            itemConditions.push({ VCN: keyRegex });
+            itemConditions.push({ VOUCHER: key });
+            itemConditions.push({ VOUCHER: keyRegex });
+            itemConditions.push({ BILLNO: key });
+            itemConditions.push({ BILLNO: keyRegex });
+            itemConditions.push({ INVNO: key });
+            itemConditions.push({ INVNO: keyRegex });
+            const num = Number(key);
+            if (!isNaN(num) && num > 0) {
+                itemConditions.push({ VOUCHER: num });
+            }
         });
 
-        let details: any[] = await SalesDis.find({ $or: orConditions }).lean();
+        let details: any[] = await SalesDis.find({ $or: itemConditions }).lean();
 
         // Fallback: If no line items found by voucher keys, search by supplier/customer CODEP and DATE
         if (details.length === 0 && header.CODEP && header.DATE) {
@@ -159,10 +191,15 @@ export async function GET(
             .map((row: any) => String(row.PRODUCT || row.CODE || "").trim())
             .filter(Boolean);
 
+        const numericProdCodes = allProdCodes
+            .map((c) => Number(c))
+            .filter((n) => !isNaN(n) && n > 0);
+
         const batchProducts = allProdCodes.length > 0
             ? await Product.find({
                 $or: [
                     { CODE: { $in: allProdCodes } },
+                    { CODE: { $in: numericProdCodes } },
                     { PRODUCT: { $in: allProdCodes } },
                 ],
             }).lean()
@@ -172,6 +209,8 @@ export async function GET(
         (batchProducts as any[]).forEach((p: any) => {
             const key = String(p.CODE || p.PRODUCT || "").trim().toUpperCase();
             if (key) prodMap.set(key, p);
+            const numKey = String(p.CODE).trim();
+            if (numKey) prodMap.set(numKey, p);
         });
 
         const items = [];

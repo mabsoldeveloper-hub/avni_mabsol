@@ -297,7 +297,8 @@ export default function UsersTable({ users }: { users: any[] }) {
                             Edit
                           </Link>
                         </PermissionButton>
-
+                        
+                        <PermissionButton permission="users.assign">
                         <Link
                           href={`/dashboard/${user.role}/users/assignment`}
                           className="px-2.5 py-1 rounded-lg text-xs font-medium text-white bg-teal-600 hover:bg-teal-700 transition-colors whitespace-nowrap"
@@ -305,13 +306,16 @@ export default function UsersTable({ users }: { users: any[] }) {
                         >
                           Assign Scope
                         </Link>
-
-                        <Link
-                          href={`/dashboard/${user.role}/users/permission/${user._id}`}
-                          className="px-3 py-1 rounded-lg text-xs font-medium text-white bg-indigo-500/90 hover:bg-indigo-500 transition-colors"
-                        >
-                          Permission
-                        </Link>
+                        </PermissionButton>
+                        
+                        <PermissionButton permission="users.permission">
+                          <Link
+                            href={`/dashboard/${user.role}/users/permission/${user._id}`}
+                            className="px-3 py-1 rounded-lg text-xs font-medium text-white bg-indigo-500/90 hover:bg-indigo-500 transition-colors"
+                          >
+                            Permission
+                          </Link>
+                        </PermissionButton>
 
                         <PermissionButton permission="users.delete">
                           <DeleteUserButton userId={user._id.toString()} />

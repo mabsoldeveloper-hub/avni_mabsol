@@ -41,13 +41,28 @@ const VfpSyncStateSchema = new mongoose.Schema(
     },
     lastHash: String,
     lastError: String,
+    companyCode: {
+      type: String,
+      default: "",
+    },
+    companyId: {
+      type: String,
+      default: "",
+    },
+    companyName: {
+      type: String,
+      default: "",
+    },
   },
   {
     timestamps: true,
+    strict: false,
   }
 );
 
-VfpSyncStateSchema.index({ tableName: 1, email: 1 }, { unique: true });
+VfpSyncStateSchema.index({ tableName: 1, email: 1, companyCode: 1 });
 
-export default mongoose.models.VfpSyncState ||
-  mongoose.model("VfpSyncState", VfpSyncStateSchema, "vfpsyncstates");
+if (mongoose.models.VfpSyncState) {
+  delete mongoose.models.VfpSyncState;
+}
+export default mongoose.model("VfpSyncState", VfpSyncStateSchema, "vfpsyncstates");

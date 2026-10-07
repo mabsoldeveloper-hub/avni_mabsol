@@ -67,8 +67,20 @@ export async function GET(request: NextRequest) {
         lower === "default" ||
         lower === "organization" ||
         lower === "your organization" ||
-        lower === "test"
+        lower === "test" ||
+        lower === "new folder" ||
+        lower === "new_folder" ||
+        lower.startsWith("new folder") ||
+        lower.startsWith("new_folder")
       );
+    };
+
+    const cleanCompText = (name?: string) => {
+      if (!name) return "";
+      let s = name.trim();
+      s = s.replace(/[\s\-_/\\|]*new[\s_-]*folder(\s*\(\d+\))?[\s\-_/\\|]*/gi, " ").trim();
+      s = s.replace(/^[-_\s/\\|]+|[-_\s/\\|]+$/g, "").trim();
+      return isPlaceholderComp(s) ? "" : s;
     };
 
     if (tenantId || primaryCompanyId) {
@@ -84,7 +96,8 @@ export async function GET(request: NextRequest) {
         .lean();
 
       for (const comp of matchingCompanies) {
-        const compName = (comp.companyName || comp.name || "").trim();
+        const rawName = (comp.companyName || comp.name || "").trim();
+        const compName = cleanCompText(rawName);
         const compCode = (comp.companyCode || comp.code || "").trim().toUpperCase();
 
         if (compName && !isPlaceholderComp(compName)) {
@@ -102,7 +115,8 @@ export async function GET(request: NextRequest) {
         if (Array.isArray(comp.additionalGstins)) {
           for (let i = 0; i < comp.additionalGstins.length; i++) {
             const sub = comp.additionalGstins[i];
-            const subName = (sub.branchName || `${compName} - Branch ${i + 1}`).trim();
+            const rawSub = (sub.branchName || `${compName} - Branch ${i + 1}`).trim();
+            const subName = cleanCompText(rawSub);
             if (subName) {
               const subCode = sub.stateCode ? `B${sub.stateCode}` : `${compCode}_B${i + 1}`;
               branchesList.push({
@@ -121,7 +135,7 @@ export async function GET(request: NextRequest) {
 
     // Fallback if no company documents are linked but user record has company details
     if (branchesList.length === 0 && userDoc) {
-      const uCompName = (userDoc.companyName || "").trim();
+      const uCompName = cleanCompText(userDoc.companyName || "");
       const uCompCode = (userDoc.companyCode || "").trim().toUpperCase();
       if (uCompName && !isPlaceholderComp(uCompName)) {
         branchesList.push({

@@ -34,11 +34,26 @@ const VfpSyncLogSchema = new mongoose.Schema(
     error: String,
     startedAt: Date,
     finishedAt: Date,
+    companyCode: {
+      type: String,
+      default: "",
+    },
+    companyId: {
+      type: String,
+      default: "",
+    },
+    companyName: {
+      type: String,
+      default: "",
+    },
   },
   {
     timestamps: true,
+    strict: false,
   }
 );
 
-export default mongoose.models.VfpSyncLog ||
-  mongoose.model("VfpSyncLog", VfpSyncLogSchema, "vfpsynclogs");
+if (mongoose.models.VfpSyncLog) {
+  delete mongoose.models.VfpSyncLog;
+}
+export default mongoose.model("VfpSyncLog", VfpSyncLogSchema, "vfpsynclogs");

@@ -29,9 +29,16 @@ import {
   Eye,
   EyeOff,
   ShieldCheck,
-  Sparkles
+  Sparkles,
+  Building2,
+  Layers,
+  SlidersHorizontal,
+  Receipt,
+  FileSpreadsheet,
+  Search
 } from "lucide-react";
 import { useToast } from "@/context/ToastContext";
+import { useCompany } from "@/context/CompanyContext";
 
 interface VfpSyncActionsProps {
   currentPath?: string;
@@ -72,6 +79,20 @@ function formatCountdown(totalSec: number): string {
   return `${m}m ${s < 10 ? "0" : ""}${s}s`;
 }
 
+function formatDisplayPath(rawPath?: string): string {
+  if (!rawPath) return "";
+  const normalized = rawPath.replace(/\\/g, "/").trim().replace(/\/+$/, "");
+  const match = normalized.match(/(?:^|\/)(?:data|vfp_uploads)\/(.+)$/i);
+  if (match && match[1]) {
+    return match[1].replace(/^vfp_uploads\//i, "");
+  }
+  const parts = normalized.split("/").filter(Boolean);
+  if (parts.length >= 2) {
+    return `${parts[parts.length - 2]}/${parts[parts.length - 1]}`;
+  }
+  return normalized;
+}
+
 export default function VfpSyncActions({ 
   currentPath = "", 
   destinationPath = "",
@@ -88,12 +109,80 @@ export default function VfpSyncActions({
 }: VfpSyncActionsProps) {
   const router = useRouter();
 
+  const { companies, selectedCompany, setSelectedCompany } = useCompany();
+
+  // Active target company from CompanyContext or props
+  const activeCompany = selectedCompany || companies.find((c) => (c.companyCode || "").toUpperCase() === (companyCode || "").toUpperCase()) || {
+    companyCode: companyCode || "DEFAULT",
+    companyName: companyName || "Default Company",
+    _id: "",
+  };
+
+  const [serverFiles, setServerFiles] = useState<string[]>([]);
+  const [serverFileCount, setServerFileCount] = useState<number>(0);
+  const [serverDataDir, setServerDataDir] = useState<string>("");
+  const [serverFilesLoading, setServerFilesLoading] = useState<boolean>(false);
+
   const [dataDir, setDataDir] = useState(currentPath);
   const [syncScope, setSyncScope] = useState<"selected">("selected");
   const [selectedFiles, setSelectedFiles] = useState<string[]>(enabledFiles);
   const [autoSync, setAutoSync] = useState(initialAutoSync);
   const [autoSyncInterval, setAutoSyncInterval] = useState(initialAutoSyncInterval);
   const [isEditingInterval, setIsEditingInterval] = useState(false);
+
+  // Load server files whenever target company changes
+  const loadCompanyServerStatus = useCallback(async (code: string, id?: string) => {
+    if (!code) return;
+    setServerFilesLoading(true);
+    try {
+      const res = await fetch(`/api/mabsolcrmsync/status?companyCode=${encodeURIComponent(code)}&companyId=${encodeURIComponent(id || "")}`);
+      const data = await res.json();
+      if (data.success && data.status) {
+        const foundFiles: string[] = data.status.serverFiles || data.status.enabledFiles || [];
+        setServerFiles(foundFiles);
+        setServerFileCount(foundFiles.length);
+        if (data.status.serverDataDir) {
+          setServerDataDir(data.status.serverDataDir);
+        }
+        if (data.status.lastSyncedAt) {
+          setCurrentLastSyncedAt(data.status.lastSyncedAt);
+        }
+        if (data.status.autoSync !== undefined) {
+          setAutoSync(Boolean(data.status.autoSync));
+        }
+        if (data.status.autoSyncInterval) {
+          setAutoSyncInterval(Number(data.status.autoSyncInterval));
+        }
+        if (foundFiles.length > 0) {
+          setSelectedFiles(foundFiles);
+          setDirectSyncCompleted(false);
+        }
+      }
+    } catch (err) {
+      console.error("Failed to load server files for company:", err);
+    } finally {
+      setServerFilesLoading(false);
+    }
+  }, []);
+
+  // Fetch status on initial mount and when activeCompany changes
+  useEffect(() => {
+    if (activeCompany?.companyCode) {
+      loadCompanyServerStatus(activeCompany.companyCode, activeCompany._id);
+    }
+  }, [activeCompany?.companyCode, activeCompany?._id, loadCompanyServerStatus]);
+
+  // Listen to custom window event if company changes from external selector
+  useEffect(() => {
+    const handleCompChange = (e: Event) => {
+      const customEvt = e as CustomEvent<any>;
+      if (customEvt.detail?.companyCode) {
+        loadCompanyServerStatus(customEvt.detail.companyCode, customEvt.detail._id);
+      }
+    };
+    window.addEventListener("mabsol_company_changed", handleCompChange);
+    return () => window.removeEventListener("mabsol_company_changed", handleCompChange);
+  }, [loadCompanyServerStatus]);
   
   // Custom unit state & preset calculation
   const [customValueStr, setCustomValueStr] = useState<string>(() => {
@@ -129,6 +218,56 @@ export default function VfpSyncActions({
   const [busyAction, setBusyAction] = useState<string | null>(null);
   const [directSyncCompleted, setDirectSyncCompleted] = useState<boolean>(false);
   const [directSyncSummary, setDirectSyncSummary] = useState<{ tables: number; rows: number } | null>(null);
+
+  // Auto-sync live countdown & last sync state
+  const [currentLastSyncedAt, setCurrentLastSyncedAt] = useState<Date | string | undefined>(lastSyncedAt);
+  const [autoSyncRemainingSec, setAutoSyncRemainingSec] = useState<number>(0);
+  const lastBrowserTriggerTimeRef = useRef<number>(0);
+
+  useEffect(() => {
+    if (lastSyncedAt) {
+      setCurrentLastSyncedAt(lastSyncedAt);
+    }
+  }, [lastSyncedAt]);
+
+  // Live auto-sync countdown & safety trigger
+  useEffect(() => {
+    if (!autoSync) {
+      setAutoSyncRemainingSec(0);
+      return;
+    }
+
+    const intervalSec = Math.max(60, (autoSyncInterval || 10) * 60);
+
+    const updateCountdown = () => {
+      if (!autoSync) {
+        setAutoSyncRemainingSec(0);
+        return;
+      }
+      const lastMs = currentLastSyncedAt ? new Date(currentLastSyncedAt).getTime() : 0;
+      if (!lastMs) {
+        setAutoSyncRemainingSec(intervalSec);
+        return;
+      }
+      const elapsedSec = Math.floor((Date.now() - lastMs) / 1000);
+      const remaining = Math.max(0, intervalSec - elapsedSec);
+      setAutoSyncRemainingSec(remaining);
+
+      // Throttled browser safety trigger: ONLY if autoSync is actively true AND not busy AND cooldown elapsed
+      const now = Date.now();
+      const hasCooledDown = now - lastBrowserTriggerTimeRef.current >= intervalSec * 1000;
+      if (remaining === 0 && !busyAction && !isSyncingRef.current && hasCooledDown) {
+        lastBrowserTriggerTimeRef.current = now;
+        setCurrentLastSyncedAt(new Date());
+        console.log("[Auto-Sync] Scheduled interval elapsed in browser. Triggering scheduled sync...");
+        triggerSyncNow(true);
+      }
+    };
+
+    updateCountdown();
+    const timer = setInterval(updateCountdown, 1000);
+    return () => clearInterval(timer);
+  }, [autoSync, autoSyncInterval, currentLastSyncedAt, busyAction]);
 
   // User email & File Name Protection state
   const { toast } = useToast();
@@ -410,11 +549,21 @@ export default function VfpSyncActions({
   // Toggle server-side autonomous Auto-Sync
   const handleToggleAutoSync = async (enable: boolean, newInterval?: number) => {
     const targetInterval = newInterval ?? autoSyncInterval;
+    const targetCompCode = activeCompany?.companyCode || companyCode || "DEFAULT";
     setBusyAction(enable ? "enable_auto_sync" : "disable_auto_sync");
+
+    if (!enable) {
+      // Immediately stop all client-side sync indicators and polling
+      setAutoSync(false);
+      setAutoSyncRemainingSec(0);
+      stopProgressPolling();
+      setSyncProgress(null);
+    }
+
     setMessage({
       type: "info",
       text: enable
-        ? `Activating autonomous server auto-sync for company [${companyCode}]...`
+        ? `Activating autonomous server auto-sync for company [${targetCompCode}]...`
         : "Stopping and cancelling server auto-sync...",
     });
 
@@ -425,18 +574,32 @@ export default function VfpSyncActions({
         body: JSON.stringify({
           autoSync: enable,
           autoSyncInterval: targetInterval,
-          companyCode: companyCode || "DEFAULT",
+          companyCode: targetCompCode,
         }),
       });
       const data = await res.json();
       if (data.success) {
         setAutoSync(enable);
-        if (targetInterval) setAutoSyncInterval(targetInterval);
+        if (!enable) {
+          setAutoSyncRemainingSec(0);
+          stopProgressPolling();
+          setSyncProgress(null);
+          // Also cancel any active background server tasks
+          fetch("/api/mabsolcrmsync/cancel", { method: "POST" }).catch(() => {});
+        } else {
+          if (targetInterval) {
+            setAutoSyncInterval(targetInterval);
+            setPresetInterval(String(targetInterval));
+          }
+          setCurrentLastSyncedAt(new Date());
+          lastBrowserTriggerTimeRef.current = Date.now();
+        }
         setMessage({
           type: "success",
           text: data.message,
         });
         toast.success(data.message);
+        loadCompanyServerStatus(targetCompCode, activeCompany?._id);
         router.refresh();
       } else {
         setMessage({ type: "error", text: data.error || "Failed to update Auto-Sync status." });
@@ -465,7 +628,7 @@ export default function VfpSyncActions({
     const dbfFiles = allFiles.filter((f) => f.name.toLowerCase().endsWith(".dbf"));
     const fptFiles = allFiles.filter((f) => f.name.toLowerCase().endsWith(".fpt"));
     if (dbfFiles.length === 0) {
-      setMessage({ type: "error", text: "Please select valid data files to upload (.dbf)." });
+      setMessage({ type: "error", text: "Please select valid data files to upload." });
       return;
     }
 
@@ -523,6 +686,10 @@ export default function VfpSyncActions({
             const xhr = new XMLHttpRequest();
             const formData = new FormData();
             formData.append("directSync", "true");
+            formData.append("companyCode", activeCompany?.companyCode || companyCode || "DEFAULT");
+            if (activeCompany?._id) {
+              formData.append("companyId", activeCompany._id);
+            }
             formData.append("files", file);
             if (companionFpt) {
               formData.append("files", companionFpt);
@@ -925,10 +1092,25 @@ export default function VfpSyncActions({
         if (!data.isRunning && isSyncingRef.current && graceElapsed) {
           stopProgressPolling();
           setBusyAction(null);
+          const succText = `Sync complete! ${data.doneTables || 0} table(s) done${data.failedTables > 0 ? `, ${data.failedTables} failed` : ""}.`;
           setMessage({
             type: data.failedTables > 0 ? "info" : "success",
-            text: `Sync complete! ${data.doneTables || 0} table(s) done${data.failedTables > 0 ? `, ${data.failedTables} failed` : ""}.`,
+            text: succText,
           });
+          if (data.failedTables > 0) {
+            toast.info(succText);
+          } else {
+            toast.success(succText);
+          }
+          setCurrentLastSyncedAt(new Date());
+          lastBrowserTriggerTimeRef.current = Date.now();
+          loadCompanyServerStatus(activeCompany?.companyCode, activeCompany?._id);
+
+          // Auto-dismiss the progress panel after 8 seconds so it doesn't linger at 99%
+          setTimeout(() => {
+            setSyncProgress(null);
+          }, 8000);
+
           router.refresh();
         }
       } catch {
@@ -952,51 +1134,61 @@ export default function VfpSyncActions({
 
   // Trigger manual or auto sync now
   async function triggerSyncNow(isAuto: boolean = false) {
-    if (directSyncCompleted) {
-      setMessage({ 
-        type: "success", 
-        text: `All ${directSyncSummary?.tables || selectedFiles.length} tables are already synced directly into the database.` 
+    const targetCompCode = activeCompany?.companyCode || companyCode || "DEFAULT";
+    const targetCompName = activeCompany?.companyName || companyName || "Default Company";
+    const targetCompId = activeCompany?._id || "";
+
+    const tablesToSyncCount = selectedFiles.length > 0 ? selectedFiles.length : (serverFiles.length > 0 ? serverFiles.length : 0);
+
+    if (tablesToSyncCount === 0 && !directSyncCompleted) {
+      setMessage({
+        type: "error",
+        text: `No data tables found to sync for company [${targetCompCode}]. Please ensure company data exists on server.`,
       });
       return;
     }
-    if (selectedFiles.length === 0) return;
+
     setBusyAction("sync");
     setSyncProgress(null);
+    setDirectSyncCompleted(false);
     setMessage({ 
       type: "info", 
-      text: isAuto ? "Running scheduled background auto-sync..." : "Checking sync status with database..." 
+      text: isAuto 
+        ? `Running scheduled background auto-sync for [${targetCompCode}]...` 
+        : `Synchronizing real-time data on server for ${targetCompName} [${targetCompCode}] (${tablesToSyncCount} tables)...` 
     });
 
     try {
       const response = await fetch("/api/mabsolcrmsync/sync-now", {
         method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          companyCode: targetCompCode,
+          companyId: targetCompId,
+          companyName: targetCompName,
+          force: true,
+          enabledFiles: selectedFiles.length > 0 ? selectedFiles : undefined,
+        }),
       });
       const data = await response.json();
 
       if (data.success) {
-        if (data.result?.alreadySynced) {
-          setMessage({
-            type: "success",
-            text: data.message || "All company data is already synced and up to date in the database.",
-          });
-          setDirectSyncCompleted(true);
-          setBusyAction(null);
-          return;
-        }
         if (data.result?.background) {
           // Background sync started — begin polling for live progress
           setMessage({ 
             type: "info", 
-            text: `Sync running in background... Tracking progress live below.` 
+            text: `Real-time synchronization running in background for ${targetCompName} [${targetCompCode}] (${tablesToSyncCount} tables)... Tracking live progress below.` 
           });
           startProgressPolling();
-          // Do NOT call router.refresh() here — wait until polling detects completion
         } else {
-          // Queued mode (cloud/offline worker)
+          const succText = data.message || `Sync completed for ${targetCompName}.`;
           setMessage({ 
-            type: data.queued && !data.workerOnline ? "info" : "success", 
-            text: data.message || "Sync queued."
+            type: "success", 
+            text: succText,
           });
+          toast.success(succText);
+          setCurrentLastSyncedAt(new Date());
+          loadCompanyServerStatus(targetCompCode, targetCompId);
           setBusyAction(null);
           router.refresh();
         }
@@ -1015,12 +1207,11 @@ export default function VfpSyncActions({
     setBusyAction("cancel");
     stopProgressPolling();
     setSyncProgress(null);
+    setAutoSync(false);
+    setAutoSyncRemainingSec(0);
     setMessage({ type: "info", text: "Cancelling sync and disabling Auto-sync..." });
 
-    if (autoSync) {
-      setAutoSync(false);
-      saveConfiguration(dataDir, syncScope, selectedFiles, false, autoSyncInterval, true);
-    }
+    saveConfiguration(dataDir, syncScope, selectedFiles, false, autoSyncInterval, true);
 
     try {
       const response = await fetch("/api/mabsolcrmsync/cancel", {
@@ -1082,413 +1273,238 @@ export default function VfpSyncActions({
         </button>
       </div>
 
-      <div className="p-3.5 sm:p-6 w-full max-w-full overflow-hidden box-border">
-        <div className="grid grid-cols-1 lg:grid-cols-[1.2fr_1fr] gap-5 sm:gap-6 items-start w-full box-border">
+      <div className="p-3 sm:p-5 w-full max-w-full overflow-hidden box-border">
+        <div className="grid grid-cols-1 xl:grid-cols-[1.2fr_1fr] gap-4 sm:gap-6 items-start w-full box-border">
           
           {/* Left Column: Scope & Path Settings */}
           <div className="space-y-5 min-w-0">
             
-            {/* TOP ITEM: SELECT DBF TABLES TO SYNC */}
+            {/* OPTION 1: DIRECT FILE UPLOAD */}
             <div className="space-y-4">
-              {/* SELECT DBF TABLES CONTAINER */}
-              {(() => {
-                const allClipsList = Array.from(new Set([...selectedFiles, ...folderDbfFiles]));
-                return (
-                  <div className="p-3.5 bg-slate-50/80 border border-slate-200/80 rounded-2xl space-y-3.5 shadow-2xs">
-                    
-                    {/* OPTION 1: DIRECT FILE UPLOAD AREA (REPLACES FOLDER PATH SELECTION) */}
-                    <div className="space-y-2 pb-3 border-b border-slate-200/80">
-                      <div className="flex items-center justify-between gap-2">
-                        <span className="text-[10px] font-bold text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
-                          <UploadCloud size={13} className="text-slate-700" />
-                          <span>OPTION 1: MANUAL DIRECT FILE UPLOAD (DRAG & DROP / BROWSE)</span>
-                        </span>
-                        {autoSync ? (
-                          <span className="text-[10px] text-amber-800 bg-amber-100 border border-amber-300 px-2.5 py-0.5 rounded-full font-bold flex items-center gap-1">
-                            <Lock size={10} className="text-amber-700" />
-                            LOCKED (Auto-Sync Active)
-                          </span>
-                        ) : selectedFiles.length > 0 ? (
-                          <span className="text-[10px] text-emerald-700 bg-emerald-50 border border-emerald-200/80 px-2.5 py-0.5 rounded-full font-bold font-mono">
-                            ✓ {selectedFiles.length} file(s) ready
-                          </span>
-                        ) : (
-                          <span className="text-[10px] text-amber-700 bg-amber-50 border border-amber-200/80 px-2.5 py-0.5 rounded-full font-bold font-mono">
-                            No files uploaded
-                          </span>
-                        )}
-                      </div>
+              <div className="p-3.5 bg-slate-50/80 border border-slate-200/80 rounded-2xl space-y-3.5 shadow-2xs">
+                
+                {/* DIRECT FILE UPLOAD AREA */}
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-[10px] font-bold text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
+                      <UploadCloud size={13} className="text-slate-700" />
+                      <span>OPTION 1: MANUAL DIRECT FILE UPLOAD (DRAG & DROP / BROWSE)</span>
+                    </span>
+                    {autoSync ? (
+                      <span className="text-[10px] text-amber-800 bg-amber-100 border border-amber-300 px-2.5 py-0.5 rounded-full font-bold flex items-center gap-1">
+                        <Lock size={10} className="text-amber-700" />
+                        LOCKED (Auto-Sync Active)
+                      </span>
+                    ) : selectedFiles.length > 0 ? (
+                      <span className="text-[10px] text-emerald-700 bg-emerald-50 border border-emerald-200/80 px-2.5 py-0.5 rounded-full font-bold font-mono">
+                        ✓ {selectedFiles.length} file(s) ready
+                      </span>
+                    ) : (
+                      <span className="text-[10px] text-amber-700 bg-amber-50 border border-amber-200/80 px-2.5 py-0.5 rounded-full font-bold font-mono">
+                        No files uploaded
+                      </span>
+                    )}
+                  </div>
 
-                      {/* When AutoSync is ACTIVE: Lock Guard Banner */}
-                      {autoSync ? (
-                        <div className="rounded-xl border border-amber-200 bg-amber-50/80 p-4 text-center space-y-2.5 transition-all shadow-2xs">
-                          <div className="flex items-center justify-center gap-2 text-amber-900 font-bold text-xs">
-                            <Lock size={15} className="text-amber-600" />
-                            <span>Manual File Upload is Locked While Server Auto-Sync is ON</span>
-                          </div>
-                          <p className="text-[11px] text-amber-800 leading-relaxed max-w-lg mx-auto">
-                            The server is currently running autonomous 24/7 background sync targeting company tables. To manually select, upload, or drag-and-drop individual files, you must first cancel/turn off Auto-Sync.
-                          </p>
-                          <div className="pt-1">
-                            <button
-                              type="button"
-                              disabled={Boolean(busyAction)}
-                              onClick={() => handleToggleAutoSync(false)}
-                              className="inline-flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-bold text-amber-900 bg-white hover:bg-amber-100 border border-amber-300 rounded-full transition-all cursor-pointer shadow-2xs hover:shadow-xs active:scale-95 disabled:opacity-50"
-                            >
-                              <X size={13} className="text-amber-700" />
-                              <span>Cancel Auto-Sync to Unlock File Upload</span>
-                            </button>
-                          </div>
+                  {/* When AutoSync is ACTIVE: Lock Guard Banner */}
+                  {autoSync ? (
+                    <div className="rounded-xl border border-amber-200 bg-amber-50/80 p-4 text-center space-y-2.5 transition-all shadow-2xs">
+                      <div className="flex items-center justify-center gap-2 text-amber-900 font-bold text-xs">
+                        <Lock size={15} className="text-amber-600" />
+                        <span>Manual File Upload is Locked While Server Auto-Sync is ON</span>
+                      </div>
+                      <p className="text-[11px] text-amber-800 leading-relaxed max-w-lg mx-auto">
+                        The server is currently running autonomous 24/7 background sync targeting company tables. To manually select, upload, or drag-and-drop individual files, you must first cancel/turn off Auto-Sync.
+                      </p>
+                      <div className="pt-1">
+                        <button
+                          type="button"
+                          disabled={Boolean(busyAction)}
+                          onClick={() => handleToggleAutoSync(false)}
+                          className="inline-flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-bold text-amber-900 bg-white hover:bg-amber-100 border border-amber-300 rounded-full transition-all cursor-pointer shadow-2xs hover:shadow-xs active:scale-95 disabled:opacity-50"
+                        >
+                          <X size={13} className="text-amber-700" />
+                          <span>Cancel Auto-Sync to Unlock File Upload</span>
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    /* Dropzone & Browse button when Auto-Sync is OFF */
+                    <div
+                      onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); }}
+                      onDrop={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+                          handleDirectDbfUpload(e.dataTransfer.files);
+                        }
+                      }}
+                      onClick={() => {
+                        nativeFileInputRef.current?.click();
+                      }}
+                      className={`border-2 border-dashed rounded-xl p-3.5 text-center transition-all cursor-pointer ${
+                        uploading
+                          ? "bg-slate-50 border-slate-300 pointer-events-none"
+                          : "bg-white hover:bg-slate-50/80 border-slate-300 hover:border-slate-400 shadow-2xs"
+                      }`}
+                    >
+                      {uploading ? (
+                        <div className="flex items-center justify-center gap-2 py-1 text-xs font-semibold text-slate-700">
+                          <Loader2 size={15} className="animate-spin text-slate-900" />
+                          <span>Uploading files directly... Please wait</span>
                         </div>
                       ) : (
-                        /* Dropzone & Browse button when Auto-Sync is OFF */
-                        <div
-                          onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); }}
-                          onDrop={(e) => {
-                            e.preventDefault();
-                            e.stopPropagation();
-                            if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-                              handleDirectDbfUpload(e.dataTransfer.files);
-                            }
-                          }}
-                          onClick={() => {
-                            nativeFileInputRef.current?.click();
-                          }}
-                          className={`border-2 border-dashed rounded-xl p-3.5 text-center transition-all cursor-pointer ${
-                            uploading
-                              ? "bg-slate-50 border-slate-300 pointer-events-none"
-                              : "bg-white hover:bg-slate-50/80 border-slate-300 hover:border-slate-400 shadow-2xs"
-                          }`}
-                        >
-                          {uploading ? (
-                            <div className="flex items-center justify-center gap-2 py-1 text-xs font-semibold text-slate-700">
-                              <Loader2 size={15} className="animate-spin text-slate-900" />
-                              <span>Uploading files directly... Please wait</span>
-                            </div>
-                          ) : (
-                            <div className="flex flex-col sm:flex-row items-center justify-center gap-2 text-xs text-slate-600">
-                              <div className="flex items-center gap-1.5">
-                                <UploadCloud size={16} className="text-slate-700 shrink-0" />
-                                <span className="font-bold text-slate-900 underline">Click to choose files</span>
-                              </div>
-                              <span className="text-slate-400 hidden sm:inline">|</span>
-                              <span className="text-slate-500 text-[11px]">or drag & drop data files here</span>
-                            </div>
-                          )}
+                        <div className="flex flex-col sm:flex-row items-center justify-center gap-2 text-xs text-slate-600">
+                          <div className="flex items-center gap-1.5">
+                            <UploadCloud size={16} className="text-slate-700 shrink-0" />
+                            <span className="font-bold text-slate-900 underline">Click to choose files</span>
+                          </div>
+                          <span className="text-slate-400 hidden sm:inline">|</span>
+                          <span className="text-slate-500 text-[11px]">or drag & drop data files here</span>
                         </div>
                       )}
                     </div>
+                  )}
+                </div>
 
-                    {/* Live Multi-File Upload & Sync Tracker */}
-                    {showUploadTracker && uploadQueue.length > 0 && (
-                      <div className="p-3.5 sm:p-4 bg-white border border-slate-200 rounded-2xl shadow-2xs space-y-3">
-                        {/* Tracker Header */}
-                        <div className="flex items-center justify-between gap-3 flex-wrap">
-                          <div className="flex items-center gap-2.5 min-w-0">
-                            <div className="w-8 h-8 rounded-xl bg-slate-900 text-white flex items-center justify-center shrink-0 shadow-2xs">
-                              {uploading ? (
-                                <Loader2 size={15} className="animate-spin text-white" />
-                              ) : (
-                                <CheckCircle2 size={15} className="text-emerald-400" />
-                              )}
-                            </div>
-                            <div className="min-w-0">
-                              <div className="text-xs sm:text-sm font-bold text-slate-900 flex items-center gap-2">
-                                <span>
-                                  {uploading
-                                    ? `Syncing Files (${uploadQueue.filter((q) => q.status === "success").length} of ${uploadQueue.length} completed)`
-                                    : `Sync Completed (${uploadQueue.filter((q) => q.status === "success").length} of ${uploadQueue.length} files synced)`}
-                                </span>
-                                <span className="text-[10px] font-mono font-bold text-slate-600 bg-slate-100 px-2 py-0.5 rounded-full border border-slate-200">
-                                  {Math.round(
-                                    (uploadQueue.filter((q) => q.status === "success" || q.status === "error").length /
-                                      uploadQueue.length) *
-                                      100
-                                  )}%
-                                </span>
-                              </div>
-                              <div className="text-[11px] text-slate-500 mt-0.5">
-                                Total: <strong className="text-slate-800">{uploadQueue.length} files</strong> · Synced:{" "}
-                                <strong className="text-emerald-700">
-                                  {uploadQueue.filter((q) => q.status === "success").length}
-                                </strong>{" "}
-                                · Total rows:{" "}
-                                <strong className="text-slate-900 font-mono">
-                                  {uploadQueue
-                                    .reduce((acc, q) => acc + (q.importedRows || 0), 0)
-                                    .toLocaleString()}
-                                </strong>
-                              </div>
-                            </div>
-                          </div>
-
-                          {!uploading && (
-                            <button
-                              type="button"
-                              onClick={() => setShowUploadTracker(false)}
-                              className="text-xs font-semibold text-slate-500 hover:text-slate-800 px-3 py-1 rounded-full border border-slate-200 hover:bg-slate-50 cursor-pointer transition-colors"
-                            >
-                              Dismiss
-                            </button>
+                {/* Live Multi-File Upload & Sync Tracker */}
+                {showUploadTracker && uploadQueue.length > 0 && (
+                  <div className="p-3.5 sm:p-4 bg-white border border-slate-200 rounded-2xl shadow-2xs space-y-3">
+                    {/* Tracker Header */}
+                    <div className="flex items-center justify-between gap-3 flex-wrap">
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <div className="w-8 h-8 rounded-xl bg-slate-900 text-white flex items-center justify-center shrink-0 shadow-2xs">
+                          {uploading ? (
+                            <Loader2 size={15} className="animate-spin text-white" />
+                          ) : (
+                            <CheckCircle2 size={15} className="text-emerald-400" />
                           )}
                         </div>
-
-                        {/* Animated Progress Bar */}
-                        <div className="w-full bg-slate-100 h-1.5 rounded-full overflow-hidden">
-                          <div
-                            className={`h-full transition-all duration-300 rounded-full ${
-                              uploading ? "bg-slate-900" : "bg-emerald-600"
-                            }`}
-                            style={{
-                              width: `${Math.round(
+                        <div className="min-w-0">
+                          <div className="text-xs sm:text-sm font-bold text-slate-900 flex items-center gap-2">
+                            <span>
+                              {uploading
+                                ? `Syncing Files (${uploadQueue.filter((q) => q.status === "success").length} of ${uploadQueue.length} completed)`
+                                : `Sync Completed (${uploadQueue.filter((q) => q.status === "success").length} of ${uploadQueue.length} files synced)`}
+                            </span>
+                            <span className="text-[10px] font-mono font-bold text-slate-600 bg-slate-100 px-2 py-0.5 rounded-full border border-slate-200">
+                              {Math.round(
                                 (uploadQueue.filter((q) => q.status === "success" || q.status === "error").length /
                                   uploadQueue.length) *
                                   100
-                              )}%`,
-                            }}
-                          />
-                        </div>
-
-                        {/* File by File Tracking List */}
-                        <div className="max-h-48 overflow-y-auto divide-y divide-slate-100 border border-slate-100 rounded-xl">
-                          {uploadQueue.map((item) => {
-                            const isDone = item.status === "success";
-                            const isErr = item.status === "error";
-                            const isRunning = item.status === "uploading" || item.status === "syncing";
-                            const displayName = isFilesUnlocked ? item.cleanName : "••••••••";
-
-                            return (
-                              <div
-                                key={item.id}
-                                className="flex items-center justify-between p-2.5 bg-white hover:bg-slate-50/60 gap-2 text-xs transition-colors"
-                              >
-                                <div className="flex items-center gap-2 min-w-0 flex-1">
-                                  <div className="w-5 h-5 rounded flex items-center justify-center shrink-0 bg-slate-100 text-slate-600 text-[10px] font-mono font-bold">
-                                    📄
-                                  </div>
-                                  <div className="min-w-0 flex-1 truncate">
-                                    <span className="font-mono font-bold text-slate-800">
-                                      {displayName}
-                                    </span>
-                                    <span className="text-[10px] text-slate-400 ml-2 font-mono">
-                                      {item.sizeFormatted}
-                                    </span>
-                                  </div>
-                                </div>
-
-                                <div className="shrink-0">
-                                  {isDone && (
-                                    <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-0.5 rounded-full">
-                                      <CheckCircle2 size={11} className="text-emerald-600" />
-                                      <span>Synced ({item.importedRows?.toLocaleString()} rows) • Storage Cleaned</span>
-                                    </span>
-                                  )}
-                                  {isErr && (
-                                    <span className="inline-flex items-center gap-1 text-[10px] font-bold text-red-700 bg-red-50 border border-red-200 px-2.5 py-0.5 rounded-full cursor-help" title={item.error}>
-                                      <X size={11} className="text-red-600" />
-                                      <span>Failed</span>
-                                    </span>
-                                  )}
-                                  {item.status === "uploading" && (
-                                    <span className="inline-flex items-center gap-1 text-[10px] font-bold text-sky-700 bg-sky-50 border border-sky-200 px-2.5 py-0.5 rounded-full font-mono">
-                                      <Loader2 size={11} className="animate-spin text-sky-600" />
-                                      <span>Uploading {item.uploadProgress || 0}%</span>
-                                    </span>
-                                  )}
-                                  {item.status === "syncing" && (
-                                    <span className="inline-flex items-center gap-1 text-[10px] font-bold text-indigo-700 bg-indigo-50 border border-indigo-200 px-2.5 py-0.5 rounded-full font-mono">
-                                      <Loader2 size={11} className="animate-spin text-indigo-600" />
-                                      <span>Syncing DB...</span>
-                                    </span>
-                                  )}
-                                  {item.status === "pending" && (
-                                    <span className="inline-flex items-center gap-1 text-[10px] font-bold text-slate-500 bg-slate-100 px-2.5 py-0.5 rounded-full">
-                                      <span>Pending</span>
-                                    </span>
-                                  )}
-                                </div>
-                              </div>
-                            );
-                          })}
+                              )}%
+                            </span>
+                          </div>
+                          <div className="text-[11px] text-slate-500 mt-0.5">
+                            Total: <strong className="text-slate-800">{uploadQueue.length} files</strong> · Synced:{" "}
+                            <strong className="text-emerald-700">
+                              {uploadQueue.filter((q) => q.status === "success").length}
+                            </strong>{" "}
+                            · Total rows:{" "}
+                            <strong className="text-slate-900 font-mono">
+                              {uploadQueue
+                                .reduce((acc, q) => acc + (q.importedRows || 0), 0)
+                                .toLocaleString()}
+                            </strong>
+                          </div>
                         </div>
                       </div>
-                    )}
 
-                    <div className="flex items-center justify-between gap-3 flex-wrap">
-                      <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider flex items-center gap-1.5 shrink-0">
-                        <Database size={13} className="text-teal-600" />
-                        <span>SELECT TABLES TO SYNC</span>
-                        {selectedFiles.length > 0 && (
-                          <span className="text-teal-600 font-bold font-mono">({selectedFiles.length} active)</span>
-                        )}
-                        {scanningFolder && (
-                          <span className="text-slate-400 text-[10px] animate-pulse">Scanning folder...</span>
-                        )}
-                      </span>
-                      
-                      <div className="flex items-center gap-3 shrink-0">
-                        <button 
+                      {!uploading && (
+                        <button
                           type="button"
-                          disabled={autoSync}
-                          onClick={handleOpenNativeFilePicker}
-                          className={`inline-flex items-center gap-1 text-[11px] font-bold px-3 py-1 bg-white border border-slate-200 text-slate-800 transition-all shadow-2xs btn-pill ${
-                            autoSync ? "opacity-50 cursor-not-allowed" : "hover:bg-slate-100 cursor-pointer"
-                          }`}
-                          style={{ borderRadius: "9999px" }}
-                          title={autoSync ? "Turn off Auto-sync to add tables" : "Open file picker to select table(s)"}
+                          onClick={() => setShowUploadTracker(false)}
+                          className="text-xs font-semibold text-slate-500 hover:text-slate-800 px-3 py-1 rounded-full border border-slate-200 hover:bg-slate-50 cursor-pointer transition-colors"
                         >
-                          <Plus size={12} className="text-slate-600" />
-                          <span>Add table(s)</span>
+                          Dismiss
                         </button>
-
-                        <button 
-                          type="button"
-                          disabled={autoSync || allClipsList.length === 0 || selectedFiles.length === allClipsList.length}
-                          onClick={() => {
-                            if (autoSync) {
-                              setMessage({ type: "info", text: "Please turn off Auto-sync below to select all." });
-                              return;
-                            }
-                            setSelectedFiles(allClipsList);
-                            saveConfiguration(dataDir, "selected", allClipsList, autoSync, autoSyncInterval, true);
-                          }}
-                          className={`text-[11px] font-bold px-1.5 py-0.5 transition-colors ${
-                            autoSync || allClipsList.length === 0 || selectedFiles.length === allClipsList.length
-                              ? "text-slate-300 cursor-not-allowed"
-                              : "text-teal-600 hover:text-teal-800 cursor-pointer"
-                          }`}
-                        >
-                          Select all
-                        </button>
-
-                        <button 
-                          type="button"
-                          disabled={autoSync || selectedFiles.length === 0}
-                          onClick={() => {
-                            if (autoSync) {
-                              setMessage({ type: "info", text: "Please turn off Auto-sync below to clear tables." });
-                              return;
-                            }
-                            handleClearAllFiles();
-                          }}
-                          className={`text-[11px] font-bold px-1.5 py-0.5 transition-colors ${
-                            autoSync || selectedFiles.length === 0
-                              ? "text-slate-300 cursor-not-allowed"
-                              : "text-red-500 hover:text-red-700 cursor-pointer"
-                          }`}
-                        >
-                          Deselect all
-                        </button>
-                      </div>
+                      )}
                     </div>
 
-                    {/* Privacy & File Unlock Section - Only show when tables are selected */}
-                    {selectedFiles.length > 0 && (
-                      !isFilesUnlocked ? (
-                        <div className="p-3.5 sm:p-4 bg-white border border-slate-200 rounded-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3" style={{ borderLeft: "3px solid #14b8a6" }}>
-                          <div className="flex items-center gap-3 min-w-0">
-                            <div className="w-9 h-9 rounded-xl bg-teal-50 border border-teal-200/70 flex items-center justify-center text-teal-600 shrink-0">
-                              <Lock size={16} />
-                            </div>
-                            <div className="min-w-0">
-                              <div className="text-xs sm:text-sm font-bold text-slate-800 leading-snug flex items-center gap-2 flex-wrap">
-                                <span>Table Names Hidden</span>
-                                <span className="text-[10px] font-mono font-semibold text-teal-700 bg-teal-50 px-2 py-0.5 rounded-full border border-teal-200/80">
-                                  {selectedFiles.length} active
+                    {/* Animated Progress Bar */}
+                    <div className="w-full bg-slate-100 h-1.5 rounded-full overflow-hidden">
+                      <div
+                        className={`h-full transition-all duration-300 rounded-full ${
+                          uploading ? "bg-slate-900" : "bg-emerald-600"
+                        }`}
+                        style={{
+                          width: `${Math.round(
+                            (uploadQueue.filter((q) => q.status === "success" || q.status === "error").length /
+                              uploadQueue.length) *
+                              100
+                          )}%`,
+                        }}
+                      />
+                    </div>
+
+                    {/* File by File Tracking List */}
+                    <div className="max-h-48 overflow-y-auto divide-y divide-slate-100 border border-slate-100 rounded-xl">
+                      {uploadQueue.map((item) => {
+                        const isDone = item.status === "success";
+                        const isErr = item.status === "error";
+                        const isRunning = item.status === "uploading" || item.status === "syncing";
+                        const displayName = item.cleanName;
+
+                        return (
+                          <div
+                            key={item.id}
+                            className="flex items-center justify-between p-2.5 bg-white hover:bg-slate-50/60 gap-2 text-xs transition-colors"
+                          >
+                            <div className="flex items-center gap-2 min-w-0 flex-1">
+                              <div className="w-5 h-5 rounded flex items-center justify-center shrink-0 bg-slate-100 text-slate-600 text-[10px] font-mono font-bold">
+                                📄
+                              </div>
+                              <div className="min-w-0 flex-1 truncate">
+                                <span className="font-mono font-bold text-slate-800">
+                                  {displayName}
+                                </span>
+                                <span className="text-[10px] text-slate-400 ml-2 font-mono">
+                                  {item.sizeFormatted}
                                 </span>
                               </div>
-                              <div className="text-[11px] text-slate-500 mt-0.5 leading-relaxed">
-                                Verify email OTP to reveal table names for 5 minutes.
-                              </div>
+                            </div>
+
+                            <div className="shrink-0">
+                              {isDone && (
+                                <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-0.5 rounded-full">
+                                  <CheckCircle2 size={11} className="text-emerald-600" />
+                                  <span>Synced ({item.importedRows?.toLocaleString()} rows) • Storage Cleaned</span>
+                                </span>
+                              )}
+                              {isErr && (
+                                <span className="inline-flex items-center gap-1 text-[10px] font-bold text-red-700 bg-red-50 border border-red-200 px-2.5 py-0.5 rounded-full cursor-help" title={item.error}>
+                                  <X size={11} className="text-red-600" />
+                                  <span>Failed</span>
+                                </span>
+                              )}
+                              {item.status === "uploading" && (
+                                <span className="inline-flex items-center gap-1 text-[10px] font-bold text-sky-700 bg-sky-50 border border-sky-200 px-2.5 py-0.5 rounded-full font-mono">
+                                  <Loader2 size={11} className="animate-spin text-sky-600" />
+                                  <span>Uploading {item.uploadProgress || 0}%</span>
+                                </span>
+                              )}
+                              {item.status === "syncing" && (
+                                <span className="inline-flex items-center gap-1 text-[10px] font-bold text-indigo-700 bg-indigo-50 border border-indigo-200 px-2.5 py-0.5 rounded-full font-mono">
+                                  <Loader2 size={11} className="animate-spin text-indigo-600" />
+                                  <span>Syncing DB...</span>
+                                </span>
+                              )}
+                              {item.status === "pending" && (
+                                <span className="inline-flex items-center gap-1 text-[10px] font-bold text-slate-500 bg-slate-100 px-2.5 py-0.5 rounded-full">
+                                  <span>Pending</span>
+                                </span>
+                              )}
                             </div>
                           </div>
-
-                          <button
-                            type="button"
-                            onClick={handleOpenOtpModal}
-                            className="inline-flex items-center justify-center gap-1.5 w-full sm:w-auto px-4.5 py-2 text-xs font-semibold text-teal-700 border border-teal-400 hover:bg-teal-50 hover:border-teal-500 transition-all active:scale-[0.98] cursor-pointer whitespace-nowrap shrink-0"
-                            style={{ borderRadius: "9999px" }}
-                          >
-                            <Key size={12} />
-                            <span>Verify Email to View</span>
-                          </button>
-                        </div>
-                      ) : (
-                        <div className="space-y-3">
-                          <div className="flex items-center justify-between gap-2.5 p-2.5 bg-emerald-50 border border-emerald-200/90 rounded-xl text-emerald-900 shadow-2xs">
-                            <div className="flex items-center gap-2 text-xs font-bold">
-                              <Unlock size={14} className="text-emerald-600 shrink-0" />
-                              <span>File names unlocked (Auto-hides in <strong className="font-mono text-emerald-700 font-extrabold">{formatCountdown(unlockedRemainingSec)}</strong>)</span>
-                            </div>
-                            <button
-                              type="button"
-                              onClick={handleLockNow}
-                              className="inline-flex items-center gap-1 px-3 py-1 text-[11px] font-bold bg-white border border-emerald-300 text-emerald-800 hover:bg-emerald-100 transition-all cursor-pointer whitespace-nowrap shrink-0"
-                              style={{ borderRadius: "9999px" }}
-                            >
-                              <Lock size={12} className="text-emerald-700" />
-                              <span>Hide now</span>
-                            </button>
-                          </div>
-
-                          {/* Chips - Only visible when unlocked */}
-                          {allClipsList.length > 0 ? (
-                            <div className="flex items-center gap-2 flex-wrap pt-1">
-                              {allClipsList.map((file) => {
-                                const isSelected = selectedFiles.includes(file);
-                                return (
-                                  <button
-                                    key={file}
-                                    type="button"
-                                    disabled={autoSync}
-                                    onClick={() => {
-                                      if (autoSync) {
-                                        setMessage({ type: "info", text: "Please turn off Auto-sync below to select or deselect tables." });
-                                        return;
-                                      }
-                                      lastUserEditTimeRef.current = Date.now();
-                                      let updated: string[];
-                                      if (isSelected) {
-                                        updated = selectedFiles.filter((f) => f !== file);
-                                      } else {
-                                        updated = [...selectedFiles, file];
-                                      }
-                                      setSelectedFiles(updated);
-                                      saveConfiguration(dataDir, "selected", updated, autoSync, autoSyncInterval, true);
-                                    }}
-                                    className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold transition-all cursor-pointer ${
-                                      isSelected
-                                        ? "bg-slate-900 text-white shadow-xs"
-                                        : "bg-slate-100 text-slate-600 hover:bg-slate-200 border border-slate-200"
-                                    }`}
-                                    style={{ borderRadius: "9999px" }}
-                                    title={autoSync ? "Turn off Auto-sync to modify table selection" : `Click to toggle ${file}`}
-                                  >
-                                    {isSelected ? (
-                                      <Check size={13} className="text-emerald-400 shrink-0 stroke-[3]" />
-                                    ) : (
-                                      <span className="text-teal-600 font-bold text-xs shrink-0">+</span>
-                                    )}
-                                    <span>{file}</span>
-                                  </button>
-                                );
-                              })}
-                            </div>
-                          ) : (
-                            <div className="text-xs text-slate-500 font-mono italic">
-                              No tables selected. Click "Add table(s)" to select files.
-                            </div>
-                          )}
-                        </div>
-                      )
-                    )}
+                        );
+                      })}
+                    </div>
                   </div>
-                );
-              })()}
+                )}
+              </div>
             </div>
 
-            {/* OPTION 2: SERVER-SIDE AUTO-SYNC (VFP EXE & SERVER COMPANY DATA) */}
+            {/* OPTION 2: SERVER-SIDE AUTO-SYNC (REAL-TIME COMPANY DATA) */}
             <div 
               className={`p-4 border transition-all space-y-4 shadow-2xs ${
                 autoSync 
@@ -1503,11 +1519,11 @@ export default function VfpSyncActions({
                   <div className="flex items-center gap-2">
                     <Server size={16} className={autoSync ? "text-emerald-700" : "text-slate-700"} />
                     <span className="text-xs font-bold text-slate-900 uppercase tracking-wider">
-                      OPTION 2: SERVER-SIDE AUTO-SYNC (VFP EXE & SERVER COMPANY DATA)
+                      OPTION 2: SERVER-SIDE AUTO-SYNC (REAL-TIME COMPANY DATA)
                     </span>
                   </div>
                   <div className="text-[11px] text-slate-500 leading-relaxed">
-                    Autonomous 24/7 background sync targeting server company data & VFP EXE. Runs directly on the server even when this browser tab or window is closed.
+                    Autonomous 24/7 background sync targeting server company data. Runs directly on the server even when this browser tab or window is closed.
                   </div>
                 </div>
 
@@ -1525,21 +1541,57 @@ export default function VfpSyncActions({
               </div>
 
               {/* Company Info & Server Directory Target */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs bg-white/80 p-3 rounded-xl border border-slate-200/80">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs bg-white/90 p-3.5 rounded-xl border border-slate-200/90 shadow-2xs">
                 <div>
-                  <span className="text-[10px] uppercase font-bold text-slate-400 block">Target Company:</span>
-                  <span className="font-bold text-slate-900 font-mono">
-                    {companyCode || "DEFAULT"}
-                  </span>
-                  <span className="text-slate-500 text-[11px] ml-1.5">
-                    ({companyName || "Default Company"})
-                  </span>
+                  <span className="text-[10px] uppercase font-extrabold text-slate-500 block mb-1">Target Company:</span>
+                  <select
+                    value={activeCompany?.companyCode || companyCode || "DEFAULT"}
+                    onChange={(e) => {
+                      const code = e.target.value;
+                      const found = companies.find((c) => (c.companyCode || "").toUpperCase() === code.toUpperCase());
+                      if (found) {
+                        setSelectedCompany(found);
+                        loadCompanyServerStatus(found.companyCode, found._id);
+                        if (typeof window !== "undefined") {
+                          window.dispatchEvent(new CustomEvent("mabsol_company_changed", { detail: found }));
+                        }
+                      }
+                    }}
+                    className="w-full bg-slate-50 hover:bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs font-bold text-slate-900 cursor-pointer shadow-2xs transition-colors focus:ring-1 focus:ring-teal-500 focus:outline-none"
+                  >
+                    {companies.length > 0 ? (
+                      companies.map((c) => (
+                        <option key={c._id || c.companyCode} value={c.companyCode}>
+                          {c.companyName} ({c.companyCode})
+                        </option>
+                      ))
+                    ) : (
+                      <option value={activeCompany?.companyCode || "DEFAULT"}>
+                        {activeCompany?.companyName || "Default Company"} ({activeCompany?.companyCode || "DEFAULT"})
+                      </option>
+                    )}
+                  </select>
                 </div>
                 <div>
-                  <span className="text-[10px] uppercase font-bold text-slate-400 block">Server VFP Path:</span>
-                  <span className="font-mono text-slate-700 text-[11px] truncate block" title={dataDir || "Default server company folder"}>
-                    {dataDir || "Default server folder"}
-                  </span>
+                  <span className="text-[10px] uppercase font-extrabold text-slate-500 block mb-1">Server Real-time Status:</span>
+                  <div className="p-2 rounded-lg bg-teal-50/60 border border-teal-200/80">
+                    <div className="font-bold text-teal-900 text-[11px] flex items-center gap-1.5">
+                      <Database size={12} className="text-teal-600 shrink-0" />
+                      <span>
+                        {serverFilesLoading
+                          ? "Scanning server files..."
+                          : serverFiles.length > 0
+                          ? `⚡ ${new Set(serverFiles.map((f) => f.replace(/\.dbf$/i, "").replace(/[\._][a-zA-Z]?\d+$/i, "").toLowerCase())).size || serverFiles.length} real-time tables ready`
+                          : "0 tables detected on server"}
+                      </span>
+                    </div>
+                    <div 
+                      className="text-[10px] font-mono text-slate-600 truncate mt-0.5" 
+                      title={formatDisplayPath(serverDataDir || dataDir) || "Default company folder"}
+                    >
+                      <span className="font-semibold text-slate-400">Path:</span> {formatDisplayPath(serverDataDir || dataDir) || "Default company folder"}
+                    </div>
+                  </div>
                 </div>
               </div>
 
@@ -1557,23 +1609,25 @@ export default function VfpSyncActions({
 
                 <div className="flex items-center gap-2">
                   <select
-                    value={presetInterval}
+                    value={autoSync ? presetInterval : "off"}
                     onChange={(e) => {
                       const val = e.target.value;
+                      if (val === "off") {
+                        setPresetInterval("off");
+                        handleToggleAutoSync(false);
+                        return;
+                      }
                       setPresetInterval(val);
                       if (val !== "custom") {
                         const mins = Number(val);
                         setAutoSyncInterval(mins);
-                        if (autoSync) {
-                          handleToggleAutoSync(true, mins);
-                        } else {
-                          saveConfiguration(dataDir, syncScope, selectedFiles, false, mins, true);
-                        }
+                        // Immediately activate Auto-Sync so the user's selected time is live!
+                        handleToggleAutoSync(true, mins);
                       }
                     }}
                     className="flex-1 bg-white border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-800 focus:outline-none shadow-2xs rounded-xl cursor-pointer"
                   >
-                    <option value="10">Every 10 minutes</option>
+                    <option value="10">Every 10 minutes (Recommended)</option>
                     <option value="30">Every 30 minutes</option>
                     <option value="60">Every 1 hour</option>
                     <option value="360">Every 6 hours</option>
@@ -1581,6 +1635,7 @@ export default function VfpSyncActions({
                     <option value="1440">Every 1 day (24 hours)</option>
                     <option value="10080">Every 7 days (1 week)</option>
                     <option value="custom">Custom interval...</option>
+                    <option value="off">Turn OFF Auto-Sync</option>
                   </select>
 
                   {presetInterval === "custom" && (
@@ -1612,16 +1667,41 @@ export default function VfpSyncActions({
                           const multiplier = customUnit === "days" ? 1440 : customUnit === "hours" ? 60 : 1;
                           const totalMins = clampedVal * multiplier;
                           setAutoSyncInterval(totalMins);
-                          if (autoSync) {
-                            handleToggleAutoSync(true, totalMins);
-                          } else {
-                            saveConfiguration(dataDir, syncScope, selectedFiles, false, totalMins, true);
-                          }
+                          handleToggleAutoSync(true, totalMins);
                         }}
-                        className="px-2.5 py-1.5 text-[11px] font-bold text-white bg-slate-900 hover:bg-black rounded-lg transition-all cursor-pointer shadow-2xs"
+                        className="px-2.5 py-1.5 text-[11px] font-bold text-white bg-slate-900 hover:bg-black rounded-lg transition-all cursor-pointer shadow-2xs whitespace-nowrap"
                       >
-                        Set
+                        Set & Activate
                       </button>
+                    </div>
+                  )}
+                </div>
+
+                {/* Live Auto-Sync Status & Countdown Banner */}
+                <div className="pt-1">
+                  {autoSync ? (
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-2.5 rounded-xl bg-emerald-50 border border-emerald-200/90 text-emerald-900 text-xs shadow-2xs">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse shrink-0" />
+                        <span className="font-bold truncate">
+                          Server Auto-Sync Active ({formatIntervalSummary(autoSyncInterval)})
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-1.5 shrink-0 bg-white/90 border border-emerald-300 px-2.5 py-0.5 rounded-full">
+                        <Clock size={11} className="text-emerald-700" />
+                        <span className="text-[11px] font-mono font-extrabold text-emerald-800">
+                          {busyAction === "sync" || (syncProgress && syncProgress.isRunning)
+                            ? "Syncing now..."
+                            : autoSyncRemainingSec > 0
+                            ? `Next sync in ${formatCountdown(autoSyncRemainingSec)}`
+                            : "Sync due"}
+                        </span>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-2 p-2 rounded-xl bg-slate-100/90 border border-slate-200 text-slate-500 text-[11px]">
+                      <span className="w-2 h-2 rounded-full bg-slate-400 shrink-0" />
+                      <span>Auto-Sync is currently OFF. Select any frequency above or click below to start auto-sync.</span>
                     </div>
                   )}
                 </div>
@@ -1641,13 +1721,13 @@ export default function VfpSyncActions({
                     ) : (
                       <X size={14} className="text-rose-600" />
                     )}
-                    <span>🛑 Cancel / Turn OFF Server Auto-Sync (Unlocks Manual Upload)</span>
+                    <span>🛑 Turn OFF Server Auto-Sync (Currently active: {formatIntervalSummary(autoSyncInterval)})</span>
                   </button>
                 ) : (
                   <button
                     type="button"
                     disabled={Boolean(busyAction)}
-                    onClick={() => handleToggleAutoSync(true)}
+                    onClick={() => handleToggleAutoSync(true, autoSyncInterval || 10)}
                     className="w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 text-xs font-bold text-white bg-slate-900 hover:bg-black border border-slate-800 rounded-xl transition-all cursor-pointer shadow-2xs active:scale-[0.99] disabled:opacity-50"
                   >
                     {busyAction === "enable_auto_sync" ? (
@@ -1655,7 +1735,7 @@ export default function VfpSyncActions({
                     ) : (
                       <Play size={14} className="text-teal-400 fill-teal-400" />
                     )}
-                    <span>⚡ Turn ON Server Auto-Sync (24/7 Autonomous Background)</span>
+                    <span>⚡ Turn ON Server Auto-Sync ({formatIntervalSummary(autoSyncInterval || 10)})</span>
                   </button>
                 )}
               </div>
@@ -1664,7 +1744,7 @@ export default function VfpSyncActions({
               <div className="text-[11px] text-slate-500 leading-relaxed bg-white/60 p-2.5 rounded-xl border border-slate-200/60 flex items-start gap-2">
                 <Sparkles size={14} className="text-teal-600 shrink-0 mt-0.5" />
                 <div>
-                  <strong className="text-slate-700">Autonomous Server Daemon:</strong> Runs continuously via server process (Node/PM2). Syncs FoxPro company files automatically without requiring any browser tab to be kept open.
+                  <strong className="text-slate-700">Autonomous Server Daemon:</strong> Runs continuously via server process (Node/PM2). Syncs company data automatically without requiring any browser tab to be kept open.
                   {autoSync && (
                     <span className="block text-amber-700 font-semibold mt-0.5">
                       🔒 Manual file upload (Option 1) is currently locked while Auto-Sync is running.
@@ -1705,66 +1785,72 @@ export default function VfpSyncActions({
 
 
               <div className="flex flex-col gap-1.5 pt-1 w-full">
-                <button 
-                  className={`w-full inline-flex items-center justify-center gap-2 py-2.5 px-4 text-xs sm:text-sm font-bold transition-all btn-pill ${
-                    autoSync 
-                      ? "bg-slate-900 text-white opacity-90 cursor-not-allowed" 
-                      : directSyncCompleted
-                      ? "bg-emerald-50 text-emerald-800 border border-emerald-300 shadow-2xs opacity-90 cursor-default"
-                      : uploading || selectedFiles.length === 0
-                      ? "bg-slate-100 text-slate-400 border border-slate-200 cursor-not-allowed shadow-none"
-                      : "bg-black hover:bg-slate-900 text-white shadow-xs cursor-pointer active:scale-[0.99]"
-                  } disabled:cursor-not-allowed`} 
-                  style={{ borderRadius: "9999px" }}
-                  id="sync-btn" 
-                  onClick={() => {
-                    if (directSyncCompleted) return;
-                    triggerSyncNow(false);
-                  }}
-                  disabled={uploading || (selectedFiles.length === 0 && !directSyncCompleted) || Boolean(busyAction) || autoSync || directSyncCompleted}
-                  type="button"
-                  title={
-                    uploading
-                      ? "Files are currently uploading... Please wait."
-                      : autoSync 
-                      ? "Auto-sync is running on a schedule. Click 'Cancel sync' below to stop." 
-                      : directSyncCompleted
-                      ? "All uploaded tables are already synced directly into the database. Drag and drop new files to sync updates."
-                      : selectedFiles.length === 0 
-                      ? "No files uploaded. Please upload files directly to enable sync." 
-                      : "Click to trigger immediate manual sync"
-                  }
-                >
-                  {uploading ? (
-                    <>
-                      <Loader2 size={14} className="animate-spin text-slate-500" />
-                      <span>Uploading & syncing files...</span>
-                    </>
-                  ) : busyAction === "sync" ? (
-                    <>
-                      <RefreshCw size={14} className="animate-spin text-slate-700" />
-                      <span>Checking database...</span>
-                    </>
-                  ) : autoSync ? (
-                    <>
-                      <span className="flex items-center gap-1.5 shrink-0">
-                        <RefreshCw size={13} className="animate-spin text-emerald-400" />
-                        <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse shrink-0" />
-                      </span>
-                      <span>Auto-sync active</span>
-                    </>
-                  ) : directSyncCompleted ? (
-                    <>
-                      <CheckCircle2 size={14} className="text-emerald-600" />
-                      <span>All Synced to DB ({directSyncSummary?.tables || selectedFiles.length} tables)</span>
-                    </>
-                  ) : (
-                    <>
-                      <Play size={13} fill="currentColor" className={selectedFiles.length === 0 ? "text-slate-400" : "text-white"} />
-                      <span>{selectedFiles.length === 0 ? "Upload files to sync" : "Sync now"}</span>
-                    </>
-                  )}
-                </button>
+                {(() => {
+                  const canSync = (selectedFiles.length > 0 || serverFiles.length > 0) && !uploading && !autoSync && !Boolean(busyAction);
+                  const totalTablesReady = selectedFiles.length > 0 ? selectedFiles.length : (serverFiles.length > 0 ? serverFiles.length : 0);
+
+                  return (
+                    <button 
+                      className={`w-full inline-flex items-center justify-center gap-2 py-2.5 px-4 text-xs sm:text-sm font-bold transition-all btn-pill ${
+                        autoSync 
+                          ? "bg-slate-900 text-white opacity-90 cursor-not-allowed" 
+                          : uploading || (!canSync && !directSyncCompleted)
+                          ? "bg-slate-100 text-slate-400 border border-slate-200 cursor-not-allowed shadow-none"
+                          : "bg-black hover:bg-slate-900 text-white shadow-xs cursor-pointer active:scale-[0.99]"
+                      } disabled:cursor-not-allowed`} 
+                      style={{ borderRadius: "9999px" }}
+                      id="sync-btn" 
+                      onClick={() => {
+                        triggerSyncNow(false);
+                      }}
+                      disabled={uploading || (!canSync && !directSyncCompleted) || Boolean(busyAction) || autoSync}
+                      type="button"
+                      title={
+                        uploading
+                          ? "Files are currently uploading... Please wait."
+                          : autoSync 
+                          ? "Auto-sync is running on a schedule. Click 'Cancel sync' below to stop." 
+                          : !canSync
+                          ? `No data tables found for ${activeCompany?.companyName || "company"}. Please ensure company folder exists on server.`
+                          : `Click to sync real-time data for ${activeCompany?.companyName || "company"}`
+                      }
+                    >
+                      {uploading ? (
+                        <>
+                          <Loader2 size={14} className="animate-spin text-slate-500" />
+                          <span>Uploading & syncing files...</span>
+                        </>
+                      ) : busyAction === "sync" ? (
+                        <>
+                          <RefreshCw size={14} className="animate-spin text-slate-700" />
+                          <span>Syncing real-time server data...</span>
+                        </>
+                      ) : autoSync ? (
+                        <>
+                          <span className="flex items-center gap-1.5 shrink-0">
+                            <RefreshCw size={13} className="animate-spin text-emerald-400" />
+                            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse shrink-0" />
+                          </span>
+                          <span>Auto-sync active</span>
+                        </>
+                      ) : directSyncCompleted ? (
+                        <>
+                          <CheckCircle2 size={14} className="text-emerald-400" />
+                          <span>Synced to DB ({directSyncSummary?.tables || totalTablesReady} tables) · Click to re-sync</span>
+                        </>
+                      ) : (
+                        <>
+                          <Play size={13} fill="currentColor" className={!canSync ? "text-slate-400" : "text-emerald-400"} />
+                          <span>
+                            {!canSync
+                              ? "No tables ready to sync"
+                              : `Sync Realtime Data [${activeCompany?.companyCode || "DEFAULT"}]`}
+                          </span>
+                        </>
+                      )}
+                    </button>
+                  );
+                })()}
 
                 <button 
                   className={`w-full inline-flex items-center justify-center gap-2 py-2 px-4 text-xs sm:text-sm font-bold border transition-all btn-pill ${
@@ -1809,9 +1895,21 @@ export default function VfpSyncActions({
                       {syncProgress.isRunning ? "Sync in Progress..." : "Sync Complete"}
                     </span>
                   </div>
-                  <span className="text-[10px] font-bold font-mono text-slate-400">
-                    {syncProgress.doneTables}/{syncProgress.totalTables > 0 ? syncProgress.totalTables : "?"} tables
-                  </span>
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] font-bold font-mono text-slate-400">
+                      {syncProgress.doneTables}/{syncProgress.totalTables > 0 ? syncProgress.totalTables : "?"} tables
+                    </span>
+                    {!syncProgress.isRunning && (
+                      <button
+                        type="button"
+                        onClick={() => setSyncProgress(null)}
+                        className="text-slate-400 hover:text-slate-600 p-0.5 rounded-full hover:bg-slate-100 transition-colors cursor-pointer"
+                        title="Dismiss"
+                      >
+                        <X size={13} />
+                      </button>
+                    )}
+                  </div>
                 </div>
 
                 {/* Progress Bar */}

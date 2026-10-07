@@ -40,7 +40,7 @@ export const SYNC_SYSTEMS: SyncSystemConfig[] = [
     iconBg: "bg-slate-100",
     desc: "MabsolCRM native database and data tables sync with background worker",
     folderLabel: "MabsolCRM Folder",
-    format: "CRM Data Tables (DBF / Data Store)",
+    format: "CRM Data Tables & Data Store",
     defaultPathHint: "e.g. D:\\MabsolCRM\\DATA",
     isComingSoon: false,
   },

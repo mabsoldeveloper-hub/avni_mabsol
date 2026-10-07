@@ -33,6 +33,17 @@ export async function GET(request: NextRequest) {
       .sort({ updatedAt: -1 })
       .lean();
 
+    // Auto-expire stale running logs/states older than 10 minutes
+    const tenMinsAgo = new Date(Date.now() - 10 * 60 * 1000);
+    await VfpSyncState.updateMany(
+      { email, status: "running", updatedAt: { $lt: tenMinsAgo } },
+      { $set: { status: "failed", error: "Sync timed out" } }
+    );
+    await VfpSyncLog.updateMany(
+      { email, status: "running", createdAt: { $lt: tenMinsAgo } },
+      { $set: { status: "failed", finishedAt: new Date(), message: "Sync timed out" } }
+    );
+
     // Check if any table is currently running (more reliable than just the top-level log)
     const runningStateCount = tableStates.filter((s: any) => s.status === "running").length;
 

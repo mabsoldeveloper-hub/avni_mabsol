@@ -141,10 +141,10 @@ function loadProjectEnv() {
 
 function getDefaultCloudUrl() {
   const env = loadProjectEnv();
-  if (env.CLOUD_URL && !env.CLOUD_URL.includes("localhost") && !env.CLOUD_URL.includes("127.0.0.1")) {
+  if (env.CLOUD_URL) {
     return env.CLOUD_URL.replace(/\/+$/, "");
   }
-  if (env.NEXT_PUBLIC_APP_URL && !env.NEXT_PUBLIC_APP_URL.includes("localhost") && !env.NEXT_PUBLIC_APP_URL.includes("127.0.0.1")) {
+  if (env.NEXT_PUBLIC_APP_URL) {
     return env.NEXT_PUBLIC_APP_URL.replace(/\/+$/, "");
   }
   return "https://phcrm.mabsolinfotech.cloud";
@@ -152,10 +152,26 @@ function getDefaultCloudUrl() {
 
 function resolveCloudUrl(candidateUrl) {
   let url = (candidateUrl || "").trim().replace(/\/+$/, "");
-  if (!url || url.includes("localhost") || url.includes("127.0.0.1")) {
+  if (!url) {
     return getDefaultCloudUrl();
   }
+  // Allow and format localhost / 127.0.0.1 for local testing
+  if (/^localhost(:\d+)?/i.test(url) || /^127\.0\.0\.1(:\d+)?/i.test(url)) {
+    url = `http://${url}`;
+  }
   return url;
+}
+
+function cleanCompanyName(name) {
+  if (!name) return "";
+  let s = String(name).trim();
+  s = s.replace(/[\s\-_/\\|]*new[\s_-]*folder(\s*\(\d+\))?[\s\-_/\\|]*/gi, " ").trim();
+  s = s.replace(/^[-_\s/\\|]+|[-_\s/\\|]+$/g, "").trim();
+  const lower = s.toLowerCase();
+  if (lower === "default" || lower === "test" || lower === "organization" || lower === "your organization" || lower === "new folder") {
+    return "";
+  }
+  return s;
 }
 
 // Execute request with resolved cloud URL
@@ -237,7 +253,16 @@ function loadConfig() {
     const isPlaceholderCompVal = (val) => {
       if (!val) return true;
       const s = String(val).trim().toLowerCase();
-      return s === "your organization" || s === "organization" || s === "default" || s === "test";
+      return (
+        s === "your organization" ||
+        s === "organization" ||
+        s === "default" ||
+        s === "test" ||
+        s === "new folder" ||
+        s === "new_folder" ||
+        s.startsWith("new folder") ||
+        s.startsWith("new_folder")
+      );
     };
 
     const resolvedConfig = { ...defaults, ...parsed };
@@ -251,6 +276,7 @@ function loadConfig() {
       resolvedConfig.productKey = "";
       resolvedConfig.userEmail = "";
     }
+    resolvedConfig.companyName = cleanCompanyName(resolvedConfig.companyName);
     if (isPlaceholderCompVal(resolvedConfig.companyName)) {
       resolvedConfig.companyName = "";
     }
@@ -297,13 +323,23 @@ function saveConfig(cfg) {
       const isPlaceholderCompVal = (val) => {
         if (!val) return true;
         const s = String(val).trim().toLowerCase();
-        return s === "your organization" || s === "organization" || s === "default" || s === "test";
+        return (
+          s === "your organization" ||
+          s === "organization" ||
+          s === "default" ||
+          s === "test" ||
+          s === "new folder" ||
+          s === "new_folder" ||
+          s.startsWith("new folder") ||
+          s.startsWith("new_folder")
+        );
       };
       if (cfg.cloudUrl) cfg.cloudUrl = resolveCloudUrl(cfg.cloudUrl);
       if (cfg.sourceDir) cfg.sourceDir = sanitizeFolderPath(cfg.sourceDir);
       if (cfg.companyCode !== undefined) {
         cfg.companyCode = (cfg.companyCode || "").trim().toUpperCase();
       }
+      if (cfg.companyName) cfg.companyName = cleanCompanyName(cfg.companyName);
       if (isPlaceholderCompVal(cfg.companyName)) cfg.companyName = "";
       if (isPlaceholderCompVal(cfg.companyCode)) cfg.companyCode = "";
 
@@ -1175,10 +1211,11 @@ ipcMain.handle("config:fetch-branches", async (_event, payload = {}) => {
         const crmKey = (b.companyCode || "").trim().toUpperCase();
         if (!crmKey) continue;
         const existing = current.branchProfiles[crmKey] || {};
+        const cleanedName = cleanCompanyName(b.companyName || existing.companyName || "");
         current.branchProfiles[crmKey] = {
           ...existing,
           crmCompanyCode: crmKey,
-          companyName: b.companyName || existing.companyName || "",
+          companyName: cleanedName,
           companyCode: existing.decryptCode || existing.companyCode || "",
           decryptCode: existing.decryptCode || existing.companyCode || "",
           gstin: b.gstin || existing.gstin || "",
@@ -1225,6 +1262,7 @@ ipcMain.handle("config:switch-branch", async (_event, companyCode) => {
 
   if (codeKey && current.branchProfiles[codeKey]) {
     const profile = current.branchProfiles[codeKey];
+    profile.companyName = cleanCompanyName(profile.companyName);
     current.selectedCompanyCode = codeKey;
     current.companyCode = profile.decryptCode || profile.companyCode || "";
     current.companyName = profile.companyName || "";
@@ -1244,10 +1282,11 @@ ipcMain.handle("config:save-branch-profile", async (_event, branchData) => {
     return { success: false, message: "Company code is required." };
   }
   const cleanDir = branchData.sourceDir ? sanitizeFolderPath(branchData.sourceDir) : (current.branchProfiles[codeKey]?.sourceDir || "");
+  const cleanedName = cleanCompanyName(branchData.companyName || current.branchProfiles[codeKey]?.companyName || "");
   current.branchProfiles[codeKey] = {
     ...(current.branchProfiles[codeKey] || {}),
     companyCode: codeKey,
-    companyName: (branchData.companyName || "").trim(),
+    companyName: cleanedName,
     sourceDir: cleanDir,
     gstin: (branchData.gstin || "").trim()
   };
@@ -1648,9 +1687,24 @@ ipcMain.handle("dialog:validate-folder", async (_event, folderPath, companyCode 
 
 let isAutoSyncPaused = false;
 
-ipcMain.handle("sync:start", async () => {
+ipcMain.handle("sync:start", async (_event, payload) => {
   if (isSyncing) return { success: false, message: "Sync is already in progress." };
-  return await executeDecryptionAndSync("manual");
+  let targetProfile = null;
+  const cfg = loadConfig();
+  const branchCode = (typeof payload === "string" ? payload : payload?.branchCode || cfg.selectedCompanyCode || "").trim().toUpperCase();
+  if (branchCode && cfg.branchProfiles && cfg.branchProfiles[branchCode]) {
+    targetProfile = { ...cfg.branchProfiles[branchCode] };
+  } else if (branchCode) {
+    targetProfile = { companyCode: branchCode, crmCompanyCode: branchCode };
+  }
+  if (typeof payload === "object" && payload !== null) {
+    if (!targetProfile) targetProfile = {};
+    if (payload.companyCode) targetProfile.decryptCode = payload.companyCode;
+    if (payload.sourceDir) targetProfile.sourceDir = payload.sourceDir;
+    if (payload.companyName) targetProfile.companyName = payload.companyName;
+    if (payload.branchCode) targetProfile.crmCompanyCode = payload.branchCode;
+  }
+  return await executeDecryptionAndSync("manual", targetProfile);
 });
 
 ipcMain.handle("sync:start-all-branches", async () => {
@@ -1724,7 +1778,8 @@ async function executeDecryptionAndSync(triggerReason = "manual", targetProfile 
 
   const config = loadConfig();
   const session = loadSession();
-  const rawCodes = ((targetProfile && (targetProfile.decryptCode || targetProfile.extractCode || targetProfile.companyCode)) || config.companyCode || "").trim();
+  const activeProfile = targetProfile || (config.selectedCompanyCode && config.branchProfiles && config.branchProfiles[config.selectedCompanyCode]) || null;
+  const rawCodes = ((activeProfile && (activeProfile.decryptCode || activeProfile.extractCode || activeProfile.companyCode)) || config.companyCode || "").trim();
   const companyCodes = rawCodes.split(/[,\s;]+/).map(c => c.trim().toUpperCase()).filter(Boolean);
   if (companyCodes.length === 0) {
     const msg = "ERP Extract Code is not set. Please click Edit Configuration and enter your ERP Data Code(s) (e.g. A01 or B01).";
@@ -1734,9 +1789,9 @@ async function executeDecryptionAndSync(triggerReason = "manual", targetProfile 
     return { success: false, message: msg };
   }
 
-  const sourceDir = sanitizeFolderPath((targetProfile && targetProfile.sourceDir) || config.sourceDir);
-  const activeCompanyName = (targetProfile && targetProfile.companyName) || config.companyName || "";
-  const activeCrmCode = (targetProfile && targetProfile.crmCompanyCode) || config.selectedCompanyCode || "";
+  const sourceDir = sanitizeFolderPath((activeProfile && activeProfile.sourceDir) || config.sourceDir);
+  const activeCompanyName = (activeProfile && activeProfile.companyName) || config.companyName || "";
+  const activeCrmCode = (activeProfile && (activeProfile.crmCompanyCode || activeProfile.companyCode)) || config.selectedCompanyCode || "";
   // Destination staging folder is internal and automated! No need to configure manually.
   const baseStagingDir = config.destDir || path.join(USER_DATA_DIR, "staging");
 
@@ -2182,8 +2237,8 @@ async function executeDecryptionAndSync(triggerReason = "manual", targetProfile 
     // SCENARIO 1: ONLINE -> Upload directly from staging to Cloud Server
     if (isCloudReachable) {
       emitLog("info", `Uploading [${compCode}] tables directly to Cloud Server...`);
-      const activeCrmCode = (targetProfile && targetProfile.crmCompanyCode) || config.selectedCompanyCode || compCode;
-      const uploadResult = await uploadDbfBatch(cloudUrl, compDestDir, dbfFiles, authToken, userEmail, licenseKey, activeCrmCode, activeCompanyName);
+      const uploadCompCode = (activeProfile && (activeProfile.crmCompanyCode || activeProfile.companyCode)) || config.selectedCompanyCode || compCode;
+      const uploadResult = await uploadDbfBatch(cloudUrl, compDestDir, dbfFiles, authToken, userEmail, licenseKey, uploadCompCode, activeCompanyName);
 
       if (uploadResult.success) {
         lastSyncFileSignatures.set(compCode, sigKey);
@@ -2404,11 +2459,12 @@ async function uploadDbfBatch(cloudUrl, destDir, dbfFiles, token, email, license
       const hasValidToken = token && !isTokenExpired(token);
       await axios.post(
         `${cloudUrl}/api/mabsolcrmsync/sync-now`,
-        { companyCode, background: true },
+        { companyCode, companyName, background: true },
         {
           headers: {
             ...(hasValidToken ? { Authorization: `Bearer ${token}` } : {}),
             ...(licenseKey ? { "x-license-key": licenseKey } : {}),
+            ...(email ? { "x-agent-email": email } : {}),
             "x-device-id": getMachineIdentifier(),
             "x-company-code": companyCode || ""
           },

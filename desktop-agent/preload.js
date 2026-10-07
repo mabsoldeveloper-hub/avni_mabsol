@@ -40,7 +40,7 @@ contextBridge.exposeInMainWorld("electronAPI", {
   validateFolder: (folderPath, companyCode) => ipcRenderer.invoke("dialog:validate-folder", folderPath, companyCode),
 
   // Sync operations
-  startSync: () => ipcRenderer.invoke("sync:start"),
+  startSync: (payload) => ipcRenderer.invoke("sync:start", payload),
   stopSync: () => ipcRenderer.invoke("sync:stop"),
   resumeSync: () => ipcRenderer.invoke("sync:resume"),
   getSyncStatus: () => ipcRenderer.invoke("sync:status"),

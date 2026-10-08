@@ -43,84 +43,11 @@ function normalizeCode(value: any): string {
 }
 
 /* ============================================================
-   SALE TYPE MAP
-============================================================ */
-
-async function buildSaleTypeMap(codes: string[]) {
-  const map = new Map<string, any>();
-
-  if (!codes.length) return map;
-
-  const uniqueCodes = Array.from(
-    new Set(
-      codes
-        .map((code) => normalizeCode(code))
-        .filter(Boolean)
-    )
-  );
-
-  if (!uniqueCodes.length) return map;
-
-  const saleTypes = await SaleType.find(
-    {
-      SCODE: {
-        $in: uniqueCodes,
-      },
-    }
-  )
-    .select("SCODE SNAME STYPE")
-    .lean();
-
-  for (const row of saleTypes as any[]) {
-    const code = normalizeCode(row?.SCODE);
-
-    if (!code) continue;
-
-    const type = normalizeCode(row?.STYPE);
-
-    map.set(`${code}:${type}`, row);
-
-    /*
-      Some records may not have STYPE.
-      Keep a fallback entry as well.
-    */
-    if (!type) {
-      map.set(`${code}:`, row);
-    }
-  }
-
-  return map;
-}
-
-function getSaleTypeName(
-  saleTypeMap: Map<string, any>,
-  code: any,
-  type: any
-): string {
-  const normalizedCode = normalizeCode(code);
-  const normalizedType = normalizeCode(type);
-
-  if (!normalizedCode) return "";
-
-  const exactKey = `${normalizedCode}:${normalizedType}`;
-
-  const exact = saleTypeMap.get(exactKey);
-
-  if (exact?.SNAME) {
-    return firstValue(exact.SNAME);
-  }
-
-  const fallback = saleTypeMap.get(`${normalizedCode}:`);
-
-  return firstValue(fallback?.SNAME);
-}
-
-/* ============================================================
-   GET - CUSTOMER VIEW
+   GET CUSTOMER
 ============================================================ */
 
 export async function GET(
-  req: Request,
+  request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
@@ -129,7 +56,7 @@ export async function GET(
     const { id } = await params;
 
     /* --------------------------------------------------------
-       Validate MongoDB ID
+       Validate ID
     -------------------------------------------------------- */
 
     if (!mongoose.Types.ObjectId.isValid(id)) {
@@ -145,23 +72,18 @@ export async function GET(
     }
 
     /* --------------------------------------------------------
-       Hierarchy access control
+       Territory / hierarchy restriction
     -------------------------------------------------------- */
 
-    const restriction = await getMrTerritoryRestriction();
-
-    /*
-     * Do the authorization check before returning ANY customer data.
-     * For restricted users, an inaccessible customer is intentionally
-     * returned as 404 instead of 403 so the API does not reveal that
-     * the customer exists outside the user's hierarchy.
-     */
+    const restriction =
+      await getMrTerritoryRestriction();
 
     /* --------------------------------------------------------
-       Customer
+       CUSTOMER
     -------------------------------------------------------- */
 
-    const customer: any = await Customer.findById(id).lean();
+    const customer: any =
+      await Customer.findById(id).lean();
 
     if (!customer) {
       return NextResponse.json(
@@ -177,120 +99,33 @@ export async function GET(
 
     /* --------------------------------------------------------
        Territory restriction
+
+       IMPORTANT:
+       getMrTerritoryRestriction() returns:
+
+       isMrRestricted
+       isPartyAllowed()
+
+       It does NOT return:
+
+       restriction.enabled
+       restriction.allowed
     -------------------------------------------------------- */
 
-    if (restriction?.enabled) {
-      const allowed = restriction.allowed;
+    if (restriction?.isMrRestricted) {
+      const partyAllowed =
+        restriction.isPartyAllowed(customer);
 
-      const customerState = normalizeCode(customer?.STATE1);
-      const customerZone = normalizeCode(customer?.ZONE);
-      const customerArea = normalizeCode(customer?.AREA);
-      const customerCity = normalizeCode(customer?.CITY);
-      const customerStation = normalizeCode(customer?.STATION);
-      const customerRoute = normalizeCode(
-        firstValue(customer?.ROUTE, customer?.ROUT)
-      );
-
-      const hasRestrictionValue =
-        allowed?.states?.length ||
-        allowed?.zones?.length ||
-        allowed?.areas?.length ||
-        allowed?.cities?.length ||
-        allowed?.stations?.length ||
-        allowed?.routes?.length;
-
-      if (hasRestrictionValue) {
-        const allowedStates = new Set(
-          (allowed?.states || []).map((x: any) =>
-            normalizeCode(x)
-          )
+      if (!partyAllowed) {
+        return NextResponse.json(
+          {
+            success: false,
+            message: "Customer not found",
+          },
+          {
+            status: 404,
+          }
         );
-
-        const allowedZones = new Set(
-          (allowed?.zones || []).map((x: any) =>
-            normalizeCode(x)
-          )
-        );
-
-        const allowedAreas = new Set(
-          (allowed?.areas || []).map((x: any) =>
-            normalizeCode(x)
-          )
-        );
-
-        const allowedCities = new Set(
-          (allowed?.cities || []).map((x: any) =>
-            normalizeCode(x)
-          )
-        );
-
-        const allowedStations = new Set(
-          (allowed?.stations || []).map((x: any) =>
-            normalizeCode(x)
-          )
-        );
-
-        const allowedRoutes = new Set(
-          (allowed?.routes || []).map((x: any) =>
-            normalizeCode(x)
-          )
-        );
-
-        let territoryAllowed = false;
-
-        if (
-          customerState &&
-          allowedStates.has(customerState)
-        ) {
-          territoryAllowed = true;
-        }
-
-        if (
-          customerZone &&
-          allowedZones.has(customerZone)
-        ) {
-          territoryAllowed = true;
-        }
-
-        if (
-          customerArea &&
-          allowedAreas.has(customerArea)
-        ) {
-          territoryAllowed = true;
-        }
-
-        if (
-          customerCity &&
-          allowedCities.has(customerCity)
-        ) {
-          territoryAllowed = true;
-        }
-
-        if (
-          customerStation &&
-          allowedStations.has(customerStation)
-        ) {
-          territoryAllowed = true;
-        }
-
-        if (
-          customerRoute &&
-          allowedRoutes.has(customerRoute)
-        ) {
-          territoryAllowed = true;
-        }
-
-        if (!territoryAllowed) {
-          return NextResponse.json(
-            {
-              success: false,
-              message: "Customer not found",
-            },
-            {
-              status: 404,
-            }
-          );
-        }
       }
     }
 
@@ -307,28 +142,31 @@ export async function GET(
     );
 
     if (groupCode) {
-      accountGroup = await AccountGroup.findOne({
-        $or: [
-          {
-            code: groupCode,
-          },
-          {
-            groupCode: groupCode,
-          },
-          {
-            SCODE: groupCode,
-          },
-        ],
-      }).lean();
+      accountGroup =
+        await AccountGroup.findOne({
+          $or: [
+            {
+              code: groupCode,
+            },
+            {
+              groupCode: groupCode,
+            },
+            {
+              SCODE: groupCode,
+            },
+          ],
+        }).lean();
     }
 
     /* --------------------------------------------------------
        CUSTOMER ORDER CODE
     -------------------------------------------------------- */
 
-    const customerOrdno = clean(customer?.ORDNO);
+    const customerOrdno =
+      clean(customer?.ORDNO);
 
-    const customerCodep = clean(customer?.CODEP);
+    const customerCodep =
+      clean(customer?.CODEP);
 
     /* --------------------------------------------------------
        ORDER LOOKUP
@@ -337,60 +175,71 @@ export async function GET(
     let order: any = null;
 
     if (customerOrdno || customerCodep) {
-      const orderCodes = Array.from(
-        new Set(
-          [
-            customerOrdno,
-            customerCodep,
-          ].filter(Boolean)
-        )
-      );
+      const orderCodes =
+        Array.from(
+          new Set(
+            [
+              customerOrdno,
+              customerCodep,
+            ].filter(Boolean)
+          )
+        );
 
-      const orderRows = await Order.find({
-        $or: [
-          {
-            ORDNO: {
-              $in: orderCodes,
+      const orderRows =
+        await Order.find({
+          $or: [
+            {
+              ORDNO: {
+                $in: orderCodes,
+              },
             },
-          },
-          {
-            CODEP: {
-              $in: orderCodes,
+            {
+              CODEP: {
+                $in: orderCodes,
+              },
             },
-          },
-        ],
-      })
-        .lean();
+          ],
+        }).lean();
 
-      /*
-       * Build map using both ORDNO and CODEP
-       */
-
-      const orderMap = new Map<string, any>();
+      const orderMap =
+        new Map<string, any>();
 
       for (const row of orderRows as any[]) {
-        const ordno = clean(row?.ORDNO);
-        const codep = clean(row?.CODEP);
+        const ordno =
+          clean(row?.ORDNO);
+
+        const codep =
+          clean(row?.CODEP);
 
         if (ordno) {
-          orderMap.set(ordno, row);
+          orderMap.set(
+            ordno,
+            row
+          );
         }
 
         if (codep) {
-          orderMap.set(codep, row);
+          orderMap.set(
+            codep,
+            row
+          );
         }
       }
 
       order =
-        orderMap.get(customerOrdno) ||
-        orderMap.get(customerCodep) ||
+        orderMap.get(
+          customerOrdno
+        ) ||
+        orderMap.get(
+          customerCodep
+        ) ||
         null;
     }
 
     /* ========================================================
        MARG CUSTOMER EMAIL
-       
-       Exact MARG matching:
+
+       EXACT MATCHING:
 
        ORDER_f18.ORDNO
               =
@@ -412,13 +261,16 @@ export async function GET(
     if (supportCode) {
       /*
        * IMPORTANT:
-       * Your MongoDB collection is:
+       *
+       * Actual MongoDB collection:
        *
        * vfp_new_folder_support
        *
-       * NOT SUPPORT_f18
+       * Example:
        *
-       * MongoDB Atlas screenshot confirms this.
+       * LCODE  = AEEG
+       * SNO    = 2
+       * REMARK = MAIL@VKPUBLICATIONS.COM
        */
 
       const supportCollection =
@@ -445,13 +297,16 @@ export async function GET(
         );
 
       const remark =
-        clean(supportRow?.REMARK);
+        clean(
+          supportRow?.REMARK
+        );
 
       if (remark) {
         /*
          * Extract email from REMARK.
          *
          * Example:
+         *
          * MAIL@VKPUBLICATIONS.COM
          */
 
@@ -465,6 +320,10 @@ export async function GET(
             ?.trim()
             .toUpperCase() || "";
       }
+
+      /* ------------------------------------------------------
+         DEBUG
+      ------------------------------------------------------ */
 
       console.log(
         "======================================"
@@ -496,7 +355,8 @@ export async function GET(
 
       console.log(
         "FINAL CUSTOMER EMAIL:",
-        customerEmail || "NOT_FOUND"
+        customerEmail ||
+          "NOT_FOUND"
       );
 
       console.log(
@@ -533,7 +393,7 @@ export async function GET(
       );
 
     /* --------------------------------------------------------
-       ORDER CODE -> SALETYPE SCODE -> SNAME
+       SALE TYPE LOOKUP
     -------------------------------------------------------- */
 
     const territoryCodes =
@@ -548,35 +408,31 @@ export async function GET(
             orderStation,
             orderRoute,
           ]
-            .map((v) =>
-              clean(v).toUpperCase()
+            .map((value) =>
+              clean(value).toUpperCase()
             )
             .filter(Boolean)
         )
       );
 
-    const saleTypeQuery: any = {
-      $or: [
-        {
-          SCODE: {
-            $in: territoryCodes,
-          },
-        },
-        {
-          code: {
-            $in: territoryCodes,
-          },
-        },
-      ],
-    };
-
     let saleTypeRows: any[] = [];
 
     if (territoryCodes.length) {
       saleTypeRows =
-        (await SaleType.find(
-          saleTypeQuery
-        )
+        (await SaleType.find({
+          $or: [
+            {
+              SCODE: {
+                $in: territoryCodes,
+              },
+            },
+            {
+              code: {
+                $in: territoryCodes,
+              },
+            },
+          ],
+        })
           .select(
             "SCODE SNAME STYPE code name type"
           )
@@ -587,19 +443,21 @@ export async function GET(
       new Map<string, any>();
 
     for (const row of saleTypeRows) {
-      const code = normalizeCode(
-        firstValue(
-          row?.SCODE,
-          row?.code
-        )
-      );
+      const code =
+        normalizeCode(
+          firstValue(
+            row?.SCODE,
+            row?.code
+          )
+        );
 
-      const type = normalizeCode(
-        firstValue(
-          row?.STYPE,
-          row?.type
-        )
-      );
+      const type =
+        normalizeCode(
+          firstValue(
+            row?.STYPE,
+            row?.type
+          )
+        );
 
       if (!code) continue;
 
@@ -616,110 +474,122 @@ export async function GET(
       }
     }
 
+    const getSaleTypeName = (
+      code: any,
+      type: any
+    ): string => {
+      const normalizedCode =
+        normalizeCode(code);
+
+      const normalizedType =
+        normalizeCode(type);
+
+      if (!normalizedCode) {
+        return "";
+      }
+
+      const exact =
+        saleTypeMap.get(
+          `${normalizedCode}:${normalizedType}`
+        );
+
+      if (exact?.SNAME) {
+        return firstValue(
+          exact.SNAME
+        );
+      }
+
+      const fallback =
+        saleTypeMap.get(
+          `${normalizedCode}:`
+        );
+
+      return firstValue(
+        fallback?.SNAME
+      );
+    };
+
     const state1Name =
       getSaleTypeName(
-        saleTypeMap,
         orderState1,
         "STATE1"
       ) ||
       getSaleTypeName(
-        saleTypeMap,
         orderState1,
         ""
       );
 
     const state2Name =
       getSaleTypeName(
-        saleTypeMap,
         orderState2,
         "STATE2"
       ) ||
       getSaleTypeName(
-        saleTypeMap,
         orderState2,
         ""
       );
 
     const zoneName =
       getSaleTypeName(
-        saleTypeMap,
         orderZone,
         "ZONE"
       ) ||
       getSaleTypeName(
-        saleTypeMap,
         orderZone,
         ""
       );
 
     const cityName =
       getSaleTypeName(
-        saleTypeMap,
         orderCity,
         "CITY"
       ) ||
       getSaleTypeName(
-        saleTypeMap,
         orderCity,
         ""
       );
 
     const areaName =
       getSaleTypeName(
-        saleTypeMap,
         orderArea,
         "AREA"
       ) ||
       getSaleTypeName(
-        saleTypeMap,
         orderArea,
         ""
       );
 
     const stationName =
       getSaleTypeName(
-        saleTypeMap,
         orderStation,
         "STATION"
       ) ||
       getSaleTypeName(
-        saleTypeMap,
         orderStation,
         ""
       );
 
     const routeName =
       getSaleTypeName(
-        saleTypeMap,
         orderRoute,
         "ROUTE"
       ) ||
       getSaleTypeName(
-        saleTypeMap,
         orderRoute,
         ""
       );
 
     /* --------------------------------------------------------
-       CUSTOMER STATUS
-    -------------------------------------------------------- */
-
-    const status =
-      firstValue(
-        customer?.STATUS,
-        "Y"
-      );
-
-    /* --------------------------------------------------------
-       FINAL RESPONSE
+       FINAL CUSTOMER RESPONSE
     -------------------------------------------------------- */
 
     const result: any = {
       ...customer,
 
-      _id: String(
-        customer?._id || ""
-      ),
+      _id:
+        String(
+          customer?._id || ""
+        ),
 
       PARNAM:
         customer?.PARNAM || "",
@@ -770,26 +640,21 @@ export async function GET(
         customer?.CREDIT ?? 0,
 
       STATUS:
-        status,
+        customer?.STATUS || "Y",
 
-      /*
-       * ======================================================
-       * IMPORTANT
-       *
-       * This is the email obtained from:
-       *
-       * ORDER_f18.ORDNO
-       *        ->
-       * vfp_new_folder_support.LCODE
-       *        ->
-       * SNO = 2
-       *        ->
-       * REMARK
-       *
-       * Example:
-       * AEEG -> AEEG -> 2 -> MAIL@VKPUBLICATIONS.COM
-       * ======================================================
-       */
+      /* ======================================================
+         IMPORTANT MARG EMAIL
+
+         AEEG
+          ↓
+         SUPPORT LCODE AEEG
+          ↓
+         SNO 2
+          ↓
+         REMARK
+          ↓
+         MAIL@VKPUBLICATIONS.COM
+      ====================================================== */
 
       EMAIL:
         customerEmail,
@@ -845,7 +710,7 @@ export async function GET(
         routeName,
 
       /* ------------------------------------------------------
-         ORDER DATA
+         Order territory
       ------------------------------------------------------ */
 
       orderTerritory: {
@@ -892,12 +757,16 @@ export async function GET(
           routeName,
       },
 
+      /* ------------------------------------------------------
+         Account Group
+      ------------------------------------------------------ */
+
       accountGroup:
         accountGroup || null,
     };
 
     /* --------------------------------------------------------
-       RETURN
+       RESPONSE
     -------------------------------------------------------- */
 
     return NextResponse.json(

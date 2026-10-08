@@ -52,6 +52,8 @@ import Customer from "@/models/Customer";
 import AccountGroup from "@/models/AccountGroup";
 import Order from "@/models/Order";
 import SaleType from "@/models/SaleType";
+import Pendings from "@/models/Pendings";
+import Notification from "@/models/Notification";
 import mongoose from "mongoose";
 import { getMrTerritoryRestriction } from "@/lib/mrTerritoryHelper";
 
@@ -310,6 +312,115 @@ export async function GET(
     const status =
       customerDoc.STATUS === "N" || customerDoc.SALDR === "N" ? "N" : "Y";
 
+    /* ------------------------------------------------------ */
+    /* Financial Health: Credit Limit, Days Remaining, Bill Limit Alerts */
+    /* ------------------------------------------------------ */
+    const creditLimit = Number(customerDoc.CREDIT ?? 0);
+    const outstandingBalance = Number(customerDoc.BALANCE ?? customerDoc.FINAL ?? 0);
+    const dueDaysLimit = Number(customerDoc.DUEDAYS ?? customerDoc.DAYS ?? 0);
+    const billLimit = Number(
+      customerDoc.BILL_LIMIT ?? customerDoc.BILLLIMIT ?? customerDoc.MAXBILLS ?? 0
+    );
+
+    // 1. Credit Limit Exceeded Check
+    const isCreditLimitExceeded = creditLimit > 0 && outstandingBalance > creditLimit;
+    const excessCreditAmount = isCreditLimitExceeded ? Math.round(outstandingBalance - creditLimit) : 0;
+    const creditUtilization = creditLimit > 0 ? Math.round((outstandingBalance / creditLimit) * 100) : 0;
+
+    let totalPendingBills = 0;
+    let overdueBillsCount = 0;
+    let maxOverdueDays = 0;
+    let overdueAmount = 0;
+    let minDaysRemaining = 999;
+    let oldestPendingBillNo = "";
+    let oldestBillDate = "";
+
+    try {
+      if (orderKeys.length) {
+        const pendingInvoices: any[] = await Pendings.find({
+          ORD: { $in: orderKeys },
+        }).sort({ DDATE: 1 }).lean();
+
+        const todayMs = Date.now();
+        for (const inv of pendingInvoices) {
+          const bal = Math.abs(Number(inv.BALANCE ?? 0));
+          if (bal > 0) {
+            totalPendingBills++;
+            if (!oldestPendingBillNo) {
+              oldestPendingBillNo = String(inv.VCN || inv.VOUCHER || "");
+              oldestBillDate = String(inv.DDATE || "");
+            }
+
+            let billOverdueDays = 0;
+            if (inv.DDATE) {
+              const billMs = new Date(inv.DDATE).getTime();
+              const diffDays = Math.floor((todayMs - billMs) / (1000 * 60 * 60 * 24));
+              const allowedDays = dueDaysLimit > 0 ? dueDaysLimit : (Number(inv.DUEDAYS) || 0);
+
+              const remaining = allowedDays - diffDays;
+              if (remaining < minDaysRemaining) {
+                minDaysRemaining = remaining;
+              }
+
+              if (diffDays > allowedDays) {
+                billOverdueDays = diffDays - allowedDays;
+              }
+            }
+
+            if (billOverdueDays > 0 || Number(inv.DUEDAYS || 0) > 0) {
+              overdueBillsCount++;
+              overdueAmount += bal;
+              if (billOverdueDays > maxOverdueDays) {
+                maxOverdueDays = billOverdueDays;
+              }
+            }
+          }
+        }
+      }
+    } catch (pendingsErr) {
+      console.warn("Error calculating pendings overdue:", pendingsErr);
+    }
+
+    if (minDaysRemaining === 999) {
+      minDaysRemaining = dueDaysLimit;
+    }
+
+    // 2. Days Kam Bache / Days Expiring Soon Check
+    const isDaysKamBache = dueDaysLimit > 0 && minDaysRemaining <= 3 && minDaysRemaining >= 0 && totalPendingBills > 0;
+    const isDaysExpired = maxOverdueDays > 0;
+    const isDayLimitExceeded = isDaysKamBache || isDaysExpired;
+
+    // 3. Bill Limit / Number of Bills Exceeded Check
+    const isBillLimitExceeded = billLimit > 0 && totalPendingBills > billLimit;
+    const excessBillsCount = isBillLimitExceeded ? totalPendingBills - billLimit : 0;
+
+    const financialAlerts = {
+      // Credit Limit
+      creditLimit,
+      outstandingBalance,
+      isCreditLimitExceeded,
+      excessCreditAmount,
+      creditUtilization,
+
+      // Days Limit
+      dueDaysLimit,
+      minDaysRemaining: minDaysRemaining === 999 ? 0 : minDaysRemaining,
+      isDaysKamBache,
+      isDaysExpired,
+      isDayLimitExceeded,
+      maxOverdueDays,
+      overdueBillsCount,
+      overdueAmount,
+      oldestPendingBillNo,
+      oldestBillDate,
+
+      // Bill Limit
+      billLimit,
+      totalPendingBills,
+      isBillLimitExceeded,
+      excessBillsCount,
+    };
+
     return NextResponse.json({
       ...customerDoc,
       ...groupInfo,
@@ -321,6 +432,23 @@ export async function GET(
       Area: area,
       station,
       route,
+
+      /* Financial alerts */
+      financialAlerts,
+      isCreditLimitExceeded,
+      excessCreditAmount,
+      creditUtilization,
+      isDayLimitExceeded,
+      isDaysKamBache,
+      isDaysExpired,
+      minDaysRemaining: minDaysRemaining === 999 ? 0 : minDaysRemaining,
+      maxOverdueDays,
+      overdueAmount,
+      overdueBillsCount,
+      billLimit,
+      totalPendingBills,
+      isBillLimitExceeded,
+      excessBillsCount,
 
       /* Original ORDER_K19 source codes retained for software logic/debugging. */
       _orderTerritory: order
@@ -349,7 +477,7 @@ export async function GET(
 }
 
 /* ---------------------------------------------------------- */
-/* PATCH - Save manual customer territory                      */
+/* PATCH - Update customer details, credit limit, terms, etc. */
 /* ---------------------------------------------------------- */
 export async function PATCH(
   request: Request,
@@ -387,29 +515,141 @@ export async function PATCH(
     }
 
     const body = await request.json();
-    const allowedFields = [
-      "state1", "country", "ZONE", "CITY", "Area", "station", "route",
+
+    const numericFields = [
+      "CREDIT",
+      "DUEDAYS",
+      "DAYS",
+      "BILL_LIMIT",
+      "BILLLIMIT",
+      "MAXBILLS",
+      "BALANCE",
+      "DISCOUNT",
+      "OPNING",
+      "OPENING",
+      "CLBAL",
+      "DEBIT",
+      "FINAL",
     ] as const;
 
-    const updates: Record<string, string> = {};
-    for (const field of allowedFields) {
+    const stringFields = [
+      "PARNAM",
+      "REF",
+      "PHONE1",
+      "PHONE2",
+      "MAILNAM",
+      "STATUS",
+      "PRICE",
+      "PARADD",
+      "PARADD2",
+      "PARADD3",
+      "CITY",
+      "STATE",
+      "state1",
+      "country",
+      "PINCODE",
+      "PIN",
+      "Area",
+      "AREA",
+      "station",
+      "route",
+      "ROUT",
+      "ZONE",
+      "GSTNO",
+      "DLNO",
+      "DLNO2",
+      "PANNO",
+      "FSSAINO",
+      "DSM",
+      "SALESMAN",
+      "ASM",
+      "RSM",
+      "COMPANY",
+      "TINNO",
+      "STAXNO",
+      "CSTNO",
+      "GCODE",
+      "SCODE",
+    ] as const;
+
+    const updates: Record<string, any> = {};
+
+    // String fields
+    for (const field of stringFields) {
       if (Object.prototype.hasOwnProperty.call(body, field)) {
         updates[field] = clean(body[field]);
       }
     }
 
+    // Numeric fields
+    for (const field of numericFields) {
+      if (Object.prototype.hasOwnProperty.call(body, field)) {
+        const val = body[field];
+        if (val === "" || val === null || val === undefined) {
+          updates[field] = 0;
+        } else {
+          const num = Number(val);
+          updates[field] = isNaN(num) ? 0 : num;
+        }
+      }
+    }
+
+    // Field normalizations & synchronizations
     if (Object.prototype.hasOwnProperty.call(body, "country") && !updates.country) {
       updates.country = "India";
     }
 
+    if (Object.prototype.hasOwnProperty.call(body, "DUEDAYS")) {
+      updates.DAYS = updates.DUEDAYS;
+    } else if (Object.prototype.hasOwnProperty.call(body, "DAYS")) {
+      updates.DUEDAYS = updates.DAYS;
+    }
+
+    if (Object.prototype.hasOwnProperty.call(body, "BILL_LIMIT")) {
+      updates.BILLLIMIT = updates.BILL_LIMIT;
+      updates.MAXBILLS = updates.BILL_LIMIT;
+    } else if (Object.prototype.hasOwnProperty.call(body, "BILLLIMIT")) {
+      updates.BILL_LIMIT = updates.BILLLIMIT;
+      updates.MAXBILLS = updates.BILLLIMIT;
+    }
+
+    if (Object.prototype.hasOwnProperty.call(body, "state1")) {
+      updates.STATE = updates.state1;
+    } else if (Object.prototype.hasOwnProperty.call(body, "STATE")) {
+      updates.state1 = updates.STATE;
+    }
+
+    if (Object.prototype.hasOwnProperty.call(body, "Area")) {
+      updates.AREA = updates.Area;
+    } else if (Object.prototype.hasOwnProperty.call(body, "AREA")) {
+      updates.Area = updates.AREA;
+    }
+
+    if (Object.prototype.hasOwnProperty.call(body, "route")) {
+      updates.ROUT = updates.route;
+    } else if (Object.prototype.hasOwnProperty.call(body, "ROUT")) {
+      updates.route = updates.ROUT;
+    }
+
+    if (Object.prototype.hasOwnProperty.call(body, "STATUS")) {
+      const st = String(body.STATUS || "").trim().toUpperCase();
+      updates.STATUS = (st === "Y" || st === "ACTIVE" || st === "YES") ? "Y" : "N";
+    }
+
+    if (Object.prototype.hasOwnProperty.call(body, "OPNING")) {
+      updates.OPENING = updates.OPNING;
+    } else if (Object.prototype.hasOwnProperty.call(body, "OPENING")) {
+      updates.OPNING = updates.OPENING;
+    }
+
     if (!Object.keys(updates).length) {
       return NextResponse.json(
-        { success: false, message: "No fields received to update" },
+        { success: false, message: "No valid fields received to update" },
         { status: 400 }
       );
     }
 
-    const updatedCustomer = await Customer.findByIdAndUpdate(
+    const updatedCustomer: any = await Customer.findByIdAndUpdate(
       id,
       { $set: updates },
       { new: true, runValidators: true, strict: false }
@@ -422,10 +662,40 @@ export async function PATCH(
       );
     }
 
+    // Check if updated values breach credit limit and record Notification
+    const currentBal = Number(updatedCustomer.BALANCE ?? updatedCustomer.FINAL ?? 0);
+    const currentCredit = Number(updatedCustomer.CREDIT ?? 0);
+    const isCreditLimitExceeded = currentCredit > 0 && currentBal > currentCredit;
+
+    if (isCreditLimitExceeded) {
+      try {
+        await Notification.create({
+          title: `⚠️ Credit Limit Exceeded: ${updatedCustomer.PARNAM}`,
+          message: `Customer ${updatedCustomer.PARNAM} has exceeded credit limit! Balance: ₹${currentBal.toLocaleString("en-IN")}, Limit: ₹${currentCredit.toLocaleString("en-IN")}.`,
+          type: "CREDIT_LIMIT_EXCEEDED",
+          category: "FINANCIAL",
+          severity: "warning",
+          targetRole: "All",
+          entityId: String(id),
+          actionUrl: `/dashboard/customers/view/${id}`,
+          metadata: {
+            customerId: id,
+            customerName: updatedCustomer.PARNAM,
+            balance: currentBal,
+            creditLimit: currentCredit,
+            dueDays: updatedCustomer.DUEDAYS,
+          },
+        });
+      } catch (notifErr) {
+        console.warn("Failed to create credit limit notification:", notifErr);
+      }
+    }
+
     return NextResponse.json({
       success: true,
-      message: "Customer ledger details saved successfully",
+      message: "Customer details and limits updated successfully",
       data: updatedCustomer,
+      isCreditLimitExceeded,
     });
   } catch (error: any) {
     console.error("PATCH /api/customers/[id] error:", error);

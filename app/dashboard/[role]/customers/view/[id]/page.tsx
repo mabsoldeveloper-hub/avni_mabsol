@@ -9,6 +9,10 @@ import CustomerHeader from "@/components/customer/CustomerHeader";
 import CustomerSummaryCards from "@/components/customer/CustomerSummaryCards";
 import CustomerQuickActions from "@/components/customer/CustomerQuickActions";
 import CustomerOverview from "@/components/customer/CustomerOverview";
+import CustomerAlertBanner from "@/components/customer/CustomerAlertBanner";
+import EditCustomerModal from "@/components/customer/EditCustomerModal";
+import CustomerSendAlertModal from "@/components/customer/CustomerSendAlertModal";
+import CustomerAutoAlertSettingsModal from "@/components/customer/CustomerAutoAlertSettingsModal";
 
 export default function CustomerViewPage() {
   const { id } = useParams();
@@ -16,12 +20,15 @@ export default function CustomerViewPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  // Modal visibility states
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [isAlertModalOpen, setIsAlertModalOpen] = useState(false);
+  const [isAutoAlertSettingsOpen, setIsAutoAlertSettingsOpen] = useState(false);
+
   useEffect(() => {
     if (!id) return;
     loadCustomer();
   }, [id]);
-
-  
 
   const loadCustomer = async () => {
     setLoading(true);
@@ -122,19 +129,63 @@ export default function CustomerViewPage() {
         {/* Header + Quick Actions */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 print:block">
           <div className="lg:col-span-9 print:col-span-12">
-            <CustomerHeader customer={customer} />
+            <CustomerHeader
+              customer={customer}
+              onEditClick={() => setIsEditModalOpen(true)}
+              onSendAlertClick={() => setIsAlertModalOpen(true)}
+              onAutoAlertSettingsClick={() => setIsAutoAlertSettingsOpen(true)}
+            />
           </div>
           <div className="lg:col-span-3 print:hidden">
-            <CustomerQuickActions customer={customer} />
+            <CustomerQuickActions
+              customer={customer}
+              onEditClick={() => setIsEditModalOpen(true)}
+              onSendAlertClick={() => setIsAlertModalOpen(true)}
+              onAutoAlertSettingsClick={() => setIsAutoAlertSettingsOpen(true)}
+            />
           </div>
         </div>
 
+        {/* Real-Time Credit Limit & Day Limit Alert Banner */}
+        <CustomerAlertBanner
+          customer={customer}
+          onSendAlertClick={() => setIsAlertModalOpen(true)}
+          onEditClick={() => setIsEditModalOpen(true)}
+          onAutoAlertSettingsClick={() => setIsAutoAlertSettingsOpen(true)}
+        />
+
         {/* Financial Summary Cards */}
-        <CustomerSummaryCards customer={customer} />
+        <CustomerSummaryCards
+          customer={customer}
+          onEditClick={() => setIsEditModalOpen(true)}
+        />
 
         {/* Complete Customer Overview */}
         <CustomerOverview customer={customer} />
       </div>
+
+      {/* Edit Customer Profile & Limits Modal */}
+      <EditCustomerModal
+        isOpen={isEditModalOpen}
+        onClose={() => setIsEditModalOpen(false)}
+        customer={customer}
+        onSuccess={() => loadCustomer()}
+      />
+
+      {/* Dispatch Customer Alert Modal */}
+      <CustomerSendAlertModal
+        isOpen={isAlertModalOpen}
+        onClose={() => setIsAlertModalOpen(false)}
+        customer={customer}
+        onOpenAutoAlertSettings={() => setIsAutoAlertSettingsOpen(true)}
+      />
+
+      {/* Automatic Alert Thresholds Configuration Form Modal */}
+      <CustomerAutoAlertSettingsModal
+        isOpen={isAutoAlertSettingsOpen}
+        onClose={() => setIsAutoAlertSettingsOpen(false)}
+        onSaved={() => loadCustomer()}
+      />
     </div>
   );
 }

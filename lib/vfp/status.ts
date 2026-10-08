@@ -9,9 +9,52 @@ import VfpTableMap from "@/models/VfpTableMap";
 import VfpWorkerHeartbeat from "@/models/VfpWorkerHeartbeat";
 import VfpConfig from "@/models/VfpConfig";
 import fs from "fs";
+import path from "path";
+import Company from "@/models/Company";
+
+export const CORE_16_SYNC_TABLES = new Set([
+  "acgroup",
+  "billserial",
+  "dis",
+  "gledger",
+  "glmonth",
+  "maorder",
+  "mdis",
+  "mdoc",
+  "order",
+  "pend",
+  "pendings",
+  "pro",
+  "probat",
+  "rate",
+  "saletype",
+  "slipno",
+  "subdis",
+  "support",
+]);
+
+export function cleanBaseTableName(fileName: string): string {
+  let cleaned = fileName.trim().replace(/\.dbf$/i, "");
+  cleaned = cleaned.replace(/[\._][a-zA-Z]?\d+$/i, "");
+  return cleaned.toLowerCase().replace(/[^a-z0-9_]/g, "_").replace(/^_+/, "");
+}
+
+export function formatDisplayPath(rawPath?: string): string {
+  if (!rawPath) return "";
+  const normalized = rawPath.replace(/\\/g, "/").trim().replace(/\/+$/, "");
+  const match = normalized.match(/(?:^|\/)(?:data|vfp_uploads)\/(.+)$/i);
+  if (match && match[1]) {
+    return match[1].replace(/^vfp_uploads\//i, "");
+  }
+  const parts = normalized.split("/").filter(Boolean);
+  if (parts.length >= 2) {
+    return `${parts[parts.length - 2]}/${parts[parts.length - 1]}`;
+  }
+  return normalized;
+}
 
 type SyncStateSummary = {
-  lastSyncedAt?: Date;
+  lastSyncedAt?: Date | null;
   status?: string;
   lastImportedCount?: number;
 };
@@ -28,6 +71,9 @@ type VfpStatusFilter = {
   startDate?: string;
   endDate?: string;
   fileLimit?: number;
+  companyCode?: string;
+  companyId?: string;
+  companyName?: string;
 };
 
 function getDateRangeStart(range: VfpDateRange) {
@@ -176,10 +222,10 @@ export async function getVfpStatus(filter: VfpStatusFilter = {}, email?: string)
     VfpWorkerHeartbeat.findOne({}).sort({ lastSeenAt: -1 }).lean(),
   ]);
 
-  const typedStates = states as SyncStateSummary[];
+  const typedStates = states as unknown as SyncStateSummary[];
 
   const lastSyncedDates = typedStates
-    .map((state) => state.lastSyncedAt)
+    .map((state) => (state.lastSyncedAt ? new Date(state.lastSyncedAt) : undefined))
     .filter((value): value is Date => Boolean(value))
     .sort((a: Date, b: Date) => b.getTime() - a.getTime())[0];
 
@@ -187,14 +233,14 @@ export async function getVfpStatus(filter: VfpStatusFilter = {}, email?: string)
     ["failed", "locked"].includes(state.status || "")
   );
 
-  const importedRows = states.reduce(
+  const importedRows = typedStates.reduce(
     (total: number, state: SyncStateSummary) =>
       total + (state.lastImportedCount || 0),
     0
   );
 
   const filteredImportedRows = rangeFrom
-    ? states.reduce((total: number, state: SyncStateSummary) => {
+    ? typedStates.reduce((total: number, state: SyncStateSummary) => {
         const date = state.lastSyncedAt ? new Date(state.lastSyncedAt) : null;
         return total + (date && date >= rangeFrom ? state.lastImportedCount || 0 : 0);
       }, 0)
@@ -232,6 +278,105 @@ export async function getVfpStatus(filter: VfpStatusFilter = {}, email?: string)
     if (config.vfpExePath) vfpExePath = config.vfpExePath;
     if (config.prgPath) prgPath = config.prgPath;
   }
+
+  // Resolve target company code & name from filter, companyId, or config
+  let targetCompanyCode = filter.companyCode || (config as any)?.companyCode || "";
+  let targetCompanyName = filter.companyName || (config as any)?.companyName || "";
+
+  if ((!targetCompanyCode || !targetCompanyName) && filter.companyId) {
+    try {
+      const compDoc: any = await Company.findById(filter.companyId).lean();
+      if (compDoc) {
+        if (!targetCompanyCode) targetCompanyCode = compDoc.companyCode || compDoc.code || "";
+        if (!targetCompanyName) targetCompanyName = compDoc.companyName || compDoc.name || "";
+      }
+    } catch {}
+  }
+
+  if (!targetCompanyCode) {
+    targetCompanyCode = "DEFAULT";
+  }
+  if (!targetCompanyName) {
+    targetCompanyName = targetCompanyCode === "DEFAULT" ? "Default Company" : targetCompanyCode;
+  }
+
+  const sanitizedEmail = (email || "global").replace(/[^a-zA-Z0-9_-]/g, "_");
+  const sanitizedCompany = targetCompanyCode ? targetCompanyCode.replace(/[^a-zA-Z0-9_-]/g, "_") : "DEFAULT";
+
+  // Priority search for server-side DBF directory targeting this company across all storage locations
+  const baseDataRoots = [
+    "/home/vfpuser/data",
+    path.join(process.cwd(), "data"),
+    path.join(process.cwd(), "data", "vfp_uploads"),
+  ];
+
+  const companyCandidates: (string | undefined | null)[] = [
+    // 1. Direct path for logged-in user and company
+    path.join("/home/vfpuser/data", sanitizedEmail, sanitizedCompany),
+    path.join(process.cwd(), "data", sanitizedEmail, sanitizedCompany),
+    path.join(process.cwd(), "data", "vfp_uploads", sanitizedEmail, sanitizedCompany),
+  ];
+
+  // 2. Direct company folder under base roots
+  for (const root of baseDataRoots) {
+    companyCandidates.push(path.join(root, sanitizedCompany));
+  }
+
+  // 3. Search all user folders under base roots for this company folder
+  for (const root of baseDataRoots) {
+    try {
+      if (fs.existsSync(root)) {
+        const entries = fs.readdirSync(root, { withFileTypes: true });
+        for (const ent of entries) {
+          if (ent.isDirectory()) {
+            const compFolder = path.join(root, ent.name, sanitizedCompany);
+            if (!companyCandidates.includes(compFolder)) {
+              companyCandidates.push(compFolder);
+            }
+          }
+        }
+      }
+    } catch {}
+  }
+
+  // 4. Fallbacks (config paths, user base folders)
+  companyCandidates.push(
+    path.join("/home/vfpuser/data", sanitizedEmail),
+    path.join(process.cwd(), "data", sanitizedEmail),
+    path.join(process.cwd(), "data", "vfp_uploads", sanitizedEmail),
+    config?.consoleSyncDir,
+    config?.sourceDir,
+    config?.dataDir,
+    process.env.VFP_DATA_DIR,
+  );
+
+  let serverDataDir = "";
+  let serverCompanyFiles: string[] = [];
+
+  for (const c of (companyCandidates.filter(Boolean) as string[])) {
+    try {
+      if (fs.existsSync(c)) {
+        const entries = fs.readdirSync(c);
+        const validFiles = entries.filter((f) => {
+          if (!f.toLowerCase().endsWith(".dbf")) return false;
+          const base = cleanBaseTableName(f);
+          return CORE_16_SYNC_TABLES.has(base);
+        });
+        if (validFiles.length > 0) {
+          serverDataDir = c;
+          serverCompanyFiles = validFiles;
+          break;
+        }
+      }
+    } catch {}
+  }
+
+  if (serverDataDir) {
+    dataDir = serverDataDir;
+    consoleSyncDir = serverDataDir;
+    enabledFiles = serverCompanyFiles;
+  }
+
   const dataDirExists = Boolean(dataDir) && fs.existsSync(dataDir);
   const heartbeat = workerHeartbeat as
     | {
@@ -245,12 +390,12 @@ export async function getVfpStatus(filter: VfpStatusFilter = {}, email?: string)
     ? new Date(heartbeat.lastSeenAt)
     : undefined;
   const workerOnline =
-    dataDirExists || (Boolean(lastSeenAt) && Date.now() - Number(lastSeenAt) < 30_000);
+    dataDirExists || serverCompanyFiles.length > 0 || (Boolean(lastSeenAt) && Date.now() - Number(lastSeenAt) < 30_000);
 
   return {
-    workerConfigured: Boolean(dataDir),
+    workerConfigured: Boolean(dataDir) || serverCompanyFiles.length > 0,
     workerOnline,
-    workerStatus: dataDirExists ? "Active" : (heartbeat?.status || "offline"),
+    workerStatus: (dataDirExists || serverCompanyFiles.length > 0) ? "Active" : (heartbeat?.status || "offline"),
     workerLastSeenAt: lastSeenAt,
     workerLastError: heartbeat?.lastError || "",
     workerLastRunReason: heartbeat?.lastRunReason || "",
@@ -259,21 +404,25 @@ export async function getVfpStatus(filter: VfpStatusFilter = {}, email?: string)
     sourceDir,
     consoleSyncDir,
     enabledFiles,
+    serverFiles: serverCompanyFiles,
+    serverFileCount: serverCompanyFiles.length,
+    serverDataDir,
+    displayDataDir: formatDisplayPath(serverDataDir || dataDir),
     autoSync,
     autoSyncInterval,
     useVfpEngine,
     vfpExePath,
     prgPath,
     conflictPolicy: process.env.VFP_CONFLICT_POLICY || "vfp_wins",
-    tableCount,
+    tableCount: serverCompanyFiles.length > 0 ? serverCompanyFiles.length : tableCount,
     importedRows: filteredImportedRows,
     failedCount: failedTables.length,
     conflictCount,
     pendingOutboundCount,
     pendingCommandCount,
-    companyCode: config?.companyCode || "DEFAULT",
-    companyName: config?.companyName || "Default Company",
-    fileCount,
+    companyCode: targetCompanyCode,
+    companyName: targetCompanyName,
+    fileCount: serverCompanyFiles.length > 0 ? serverCompanyFiles.length : fileCount,
     storedFileCount,
     failedFileCount,
     trackedBytes,
@@ -290,6 +439,10 @@ export async function getVfpStatus(filter: VfpStatusFilter = {}, email?: string)
         }
       }
       return recentLogs.filter((log) => {
+        // Exclude 0-row empty success logs
+        if (log.status === "success" && log.importedCount === 0) return false;
+        if (log.message && /0 rows/i.test(log.message)) return false;
+
         if (log.status === "running") {
           const key = `${log.runId || ""}_${log.tableName || log.action || ""}`;
           if (completedKeys.has(key)) return false;

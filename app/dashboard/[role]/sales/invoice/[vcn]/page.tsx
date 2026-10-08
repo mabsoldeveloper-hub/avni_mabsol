@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
+import { ArrowLeft, Printer } from "lucide-react";
 
 export default function InvoiceView() {
     const params = useParams();
@@ -9,17 +10,26 @@ export default function InvoiceView() {
     const [invoice, setInvoice] = useState<any>(null);
 
     const rawVcn = params?.vcn;
-    const vcnStr = Array.isArray(rawVcn) ? rawVcn[0] : (rawVcn || "");
+    const role = (params?.role as string) || "admin";
+
+    const cleanVcn = (() => {
+        let v = Array.isArray(rawVcn) ? rawVcn[0] : (rawVcn || "");
+        try {
+            v = decodeURIComponent(v);
+        } catch {}
+        return String(v).trim();
+    })();
 
     useEffect(() => {
-        if (vcnStr) {
-            loadInvoice(vcnStr);
+        if (cleanVcn) {
+            loadInvoice(cleanVcn);
         }
-    }, [vcnStr]);
+    }, [cleanVcn]);
 
     const loadInvoice = async (targetVcn: string) => {
         try {
-            const res = await fetch(`/api/sales/invoice/${encodeURIComponent(targetVcn)}`);
+            const enc = encodeURIComponent(targetVcn);
+            const res = await fetch(`/api/sales/invoice/${enc}?v=${enc}`);
             const data = await res.json();
             setInvoice(data);
         } catch {
@@ -42,13 +52,20 @@ export default function InvoiceView() {
         return (
             <div className="flex min-h-[60vh] flex-col items-center justify-center gap-4 text-slate-600">
                 <div className="rounded-2xl border border-slate-200 bg-white p-8 text-center shadow-lg">
-                    <h3 className="text-lg font-bold text-slate-800">Invoice #{vcnStr || "N/A"} Not Found</h3>
+                    <h3 className="text-lg font-bold text-slate-800">Invoice #{cleanVcn || "N/A"} Not Found</h3>
                     <p className="mt-1 text-xs text-slate-500">{invoice.message || "The requested invoice or purchase voucher could not be located."}</p>
                     <button
-                        onClick={() => router.push("/dashboard/sales/invoice")}
-                        className="mt-4 rounded-xl bg-indigo-600 px-4 py-2 text-xs font-bold text-white shadow transition hover:bg-indigo-700"
+                        onClick={() => {
+                            if (typeof window !== "undefined" && window.history.length > 1) {
+                                router.back();
+                            } else {
+                                router.push(`/dashboard/${role}/sales/invoice`);
+                            }
+                        }}
+                        className="mt-4 inline-flex items-center gap-1.5 rounded-xl bg-indigo-600 px-4 py-2 text-xs font-bold text-white shadow transition hover:bg-indigo-700"
                     >
-                        &larr; Back to Invoices List
+                        <ArrowLeft className="h-4 w-4" />
+                        Back to Invoices List
                     </button>
                 </div>
             </div>
@@ -57,7 +74,7 @@ export default function InvoiceView() {
 
     const h = invoice.header;
     const c = invoice.customer;
-    const s = invoice.summary;
+    const s = invoice.summary || {};
 
     const money = (v: any) =>
         v === undefined || v === null || v === ""
@@ -156,21 +173,23 @@ export default function InvoiceView() {
             {/* Toolbar — hidden on print */}
             <div className="mx-auto mb-4 flex max-w-4xl items-center justify-between px-4 print:hidden">
                 <button
-                    onClick={() => router.back()}
+                    onClick={() => {
+                        if (typeof window !== "undefined" && window.history.length > 1) {
+                            router.back();
+                        } else {
+                            router.push(`/dashboard/${role}/sales/invoice`);
+                        }
+                    }}
                     className="inline-flex items-center gap-1.5 rounded-md border border-slate-300 bg-white px-3.5 py-2 text-sm font-medium text-slate-700 shadow-sm transition hover:bg-slate-50"
                 >
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                        <path d="M15 18l-6-6 6-6" />
-                    </svg>
+                    <ArrowLeft className="h-4 w-4" />
                     Back
                 </button>
                 <button
                     onClick={() => window.print()}
                     className="inline-flex items-center gap-1.5 rounded-md bg-indigo-600 px-3.5 py-2 text-sm font-medium text-white shadow-sm shadow-indigo-200 transition hover:bg-indigo-700"
                 >
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                        <path d="M6 9V2h12v7M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2M6 14h12v8H6z" />
-                    </svg>
+                    <Printer className="h-4 w-4" />
                     Print
                 </button>
             </div>
@@ -243,23 +262,31 @@ export default function InvoiceView() {
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100">
-                            {invoice.items.map((item: any, i: number) => (
-                                <tr key={i} className="text-slate-700 odd:bg-indigo-50/30">
-                                    <td className="py-2.5 pr-2 text-slate-400">{i + 1}</td>
-                                    <td className="py-2.5 pr-2 font-medium text-slate-900">{item.product}</td>
-                                    <td className="py-2.5 pr-2 text-slate-500">{item.company}</td>
-                                    <td className="py-2.5 pr-2 font-mono text-xs text-slate-500">{item.batch}</td>
-                                    <td className="py-2.5 pr-2 text-slate-500">{item.expiry}</td>
-                                    <td className="py-2.5 pr-2 text-right tabular-nums">{item.qty}</td>
-                                    <td className="py-2.5 pr-2 text-right tabular-nums text-slate-400">{item.free}</td>
-                                    <td className="py-2.5 pr-2 text-right tabular-nums">{money(item.rate)}</td>
-                                    <td className="py-2.5 pr-2 text-right tabular-nums">{money(item.mrp)}</td>
-                                    <td className="py-2.5 pr-2 text-right tabular-nums">{item.taxPct !== undefined ? item.taxPct : item.tax || 0}%</td>
-                                    <td className="py-2.5 pl-2 text-right tabular-nums font-semibold text-indigo-700">
-                                        {money(item.amount)}
+                            {(invoice.items || []).length > 0 ? (
+                                invoice.items.map((item: any, i: number) => (
+                                    <tr key={i} className="text-slate-700 odd:bg-indigo-50/30">
+                                        <td className="py-2.5 pr-2 text-slate-400">{i + 1}</td>
+                                        <td className="py-2.5 pr-2 font-medium text-slate-900">{item.product}</td>
+                                        <td className="py-2.5 pr-2 text-slate-500">{item.company}</td>
+                                        <td className="py-2.5 pr-2 font-mono text-xs text-slate-500">{item.batch}</td>
+                                        <td className="py-2.5 pr-2 text-slate-500">{item.expiry}</td>
+                                        <td className="py-2.5 pr-2 text-right tabular-nums">{item.qty}</td>
+                                        <td className="py-2.5 pr-2 text-right tabular-nums text-slate-400">{item.free}</td>
+                                        <td className="py-2.5 pr-2 text-right tabular-nums">{money(item.rate)}</td>
+                                        <td className="py-2.5 pr-2 text-right tabular-nums">{money(item.mrp)}</td>
+                                        <td className="py-2.5 pr-2 text-right tabular-nums">{item.taxPct !== undefined ? item.taxPct : item.tax || 0}%</td>
+                                        <td className="py-2.5 pl-2 text-right tabular-nums font-semibold text-indigo-700">
+                                            {money(item.amount)}
+                                        </td>
+                                    </tr>
+                                ))
+                            ) : (
+                                <tr>
+                                    <td colSpan={11} className="py-6 text-center text-xs text-slate-400">
+                                        No line items recorded for this invoice voucher.
                                     </td>
                                 </tr>
-                            ))}
+                            )}
                         </tbody>
                     </table>
                 </div>

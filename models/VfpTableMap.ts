@@ -43,13 +43,26 @@ const VfpTableMapSchema = new mongoose.Schema(
       type: Boolean,
       default: true,
     },
+    companyCode: {
+      type: String,
+      default: "",
+    },
+    companyId: {
+      type: String,
+      default: "",
+    },
+    companyName: {
+      type: String,
+      default: "",
+    },
   },
   {
     timestamps: true,
+    strict: false,
   }
 );
 
-VfpTableMapSchema.index({ fileName: 1, email: 1 }, { unique: true });
+VfpTableMapSchema.index({ fileName: 1, email: 1, companyCode: 1 });
 
 if (mongoose.models.VfpTableMap) {
   delete mongoose.models.VfpTableMap;

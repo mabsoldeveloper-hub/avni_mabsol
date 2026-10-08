@@ -9,7 +9,7 @@ const loginForm = document.getElementById("loginForm");
 const cloudUrlInput = document.getElementById("cloudUrlInput");
 const btnServerPhcrm = document.getElementById("btnServerPhcrm");
 const btnServerMbh = document.getElementById("btnServerMbh");
-const btnServerLocal = document.getElementById("btnServerLocal");
+const btnServerLocalhost = document.getElementById("btnServerLocalhost");
 const emailInput = document.getElementById("emailInput");
 const passwordInput = document.getElementById("passwordInput");
 const loginBtn = document.getElementById("loginBtn");
@@ -176,17 +176,33 @@ function updateTermsState(isAgreed) {
 }
 window.updateTermsState = updateTermsState;
 
+function cleanCompanyName(name) {
+  if (!name) return "";
+  let s = String(name).trim();
+  s = s.replace(/[\s\-_/\\|]*new[\s_-]*folder(\s*\(\d+\))?[\s\-_/\\|]*/gi, " ").trim();
+  s = s.replace(/^[-_\s/\\|]+|[-_\s/\\|]+$/g, "").trim();
+  const lower = s.toLowerCase();
+  if (lower === "default" || lower === "test" || lower === "organization" || lower === "your organization" || lower === "new folder") {
+    return "";
+  }
+  return s;
+}
+
 function updateActiveServerButtons(url) {
   const normalized = (url || "").trim().toLowerCase().replace(/\/+$/, "");
   const buttons = [
     { btn: btnServerPhcrm, url: "https://phcrm.mabsolinfotech.cloud" },
     { btn: btnServerMbh, url: "https://mbh.crm.mabsolinfotech.cloud" },
-    { btn: btnServerLocal, url: "http://localhost:3000" }
+    { btn: btnServerLocalhost, url: "http://localhost:3000" }
   ];
 
   buttons.forEach(({ btn, url: targetUrl }) => {
     if (!btn) return;
-    if (normalized === targetUrl.toLowerCase()) {
+    const isLocal = targetUrl.includes("localhost");
+    const matches = isLocal
+      ? normalized.includes("localhost") || normalized.includes("127.0.0.1")
+      : normalized === targetUrl.toLowerCase();
+    if (matches) {
       btn.classList.add("active");
     } else {
       btn.classList.remove("active");
@@ -302,13 +318,24 @@ async function loadAndDisplayConfig() {
       const isPlaceholderComp = (val) => {
         if (!val) return true;
         const s = String(val).trim().toLowerCase();
-        return s === "your organization" || s === "organization" || s === "default" || s === "test";
+        return (
+          s === "your organization" ||
+          s === "organization" ||
+          s === "default" ||
+          s === "test" ||
+          s === "new folder" ||
+          s === "new_folder" ||
+          s.startsWith("new folder") ||
+          s.startsWith("new_folder")
+        );
       };
 
-      if (cfg.companyName && !isPlaceholderComp(cfg.companyName)) {
-        companyNameInput.value = cfg.companyName;
-      } else if (compNameFromUser && !isPlaceholderComp(compNameFromUser)) {
-        companyNameInput.value = compNameFromUser;
+      const cleanFromCfg = cleanCompanyName(cfg.companyName);
+      const cleanFromUser = cleanCompanyName(compNameFromUser);
+      if (cleanFromCfg && !isPlaceholderComp(cleanFromCfg)) {
+        companyNameInput.value = cleanFromCfg;
+      } else if (cleanFromUser && !isPlaceholderComp(cleanFromUser)) {
+        companyNameInput.value = cleanFromUser;
       } else {
         companyNameInput.value = "";
       }
@@ -416,15 +443,26 @@ function renderBranchDropdown(branches, selectedCode) {
   let matched = false;
   branches.forEach(b => {
     const opt = document.createElement("option");
-    const crmCode = b.crmCompanyCode || b.companyCode || "";
+    const crmCode = (b.crmCompanyCode || b.companyCode || "").trim().toUpperCase();
     opt.value = crmCode;
-    const isSelected = selectedCode && crmCode.toUpperCase() === selectedCode.toUpperCase();
+    const isSelected = selectedCode && crmCode === selectedCode.toUpperCase();
     if (isSelected) matched = true;
     opt.selected = isSelected;
-    const folderHint = b.sourceDir ? "📁 Linked" : "⚠️ No folder";
-    const decCode = b.decryptCode || (b.companyCode !== crmCode ? b.companyCode : "");
-    const decHint = decCode ? decCode : "";
-    opt.textContent = `${b.companyName || crmCode} [${crmCode}]${decHint} (${folderHint})`;
+
+    // Remove any "new folder" text and do NOT show folder naming or hints in the option
+    const cleanName = cleanCompanyName(b.companyName);
+    let displayName = "";
+    if (cleanName && crmCode) {
+      displayName = `${cleanName} [${crmCode}]`;
+    } else if (cleanName) {
+      displayName = cleanName;
+    } else if (crmCode) {
+      displayName = `Company [${crmCode}]`;
+    } else {
+      displayName = "Company";
+    }
+
+    opt.textContent = displayName;
     branchSelectDropdown.appendChild(opt);
   });
 
@@ -436,13 +474,13 @@ function renderBranchDropdown(branches, selectedCode) {
   const active = branches.find(b => (b.crmCompanyCode || b.companyCode || "").toUpperCase() === activeVal.toUpperCase());
   if (branchBadgeStatus) {
     if (active?.sourceDir) {
-      branchBadgeStatus.textContent = "Folder Linked ✓";
+      branchBadgeStatus.textContent = "Configured ✓";
       branchBadgeStatus.style.borderColor = "rgba(34, 197, 94, 0.4)";
       branchBadgeStatus.style.color = "#4ade80";
     } else {
-      branchBadgeStatus.textContent = "Needs Folder";
-      branchBadgeStatus.style.borderColor = "rgba(245, 158, 11, 0.4)";
-      branchBadgeStatus.style.color = "#fbbf24";
+      branchBadgeStatus.textContent = "Ready";
+      branchBadgeStatus.style.borderColor = "rgba(56, 189, 248, 0.4)";
+      branchBadgeStatus.style.color = "#38bdf8";
     }
   }
 }
@@ -453,7 +491,8 @@ async function handleBranchChange(newCode) {
     const res = await window.electronAPI.switchBranchProfile(newCode);
     if (res && res.success && res.profile) {
       const p = res.profile;
-      if (companyNameInput) companyNameInput.value = p.companyName || "";
+      const cleanName = cleanCompanyName(p.companyName);
+      if (companyNameInput) companyNameInput.value = cleanName || "";
       if (crmCompanyCodeInput) crmCompanyCodeInput.value = p.crmCompanyCode || p.companyCode || "";
       const extractVal = p.decryptCode || p.extractCode || (p.companyCode !== (p.crmCompanyCode || "") ? p.companyCode : "");
       if (companyCodeInput) companyCodeInput.value = extractVal || "";
@@ -472,17 +511,18 @@ async function handleBranchChange(newCode) {
       }
       if (branchBadgeStatus) {
         if (p.sourceDir) {
-          branchBadgeStatus.textContent = "Folder Linked ✓";
+          branchBadgeStatus.textContent = "Configured ✓";
           branchBadgeStatus.style.borderColor = "rgba(34, 197, 94, 0.4)";
           branchBadgeStatus.style.color = "#4ade80";
         } else {
-          branchBadgeStatus.textContent = "Needs Folder";
-          branchBadgeStatus.style.borderColor = "rgba(245, 158, 11, 0.4)";
-          branchBadgeStatus.style.color = "#fbbf24";
+          branchBadgeStatus.textContent = "Ready";
+          branchBadgeStatus.style.borderColor = "rgba(56, 189, 248, 0.4)";
+          branchBadgeStatus.style.color = "#38bdf8";
         }
       }
       updateSyncButtonRequirementState();
-      showToast(`Switched active branch to ${p.companyName || p.companyCode}`, "info");
+      const displayTitle = cleanName || p.crmCompanyCode || p.companyCode || "Company";
+      showToast(`Switched active branch to ${displayTitle}`, "info");
     }
   } catch (err) {
     console.error("Failed to switch branch:", err);
@@ -828,17 +868,22 @@ function setupEventListeners() {
     btn.addEventListener("click", () => {
       cloudUrlInput.value = url;
       updateActiveServerButtons(url);
+      updateServerEnvDisplay(url);
+      if (window.electronAPI?.setCloudUrl) {
+        window.electronAPI.setCloudUrl(url);
+      }
       cloudUrlInput.focus();
     });
   };
 
   bindServerBtn(btnServerPhcrm, "https://phcrm.mabsolinfotech.cloud");
   bindServerBtn(btnServerMbh, "https://mbh.crm.mabsolinfotech.cloud");
-  bindServerBtn(btnServerLocal, "http://localhost:3000");
+  bindServerBtn(btnServerLocalhost, "http://localhost:3000");
 
   if (cloudUrlInput) {
     cloudUrlInput.addEventListener("input", () => {
       updateActiveServerButtons(cloudUrlInput.value);
+      updateServerEnvDisplay(cloudUrlInput.value);
     });
   }
 
@@ -2818,6 +2863,8 @@ function setupEventListeners() {
     const licenseKey = (licenseKeyInput?.value || "").trim();
     const companyCode = (companyCodeInput?.value || "").trim();
     const sourceDir = (sourceDirInput?.value || "").trim();
+    const crmCompanyCode = (crmCompanyCodeInput?.value || branchSelectDropdown?.value || "").trim().toUpperCase();
+    const companyName = (companyNameInput?.value || "").trim();
     const termsAccepted = Boolean(termsConsentCheckbox && termsConsentCheckbox.checked);
 
     if (!licenseKey || !companyCode || isPlaceholderComp(companyCode) || !sourceDir || !termsAccepted) {
@@ -2832,9 +2879,25 @@ function setupEventListeners() {
       return;
     }
 
+    // Persist active branch profile with latest configuration
+    if (crmCompanyCode) {
+      await window.electronAPI?.saveBranchProfile({
+        companyCode: crmCompanyCode,
+        crmCompanyCode,
+        companyName,
+        decryptCode: companyCode,
+        sourceDir
+      }).catch(() => {});
+    }
+
     setSyncButtonLoading(true);
     try {
-      const res = await window.electronAPI.startSync();
+      const res = await window.electronAPI.startSync({
+        branchCode: crmCompanyCode,
+        companyCode,
+        sourceDir,
+        companyName
+      });
       if (!res.success) {
         statLastStatus.textContent = "Error";
         const needsDevVerification = Boolean(
@@ -3132,34 +3195,78 @@ const serverEnvToggleBtn = document.getElementById("serverEnvToggleBtn");
 const serverEnvIcon = document.getElementById("serverEnvIcon");
 const serverEnvLabel = document.getElementById("serverEnvLabel");
 
+function normalizeTargetUrl(url) {
+  const clean = (url || "").trim().toLowerCase();
+  if (clean.includes("localhost") || clean.includes("127.0.0.1")) {
+    return "http://localhost:3000";
+  }
+  if (clean.includes("mbh.crm")) {
+    return "https://mbh.crm.mabsolinfotech.cloud";
+  }
+  return "https://phcrm.mabsolinfotech.cloud";
+}
+
 function updateServerEnvDisplay(url) {
-  const isLocal = Boolean(url && (url.includes("localhost") || url.includes("127.0.0.1")));
-  if (serverEnvLabel) serverEnvLabel.textContent = isLocal ? "Localhost (3000)" : "Cloud";
-  if (serverEnvIcon) serverEnvIcon.textContent = isLocal ? "💻" : "☁️";
+  const canonicalUrl = normalizeTargetUrl(url);
+  const isLocal = canonicalUrl.includes("localhost");
+  const isMbh = canonicalUrl.includes("mbh.crm");
+
+  if (serverEnvLabel) {
+    serverEnvLabel.textContent = isLocal ? "Localhost" : (isMbh ? "MBH Cloud" : "Cloud");
+  }
+  if (serverEnvIcon) {
+    serverEnvIcon.textContent = isLocal ? "💻" : "☁️";
+  }
+  if (serverEnvToggleBtn) {
+    const label = isLocal ? "Localhost Testing" : (isMbh ? "MBH Cloud" : "Cloud Production");
+    serverEnvToggleBtn.title = `Target Server: ${label} (${canonicalUrl})`;
+  }
+
   if (devActServerSelect) {
-    devActServerSelect.value = isLocal ? "http://localhost:3000" : "https://phcrm.mabsolinfotech.cloud";
+    devActServerSelect.value = canonicalUrl;
+  }
+
+  if (cloudUrlInput) {
+    cloudUrlInput.value = canonicalUrl;
+    updateActiveServerButtons(canonicalUrl);
   }
 }
 
 serverEnvToggleBtn?.addEventListener("click", async () => {
-  const currentVal = devActServerSelect?.value || (serverEnvLabel?.textContent?.includes("Local") ? "http://localhost:3000" : "https://phcrm.mabsolinfotech.cloud");
-  const nextVal = currentVal.includes("localhost") ? "https://phcrm.mabsolinfotech.cloud" : "http://localhost:3000";
+  const currentVal = normalizeTargetUrl(devActServerSelect?.value || cloudUrlInput?.value);
+  let nextVal = "https://phcrm.mabsolinfotech.cloud";
+  if (currentVal.includes("phcrm")) {
+    nextVal = "https://mbh.crm.mabsolinfotech.cloud";
+  } else if (currentVal.includes("mbh")) {
+    nextVal = "http://localhost:3000";
+  } else {
+    nextVal = "https://phcrm.mabsolinfotech.cloud";
+  }
+
   if (window.electronAPI?.setCloudUrl) {
-    const res = await window.electronAPI.setCloudUrl(nextVal);
-    if (res?.success) {
-      updateServerEnvDisplay(nextVal);
-      showToast(`Target server set to ${nextVal.includes("localhost") ? "Local Dev (localhost:3000)" : "Cloud Production"}`, "info");
-    }
+    await window.electronAPI.setCloudUrl(nextVal);
+  }
+  updateServerEnvDisplay(nextVal);
+  showToast(`Target server switched to: ${nextVal}`, "info");
+
+  if (deviceActivationModal && !deviceActivationModal.classList.contains("hidden")) {
+    currentActiveAgentPin = "";
+    await requestAndDisplayAgentPin();
   }
 });
 
 devActServerSelect?.addEventListener("change", async () => {
-  const chosen = devActServerSelect.value;
+  const chosen = normalizeTargetUrl(devActServerSelect.value);
   if (window.electronAPI?.setCloudUrl) {
     await window.electronAPI.setCloudUrl(chosen);
   }
   updateServerEnvDisplay(chosen);
-  showToast(`Target server set to: ${chosen}`, "info");
+  showToast(`Target server switched to: ${chosen}`, "info");
+
+  // Immediately request a fresh PIN from the newly selected target server!
+  currentActiveAgentPin = "";
+  if (devActPinDisplay) devActPinDisplay.textContent = "⏳ ...";
+  await requestAndDisplayAgentPin();
 });
 
 let currentActiveAgentPin = "";
@@ -3192,32 +3299,46 @@ function stopPinPolling() {
 async function requestAndDisplayAgentPin() {
   stopPinPolling();
   setButtonLoading(btnDevActRequestPin, true);
+  if (btnDevActRegenPin) btnDevActRegenPin.disabled = true;
+  if (devActPinDisplay) devActPinDisplay.textContent = "⏳ ...";
   try {
     let email = devActTargetEmail || currentAuthEmail || (emailInput ? emailInput.value.trim() : "");
     const cloudUrl = devActServerSelect?.value || (cloudUrlInput ? cloudUrlInput.value.trim() : "");
     const res = await window.electronAPI.requestAgentPin({ cloudUrl, email });
     setButtonLoading(btnDevActRequestPin, false);
+    if (btnDevActRegenPin) btnDevActRegenPin.disabled = false;
     if (res && res.success && res.pin) {
       if (res.cloudUrl) {
         updateServerEnvDisplay(res.cloudUrl);
       }
       currentActiveAgentPin = res.pin;
       if (devActPinDisplay) devActPinDisplay.textContent = res.pin;
+      if (res.deviceId && devActDeviceId) devActDeviceId.textContent = res.deviceId;
+      if (res.deviceName && devActMachineName) devActMachineName.textContent = res.deviceName;
       devActPinInitial?.classList.add("hidden");
       devActPinActiveCard?.classList.remove("hidden");
       startPinPolling(res.pin);
       showToast(`Agent PIN generated: ${res.pin}. Enter this on Web CRM!`, "success");
     } else {
+      if (devActPinDisplay) devActPinDisplay.textContent = currentActiveAgentPin || "------";
       showToast(res?.error || "Failed to generate Agent PIN.", "error");
     }
   } catch (err) {
     setButtonLoading(btnDevActRequestPin, false);
+    if (btnDevActRegenPin) btnDevActRegenPin.disabled = false;
+    if (devActPinDisplay) devActPinDisplay.textContent = currentActiveAgentPin || "------";
     showToast(err.message || "Failed to generate PIN.", "error");
   }
 }
 
-btnDevActRequestPin?.addEventListener("click", requestAndDisplayAgentPin);
-btnDevActRegenPin?.addEventListener("click", requestAndDisplayAgentPin);
+btnDevActRequestPin?.addEventListener("click", () => {
+  currentActiveAgentPin = "";
+  requestAndDisplayAgentPin();
+});
+btnDevActRegenPin?.addEventListener("click", () => {
+  currentActiveAgentPin = "";
+  requestAndDisplayAgentPin();
+});
 
 btnGeneratePinAgent?.addEventListener("click", () => {
   openDeviceActivationModal({
@@ -3225,7 +3346,6 @@ btnGeneratePinAgent?.addEventListener("click", () => {
     licenseKey: licenseKeyInput ? licenseKeyInput.value.trim() : ""
   });
   switchDevActTab("pin");
-  requestAndDisplayAgentPin();
 });
 
 btnCopyAgentPin?.addEventListener("click", () => {

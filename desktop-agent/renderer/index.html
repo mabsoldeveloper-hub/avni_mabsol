@@ -52,9 +52,9 @@
               <span class="server-choice-title">mbh.crm.mabsolinfotech.cloud</span>
               <span class="server-choice-sub">MBH Cloud</span>
             </button>
-            <button type="button" class="server-choice-btn local-btn" id="btnServerLocal" data-url="http://localhost:3000">
-              <span class="server-choice-title">Local Dev Server</span>
-              <span class="server-choice-sub">http://localhost:3000</span>
+            <button type="button" class="server-choice-btn local-btn" id="btnServerLocalhost" data-url="http://localhost:3000">
+              <span class="server-choice-title">💻 Localhost (Testing): http://localhost:3000</span>
+              <span class="server-choice-sub">Local Development Testing</span>
             </button>
           </div>
           <input type="url" id="cloudUrlInput" value="https://phcrm.mabsolinfotech.cloud" required
@@ -442,7 +442,7 @@
             <span class="dot"></span>
             <span class="label">Online</span>
           </div>
-          <button type="button" id="serverEnvToggleBtn" class="status-pill" style="background: rgba(56, 189, 248, 0.1); border: 1px solid rgba(56, 189, 248, 0.3); color: #38bdf8; font-size: 11px; font-weight: 600; cursor: pointer; padding: 2px 9px; border-radius: 9999px; margin-left: 4px; display: inline-flex; align-items: center; gap: 4px;" title="Target Server: Click to toggle Cloud / Localhost">
+          <button type="button" id="serverEnvToggleBtn" class="status-pill" style="background: rgba(56, 189, 248, 0.1); border: 1px solid rgba(56, 189, 248, 0.3); color: #38bdf8; font-size: 11px; font-weight: 600; cursor: pointer; padding: 2px 9px; border-radius: 9999px; margin-left: 4px; display: inline-flex; align-items: center; gap: 4px;" title="Target Server: Cloud Production">
             <span id="serverEnvIcon">☁️</span>
             <span id="serverEnvLabel">Cloud</span>
           </button>
@@ -881,7 +881,8 @@
             <span style="color: #94a3b8;">Target Server:</span>
             <select id="devActServerSelect" style="background: rgba(15, 23, 42, 0.9); color: #38bdf8; border: 1px solid rgba(56, 189, 248, 0.4); border-radius: 4px; padding: 2px 8px; font-size: 11px; outline: none; cursor: pointer; font-weight: 600;">
               <option value="https://phcrm.mabsolinfotech.cloud">☁️ Cloud Production</option>
-              <option value="http://localhost:3000">💻 Local Dev (localhost:3000)</option>
+              <option value="https://mbh.crm.mabsolinfotech.cloud">☁️ MBH Cloud</option>
+              <option value="http://localhost:3000">💻 Localhost (Testing)</option>
             </select>
           </div>
         </div>

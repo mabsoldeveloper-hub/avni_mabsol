@@ -50,9 +50,11 @@ async function dbConnect() {
       }
       if (colNames.includes("vfpsyncstates")) {
         await db.collection("vfpsyncstates").dropIndex("tableName_1").catch(() => {});
+        await db.collection("vfpsyncstates").dropIndex("tableName_1_email_1").catch(() => {});
       }
       if (colNames.includes("vfptablemaps")) {
         await db.collection("vfptablemaps").dropIndex("fileName_1").catch(() => {});
+        await db.collection("vfptablemaps").dropIndex("fileName_1_email_1").catch(() => {});
       }
       if (colNames.includes("vfpfileassets")) {
         await db.collection("vfpfileassets").dropIndex("relativePath_1").catch(() => {});
@@ -84,18 +86,20 @@ async function dbConnect() {
   if (!globalForWorker.vfpWorkerStarted) {
     globalForWorker.vfpWorkerStarted = true;
     try {
-      const req = eval("require");
-      const { spawn } = req("child_process");
-      const path = req("path");
-      const workerScript = path.join(process.cwd(), "scripts", "vfp-sync", "worker.cjs");
+      const nodeRequire = eval("require");
+      const { spawn } = nodeRequire("child_process");
+      const path = nodeRequire("path");
+      const fs = nodeRequire("fs");
+      const workerScript = path.join(process.cwd(), "scripts", "mabsolcrm-sync", "worker.cjs");
       
-      console.log(`[server] Launching VFP background worker automatically: ${workerScript}`);
-      const child = spawn("node", [workerScript], {
-        detached: true,
-        stdio: "ignore",
-        cwd: process.cwd(),
-      });
-      child.unref();
+      if (fs.existsSync(workerScript)) {
+        const child = spawn("node", [workerScript], {
+          detached: true,
+          stdio: "ignore",
+          cwd: process.cwd(),
+        });
+        child.unref();
+      }
     } catch (workerErr) {
       console.error("[server] Failed to auto-launch VFP background worker:", workerErr);
     }

@@ -4,7 +4,7 @@ import path from "path";
 import dbConnect from "@/lib/mongodb";
 import VfpConfig from "@/models/VfpConfig";
 import VfpSyncState from "@/models/VfpSyncState";
-import { performDirectServerSync } from "@/lib/vfp/dbfSync";
+import { performDirectServerSync, CORE_16_SYNC_TABLES } from "@/lib/vfp/dbfSync";
 
 // Persistent global singleton across Next.js reloads
 declare global {
@@ -32,9 +32,7 @@ const schedulerState = globalThis.__vfpServerSyncScheduler!;
 export function resolveServerCompanyDir(config: any): string | null {
   if (!config) return null;
 
-  const email = config.email;
-  if (!email || typeof email !== "string" || !email.includes("@")) return null;
-
+  const email = config.email || "global";
   const sanitizedEmail = email.replace(/[^a-zA-Z0-9_-]/g, "_");
   const rawCompany = config.companyCode;
   const companySub = rawCompany ? String(rawCompany).trim().replace(/[^a-zA-Z0-9_-]/g, "_") : "DEFAULT";
@@ -57,24 +55,52 @@ export function resolveServerCompanyDir(config: any): string | null {
     return null;
   };
 
-  // Strictly user-scoped candidate paths ONLY
-  const candidates = [
-    // 1. Company specific server folder for THIS user
-    path.join(process.cwd(), "data", sanitizedEmail, companySub),
-    path.join("/home/vfpuser/data", sanitizedEmail, companySub),
-    // 2. User specific server folder for THIS user
-    path.join(process.cwd(), "data", sanitizedEmail),
-    path.join("/home/vfpuser/data", sanitizedEmail),
-    // 3. User configured consoleSyncDir / dataDir (validate it contains user's identifier or exists)
-    config.consoleSyncDir,
-    config.dataDir,
+  const baseDataRoots = [
+    "/home/vfpuser/data",
+    path.join(process.cwd(), "data"),
+    path.join(process.cwd(), "data", "vfp_uploads"),
   ];
 
-  for (const c of candidates) {
-    if (c && typeof c === "string") {
-      const found = findDbfInDir(c);
-      if (found) return found;
-    }
+  // Candidates for company server directory
+  const candidates: (string | undefined | null)[] = [
+    // 1. Company specific server folder for THIS user
+    path.join("/home/vfpuser/data", sanitizedEmail, companySub),
+    path.join(process.cwd(), "data", sanitizedEmail, companySub),
+    path.join(process.cwd(), "data", "vfp_uploads", sanitizedEmail, companySub),
+  ];
+
+  // 2. Direct company folder under base roots
+  for (const root of baseDataRoots) {
+    candidates.push(path.join(root, companySub));
+  }
+
+  // 3. Across all user folders under base roots
+  for (const root of baseDataRoots) {
+    try {
+      if (fs.existsSync(root)) {
+        const subDirs = fs.readdirSync(root, { withFileTypes: true });
+        for (const s of subDirs) {
+          if (s.isDirectory()) {
+            candidates.push(path.join(root, s.name, companySub));
+          }
+        }
+      }
+    } catch {}
+  }
+
+  // 4. Fallbacks
+  candidates.push(
+    path.join("/home/vfpuser/data", sanitizedEmail),
+    path.join(process.cwd(), "data", sanitizedEmail),
+    config.consoleSyncDir,
+    config.dataDir,
+    "/home/vfpuser/data",
+    path.join(process.cwd(), "data"),
+  );
+
+  for (const c of (candidates.filter(Boolean) as string[])) {
+    const found = findDbfInDir(c);
+    if (found) return found;
   }
 
   return null;
@@ -83,13 +109,20 @@ export function resolveServerCompanyDir(config: any): string | null {
 /**
  * Check if the DBF files in target directory have changed compared to last known sync
  */
-export async function hasDirectoryChanged(email: string, dirPath: string): Promise<boolean> {
+export async function hasDirectoryChanged(email: string, dirPath: string, companyCode?: string): Promise<boolean> {
   try {
     if (!dirPath || !fs.existsSync(dirPath)) return false;
-    const dbfFiles = fs.readdirSync(dirPath).filter((f) => f.toLowerCase().endsWith(".dbf"));
+    const dbfFiles = fs.readdirSync(dirPath).filter((f) => {
+      if (!f.toLowerCase().endsWith(".dbf")) return false;
+      const base = f.replace(/\.dbf$/i, "").trim().replace(/[\._][a-zA-Z]?\d+$/i, "").toLowerCase();
+      return CORE_16_SYNC_TABLES.has(base);
+    });
     if (dbfFiles.length === 0) return false;
 
-    const states = await VfpSyncState.find({ email }).lean();
+    const query: any = { email };
+    if (companyCode) query.companyCode = companyCode;
+
+    const states = await VfpSyncState.find(query).lean();
     const stateMap = new Map<string, any>(
       states.map((s: any) => [s.fileName?.toLowerCase() || s.tableName?.toLowerCase(), s])
     );
@@ -117,7 +150,7 @@ export async function hasDirectoryChanged(email: string, dirPath: string): Promi
 /**
  * Executes a single scheduled sync iteration for an active config
  */
-async function processConfigAutoSync(config: any) {
+export async function processConfigAutoSync(config: any, forceRun: boolean = false) {
   const email = config.email;
   if (!email || !config.autoSync || schedulerState.runningUserSyncs.has(email)) return;
 
@@ -126,47 +159,59 @@ async function processConfigAutoSync(config: any) {
   const lastSyncMs = config.lastSyncedAt ? new Date(config.lastSyncedAt).getTime() : 0;
   const now = Date.now();
 
-  // If interval has not elapsed yet, skip
-  if (lastSyncMs > 0 && now - lastSyncMs < intervalMs) {
-    return;
+  const isDue = lastSyncMs === 0 || (now - lastSyncMs >= intervalMs);
+
+  // If interval has not elapsed yet and not forced, check if files changed early
+  if (!forceRun && !isDue) {
+    const targetDir = resolveServerCompanyDir(config);
+    if (!targetDir) return;
+    const companyCode = config.companyCode || "DEFAULT";
+    const earlyChanged = await hasDirectoryChanged(email, targetDir, companyCode);
+    if (!earlyChanged) {
+      return; // Not due yet and no files changed
+    }
+    console.log(`[Auto-Sync Daemon] Early sync triggered for ${email}: File change detected before interval.`);
   }
 
   const targetDir = resolveServerCompanyDir(config);
   if (!targetDir) {
+    console.warn(`[Auto-Sync Daemon] Could not resolve server company directory for ${email}`);
     return;
   }
 
-  const filesChanged = await hasDirectoryChanged(email, targetDir);
-  const forceDue = lastSyncMs > 0 && now - lastSyncMs >= intervalMs * 2;
-
-  // If files have not changed and not force due, skip
-  if (!filesChanged && !forceDue && lastSyncMs > 0) {
-    await VfpConfig.updateOne({ _id: config._id }, { $set: { lastCheckedAt: new Date() } });
-    return;
-  }
+  const companyCode = config.companyCode || "DEFAULT";
+  const companyName = config.companyName || companyCode;
 
   schedulerState.runningUserSyncs.add(email);
-  const companyCode = config.companyCode || "DEFAULT";
 
   try {
-    console.log(`[Auto-Sync Daemon] Starting autonomous server sync for ${email} [${companyCode}] at: ${targetDir}`);
-    const result = await performDirectServerSync(email, targetDir);
+    console.log(`[Auto-Sync Daemon] Starting autonomous server sync for ${email} [${companyCode}] (every ${intervalMins}m) at: ${targetDir}`);
+    const result = await performDirectServerSync(email, targetDir, {
+      companyCode,
+      companyName,
+      force: true,
+      enabledFiles: [], // Background auto-sync processes all 16 core business tables
+    });
     
-    // Update mtimes in VfpSyncState so hasDirectoryChanged won't re-trigger immediately
+    // Update mtimes in VfpSyncState so hasDirectoryChanged stays consistent
     try {
-      const dbfFiles = fs.readdirSync(targetDir).filter((f) => f.toLowerCase().endsWith(".dbf"));
+      const dbfFiles = fs.readdirSync(targetDir).filter((f) => {
+        if (!f.toLowerCase().endsWith(".dbf")) return false;
+        const base = f.replace(/\.dbf$/i, "").trim().replace(/[\._][a-zA-Z]?\d+$/i, "").toLowerCase();
+        return CORE_16_SYNC_TABLES.has(base);
+      });
       for (const fn of dbfFiles) {
         const stats = fs.statSync(path.join(targetDir, fn));
         const baseName = fn.replace(/\.dbf$/i, "").toLowerCase();
         await VfpSyncState.updateOne(
-          { email, fileName: { $regex: new RegExp(`^${baseName}\\.dbf$`, "i") } },
-          { $set: { lastFileMtimeMs: stats.mtimeMs, status: "success" } }
+          { email, fileName: { $regex: new RegExp(`^${baseName}\\.dbf$`, "i") }, ...(companyCode ? { companyCode } : {}) },
+          { $set: { lastFileMtimeMs: stats.mtimeMs, status: "success", ...(companyCode ? { companyCode } : {}) } }
         );
       }
     } catch {}
 
-    await VfpConfig.updateOne(
-      { _id: config._id },
+    await VfpConfig.updateMany(
+      { $or: [{ email }, { key: "vfp_sync_config_" + email }, { key: "vfp_sync_config" }] },
       {
         $set: {
           lastSyncedAt: new Date(),
@@ -180,11 +225,11 @@ async function processConfigAutoSync(config: any) {
         },
       }
     );
-    console.log(`[Auto-Sync Daemon] Autonomous sync completed for ${email}: ${result.importedTables} tables, ${result.importedRows} rows.`);
+    console.log(`[Auto-Sync Daemon] Autonomous sync completed for ${email} [${companyCode}]: ${result.importedTables} tables, ${result.importedRows} rows.`);
   } catch (err: any) {
     console.error(`[Auto-Sync Daemon] Error during sync for ${email}:`, err.message);
-    await VfpConfig.updateOne(
-      { _id: config._id },
+    await VfpConfig.updateMany(
+      { $or: [{ email }, { key: "vfp_sync_config_" + email }, { key: "vfp_sync_config" }] },
       {
         $set: {
           lastCheckedAt: new Date(),
@@ -213,7 +258,11 @@ async function runSchedulerTick() {
       return;
     }
 
+    const seenEmails = new Set<string>();
     for (const config of activeConfigs) {
+      const email = config.email || "global";
+      if (seenEmails.has(email)) continue;
+      seenEmails.add(email);
       await processConfigAutoSync(config);
     }
   } catch (err: any) {
@@ -231,19 +280,24 @@ export function startServerSyncScheduler() {
 
   // Clear any existing cron task
   if (schedulerState.cronTask) {
-    schedulerState.cronTask.stop();
+    try {
+      schedulerState.cronTask.stop();
+    } catch {}
     schedulerState.cronTask = null;
   }
 
-  // Check once per minute
-  schedulerState.cronTask = cron.schedule("* * * * *", () => {
+  // Check every 30 seconds for precise schedule alignment
+  schedulerState.cronTask = cron.schedule("*/30 * * * * *", () => {
     runSchedulerTick().catch((err) => {
       console.error("[Auto-Sync Cron Fatal]:", err);
     });
   });
 
   schedulerState.isSchedulerRunning = true;
-  console.log("[Auto-Sync Daemon] Server background scheduler initialized and active.");
+  console.log("[Auto-Sync Daemon] Server background scheduler initialized and active (30s interval tick).");
+  
+  // Also run an immediate tick right now so overdue/pending syncs run immediately
+  runSchedulerTick().catch(() => {});
 }
 
 /**

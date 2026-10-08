@@ -2,7 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import dbConnect from "@/lib/mongodb";
 import { getCurrentUser } from "@/lib/auth";
 import VfpConfig from "@/models/VfpConfig";
-import { resolveServerCompanyDir, isSchedulerActive, startServerSyncScheduler } from "@/lib/vfp/serverSyncScheduler";
+import VfpSyncState from "@/models/VfpSyncState";
+import VfpSyncLog from "@/models/VfpSyncLog";
+import { resolveServerCompanyDir, isSchedulerActive, startServerSyncScheduler, processConfigAutoSync } from "@/lib/vfp/serverSyncScheduler";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -20,14 +22,19 @@ export async function GET() {
       {};
 
     const serverDir = resolveServerCompanyDir(config);
+    const intervalMins = (config as any).autoSyncInterval || 10;
+    const isAutoSync = Boolean((config as any).autoSync);
+    const lastSyncMs = (config as any).lastSyncedAt ? new Date((config as any).lastSyncedAt).getTime() : 0;
+    const nextSyncAt = isAutoSync && lastSyncMs > 0 ? new Date(lastSyncMs + intervalMins * 60 * 1000).toISOString() : null;
 
     return NextResponse.json({
       success: true,
-      autoSync: Boolean((config as any).autoSync),
-      autoSyncInterval: (config as any).autoSyncInterval || 10,
+      autoSync: isAutoSync,
+      autoSyncInterval: intervalMins,
       companyCode: (config as any).companyCode || "DEFAULT",
       companyName: (config as any).companyName || "Default Company",
       lastSyncedAt: (config as any).lastSyncedAt || null,
+      nextSyncAt,
       serverDir,
       schedulerActive: isSchedulerActive(),
     });
@@ -50,40 +57,69 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const { autoSync, autoSyncInterval, companyCode } = body;
 
-    const updateFields: any = {
-      autoSync: Boolean(autoSync),
-    };
+    const isEnabled = Boolean(autoSync);
+    const targetInterval = autoSyncInterval !== undefined && Number(autoSyncInterval) > 0
+      ? Math.max(1, Math.min(10080, Number(autoSyncInterval)))
+      : 10;
 
-    if (autoSyncInterval !== undefined && Number(autoSyncInterval) > 0) {
-      updateFields.autoSyncInterval = Math.max(1, Math.min(10080, Number(autoSyncInterval)));
-    }
+    const updateFields: any = {
+      autoSync: isEnabled,
+      autoSyncInterval: targetInterval,
+    };
 
     if (companyCode) {
       const sanitized = String(companyCode).trim().toUpperCase().replace(/[^a-zA-Z0-9_-]/g, "_") || "DEFAULT";
       updateFields.companyCode = sanitized;
     }
 
-    await VfpConfig.updateOne(
-      { email: user.email },
-      { $set: updateFields },
-      { upsert: true }
+    const res = await VfpConfig.updateMany(
+      { $or: [{ email: user.email }, { key: "vfp_sync_config_" + user.email }, { key: "vfp_sync_config" }] },
+      { $set: updateFields }
     );
+    if (res.matchedCount === 0) {
+      await VfpConfig.updateOne(
+        { email: user.email },
+        { $set: { ...updateFields, email: user.email, key: "vfp_sync_config_" + user.email } },
+        { upsert: true }
+      );
+    }
 
-    // Ensure server-side background scheduler daemon is running
+    if (!isEnabled) {
+      // Clean up running states and logs so UI stops polling immediately
+      await VfpSyncState.updateMany(
+        { email: user.email, status: "running" },
+        { $set: { status: "cancelled" } }
+      );
+      await VfpSyncLog.updateMany(
+        { email: user.email, status: "running" },
+        { $set: { status: "cancelled", finishedAt: new Date() } }
+      );
+      if (globalThis.__vfpServerSyncScheduler) {
+        globalThis.__vfpServerSyncScheduler.runningUserSyncs.delete(user.email);
+      }
+    }
+
+    // Ensure server-side background scheduler daemon is running if enabled
     startServerSyncScheduler();
 
     const updatedConfig = await VfpConfig.findOne({ email: user.email }).lean();
     const resolvedDir = resolveServerCompanyDir(updatedConfig);
 
-    const isEnabled = Boolean(autoSync);
+    if (isEnabled && updatedConfig) {
+      // Trigger immediate background sync so data is imported into the database right away!
+      processConfigAutoSync(updatedConfig, true).catch((err) => {
+        console.error("[AutoSync] Immediate auto-sync trigger failed:", err);
+      });
+    }
+
     const message = isEnabled
-      ? `Server-side Auto-Sync is now ACTIVATED for company [${updateFields.companyCode || (updatedConfig as any)?.companyCode || "DEFAULT"}]. The server will automatically sync data every ${updateFields.autoSyncInterval || (updatedConfig as any)?.autoSyncInterval || 10} minutes in the background, even when the browser is closed.`
+      ? `Server-side Auto-Sync is now ACTIVATED for company [${updateFields.companyCode || (updatedConfig as any)?.companyCode || "DEFAULT"}]. The server is now synchronizing data immediately and will continue every ${targetInterval} minutes in the background.`
       : "Server-side Auto-Sync has been CANCELLED and turned off. Manual file upload is now unlocked.";
 
     return NextResponse.json({
       success: true,
       autoSync: isEnabled,
-      autoSyncInterval: (updatedConfig as any)?.autoSyncInterval || 10,
+      autoSyncInterval: (updatedConfig as any)?.autoSyncInterval || targetInterval,
       companyCode: (updatedConfig as any)?.companyCode || "DEFAULT",
       serverDir: resolvedDir,
       schedulerActive: isSchedulerActive(),

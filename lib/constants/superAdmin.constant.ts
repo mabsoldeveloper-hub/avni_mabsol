@@ -10,7 +10,7 @@ export const SUPER_ADMIN_CREDENTIALS = {
     return process.env.SUPER_ADMIN_PASSWORD || "Mab@5181";
   },
   get NAME(): string {
-    return process.env.SUPER_ADMIN_NAME || "Super Administrator";
+    return process.env.SUPER_ADMIN_NAME || "mabsolinfotech";
   },
   ROLE: "SuperAdmin",
   ROLE_TYPE: "SuperAdmin",

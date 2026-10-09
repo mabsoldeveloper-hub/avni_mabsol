@@ -26,13 +26,14 @@ export async function GET(req: NextRequest) {
 
     const { searchParams } = new URL(req.url);
     const statusFilter = searchParams.get("status") || "all";
-    const branchTypeFilter = searchParams.get("branchType") || "all"; // 'all' | 'head_office' | 'child_branch'
+    // By default, exclude child accounts from primary directory list so only Head Offices / Primary Accounts are listed
+    const branchTypeFilter = searchParams.get("branchType") || "head_office";
     const parentCompanyFilter = searchParams.get("parentCompanyId") || "all";
     const searchQuery = (searchParams.get("search") || "").trim();
 
     const now = new Date();
 
-    // Auto update any expired accounts in DB
+    // 1. Auto update any expired accounts in DB
     await User.updateMany(
       {
         isApproved: true,
@@ -44,6 +45,48 @@ export async function GET(req: NextRequest) {
         $set: { status: USER_APPROVAL_STATUS.EXPIRED },
       }
     );
+
+    // 2. Auto-expire and deactivate child branches of expired or suspended Head Offices
+    const expiredOrSuspendedHeadOffices = await User.find({
+      $or: [
+        { status: USER_APPROVAL_STATUS.EXPIRED },
+        { status: USER_APPROVAL_STATUS.SUSPENDED },
+        {
+          isApproved: true,
+          isUnlimitedAccess: { $ne: true },
+          accessValidUntil: { $ne: null, $lte: now },
+        },
+      ],
+    }).select("companyId status").lean();
+
+    const expiredHoCompIds = expiredOrSuspendedHeadOffices
+      .map((u) => u.companyId)
+      .filter(Boolean);
+
+    if (expiredHoCompIds.length > 0) {
+      const childCompaniesOfExpired = await Company.find({
+        parentCompanyId: { $in: expiredHoCompIds },
+      }).select("_id").lean();
+
+      const childCompIds = childCompaniesOfExpired.map((c) => c._id);
+      if (childCompIds.length > 0) {
+        await User.updateMany(
+          { companyId: { $in: childCompIds }, isSuperAdmin: { $ne: true } },
+          { $set: { status: USER_APPROVAL_STATUS.EXPIRED, accessValidUntil: now } }
+        );
+        await Company.updateMany(
+          { _id: { $in: childCompIds } },
+          { $set: { status: "Suspended" } }
+        );
+      }
+    }
+
+    // Identify all child branch company IDs across the database
+    const allChildCompanies = await Company.find({
+      parentCompanyId: { $ne: null },
+      isHeadOffice: false,
+    }).select("_id parentCompanyId").lean();
+    const allChildCompanyIds = allChildCompanies.map((c) => c._id);
 
     // Build filter query for User
     const query: any = {};
@@ -86,34 +129,20 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    // Branch Type filtering via company IDs
-    let companyQuery: any = null;
-    if (branchTypeFilter === "head_office") {
-      companyQuery = {
-        $or: [
-          { parentCompanyId: null },
-          { parentCompanyId: { $exists: false } },
-          { isHeadOffice: true },
-        ],
-      };
-    } else if (branchTypeFilter === "child_branch") {
-      companyQuery = {
-        $or: [
-          { parentCompanyId: { $ne: null } },
-          { isHeadOffice: false },
-        ],
-      };
+    // Branch Type filtering: child accounts must NOT be seen in the primary list of accounts
+    if (branchTypeFilter === "child_branch") {
+      query.companyId = { $in: allChildCompanyIds };
+    } else if (branchTypeFilter !== "all_including_branches") {
+      // Default: exclude all child branch accounts from primary directory list
+      query.companyId = { $nin: allChildCompanyIds };
     }
 
     if (parentCompanyFilter && parentCompanyFilter !== "all") {
-      companyQuery = companyQuery || {};
-      companyQuery.parentCompanyId = parentCompanyFilter;
-    }
-
-    if (companyQuery) {
-      const matchingCompanies = await Company.find(companyQuery).select("_id").lean();
-      const matchingCompIds = matchingCompanies.map((c) => c._id);
-      query.companyId = { $in: matchingCompIds };
+      const companiesUnderParent = await Company.find({
+        parentCompanyId: parentCompanyFilter,
+      }).select("_id").lean();
+      const parentCompChildIds = companiesUnderParent.map((c) => c._id);
+      query.companyId = { $in: parentCompChildIds };
     }
 
     if (searchQuery) {
@@ -218,10 +247,11 @@ export async function GET(req: NextRequest) {
       }
     });
 
-    // Compute live dashboard stats (exclusive of soft-deleted records for active lists)
+    // Compute live dashboard stats (exclusive of child branches and soft-deleted records)
     const baseNonDeleted = {
       email: { $ne: currentUser.email.toLowerCase() },
       isDeleted: { $ne: true },
+      companyId: { $nin: allChildCompanyIds },
     };
 
     const [totalCount, pendingCount, activeCount, expiredCount, rejectedCount, suspendedCount, deletedCount, totalCompaniesCount, totalHeadOfficesInDb, totalChildBranchesInDb] =
@@ -269,6 +299,7 @@ export async function GET(req: NextRequest) {
         User.countDocuments({
           email: { $ne: currentUser.email.toLowerCase() },
           isDeleted: true,
+          companyId: { $nin: allChildCompanyIds },
         }),
         Company.countDocuments({ isDeleted: { $ne: true } }),
         Company.countDocuments({

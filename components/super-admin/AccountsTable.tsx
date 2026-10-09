@@ -17,6 +17,7 @@ import {
   FaUndo,
   FaTimes,
   FaBan,
+  FaChevronDown,
 } from "react-icons/fa";
 import { SuperAdminUserItem } from "./types";
 import { DEFAULT_ACCESS_DAYS } from "@/lib/constants/superAdmin.constant";
@@ -117,40 +118,48 @@ export default function AccountsTable({
   onSelectUser,
   className = "",
 }: AccountsTableProps) {
+  const [expandedBranches, setExpandedBranches] = React.useState<Record<string, boolean>>({});
+
+  const toggleExpand = (userId: string) => {
+    setExpandedBranches((prev) => ({ ...prev, [userId]: !prev[userId] }));
+  };
+
   return (
     <div className={`bg-white rounded-2xl border border-slate-200/80 overflow-hidden shadow-xs ${className}`}>
       {loading ? (
         <div className="p-14 text-center text-slate-400 flex flex-col items-center justify-center gap-2.5">
-          <FaSync className="animate-spin text-xl text-blue-600" />
+          <FaSync className="animate-spin text-xl text-indigo-600" />
           <p className="text-xs font-semibold text-slate-600">Retrieving multi-tenant directory...</p>
         </div>
       ) : users.length === 0 ? (
-        <div className="p-14 text-center text-slate-400 flex flex-col items-center justify-center gap-2">
-          <div className="w-12 h-12 rounded-full bg-slate-100 flex items-center justify-center text-slate-400 text-xl mb-1">
+        <div className="p-14 text-center text-slate-400 flex flex-col items-center justify-center gap-3">
+          <div className="w-13 h-13 rounded-2xl bg-indigo-50/80 border border-indigo-100 flex items-center justify-center text-indigo-500 text-xl shadow-2xs">
             <FaCheckCircle />
           </div>
-          <p className="text-sm font-bold text-slate-800">No Enterprise Accounts Found</p>
-          <p className="text-xs text-slate-400 max-w-sm">
-            No registration records match the current status, branch-wise filter, or search query.
-          </p>
+          <div>
+            <p className="text-sm font-bold text-slate-800">No Enterprise Accounts Found</p>
+            <p className="text-xs text-slate-400 max-w-sm mt-0.5">
+              No registration records match the current status filter, branch hierarchy, or search query.
+            </p>
+          </div>
         </div>
       ) : (
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs border-collapse">
             <thead>
-              <tr className="border-b border-slate-200/80 bg-slate-50/80 text-slate-500 uppercase text-[10px] font-bold tracking-wider">
-                <th className="py-3 px-3.5">ENTERPRISE / BRANCH</th>
-                <th className="py-3 px-3.5">BRANCH HIERARCHY</th>
-                <th className="py-3 px-3.5">CONTACT & ADMIN</th>
-                <th className="py-3 px-3.5 text-center">BRANCHES</th>
-                <th className="py-3 px-3.5">STATUS</th>
-                <th className="py-3 px-3.5 text-center">ACCESS</th>
-                <th className="py-3 px-3.5">SUBSCRIPTION</th>
-                <th className="py-3 px-3.5">REGISTERED</th>
-                <th className="py-3 px-3.5 text-center">ACTIONS</th>
+              <tr className="border-b border-slate-200/90 bg-slate-50/90 text-slate-500 uppercase text-[10px] font-bold tracking-wider">
+                <th className="py-3.5 px-4">ENTERPRISE / HUB</th>
+                <th className="py-3.5 px-4">HIERARCHY</th>
+                <th className="py-3.5 px-4">CONTACT & ADMIN</th>
+                <th className="py-3.5 px-4 text-center">BRANCHES</th>
+                <th className="py-3.5 px-4">STATUS</th>
+                <th className="py-3.5 px-4 text-center">ACCESS</th>
+                <th className="py-3.5 px-4">SUBSCRIPTION</th>
+                <th className="py-3.5 px-4">REGISTERED</th>
+                <th className="py-3.5 px-4 text-center">ACTIONS</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100">
+            <tbody className="divide-y divide-slate-100/90">
               {users.map((u) => {
                 const company = u.companyId;
                 const companyName = company?.companyName || u.name || "Pharma Enterprise";
@@ -158,7 +167,9 @@ export default function AccountsTable({
                 const gstin = company?.gstNo || "";
                 const isHeadOffice = !company?.parentCompanyId || company?.isHeadOffice === true;
                 const parentComp = company?.parentCompanyId;
-                const branchCount = company?.branchCount || 0;
+                const branchCount = company?.branchCount || company?.childBranches?.length || 0;
+                const childBranches = company?.childBranches || [];
+                const isExpanded = Boolean(expandedBranches[u._id]);
                 const city = company?.city || "";
                 const state = company?.state || "";
 
@@ -174,26 +185,27 @@ export default function AccountsTable({
                 const isUserActive = u.status !== "Suspended" && u.status !== "Inactive" && u.isApproved;
 
                 return (
-                  <tr key={u._id} className="hover:bg-slate-50/60 transition-colors">
+                  <React.Fragment key={u._id}>
+                    <tr className="hover:bg-slate-50/80 transition-colors duration-150">
                     {/* ENTERPRISE / BRANCH */}
-                    <td className="py-3 px-3.5 align-middle max-w-[260px]">
-                      <div className="flex items-start gap-2.5">
+                    <td className="py-3.5 px-4 align-middle max-w-[280px]">
+                      <div className="flex items-start gap-3">
                         <div
-                          className={`w-8 h-8 rounded-xl font-extrabold text-[11px] flex items-center justify-center shrink-0 shadow-2xs border ${
+                          className={`w-9 h-9 rounded-xl font-extrabold text-xs flex items-center justify-center shrink-0 shadow-2xs border ${
                             isHeadOffice
-                              ? "bg-indigo-50 text-indigo-700 border-indigo-200"
-                              : "bg-teal-50 text-teal-700 border-teal-200"
+                              ? "bg-indigo-50 text-indigo-700 border-indigo-200/90"
+                              : "bg-teal-50 text-teal-700 border-teal-200/90"
                           }`}
                         >
                           {initials}
                         </div>
                         <div className="min-w-0 flex-1">
-                          <div className="font-bold text-slate-900 text-xs tracking-tight line-clamp-1">
+                          <div className="font-bold text-slate-900 text-xs tracking-tight truncate hover:text-indigo-600 transition-colors">
                             {companyName}
                           </div>
-                          <div className="flex items-center flex-wrap gap-1 mt-0.5 font-mono text-[10px]">
+                          <div className="flex items-center flex-wrap gap-1.5 mt-1 font-mono text-[10px]">
                             {companyCode && (
-                              <span className="px-1.5 py-0.2 rounded bg-slate-100 text-slate-800 font-bold border border-slate-200">
+                              <span className="px-1.5 py-0.5 rounded-md bg-slate-100 text-slate-800 font-bold border border-slate-200/90">
                                 {companyCode}
                               </span>
                             )}
@@ -204,7 +216,7 @@ export default function AccountsTable({
                             )}
                           </div>
                           {(city || state) && (
-                            <div className="text-[10px] text-slate-400 flex items-center gap-1 mt-0.5">
+                            <div className="text-[10px] text-slate-400 flex items-center gap-1 mt-1">
                               <FaMapMarkerAlt size={9} className="text-slate-400 shrink-0" />
                               <span className="truncate">{[city, state].filter(Boolean).join(", ")}</span>
                             </div>
@@ -214,27 +226,27 @@ export default function AccountsTable({
                     </td>
 
                     {/* BRANCH HIERARCHY BADGE */}
-                    <td className="py-3 px-3.5 align-middle">
+                    <td className="py-3.5 px-4 align-middle">
                       {isHeadOffice ? (
                         <div className="inline-flex flex-col gap-0.5">
-                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-200/80 w-fit">
+                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-200/80 w-fit">
                             <FaBuilding size={9} />
                             <span>Head Office</span>
                           </span>
-                          <span className="text-[9.5px] text-slate-400 font-medium">Main Hub</span>
+                          <span className="text-[9.5px] text-slate-400 font-medium ml-1">Central Hub</span>
                         </div>
                       ) : (
                         <div className="inline-flex flex-col gap-0.5 max-w-[180px]">
-                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-teal-50 text-teal-700 border border-teal-200/80 w-fit">
+                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-teal-50 text-teal-700 border border-teal-200/80 w-fit">
                             <FaCodeBranch size={9} />
-                            <span>Child Branch</span>
+                            <span>Branch Node</span>
                           </span>
                           {parentComp && (
                             <span
-                              className="text-[10px] text-slate-600 font-medium truncate"
+                              className="text-[10px] text-slate-600 font-medium truncate ml-1"
                               title={`Parent: ${parentComp.companyName || ""} (${parentComp.companyCode || ""})`}
                             >
-                              Of: <strong className="font-semibold text-slate-800">{parentComp.companyCode || parentComp.companyName}</strong>
+                              Hub: <strong className="font-semibold text-slate-800">{parentComp.companyCode || parentComp.companyName}</strong>
                             </span>
                           )}
                         </div>
@@ -242,44 +254,48 @@ export default function AccountsTable({
                     </td>
 
                     {/* CONTACT & ADMIN */}
-                    <td className="py-3 px-3.5 align-middle">
-                      <div className="font-bold text-slate-800 text-xs truncate">{u.name}</div>
-                      <div className="text-[11px] text-slate-500 truncate flex items-center gap-1 mt-0.5 font-medium">
+                    <td className="py-3.5 px-4 align-middle">
+                      <div className="font-bold text-slate-900 text-xs truncate">{u.name}</div>
+                      <div className="text-[11px] text-slate-500 truncate flex items-center gap-1.5 mt-0.5 font-medium">
                         <FaEnvelope size={9} className="text-slate-400 shrink-0" />
                         <span className="truncate">{u.email}</span>
                       </div>
                       {u.mobile && (
-                        <div className="text-[10px] text-slate-400 font-mono flex items-center gap-1 mt-0.5">
+                        <div className="text-[10px] text-slate-400 font-mono flex items-center gap-1.5 mt-0.5">
                           <FaPhone size={8} className="text-slate-400 shrink-0" />
                           <span>{u.mobile}</span>
                         </div>
                       )}
                     </td>
 
-                    {/* TOTAL BRANCHES (Branch-wise real count) */}
-                    <td className="py-3 px-3.5 align-middle text-center">
+                    {/* TOTAL BRANCHES (Branch-wise real count with expand toggle) */}
+                    <td className="py-3.5 px-4 align-middle text-center">
                       {isHeadOffice ? (
-                        <div className="inline-flex flex-col items-center">
-                          <span
-                            className={`px-2 py-0.5 rounded-lg text-xs font-mono font-bold ${
-                              branchCount > 0
-                                ? "bg-blue-50 text-blue-700 border border-blue-200"
-                                : "bg-slate-100 text-slate-600"
-                            }`}
+                        branchCount > 0 ? (
+                          <button
+                            type="button"
+                            onClick={() => toggleExpand(u._id)}
+                            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-mono font-bold bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200/80 shadow-2xs transition-colors cursor-pointer"
+                            title="Click to view child branches"
                           >
-                            {branchCount} {branchCount === 1 ? "Branch" : "Branches"}
+                            <span>{branchCount} {branchCount === 1 ? "Branch" : "Branches"}</span>
+                            <FaChevronDown size={8} className={`transition-transform duration-200 ${isExpanded ? "rotate-180" : ""}`} />
+                          </button>
+                        ) : (
+                          <span className="inline-block px-2 py-0.5 rounded-lg text-xs font-mono font-semibold bg-slate-100 text-slate-500 border border-slate-200/70">
+                            0 Branches
                           </span>
-                        </div>
+                        )
                       ) : (
-                        <span className="text-[10.5px] font-medium text-slate-400">Node</span>
+                        <span className="text-[11px] font-medium text-slate-400">Node</span>
                       )}
                     </td>
 
                     {/* APPROVAL STATUS */}
-                    <td className="py-3 px-3.5 align-middle">
+                    <td className="py-3.5 px-4 align-middle">
                       {u.isDeleted ? (
                         <span
-                          className="inline-flex items-center gap-1 text-[11px] font-bold text-red-700 bg-red-50 px-2 py-0.5 rounded-full border border-red-200/80"
+                          className="inline-flex items-center gap-1 text-[11px] font-bold text-red-700 bg-red-50 px-2.5 py-0.5 rounded-full border border-red-200/80"
                           title={u.deletedReason ? `Reason: ${u.deletedReason}` : "Account deleted by Super Admin"}
                         >
                           <FaTrash size={9} />
@@ -287,23 +303,23 @@ export default function AccountsTable({
                         </span>
                       ) : u.status === "Rejected" ? (
                         <span
-                          className="inline-flex items-center gap-1 text-[11px] font-bold text-rose-700 bg-rose-50 px-2 py-0.5 rounded-full border border-rose-200/80"
+                          className="inline-flex items-center gap-1 text-[11px] font-bold text-rose-700 bg-rose-50 px-2.5 py-0.5 rounded-full border border-rose-200/80"
                           title="Application rejected"
                         >
                           <FaBan size={9} />
                           <span>Rejected</span>
                         </span>
                       ) : u.isApproved && u.status === "Active" ? (
-                        <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200/80">
+                        <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-700 bg-emerald-50 px-2.5 py-0.5 rounded-full border border-emerald-200/80">
                           <FaCheckCircle size={9} />
                           <span>Approved</span>
                         </span>
                       ) : u.status === "Suspended" || u.status === "Inactive" ? (
-                        <span className="inline-flex items-center gap-1 text-[11px] font-bold text-rose-700 bg-rose-50 px-2 py-0.5 rounded-full border border-rose-200/80">
+                        <span className="inline-flex items-center gap-1 text-[11px] font-bold text-slate-700 bg-slate-100 px-2.5 py-0.5 rounded-full border border-slate-200">
                           <span>Suspended</span>
                         </span>
                       ) : (
-                        <span className="inline-flex items-center gap-1 text-[11px] font-bold text-amber-700 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-200/80">
+                        <span className="inline-flex items-center gap-1.5 text-[11px] font-bold text-amber-800 bg-amber-50 px-2.5 py-0.5 rounded-full border border-amber-200/80">
                           <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
                           <span>Pending Review</span>
                         </span>
@@ -311,7 +327,7 @@ export default function AccountsTable({
                     </td>
 
                     {/* ACTIVE SWITCH (Toggle) */}
-                    <td className="py-3 px-3.5 align-middle text-center">
+                    <td className="py-3.5 px-4 align-middle text-center">
                       <button
                         type="button"
                         disabled={actionLoading === u._id || Boolean(u.isDeleted)}
@@ -337,13 +353,13 @@ export default function AccountsTable({
                     </td>
 
                     {/* SUBSCRIPTION */}
-                    <td className="py-3 px-3.5 align-middle">
+                    <td className="py-3.5 px-4 align-middle">
                       <div className="font-bold text-slate-800 text-xs">
                         {subInfo.text}
                       </div>
                       <div className="mt-0.5">
                         <span
-                          className={`text-[9.5px] font-bold px-1.5 py-0.2 rounded border ${subInfo.color}`}
+                          className={`text-[9.5px] font-bold px-2 py-0.5 rounded-md border ${subInfo.color}`}
                         >
                           {subInfo.status}
                         </span>
@@ -351,7 +367,7 @@ export default function AccountsTable({
                     </td>
 
                     {/* RECEIVED AT */}
-                    <td className="py-3 px-3.5 align-middle whitespace-nowrap">
+                    <td className="py-3.5 px-4 align-middle whitespace-nowrap">
                       <div className="text-xs font-bold text-slate-800">
                         {getRelativeTime(u.createdAt)}
                       </div>
@@ -361,14 +377,14 @@ export default function AccountsTable({
                     </td>
 
                     {/* ACTIONS */}
-                    <td className="py-3 px-3.5 align-middle text-center whitespace-nowrap">
+                    <td className="py-3.5 px-4 align-middle text-center whitespace-nowrap">
                       <div className="flex items-center justify-center gap-1.5">
                         <Link
                           href={`/dashboard/super-admin/approvals/${u._id}`}
-                          className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-semibold text-blue-700 bg-blue-50 hover:bg-blue-600 hover:text-white border border-blue-200 transition-all duration-150 shadow-2xs cursor-pointer"
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold text-indigo-700 bg-indigo-50/80 hover:bg-indigo-600 hover:text-white border border-indigo-200/80 transition-all duration-150 shadow-2xs hover:shadow-xs cursor-pointer"
                           title="Review credentials, branches, and account details"
                         >
-                          <FaEye size={10} />
+                          <FaEye size={11} />
                           <span>Review</span>
                         </Link>
 
@@ -387,7 +403,7 @@ export default function AccountsTable({
                                     onRestore(u._id);
                                   }
                                 }}
-                                className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs font-semibold text-emerald-700 bg-emerald-50 hover:bg-emerald-600 hover:text-white border border-emerald-200 transition-all duration-150 shadow-2xs cursor-pointer disabled:opacity-50"
+                                className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-bold text-emerald-700 bg-emerald-50/80 hover:bg-emerald-600 hover:text-white border border-emerald-200/80 transition-all duration-150 shadow-2xs hover:shadow-xs cursor-pointer disabled:opacity-50"
                                 title="Restore account"
                               >
                                 <FaUndo size={10} />
@@ -399,7 +415,7 @@ export default function AccountsTable({
                                 type="button"
                                 disabled={actionLoading === u._id}
                                 onClick={() => onPermanentDelete(u._id)}
-                                className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs font-semibold text-red-700 bg-red-50 hover:bg-red-700 hover:text-white border border-red-200 transition-all duration-150 shadow-2xs cursor-pointer disabled:opacity-50"
+                                className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-bold text-red-700 bg-red-50/80 hover:bg-red-700 hover:text-white border border-red-200/80 transition-all duration-150 shadow-2xs hover:shadow-xs cursor-pointer disabled:opacity-50"
                                 title="Permanently delete from database"
                               >
                                 <FaTrash size={10} />
@@ -421,7 +437,7 @@ export default function AccountsTable({
                                     onReject(u._id, notes);
                                   }
                                 }}
-                                className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs font-semibold text-amber-700 bg-amber-50 hover:bg-amber-600 hover:text-white border border-amber-200 transition-all duration-150 shadow-2xs cursor-pointer disabled:opacity-50"
+                                className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-bold text-amber-800 bg-amber-50/80 hover:bg-amber-600 hover:text-white border border-amber-200/80 transition-all duration-150 shadow-2xs hover:shadow-xs cursor-pointer disabled:opacity-50"
                                 title="Reject application/account"
                               >
                                 <FaBan size={10} />
@@ -441,7 +457,7 @@ export default function AccountsTable({
                                     onDelete(u._id, reason);
                                   }
                                 }}
-                                className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs font-semibold text-red-700 bg-red-50 hover:bg-red-600 hover:text-white border border-red-200 transition-all duration-150 shadow-2xs cursor-pointer disabled:opacity-50"
+                                className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-bold text-rose-700 bg-rose-50/80 hover:bg-rose-600 hover:text-white border border-rose-200/80 transition-all duration-150 shadow-2xs hover:shadow-xs cursor-pointer disabled:opacity-50"
                                 title="Delete account (soft-delete)"
                               >
                                 <FaTrash size={10} />
@@ -453,6 +469,71 @@ export default function AccountsTable({
                       </div>
                     </td>
                   </tr>
+
+                  {/* NESTED EXPANDED CHILD BRANCHES ROW */}
+                  {isHeadOffice && isExpanded && childBranches.length > 0 && (
+                    <tr className="bg-slate-50/70 border-t border-b border-indigo-100/70">
+                      <td colSpan={9} className="p-3.5 sm:p-4">
+                        <div className="bg-white rounded-xl border border-indigo-100 p-3.5 shadow-2xs space-y-3">
+                          <div className="flex items-center justify-between pb-2 border-b border-slate-100">
+                            <div className="flex items-center gap-2">
+                              <span className="w-6 h-6 rounded-lg bg-teal-50 text-teal-600 flex items-center justify-center text-xs border border-teal-100">
+                                <FaCodeBranch />
+                              </span>
+                              <span className="text-xs font-bold text-slate-900">
+                                Child Branches under {companyName}
+                              </span>
+                              <span className="text-[10px] font-bold text-teal-700 bg-teal-50 px-2 py-0.5 rounded-full border border-teal-200/70">
+                                {childBranches.length} {childBranches.length === 1 ? "Branch" : "Branches"}
+                              </span>
+                              <span className="text-[10px] font-medium text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200/70">
+                                Synchronized with Head Office Tenure ({subInfo.text})
+                              </span>
+                            </div>
+                            <span className="text-[11px] text-slate-400">
+                              All branches inherit approval and tenure from Head Office
+                            </span>
+                          </div>
+
+                          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2.5">
+                            {childBranches.map((br: any) => (
+                              <div
+                                key={br._id}
+                                className="p-3 rounded-xl bg-slate-50/80 border border-slate-200/80 flex flex-col justify-between gap-2 shadow-2xs hover:bg-slate-50 transition-colors"
+                              >
+                                <div className="flex items-start justify-between gap-2">
+                                  <div className="min-w-0">
+                                    <div className="font-bold text-slate-900 text-xs truncate">
+                                      {br.companyName}
+                                    </div>
+                                    <div className="text-[10.5px] text-slate-500 font-mono mt-0.5">
+                                      {br.companyCode || "BRANCH"} • GST: {br.gstNo || "N/A"}
+                                    </div>
+                                  </div>
+                                  <span
+                                    className={`text-[9.5px] font-bold px-2 py-0.5 rounded-full border shrink-0 ${
+                                      br.status === "Active"
+                                        ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                                        : "bg-rose-50 text-rose-700 border-rose-200"
+                                    }`}
+                                  >
+                                    {br.status || "Active"}
+                                  </span>
+                                </div>
+                                <div className="flex items-center justify-between text-[10.5px] text-slate-500 border-t border-slate-200/70 pt-1.5 mt-0.5 font-medium">
+                                  <span>{br.city ? `${br.city}, ${br.state || ""}` : "Location unassigned"}</span>
+                                  <span className="text-teal-700 font-semibold font-mono bg-teal-50 px-1.5 py-0.5 rounded border border-teal-100">
+                                    {br.enabledModules?.length || 0} Modules
+                                  </span>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+                </React.Fragment>
                 );
               })}
             </tbody>

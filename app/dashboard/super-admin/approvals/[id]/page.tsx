@@ -486,17 +486,15 @@ export default function TenantApprovalPage({
             </button>
           </div>
         </div>
-      )}
-
-      {/* 1. TOP HERO BANNER & AVATAR CARD */}
-      <div className="bg-white rounded-2xl border border-slate-200/80 overflow-hidden shadow-xs">
+      )}      {/* 1. TOP HERO BANNER & AVATAR CARD */}
+      <div className="bg-white rounded-2xl border border-slate-200/90 overflow-hidden shadow-[0_1px_3px_rgba(15,23,42,0.03)]">
         {/* Gradient Top Half with Action Buttons */}
-        <div className="h-20 sm:h-24 bg-gradient-to-r from-blue-700 via-indigo-600 to-blue-600 relative p-3.5 sm:p-4 flex items-start justify-between">
+        <div className="h-24 sm:h-28 bg-gradient-to-r from-slate-950 via-indigo-950 to-slate-900 relative p-4 sm:p-5 flex items-start justify-between">
           <Link
             href="/dashboard/super-admin"
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/20 hover:bg-white/30 text-white text-xs font-semibold backdrop-blur-xs transition-all cursor-pointer shadow-xs"
+            className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-white text-xs font-semibold backdrop-blur-md transition-all cursor-pointer shadow-2xs border border-white/10"
           >
-            <FaArrowLeft size={10} /> Back
+            <FaArrowLeft size={10} /> Back to Clearance
           </Link>
 
           {/* Quick Action Buttons in Top Right */}
@@ -507,15 +505,15 @@ export default function TenantApprovalPage({
                   type="button"
                   onClick={handleRestore}
                   disabled={actionLoading}
-                  className="px-3.5 py-1.5 rounded-full bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition-all cursor-pointer shadow-xs flex items-center gap-1.5 disabled:opacity-50"
+                  className="px-3.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition-all cursor-pointer shadow-sm flex items-center gap-1.5 disabled:opacity-50"
                 >
-                  <FaUndo size={11} /> Restore
+                  <FaUndo size={11} /> Restore Account
                 </button>
                 <button
                   type="button"
                   onClick={handlePermanentDelete}
                   disabled={actionLoading}
-                  className="px-3.5 py-1.5 rounded-full bg-red-600 hover:bg-red-700 text-white text-xs font-bold transition-all cursor-pointer shadow-xs flex items-center gap-1.5 disabled:opacity-50"
+                  className="px-3.5 py-1.5 rounded-xl bg-red-600 hover:bg-red-700 text-white text-xs font-bold transition-all cursor-pointer shadow-sm flex items-center gap-1.5 disabled:opacity-50"
                 >
                   <FaTrash size={11} /> Purge Forever
                 </button>
@@ -533,7 +531,7 @@ export default function TenantApprovalPage({
                       }
                     }}
                     disabled={actionLoading}
-                    className="px-3 py-1.5 rounded-full bg-white/20 hover:bg-amber-600 text-white text-xs font-semibold backdrop-blur-xs transition-all cursor-pointer border border-white/30 flex items-center gap-1"
+                    className="px-3 py-1.5 rounded-xl bg-amber-500/20 hover:bg-amber-600 text-amber-200 hover:text-white text-xs font-semibold backdrop-blur-md transition-all cursor-pointer border border-amber-400/30 flex items-center gap-1.5"
                   >
                     <FaBan size={10} /> Reject
                   </button>
@@ -544,7 +542,7 @@ export default function TenantApprovalPage({
                     type="button"
                     onClick={() => handleAction(isSuspended ? "activate" : "suspend")}
                     disabled={actionLoading}
-                    className="px-3 py-1.5 rounded-full bg-white/20 hover:bg-rose-500 text-white text-xs font-semibold backdrop-blur-xs transition-all cursor-pointer border border-white/30"
+                    className="px-3.5 py-1.5 rounded-xl bg-white/10 hover:bg-rose-600 text-white text-xs font-semibold backdrop-blur-md transition-all cursor-pointer border border-white/20"
                   >
                     {isSuspended ? "Reactivate" : "Suspend"}
                   </button>
@@ -554,7 +552,7 @@ export default function TenantApprovalPage({
                   type="button"
                   onClick={handleDelete}
                   disabled={actionLoading}
-                  className="px-3 py-1.5 rounded-full bg-white/20 hover:bg-red-600 text-white text-xs font-semibold backdrop-blur-xs transition-all cursor-pointer border border-white/30 flex items-center gap-1"
+                  className="px-3 py-1.5 rounded-xl bg-rose-500/20 hover:bg-rose-600 text-rose-200 hover:text-white text-xs font-semibold backdrop-blur-md transition-all cursor-pointer border border-rose-400/30 flex items-center gap-1.5"
                   title="Soft delete this account"
                 >
                   <FaTrash size={10} /> Delete
@@ -564,10 +562,10 @@ export default function TenantApprovalPage({
                   type="button"
                   onClick={() => handleAction(user.isApproved ? "update_settings" : "approve")}
                   disabled={actionLoading || (user.isApproved && !isDirty)}
-                  className={`px-3.5 py-1.5 rounded-full text-xs font-bold transition-all ${
+                  className={`px-4 py-1.5 rounded-xl text-xs font-bold transition-all ${
                     user.isApproved && !isDirty
-                      ? "bg-white/30 text-white/50 cursor-not-allowed border border-white/20"
-                      : "bg-white text-blue-700 hover:bg-blue-50 cursor-pointer shadow-sm"
+                      ? "bg-white/20 text-white/50 cursor-not-allowed border border-white/10"
+                      : "bg-white text-indigo-950 hover:bg-indigo-50 cursor-pointer shadow-sm"
                   }`}
                 >
                   {actionLoading
@@ -695,114 +693,119 @@ export default function TenantApprovalPage({
       </div>
 
       {/* 2. 5-KPI METRIC STRIP */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 sm:gap-2.5">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2.5 sm:gap-3">
         {/* KPI 1: Active Days Remaining & Degradation */}
-        <div className="bg-white rounded-2xl border border-slate-200/80 p-3 shadow-xs flex flex-col justify-between">
+        <div className="relative overflow-hidden bg-white rounded-2xl border border-slate-200/90 p-3.5 shadow-[0_1px_3px_rgba(15,23,42,0.03)] hover:shadow-md transition-all flex flex-col justify-between group">
+          <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-blue-500 to-indigo-500" />
           <div className="flex items-center justify-between">
-            <div className="w-7 h-7 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center text-xs">
+            <div className="w-8 h-8 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center text-xs border border-blue-100 shadow-2xs">
               <FaCalendarAlt />
             </div>
-            <span className="text-[9.5px] font-bold text-blue-700 bg-blue-50 px-1.5 py-0.5 rounded uppercase">
+            <span className="text-[10px] font-bold text-blue-700 bg-blue-50 px-2 py-0.5 rounded-full border border-blue-200/70 uppercase">
               Validity
             </span>
           </div>
-          <div className="mt-1.5">
-            <div className="text-lg font-extrabold text-slate-900 leading-tight">
+          <div className="mt-2">
+            <div className="text-xl font-extrabold text-slate-900 leading-tight tabular-nums tracking-tight">
               {degradation.remainingDays} Days
             </div>
-            <div className="text-xs font-bold text-slate-800">Remaining Balance</div>
-            <div className="text-[10.5px] text-slate-400 mt-0.5">
-              {degradation.status} • Total {degradation.totalDays}d
+            <div className="text-xs font-semibold text-slate-700 mt-0.5">Remaining Balance</div>
+            <div className="text-[11px] text-slate-400 mt-0.5 truncate">
+              {degradation.status} • {degradation.totalDays}d total
             </div>
           </div>
         </div>
 
         {/* KPI 2: Session Timeout */}
-        <div className="bg-white rounded-2xl border border-slate-200/80 p-3 shadow-xs flex flex-col justify-between">
+        <div className="relative overflow-hidden bg-white rounded-2xl border border-slate-200/90 p-3.5 shadow-[0_1px_3px_rgba(15,23,42,0.03)] hover:shadow-md transition-all flex flex-col justify-between group">
+          <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-indigo-500 to-purple-500" />
           <div className="flex items-center justify-between">
-            <div className="w-7 h-7 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center text-xs">
+            <div className="w-8 h-8 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center text-xs border border-indigo-100 shadow-2xs">
               <FaClock />
             </div>
-            <span className="text-[9.5px] font-bold text-indigo-700 bg-indigo-50 px-1.5 py-0.5 rounded uppercase">
+            <span className="text-[10px] font-bold text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded-full border border-indigo-200/70 uppercase">
               Security
             </span>
           </div>
-          <div className="mt-1.5">
-            <div className="text-lg font-extrabold text-slate-900 leading-tight">
+          <div className="mt-2">
+            <div className="text-xl font-extrabold text-slate-900 leading-tight tabular-nums tracking-tight">
               {selectedSessionHours} Hour{selectedSessionHours > 1 ? "s" : ""}
             </div>
-            <div className="text-xs font-bold text-slate-800">Session Timeout</div>
-            <div className="text-[10.5px] text-slate-400 mt-0.5">Inactivity re-auth</div>
+            <div className="text-xs font-semibold text-slate-700 mt-0.5">Session Timeout</div>
+            <div className="text-[11px] text-slate-400 mt-0.5">Inactivity re-auth</div>
           </div>
         </div>
 
         {/* KPI 3: Enabled Modules */}
-        <div className="bg-white rounded-2xl border border-slate-200/80 p-3 shadow-xs flex flex-col justify-between">
+        <div className="relative overflow-hidden bg-white rounded-2xl border border-slate-200/90 p-3.5 shadow-[0_1px_3px_rgba(15,23,42,0.03)] hover:shadow-md transition-all flex flex-col justify-between group">
+          <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-cyan-500 to-teal-500" />
           <div className="flex items-center justify-between">
-            <div className="w-7 h-7 rounded-lg bg-cyan-50 text-cyan-600 flex items-center justify-center text-xs">
+            <div className="w-8 h-8 rounded-xl bg-cyan-50 text-cyan-600 flex items-center justify-center text-xs border border-cyan-100 shadow-2xs">
               <FaBoxes />
             </div>
-            <span className="text-[9.5px] font-bold text-cyan-700 bg-cyan-50 px-1.5 py-0.5 rounded uppercase">
+            <span className="text-[10px] font-bold text-cyan-700 bg-cyan-50 px-2 py-0.5 rounded-full border border-cyan-200/70 uppercase">
               Modules
             </span>
           </div>
-          <div className="mt-1.5">
-            <div className="text-lg font-extrabold text-slate-900 leading-tight">
+          <div className="mt-2">
+            <div className="text-xl font-extrabold text-slate-900 leading-tight tabular-nums tracking-tight">
               {enabledModules.length} / {SYSTEM_MODULES.length}
             </div>
-            <div className="text-xs font-bold text-slate-800">Active Modules</div>
-            <div className="text-[10.5px] text-slate-400 mt-0.5">CRM capabilities</div>
+            <div className="text-xs font-semibold text-slate-700 mt-0.5">Active Modules</div>
+            <div className="text-[11px] text-slate-400 mt-0.5">CRM capabilities</div>
           </div>
         </div>
 
         {/* KPI 4: Primary Admin */}
-        <div className="bg-white rounded-2xl border border-slate-200/80 p-3 shadow-xs flex flex-col justify-between">
+        <div className="relative overflow-hidden bg-white rounded-2xl border border-slate-200/90 p-3.5 shadow-[0_1px_3px_rgba(15,23,42,0.03)] hover:shadow-md transition-all flex flex-col justify-between group">
+          <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-emerald-500 to-green-500" />
           <div className="flex items-center justify-between">
-            <div className="w-7 h-7 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center text-xs">
+            <div className="w-8 h-8 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center text-xs border border-emerald-100 shadow-2xs">
               <FaUserCheck />
             </div>
-            <span className="text-[9.5px] font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded uppercase">
+            <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200/70 uppercase">
               Admin
             </span>
           </div>
-          <div className="mt-1.5">
-            <div className="text-lg font-extrabold text-slate-900 leading-tight truncate">
+          <div className="mt-2">
+            <div className="text-xl font-extrabold text-slate-900 leading-tight truncate tracking-tight">
               {user.name || "Primary User"}
             </div>
-            <div className="text-xs font-bold text-slate-800">Root Administrator</div>
-            <div className="text-[10.5px] text-slate-400 mt-0.5 truncate">{user.email}</div>
+            <div className="text-xs font-semibold text-slate-700 mt-0.5">Root Administrator</div>
+            <div className="text-[11px] text-slate-400 mt-0.5 truncate">{user.email}</div>
           </div>
         </div>
 
         {/* KPI 5: Compliance Status */}
-        <div className="bg-white rounded-2xl border border-slate-200/80 p-3 shadow-xs flex flex-col justify-between col-span-2 sm:col-span-1">
+        <div className="relative overflow-hidden bg-white rounded-2xl border border-slate-200/90 p-3.5 shadow-[0_1px_3px_rgba(15,23,42,0.03)] hover:shadow-md transition-all flex flex-col justify-between col-span-2 sm:col-span-1 group">
+          <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-violet-500 to-purple-500" />
           <div className="flex items-center justify-between">
-            <div className="w-7 h-7 rounded-lg bg-violet-50 text-violet-600 flex items-center justify-center text-xs">
+            <div className="w-8 h-8 rounded-xl bg-violet-50 text-violet-600 flex items-center justify-center text-xs border border-violet-100 shadow-2xs">
               <FaShieldAlt />
             </div>
-            <span className="text-[9.5px] font-bold text-violet-700 bg-violet-50 px-1.5 py-0.5 rounded uppercase">
+            <span className="text-[10px] font-bold text-violet-700 bg-violet-50 px-2 py-0.5 rounded-full border border-violet-200/70 uppercase">
               Audit
             </span>
           </div>
-          <div className="mt-1.5">
-            <div className="text-lg font-extrabold text-slate-900 leading-tight">
+          <div className="mt-2">
+            <div className="text-xl font-extrabold text-slate-900 leading-tight tracking-tight">
               {gstin !== "N/A" ? "Verified" : "Pending"}
             </div>
-            <div className="text-xs font-bold text-slate-800">Pharma Compliance</div>
-            <div className="text-[10.5px] text-slate-400 mt-0.5">GSTIN & License</div>
+            <div className="text-xs font-semibold text-slate-700 mt-0.5">Pharma Compliance</div>
+            <div className="text-[11px] text-slate-400 mt-0.5">GSTIN & License</div>
           </div>
         </div>
       </div>
 
       {/* 3. NAVIGATION TABS BAR */}
-      <div className="flex items-center gap-1.5 border-b border-slate-200/80 pb-0.5 text-xs font-bold">
+      <div className="flex items-center gap-2 border-b border-slate-200/80 pb-1 text-xs font-bold pt-1">
         <button
           type="button"
           onClick={() => setActiveTab("overview")}
-          className={`pb-1.5 px-2.5 transition-all cursor-pointer relative ${
+          className={`pb-2 px-3 transition-all cursor-pointer relative ${
             activeTab === "overview"
-              ? "text-blue-600 after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-blue-600"
-              : "text-slate-500 hover:text-slate-800"
+              ? "text-indigo-600 after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-indigo-600"
+              : "text-slate-500 hover:text-slate-900"
           }`}
         >
           Overview
@@ -810,10 +813,10 @@ export default function TenantApprovalPage({
         <button
           type="button"
           onClick={() => setActiveTab("access")}
-          className={`pb-1.5 px-2.5 transition-all cursor-pointer relative ${
+          className={`pb-2 px-3 transition-all cursor-pointer relative ${
             activeTab === "access"
-              ? "text-blue-600 after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-blue-600"
-              : "text-slate-500 hover:text-slate-800"
+              ? "text-indigo-600 after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-indigo-600"
+              : "text-slate-500 hover:text-slate-900"
           }`}
         >
           Subscription & Session Access
@@ -821,10 +824,10 @@ export default function TenantApprovalPage({
         <button
           type="button"
           onClick={() => setActiveTab("modules")}
-          className={`pb-1.5 px-2.5 transition-all cursor-pointer relative ${
+          className={`pb-2 px-3 transition-all cursor-pointer relative ${
             activeTab === "modules"
-              ? "text-blue-600 after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-blue-600"
-              : "text-slate-500 hover:text-slate-800"
+              ? "text-indigo-600 after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-indigo-600"
+              : "text-slate-500 hover:text-slate-900"
           }`}
         >
           Module Permissions
@@ -903,97 +906,97 @@ export default function TenantApprovalPage({
               </span>
             </div>
 
-            <div className="grid grid-cols-2 gap-y-2.5 gap-x-4 text-xs">
-              <div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 text-xs">
+              <div className="p-2.5 rounded-xl bg-slate-50/70 border border-slate-100">
                 <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
-                  CRM COMPANY CODE
+                  CRM Company Code
                 </span>
-                <span className="font-mono font-bold text-slate-900 mt-0.5 block bg-slate-50 border border-slate-200 px-1.5 py-0.5 rounded w-fit">
+                <span className="font-mono font-bold text-slate-900 mt-1 block bg-white border border-slate-200 px-2 py-0.5 rounded-md w-fit shadow-2xs">
                   {companyCode || "N/A"}
                 </span>
               </div>
 
-              <div>
+              <div className="p-2.5 rounded-xl bg-slate-50/70 border border-slate-100">
                 <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
-                  BRANCH HIERARCHY
+                  Branch Hierarchy
                 </span>
-                <span className="font-bold text-slate-900 mt-0.5 block">
+                <span className="font-bold text-slate-900 mt-1 block">
                   {isHeadOffice ? `Head Office (${branchCount} Sub-Branches)` : `Branch of ${parentComp?.companyName || "Head Office"}`}
                 </span>
               </div>
 
-              <div>
+              <div className="p-2.5 rounded-xl bg-slate-50/70 border border-slate-100">
                 <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
-                  ENTITY TYPE
+                  Entity Formulation
                 </span>
-                <span className="font-bold text-slate-900 mt-0.5 block">
+                <span className="font-bold text-slate-900 mt-1 block">
                   {(company.businessType || "Pharma Distribution").toUpperCase().replace(/_/g, " ")}
                 </span>
               </div>
 
-              <div>
+              <div className="p-2.5 rounded-xl bg-slate-50/70 border border-slate-100">
                 <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
-                  CITY & STATE
+                  Operating Location
                 </span>
-                <span className="font-bold text-slate-900 mt-0.5 block">
+                <span className="font-bold text-slate-900 mt-1 block">
                   {[city, state].filter(Boolean).join(", ") || "Unassigned"}
                 </span>
               </div>
 
-              <div>
+              <div className="p-2.5 rounded-xl bg-slate-50/70 border border-slate-100">
                 <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
-                  GSTIN NUMBER
+                  GSTIN Number
                 </span>
-                <span className="font-mono font-bold text-slate-900 mt-0.5 block bg-slate-50 border border-slate-200 px-1.5 py-0.5 rounded w-fit">
-                  {gstin}
+                <span className="font-mono font-bold text-slate-900 mt-1 block bg-white border border-slate-200 px-2 py-0.5 rounded-md w-fit shadow-2xs">
+                  {gstin || "N/A"}
                 </span>
               </div>
 
-              <div>
+              <div className="p-2.5 rounded-xl bg-slate-50/70 border border-slate-100">
                 <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
-                  DRUG LICENSE NO
+                  Drug License No
                 </span>
-                <span className="font-mono font-bold text-slate-900 mt-0.5 block bg-slate-50 border border-slate-200 px-1.5 py-0.5 rounded w-fit">
-                  {drugLicense}
+                <span className="font-mono font-bold text-slate-900 mt-1 block bg-white border border-slate-200 px-2 py-0.5 rounded-md w-fit shadow-2xs">
+                  {drugLicense || "N/A"}
                 </span>
               </div>
 
-              <div>
+              <div className="p-2.5 rounded-xl bg-slate-50/70 border border-slate-100">
                 <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
-                  PAN NUMBER
+                  PAN Number
                 </span>
-                <span className="font-mono font-bold text-slate-900 mt-0.5 block">{pan}</span>
+                <span className="font-mono font-bold text-slate-900 mt-1 block">{pan || "N/A"}</span>
               </div>
 
-              <div>
+              <div className="p-2.5 rounded-xl bg-slate-50/70 border border-slate-100">
                 <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
-                  CONTACT PERSON
+                  Contact Person
                 </span>
-                <span className="font-bold text-slate-900 mt-0.5 block">{user.name}</span>
+                <span className="font-bold text-slate-900 mt-1 block">{user.name}</span>
               </div>
 
-              <div className="col-span-2 pt-1.5 mt-0.5 border-t border-slate-100">
+              <div className="sm:col-span-2 p-2.5 rounded-xl bg-slate-50/70 border border-slate-100">
                 <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
-                  REGISTERED ADDRESS
+                  Registered Commercial Address
                 </span>
-                <span className="text-slate-700 font-medium mt-0.5 block leading-relaxed">
+                <span className="text-slate-700 font-medium mt-1 block leading-relaxed">
                   {fullAddress}
                 </span>
               </div>
 
               {/* Connected Sub-Branches list if Head Office */}
               {isHeadOffice && childBranches.length > 0 && (
-                <div className="col-span-2 pt-2 mt-1 border-t border-slate-100">
-                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
-                    CONNECTED SUB-BRANCHES ({childBranches.length})
+                <div className="sm:col-span-2 pt-2 mt-1 border-t border-slate-100">
+                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1.5">
+                    Connected Sub-Branches ({childBranches.length})
                   </span>
                   <div className="flex flex-wrap gap-1.5">
                     {childBranches.map((cb: any) => (
                       <span
                         key={cb._id}
-                        className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-teal-50 border border-teal-200 text-teal-800 text-[11px] font-semibold"
+                        className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-teal-50 border border-teal-200/80 text-teal-800 text-[11px] font-semibold shadow-2xs"
                       >
-                        <FaCodeBranch size={9} />
+                        <FaCodeBranch size={9} className="text-teal-600" />
                         <span>{cb.companyName} ({cb.companyCode})</span>
                         <span className="text-[9.5px] text-teal-600 font-mono">[{cb.city || "Branch"}]</span>
                       </span>
@@ -1020,7 +1023,7 @@ export default function TenantApprovalPage({
                     setEnabledModules(SYSTEM_MODULES.map((m) => m.id));
                   }
                 }}
-                className="text-xs font-bold text-blue-600 hover:text-blue-700 cursor-pointer"
+                className="text-xs font-bold text-indigo-600 hover:text-indigo-700 cursor-pointer"
               >
                 {enabledModules.length === SYSTEM_MODULES.length ? "Deselect All" : "Select All"}
               </button>
@@ -1034,22 +1037,22 @@ export default function TenantApprovalPage({
                     key={mod.id}
                     type="button"
                     onClick={() => toggleModule(mod.id)}
-                    className={`p-2 rounded-xl border text-left transition-all cursor-pointer flex items-start gap-2 ${
+                    className={`p-2.5 rounded-xl border text-left transition-all cursor-pointer flex items-start gap-2.5 ${
                       isSelected
-                        ? "bg-blue-50/70 border-blue-200 ring-1 ring-blue-500/10"
-                        : "bg-slate-50/60 border-slate-200 hover:bg-slate-100/60"
+                        ? "bg-indigo-50/60 border-indigo-200/90 ring-1 ring-indigo-500/20 shadow-2xs"
+                        : "bg-slate-50/60 border-slate-200/80 hover:bg-slate-100/60"
                     }`}
                   >
                     <div
-                      className={`w-4 h-4 rounded-full flex items-center justify-center text-[9px] mt-0.5 shrink-0 border transition-all ${
-                        isSelected ? "bg-blue-600 border-blue-600 text-white" : "border-slate-300 bg-white"
+                      className={`w-4 h-4 rounded-md flex items-center justify-center text-[9px] mt-0.5 shrink-0 border transition-all ${
+                        isSelected ? "bg-indigo-600 border-indigo-600 text-white shadow-2xs" : "border-slate-300 bg-white"
                       }`}
                     >
                       {isSelected && <FaCheck />}
                     </div>
                     <div>
                       <div className="text-xs font-bold text-slate-900">{mod.name}</div>
-                      <div className="text-[10px] text-slate-400">{mod.desc}</div>
+                      <div className="text-[10px] text-slate-500 leading-snug mt-0.5">{mod.desc}</div>
                     </div>
                   </button>
                 );
@@ -1075,7 +1078,7 @@ export default function TenantApprovalPage({
                   setAdjustmentInput("0");
                   setShowDaysModal(true);
                 }}
-                className="px-3 py-1.5 rounded-full bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold shadow-sm shadow-blue-600/25 transition-all flex items-center gap-1.5 cursor-pointer"
+                className="px-3.5 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold shadow-sm shadow-indigo-600/25 transition-all flex items-center gap-1.5 cursor-pointer"
               >
                 <FaPlus size={9} /> Manage Days
               </button>
@@ -1102,7 +1105,7 @@ export default function TenantApprovalPage({
                         ? "stroke-rose-500"
                         : degradation.remainingDays <= 5
                         ? "stroke-amber-500"
-                        : "stroke-blue-600"
+                        : "stroke-indigo-600"
                     }`}
                     strokeWidth="8"
                     strokeDasharray={2 * Math.PI * 50}
@@ -1137,7 +1140,7 @@ export default function TenantApprovalPage({
                           ? "bg-rose-500"
                           : degradation.remainingDays <= 5
                           ? "bg-amber-500"
-                          : "bg-blue-600"
+                          : "bg-indigo-600"
                       }`}
                     />
                     Active Days Degradation
@@ -1151,7 +1154,7 @@ export default function TenantApprovalPage({
                         ? "bg-rose-500"
                         : degradation.remainingDays <= 5
                         ? "bg-amber-500"
-                        : "bg-blue-600"
+                        : "bg-indigo-600"
                     }`}
                     style={{ width: `${degradation.percent}%` }}
                   />
@@ -1190,10 +1193,10 @@ export default function TenantApprovalPage({
           <div className="bg-white rounded-2xl border border-slate-200/80 p-3.5 sm:p-4 shadow-xs space-y-2.5">
             <div className="flex items-center justify-between">
               <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
-                <FaClock className="text-blue-600" />
+                <FaClock className="text-indigo-600" />
                 User Login Session Timeout
               </h3>
-              <span className="text-[10px] font-bold text-blue-700 bg-blue-50 px-2 py-0.5 rounded-full">
+              <span className="text-[10px] font-bold text-indigo-700 bg-indigo-50 border border-indigo-200/80 px-2 py-0.5 rounded-md">
                 Super Admin = 365 Days
               </span>
             </div>
@@ -1213,15 +1216,15 @@ export default function TenantApprovalPage({
                       setSelectedSessionHours(preset.hours);
                       setCustomSessionHours("");
                     }}
-                    className={`min-h-[44px] py-1.5 px-1.5 rounded-xl sm:rounded-full text-xs font-semibold border transition-all flex flex-col items-center justify-center text-center cursor-pointer shadow-2xs ${
+                    className={`min-h-[44px] py-1.5 px-2 rounded-xl text-xs font-semibold border transition-all flex flex-col items-center justify-center text-center cursor-pointer shadow-2xs ${
                       isSelected
-                        ? "bg-blue-600 text-white border-blue-600 shadow-sm shadow-blue-600/20"
-                        : "bg-slate-50/70 border-slate-200 text-slate-700 hover:bg-slate-100 hover:border-slate-300"
+                        ? "bg-indigo-600 text-white border-indigo-600 shadow-md shadow-indigo-600/25 ring-1 ring-indigo-400/30"
+                        : "bg-slate-50/70 border-slate-200/90 text-slate-700 hover:bg-slate-100 hover:border-slate-300"
                     }`}
                   >
                     <span className="text-xs font-bold leading-tight">{main}</span>
                     {sub ? (
-                      <span className={`text-[9.5px] leading-tight font-normal mt-0.5 ${isSelected ? "text-blue-100" : "text-slate-400"}`}>
+                      <span className={`text-[9.5px] leading-tight font-normal mt-0.5 ${isSelected ? "text-indigo-100" : "text-slate-400"}`}>
                         {sub}
                       </span>
                     ) : (
@@ -1243,9 +1246,9 @@ export default function TenantApprovalPage({
                   placeholder="e.g. 3 or 6"
                   value={customSessionHours}
                   onChange={(e) => setCustomSessionHours(e.target.value)}
-                  className="w-full pl-3 pr-14 py-1.5 rounded-full text-xs bg-slate-50 border border-slate-200 text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 font-medium"
+                  className="w-full pl-3.5 pr-14 py-2 rounded-xl text-xs bg-slate-50/80 border border-slate-200/90 text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-600 font-medium transition-all"
                 />
-                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400">
+                <span className="absolute right-3.5 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400">
                   Hours
                 </span>
               </div>
@@ -1344,7 +1347,7 @@ export default function TenantApprovalPage({
               </div>
 
               {/* Input Box with + or — prefix (Matches Screenshot) */}
-              <div className="relative border border-slate-200 rounded-xl bg-white focus-within:border-blue-500 focus-within:ring-2 focus-within:ring-blue-500/20">
+              <div className="relative border border-slate-200 rounded-xl bg-white focus-within:border-indigo-500 focus-within:ring-2 focus-within:ring-indigo-500/20">
                 <span className="absolute left-4 top-1/2 -translate-y-1/2 text-sm font-bold text-slate-500">
                   {adjustmentAction === "add" ? "+" : "—"}
                 </span>
@@ -1369,7 +1372,7 @@ export default function TenantApprovalPage({
               <button
                 type="button"
                 onClick={() => setShowDaysModal(false)}
-                className="w-full sm:w-auto px-6 py-2.5 rounded-full text-xs font-bold text-slate-700 bg-white border border-slate-200 hover:bg-slate-50 transition-colors cursor-pointer text-center"
+                className="w-full sm:w-auto px-6 py-2.5 rounded-xl text-xs font-bold text-slate-700 bg-white border border-slate-200 hover:bg-slate-50 transition-colors cursor-pointer text-center"
               >
                 Cancel
               </button>
@@ -1377,7 +1380,7 @@ export default function TenantApprovalPage({
                 type="button"
                 onClick={handleUpdateSubscription}
                 disabled={modalSubmitting}
-                className="w-full sm:w-auto px-7 py-2.5 rounded-full text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 shadow-md shadow-blue-600/25 transition-all cursor-pointer disabled:opacity-50 flex items-center justify-center gap-1.5"
+                className="w-full sm:w-auto px-7 py-2.5 rounded-xl text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 shadow-md shadow-indigo-600/25 transition-all cursor-pointer disabled:opacity-50 flex items-center justify-center gap-1.5"
               >
                 {modalSubmitting ? (
                   <>

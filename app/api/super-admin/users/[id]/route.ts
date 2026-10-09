@@ -264,7 +264,7 @@ export async function PATCH(
 
     await targetUser.save();
 
-    // Synchronize changes to Company record if applicable
+    // Synchronize changes to Company record & Cascade to all Child Branches
     if (targetUser.companyId) {
       const Company = (await import("@/models/Company")).default;
       const companyUpdates: any = {};
@@ -294,6 +294,133 @@ export async function PATCH(
 
       if (Object.keys(companyUpdates).length > 0) {
         await Company.findByIdAndUpdate(targetUser.companyId, { $set: companyUpdates });
+      }
+
+      // ── CASCADE TO ALL CHILD BRANCHES & BRANCH USERS ──
+      const childCompanies = await Company.find({
+        parentCompanyId: targetUser.companyId,
+      }).select("_id").lean();
+      const childCompIds = childCompanies.map((c) => c._id);
+
+      if (childCompIds.length > 0) {
+        if (action === "approve" || action === "activate") {
+          await Company.updateMany(
+            { _id: { $in: childCompIds } },
+            { $set: { status: "Active", isDeleted: false } }
+          );
+          await User.updateMany(
+            { companyId: { $in: childCompIds }, isSuperAdmin: { $ne: true } },
+            {
+              $set: {
+                status: USER_APPROVAL_STATUS.ACTIVE,
+                isApproved: true,
+                approvedAt: now,
+                approvedBy: currentUser._id,
+                accessDurationDays: targetUser.accessDurationDays,
+                accessValidUntil: targetUser.accessValidUntil,
+                isUnlimitedAccess: Boolean(targetUser.isUnlimitedAccess),
+                sessionTimeoutHours: targetUser.sessionTimeoutHours,
+              },
+            }
+          );
+        } else if (
+          action === "adjust_days" ||
+          action === "extend" ||
+          action === "set_validity" ||
+          action === "setDuration"
+        ) {
+          await User.updateMany(
+            { companyId: { $in: childCompIds }, isSuperAdmin: { $ne: true } },
+            {
+              $set: {
+                status: USER_APPROVAL_STATUS.ACTIVE,
+                isApproved: true,
+                accessDurationDays: targetUser.accessDurationDays,
+                accessValidUntil: targetUser.accessValidUntil,
+                isUnlimitedAccess: Boolean(targetUser.isUnlimitedAccess),
+                sessionTimeoutHours: targetUser.sessionTimeoutHours,
+              },
+            }
+          );
+        } else if (action === "suspend" || action === "deactivate") {
+          await Company.updateMany(
+            { _id: { $in: childCompIds } },
+            { $set: { status: "Suspended" } }
+          );
+          await User.updateMany(
+            { companyId: { $in: childCompIds }, isSuperAdmin: { $ne: true } },
+            {
+              $set: {
+                status: USER_APPROVAL_STATUS.SUSPENDED,
+                isApproved: false,
+              },
+            }
+          );
+        } else if (action === "reject") {
+          await Company.updateMany(
+            { _id: { $in: childCompIds } },
+            { $set: { status: "Rejected" } }
+          );
+          await User.updateMany(
+            { companyId: { $in: childCompIds }, isSuperAdmin: { $ne: true } },
+            {
+              $set: {
+                status: USER_APPROVAL_STATUS.REJECTED,
+                isApproved: false,
+              },
+            }
+          );
+        } else if (action === "delete") {
+          await Company.updateMany(
+            { _id: { $in: childCompIds } },
+            {
+              $set: {
+                status: "Deleted",
+                isDeleted: true,
+                deletedAt: now,
+                deletedBy: currentUser._id,
+              },
+            }
+          );
+          await User.updateMany(
+            { companyId: { $in: childCompIds }, isSuperAdmin: { $ne: true } },
+            {
+              $set: {
+                status: USER_APPROVAL_STATUS.DELETED,
+                isDeleted: true,
+                isApproved: false,
+                deletedAt: now,
+                deletedBy: currentUser._id,
+                deletedReason: targetUser.deletedReason,
+              },
+            }
+          );
+        } else if (action === "restore") {
+          await Company.updateMany(
+            { _id: { $in: childCompIds } },
+            {
+              $set: {
+                status: "Active",
+                isDeleted: false,
+                deletedAt: null,
+                deletedBy: null,
+              },
+            }
+          );
+          await User.updateMany(
+            { companyId: { $in: childCompIds }, isSuperAdmin: { $ne: true } },
+            {
+              $set: {
+                status: USER_APPROVAL_STATUS.ACTIVE,
+                isDeleted: false,
+                isApproved: true,
+                deletedAt: null,
+                deletedBy: null,
+                deletedReason: "",
+              },
+            }
+          );
+        }
       }
     }
 
@@ -371,11 +498,18 @@ export async function DELETE(
     if (isPermanent) {
       await User.findByIdAndDelete(id);
       if (targetUser.companyId) {
+        // Find and purge all child branches
+        const childCompanies = await Company.find({ parentCompanyId: targetUser.companyId }).select("_id").lean();
+        const childCompIds = childCompanies.map((c) => c._id);
+        if (childCompIds.length > 0) {
+          await User.deleteMany({ companyId: { $in: childCompIds } });
+          await Company.deleteMany({ _id: { $in: childCompIds } });
+        }
         await Company.findByIdAndDelete(targetUser.companyId);
       }
       return NextResponse.json({
         success: true,
-        message: `User account ${targetUser.name} (${targetUser.email}) permanently deleted.`,
+        message: `User account ${targetUser.name} (${targetUser.email}) and its branch network permanently deleted.`,
       });
     }
 
@@ -398,6 +532,36 @@ export async function DELETE(
           deletedBy: currentUser._id,
         },
       });
+
+      // Cascade soft delete to all child branches and their users
+      const childCompanies = await Company.find({ parentCompanyId: targetUser.companyId }).select("_id").lean();
+      const childCompIds = childCompanies.map((c) => c._id);
+      if (childCompIds.length > 0) {
+        await Company.updateMany(
+          { _id: { $in: childCompIds } },
+          {
+            $set: {
+              status: "Deleted",
+              isDeleted: true,
+              deletedAt: now,
+              deletedBy: currentUser._id,
+            },
+          }
+        );
+        await User.updateMany(
+          { companyId: { $in: childCompIds }, isSuperAdmin: { $ne: true } },
+          {
+            $set: {
+              status: USER_APPROVAL_STATUS.DELETED,
+              isDeleted: true,
+              isApproved: false,
+              deletedAt: now,
+              deletedBy: currentUser._id,
+              deletedReason: reason,
+            },
+          }
+        );
+      }
     }
 
     return NextResponse.json({

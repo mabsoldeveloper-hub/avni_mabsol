@@ -190,35 +190,40 @@ function BranchManagementContent() {
 
   return (
     <div className="w-full max-w-[1600px] mx-auto space-y-4 text-slate-800">
-      {/* Executive Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white rounded-2xl border border-slate-200/80 p-4 sm:p-5 shadow-xs">
-        <div>
-          <div className="flex items-center gap-2.5">
-            <h1 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">
-              Multi-Branch Network Management
-            </h1>
-            <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10.5px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-200/80">
-              <FaCodeBranch size={10} />
-              {stats.totalEnterpriseNodes} Total Company Nodes
-            </span>
+      {/* Executive Command Header */}
+      <div className="relative overflow-hidden bg-white rounded-2xl border border-slate-200/90 p-4 sm:p-5 shadow-[0_1px_3px_rgba(15,23,42,0.03)] flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div className="flex items-start sm:items-center gap-3.5">
+          <div className="w-11 h-11 rounded-2xl bg-gradient-to-br from-indigo-600 via-indigo-700 to-slate-900 text-white flex items-center justify-center text-lg shadow-sm shadow-indigo-600/25 shrink-0">
+            <FaCodeBranch />
           </div>
-          <p className="text-xs text-slate-500 mt-1">
-            Hierarchical overview of Head Office enterprises, connected child branches, and regional nodes
-          </p>
+          <div>
+            <div className="flex items-center gap-2.5 flex-wrap">
+              <h1 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">
+                Multi-Branch Network Management
+              </h1>
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10.5px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-200/80">
+                <FaCodeBranch size={10} />
+                {stats.totalEnterpriseNodes} Total Network Nodes
+              </span>
+            </div>
+            <p className="text-xs text-slate-500 mt-1">
+              Hierarchical overview of Head Office enterprises, connected child branches, and regional operational nodes
+            </p>
+          </div>
         </div>
 
         <div className="flex items-center gap-2 self-start sm:self-auto shrink-0">
           <button
             type="button"
             onClick={expandAll}
-            className="px-3 py-1.5 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition-all cursor-pointer"
+            className="px-3.5 py-2 rounded-xl bg-slate-50/70 hover:bg-slate-100 border border-slate-200/90 text-slate-700 hover:text-slate-900 text-xs font-bold transition-all cursor-pointer shadow-2xs"
           >
             Expand All
           </button>
           <button
             type="button"
             onClick={collapseAll}
-            className="px-3 py-1.5 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition-all cursor-pointer"
+            className="px-3.5 py-2 rounded-xl bg-slate-50/70 hover:bg-slate-100 border border-slate-200/90 text-slate-700 hover:text-slate-900 text-xs font-bold transition-all cursor-pointer shadow-2xs"
           >
             Collapse All
           </button>
@@ -226,101 +231,105 @@ function BranchManagementContent() {
             type="button"
             onClick={fetchBranches}
             disabled={loading}
-            className="p-2.5 rounded-full bg-white border border-slate-200 text-slate-600 hover:text-slate-900 hover:border-slate-300 shadow-xs transition-all cursor-pointer disabled:opacity-50 flex items-center justify-center"
+            className="p-2.5 rounded-xl bg-slate-50/70 hover:bg-slate-100 border border-slate-200/90 text-slate-700 hover:text-slate-900 shadow-2xs transition-all cursor-pointer disabled:opacity-50 flex items-center justify-center"
             title="Refresh network"
           >
-            <FaSync className={`text-xs ${loading ? "animate-spin text-blue-600" : ""}`} />
+            <FaSync className={`text-xs ${loading ? "animate-spin text-indigo-600" : ""}`} />
           </button>
         </div>
       </div>
 
-      {/* 4 KPI Cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+      {/* 4 Luxury KPI Cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
         {/* Card 1: TOTAL HEAD OFFICES */}
-        <div className="bg-white rounded-2xl border border-slate-200/80 p-3.5 sm:p-4 shadow-xs">
+        <div className="relative group overflow-hidden bg-white rounded-2xl border border-slate-200/90 p-4 sm:p-5 shadow-[0_1px_3px_rgba(15,23,42,0.03)] hover:shadow-md hover:border-slate-300 transition-all duration-200">
+          <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-indigo-500 to-blue-500 opacity-90 group-hover:h-1.5 transition-all" />
           <div className="flex items-center justify-between">
-            <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider">
-              Head Offices (Main Hubs)
+            <span className="text-[10.5px] font-bold text-slate-500 uppercase tracking-wider">
+              Head Offices (Hubs)
             </span>
-            <div className="w-8 h-8 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center text-xs">
+            <div className="w-9 h-9 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center text-sm border border-indigo-100 group-hover:scale-105 transition-transform">
               <FaBuilding />
             </div>
           </div>
-          <div className="mt-2">
-            <div className="text-2xl sm:text-3xl font-black text-slate-900 leading-tight">
+          <div className="mt-3">
+            <div className="text-3xl font-black text-slate-900 tracking-tight leading-none font-mono">
               {stats.totalHeadOffices}
             </div>
-            <div className="text-[10.5px] text-indigo-600 font-semibold mt-0.5">
-              Primary enterprise licenses
+            <div className="mt-2.5 pt-2.5 border-t border-slate-100 text-[11px] text-indigo-700 font-semibold flex items-center gap-1">
+              <span>Primary enterprise licenses</span>
             </div>
           </div>
         </div>
 
         {/* Card 2: CONNECTED CHILD BRANCHES */}
-        <div className="bg-white rounded-2xl border border-slate-200/80 p-3.5 sm:p-4 shadow-xs">
+        <div className="relative group overflow-hidden bg-white rounded-2xl border border-slate-200/90 p-4 sm:p-5 shadow-[0_1px_3px_rgba(15,23,42,0.03)] hover:shadow-md hover:border-slate-300 transition-all duration-200">
+          <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-teal-500 to-emerald-500 opacity-90 group-hover:h-1.5 transition-all" />
           <div className="flex items-center justify-between">
-            <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider">
-              Connected Child Branches
+            <span className="text-[10.5px] font-bold text-slate-500 uppercase tracking-wider">
+              Child Branches
             </span>
-            <div className="w-8 h-8 rounded-xl bg-teal-50 text-teal-600 flex items-center justify-center text-xs">
+            <div className="w-9 h-9 rounded-xl bg-teal-50 text-teal-600 flex items-center justify-center text-sm border border-teal-100 group-hover:scale-105 transition-transform">
               <FaCodeBranch />
             </div>
           </div>
-          <div className="mt-2">
-            <div className="text-2xl sm:text-3xl font-black text-slate-900 leading-tight">
+          <div className="mt-3">
+            <div className="text-3xl font-black text-slate-900 tracking-tight leading-none font-mono">
               {stats.totalChildBranches}
             </div>
-            <div className="text-[10.5px] text-teal-600 font-semibold mt-0.5">
-              Regional operating units
+            <div className="mt-2.5 pt-2.5 border-t border-slate-100 text-[11px] text-teal-700 font-semibold flex items-center gap-1">
+              <span>Regional operating units</span>
             </div>
           </div>
         </div>
 
         {/* Card 3: OPERATIONAL COVERAGE */}
-        <div className="bg-white rounded-2xl border border-slate-200/80 p-3.5 sm:p-4 shadow-xs">
+        <div className="relative group overflow-hidden bg-white rounded-2xl border border-slate-200/90 p-4 sm:p-5 shadow-[0_1px_3px_rgba(15,23,42,0.03)] hover:shadow-md hover:border-slate-300 transition-all duration-200">
+          <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-emerald-500 to-teal-600 opacity-90 group-hover:h-1.5 transition-all" />
           <div className="flex items-center justify-between">
-            <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider">
+            <span className="text-[10.5px] font-bold text-slate-500 uppercase tracking-wider">
               Active Network Nodes
             </span>
-            <div className="w-8 h-8 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center text-xs">
+            <div className="w-9 h-9 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center text-sm border border-emerald-100 group-hover:scale-105 transition-transform">
               <FaCheckCircle />
             </div>
           </div>
-          <div className="mt-2">
-            <div className="flex items-baseline gap-2">
-              <span className="text-2xl sm:text-3xl font-black text-slate-900 leading-tight">
+          <div className="mt-3">
+            <div className="flex items-baseline gap-2.5">
+              <span className="text-3xl font-black text-slate-900 tracking-tight leading-none font-mono">
                 {stats.activeBranches}
               </span>
-              <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded-md border border-emerald-100">
-                {activePct}%
+              <span className="text-[10.5px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200/80">
+                {activePct}% Active
               </span>
             </div>
-            <div className="text-[10.5px] text-emerald-600 font-semibold mt-0.5">
+            <div className="mt-2.5 pt-2.5 border-t border-slate-100 text-[11px] text-emerald-700 font-semibold">
               Live & synchronized
             </div>
           </div>
         </div>
 
         {/* Card 4: RESTRICTED / PENDING */}
-        <div className="bg-white rounded-2xl border border-slate-200/80 p-3.5 sm:p-4 shadow-xs">
+        <div className="relative group overflow-hidden bg-white rounded-2xl border border-slate-200/90 p-4 sm:p-5 shadow-[0_1px_3px_rgba(15,23,42,0.03)] hover:shadow-md hover:border-slate-300 transition-all duration-200">
+          <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-amber-400 to-orange-500 opacity-90 group-hover:h-1.5 transition-all" />
           <div className="flex items-center justify-between">
-            <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider">
-              Restricted / Pending
+            <span className="text-[10.5px] font-bold text-slate-500 uppercase tracking-wider">
+              Pending / Suspended
             </span>
-            <div className="w-8 h-8 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center text-xs">
+            <div className="w-9 h-9 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center text-sm border border-amber-100 group-hover:scale-105 transition-transform">
               <FaClock />
             </div>
           </div>
-          <div className="mt-2">
-            <div className="flex items-baseline gap-2">
-              <span className="text-2xl sm:text-3xl font-black text-slate-900 leading-tight">
+          <div className="mt-3">
+            <div className="flex items-baseline gap-2.5">
+              <span className="text-3xl font-black text-slate-900 tracking-tight leading-none font-mono">
                 {stats.pendingBranches + stats.suspendedBranches}
               </span>
-              <span className="text-[10px] font-bold text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded-md border border-amber-100">
+              <span className="text-[10.5px] font-bold text-amber-800 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-200/80">
                 {stats.suspendedBranches} Suspended
               </span>
             </div>
-            <div className="text-[10.5px] text-amber-600 font-semibold mt-0.5">
+            <div className="mt-2.5 pt-2.5 border-t border-slate-100 text-[11px] text-amber-700 font-semibold">
               Requires clearance review
             </div>
           </div>
@@ -390,7 +399,7 @@ function BranchManagementContent() {
       <div className="space-y-3">
         {loading ? (
           <div className="bg-white rounded-2xl border border-slate-200/80 p-14 text-center text-slate-400 flex flex-col items-center justify-center gap-2.5">
-            <FaSync className="animate-spin text-xl text-blue-600" />
+            <FaSync className="animate-spin text-xl text-indigo-600" />
             <p className="text-xs font-semibold text-slate-600">Retrieving branch hierarchy...</p>
           </div>
         ) : networks.length === 0 ? (
@@ -644,7 +653,7 @@ function BranchManagementContent() {
                                       {b.adminUser?._id && (
                                         <Link
                                           href={`/dashboard/super-admin/approvals/${b.adminUser._id}`}
-                                          className="px-2.5 py-1 rounded-full bg-blue-50 hover:bg-blue-600 hover:text-white text-blue-700 border border-blue-200 text-[10.5px] font-bold transition-all"
+                                          className="px-2.5 py-1 rounded-full bg-indigo-50 hover:bg-indigo-600 hover:text-white text-indigo-700 border border-indigo-200 text-[10.5px] font-bold transition-all"
                                           title="Configure branch permissions"
                                         >
                                           Configure
@@ -676,7 +685,7 @@ export default function BranchManagementPage() {
       fallback={
         <div className="min-h-[400px] flex items-center justify-center">
           <div className="flex items-center gap-2 text-slate-500 text-sm font-semibold">
-            <FaSync className="animate-spin text-blue-600" />
+            <FaSync className="animate-spin text-indigo-600" />
             Loading multi-branch network...
           </div>
         </div>

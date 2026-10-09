@@ -25,7 +25,7 @@ export function useSuperAdminData(initialStatusFilter?: string) {
   const [filter, setFilter] = useState<FilterState>({
     search: "",
     status: initialStatusFilter || "all",
-    branchType: "all",
+    branchType: "head_office",
     parentCompanyId: "all",
     plan: "all",
     city: "all",
@@ -36,9 +36,15 @@ export function useSuperAdminData(initialStatusFilter?: string) {
   const fetchUsers = useCallback(async () => {
     setLoading(true);
     try {
-      const url = filter.status === "deleted"
-        ? "/api/super-admin/users?status=deleted"
-        : "/api/super-admin/users";
+      const params = new URLSearchParams();
+      if (filter.status && filter.status !== "all") {
+        params.set("status", filter.status);
+      }
+      if (filter.branchType && filter.branchType !== "head_office") {
+        params.set("branchType", filter.branchType);
+      }
+      const queryStr = params.toString() ? `?${params.toString()}` : "";
+      const url = `/api/super-admin/users${queryStr}`;
       const res = await fetch(url);
       const data = await res.json();
       if (data.users) {
@@ -52,7 +58,7 @@ export function useSuperAdminData(initialStatusFilter?: string) {
     } finally {
       setLoading(false);
     }
-  }, [filter.status]);
+  }, [filter.status, filter.branchType]);
 
   useEffect(() => {
     fetchUsers();
@@ -234,13 +240,14 @@ export function useSuperAdminData(initialStatusFilter?: string) {
         if (u.isDeleted) return false;
       }
 
-      // 3. Branch Type Filter ('all' | 'head_office' | 'child_branch')
-      if (filter.branchType === "head_office") {
-        const isHO = !u.companyId?.parentCompanyId || u.companyId?.isHeadOffice === true;
-        if (!isHO) return false;
-      } else if (filter.branchType === "child_branch") {
+      // 3. Branch Type Filter: child accounts should not be seen in the main list of accounts
+      if (filter.branchType === "child_branch") {
         const isBranch = Boolean(u.companyId?.parentCompanyId) || u.companyId?.isHeadOffice === false;
         if (!isBranch) return false;
+      } else if (filter.branchType !== "all_including_branches") {
+        // By default, strictly show Head Offices / Primary Accounts (child accounts hidden)
+        const isChild = Boolean(u.companyId?.parentCompanyId) && u.companyId?.isHeadOffice !== true;
+        if (isChild) return false;
       }
 
       // 4. Specific Head Office / Parent Filter

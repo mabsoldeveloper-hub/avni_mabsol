@@ -24,6 +24,8 @@ import {
   FaPlus,
   FaExclamationTriangle,
   FaCodeBranch,
+  FaTrash,
+  FaUndo,
 } from "react-icons/fa";
 import { DEFAULT_ACCESS_DAYS } from "@/lib/constants/superAdmin.constant";
 import { SESSION_TIMEOUT_PRESETS, DEFAULT_USER_SESSION_HOURS } from "@/lib/constants/session.constant";
@@ -176,6 +178,85 @@ export default function TenantApprovalPage({
     } catch (err) {
       console.error(err);
       alert("An unexpected error occurred.");
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleDelete = async () => {
+    const reason = window.prompt(
+      `Delete account "${user?.companyId?.companyName || user?.name}"?\nEnter reason for deletion:`,
+      "Decommissioned by Super Admin"
+    );
+    if (reason === null) return;
+    setActionLoading(true);
+    try {
+      const res = await fetch(`/api/super-admin/users/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "delete", notes: reason }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        alert("Account deleted and moved to Deleted Accounts (visible exclusively to Super Admin).");
+        await fetchUser();
+      } else {
+        alert(data.message || "Failed to delete account");
+      }
+    } catch (err: any) {
+      alert(err?.message || "Failed to delete account");
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleRestore = async () => {
+    if (!window.confirm(`Restore account "${user?.companyId?.companyName || user?.name}"? This will re-enable access.`)) {
+      return;
+    }
+    setActionLoading(true);
+    try {
+      const res = await fetch(`/api/super-admin/users/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "restore" }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        alert("Account restored successfully.");
+        await fetchUser();
+      } else {
+        alert(data.message || "Failed to restore account");
+      }
+    } catch (err: any) {
+      alert(err?.message || "Failed to restore account");
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handlePermanentDelete = async () => {
+    if (
+      !window.confirm(
+        `WARNING: PERMANENTLY PURGE account "${user?.companyId?.companyName || user?.name}" and its company record from MongoDB?\nThis CANNOT be undone.`
+      )
+    ) {
+      return;
+    }
+    setActionLoading(true);
+    try {
+      const res = await fetch(`/api/super-admin/users/${id}?permanent=true`, {
+        method: "DELETE",
+      });
+      const data = await res.json();
+      if (res.ok) {
+        alert("Account permanently purged from database.");
+        router.push("/dashboard/super-admin/deleted");
+      } else {
+        alert(data.message || "Failed to purge account");
+      }
+    } catch (err: any) {
+      alert(err?.message || "Failed to purge account");
     } finally {
       setActionLoading(false);
     }
@@ -365,57 +446,138 @@ export default function TenantApprovalPage({
 
   return (
     <div className="w-full max-w-[1600px] mx-auto space-y-3 text-slate-800">
-      {/* 1. TOP HERO BANNER & AVATAR CARD */}
-      <div className="bg-white rounded-2xl border border-slate-200/80 overflow-hidden shadow-xs">
+      {/* DELETED ACCOUNT ALERT BANNER */}
+      {user.isDeleted && (
+        <div className="bg-red-50 border-2 border-red-200 rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-red-900 shadow-xs">
+          <div className="flex items-start sm:items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-red-100 text-red-600 flex items-center justify-center shrink-0 text-base shadow-2xs">
+              <FaTrash />
+            </div>
+            <div>
+              <div className="flex items-center gap-2 flex-wrap">
+                <h3 className="font-bold text-sm text-red-950">Archived / Deleted Account</h3>
+                <span className="text-[10px] font-bold bg-red-200/80 text-red-900 px-2 py-0.5 rounded-full border border-red-300/80">
+                  Visible Exclusively To Super Admin
+                </span>
+              </div>
+              <p className="text-xs text-red-700 mt-0.5">
+                Deleted on {user.deletedAt ? new Date(user.deletedAt).toLocaleString() : "Recently"}
+                {user.deletedReason ? ` • Reason: "${user.deletedReason}"` : ""}
+                {user.deletedBy?.name ? ` • Performed by: ${user.deletedBy.name}` : ""}
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 self-start sm:self-auto shrink-0">
+            <button
+              type="button"
+              disabled={actionLoading}
+              onClick={handleRestore}
+              className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-xs cursor-pointer disabled:opacity-50"
+            >
+              <FaUndo size={11} /> Restore Account
+            </button>
+            <button
+              type="button"
+              disabled={actionLoading}
+              onClick={handlePermanentDelete}
+              className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-red-600 hover:bg-red-700 text-white font-bold text-xs shadow-xs cursor-pointer disabled:opacity-50"
+            >
+              <FaTrash size={11} /> Purge Forever
+            </button>
+          </div>
+        </div>
+      )}      {/* 1. TOP HERO BANNER & AVATAR CARD */}
+      <div className="bg-white rounded-2xl border border-slate-200/90 overflow-hidden shadow-[0_1px_3px_rgba(15,23,42,0.03)]">
         {/* Gradient Top Half with Action Buttons */}
-        <div className="h-20 sm:h-24 bg-gradient-to-r from-blue-700 via-indigo-600 to-blue-600 relative p-3.5 sm:p-4 flex items-start justify-between">
+        <div className="h-24 sm:h-28 bg-gradient-to-r from-slate-950 via-indigo-950 to-slate-900 relative p-4 sm:p-5 flex items-start justify-between">
           <Link
             href="/dashboard/super-admin"
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/20 hover:bg-white/30 text-white text-xs font-semibold backdrop-blur-xs transition-all cursor-pointer shadow-xs"
+            className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-white text-xs font-semibold backdrop-blur-md transition-all cursor-pointer shadow-2xs border border-white/10"
           >
-            <FaArrowLeft size={10} /> Back
+            <FaArrowLeft size={10} /> Back to Clearance
           </Link>
 
           {/* Quick Action Buttons in Top Right */}
-          <div className="flex items-center gap-2">
-            {!user.isApproved ? (
-              <button
-                type="button"
-                onClick={() => handleAction("reject")}
-                disabled={actionLoading}
-                className="px-3.5 py-1.5 rounded-full bg-white/20 hover:bg-rose-500 text-white text-xs font-semibold backdrop-blur-xs transition-all cursor-pointer border border-white/30"
-              >
-                Reject Application
-              </button>
+          <div className="flex items-center gap-2 flex-wrap justify-end">
+            {user.isDeleted ? (
+              <>
+                <button
+                  type="button"
+                  onClick={handleRestore}
+                  disabled={actionLoading}
+                  className="px-3.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition-all cursor-pointer shadow-sm flex items-center gap-1.5 disabled:opacity-50"
+                >
+                  <FaUndo size={11} /> Restore Account
+                </button>
+                <button
+                  type="button"
+                  onClick={handlePermanentDelete}
+                  disabled={actionLoading}
+                  className="px-3.5 py-1.5 rounded-xl bg-red-600 hover:bg-red-700 text-white text-xs font-bold transition-all cursor-pointer shadow-sm flex items-center gap-1.5 disabled:opacity-50"
+                >
+                  <FaTrash size={11} /> Purge Forever
+                </button>
+              </>
             ) : (
-              <button
-                type="button"
-                onClick={() => handleAction(isSuspended ? "activate" : "suspend")}
-                disabled={actionLoading}
-                className="px-3.5 py-1.5 rounded-full bg-white/20 hover:bg-rose-500 text-white text-xs font-semibold backdrop-blur-xs transition-all cursor-pointer border border-white/30"
-              >
-                {isSuspended ? "Reactivate" : "Suspend"}
-              </button>
-            )}
+              <>
+                {user.status !== "Rejected" && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const reason = window.prompt("Enter rejection notes / reason:");
+                      if (reason !== null) {
+                        setNotes(reason);
+                        handleAction("reject");
+                      }
+                    }}
+                    disabled={actionLoading}
+                    className="px-3 py-1.5 rounded-xl bg-amber-500/20 hover:bg-amber-600 text-amber-200 hover:text-white text-xs font-semibold backdrop-blur-md transition-all cursor-pointer border border-amber-400/30 flex items-center gap-1.5"
+                  >
+                    <FaBan size={10} /> Reject
+                  </button>
+                )}
 
-            <button
-              type="button"
-              onClick={() => handleAction(user.isApproved ? "update_settings" : "approve")}
-              disabled={actionLoading || (user.isApproved && !isDirty)}
-              className={`px-3.5 py-1.5 rounded-full text-xs font-bold transition-all ${
-                user.isApproved && !isDirty
-                  ? "bg-white/30 text-white/50 cursor-not-allowed border border-white/20"
-                  : "bg-white text-blue-700 hover:bg-blue-50 cursor-pointer shadow-sm"
-              }`}
-            >
-              {actionLoading
-                ? "Saving..."
-                : !user.isApproved
-                ? "Confirm Approval"
-                : isDirty
-                ? "Save Changes"
-                : "Saved"}
-            </button>
+                {user.isApproved && (
+                  <button
+                    type="button"
+                    onClick={() => handleAction(isSuspended ? "activate" : "suspend")}
+                    disabled={actionLoading}
+                    className="px-3.5 py-1.5 rounded-xl bg-white/10 hover:bg-rose-600 text-white text-xs font-semibold backdrop-blur-md transition-all cursor-pointer border border-white/20"
+                  >
+                    {isSuspended ? "Reactivate" : "Suspend"}
+                  </button>
+                )}
+
+                <button
+                  type="button"
+                  onClick={handleDelete}
+                  disabled={actionLoading}
+                  className="px-3 py-1.5 rounded-xl bg-rose-500/20 hover:bg-rose-600 text-rose-200 hover:text-white text-xs font-semibold backdrop-blur-md transition-all cursor-pointer border border-rose-400/30 flex items-center gap-1.5"
+                  title="Soft delete this account"
+                >
+                  <FaTrash size={10} /> Delete
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => handleAction(user.isApproved ? "update_settings" : "approve")}
+                  disabled={actionLoading || (user.isApproved && !isDirty)}
+                  className={`px-4 py-1.5 rounded-xl text-xs font-bold transition-all ${
+                    user.isApproved && !isDirty
+                      ? "bg-white/20 text-white/50 cursor-not-allowed border border-white/10"
+                      : "bg-white text-indigo-950 hover:bg-indigo-50 cursor-pointer shadow-sm"
+                  }`}
+                >
+                  {actionLoading
+                    ? "Saving..."
+                    : !user.isApproved
+                    ? "Confirm Approval"
+                    : isDirty
+                    ? "Save Changes"
+                    : "Saved"}
+                </button>
+              </>
+            )}
           </div>
         </div>
 
@@ -436,14 +598,26 @@ export default function TenantApprovalPage({
                   </h1>
                   <span
                     className={`text-[10.5px] font-bold px-2 py-0.5 rounded-full border ${
-                      !user.isApproved
+                      user.isDeleted
+                        ? "bg-red-50 text-red-700 border-red-200"
+                        : user.status === "Rejected"
+                        ? "bg-rose-50 text-rose-700 border-rose-200"
+                        : !user.isApproved
                         ? "bg-amber-50 text-amber-700 border-amber-200"
                         : isSuspended
                         ? "bg-rose-50 text-rose-700 border-rose-200"
                         : "bg-emerald-50 text-emerald-700 border-emerald-200"
                     }`}
                   >
-                    {!user.isApproved ? "Pending Review" : isSuspended ? "Suspended" : "Approved"}
+                    {user.isDeleted
+                      ? "Deleted"
+                      : user.status === "Rejected"
+                      ? "Rejected"
+                      : !user.isApproved
+                      ? "Pending Review"
+                      : isSuspended
+                      ? "Suspended"
+                      : "Approved"}
                   </span>
                   <span className={`text-[10.5px] font-semibold px-2 py-0.5 rounded-full border ${degradation.badgeClass}`}>
                     {degradation.remainingDays} Days Active
@@ -519,114 +693,119 @@ export default function TenantApprovalPage({
       </div>
 
       {/* 2. 5-KPI METRIC STRIP */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 sm:gap-2.5">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2.5 sm:gap-3">
         {/* KPI 1: Active Days Remaining & Degradation */}
-        <div className="bg-white rounded-2xl border border-slate-200/80 p-3 shadow-xs flex flex-col justify-between">
+        <div className="relative overflow-hidden bg-white rounded-2xl border border-slate-200/90 p-3.5 shadow-[0_1px_3px_rgba(15,23,42,0.03)] hover:shadow-md transition-all flex flex-col justify-between group">
+          <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-blue-500 to-indigo-500" />
           <div className="flex items-center justify-between">
-            <div className="w-7 h-7 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center text-xs">
+            <div className="w-8 h-8 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center text-xs border border-blue-100 shadow-2xs">
               <FaCalendarAlt />
             </div>
-            <span className="text-[9.5px] font-bold text-blue-700 bg-blue-50 px-1.5 py-0.5 rounded uppercase">
+            <span className="text-[10px] font-bold text-blue-700 bg-blue-50 px-2 py-0.5 rounded-full border border-blue-200/70 uppercase">
               Validity
             </span>
           </div>
-          <div className="mt-1.5">
-            <div className="text-lg font-extrabold text-slate-900 leading-tight">
+          <div className="mt-2">
+            <div className="text-xl font-extrabold text-slate-900 leading-tight tabular-nums tracking-tight">
               {degradation.remainingDays} Days
             </div>
-            <div className="text-xs font-bold text-slate-800">Remaining Balance</div>
-            <div className="text-[10.5px] text-slate-400 mt-0.5">
-              {degradation.status} • Total {degradation.totalDays}d
+            <div className="text-xs font-semibold text-slate-700 mt-0.5">Remaining Balance</div>
+            <div className="text-[11px] text-slate-400 mt-0.5 truncate">
+              {degradation.status} • {degradation.totalDays}d total
             </div>
           </div>
         </div>
 
         {/* KPI 2: Session Timeout */}
-        <div className="bg-white rounded-2xl border border-slate-200/80 p-3 shadow-xs flex flex-col justify-between">
+        <div className="relative overflow-hidden bg-white rounded-2xl border border-slate-200/90 p-3.5 shadow-[0_1px_3px_rgba(15,23,42,0.03)] hover:shadow-md transition-all flex flex-col justify-between group">
+          <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-indigo-500 to-purple-500" />
           <div className="flex items-center justify-between">
-            <div className="w-7 h-7 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center text-xs">
+            <div className="w-8 h-8 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center text-xs border border-indigo-100 shadow-2xs">
               <FaClock />
             </div>
-            <span className="text-[9.5px] font-bold text-indigo-700 bg-indigo-50 px-1.5 py-0.5 rounded uppercase">
+            <span className="text-[10px] font-bold text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded-full border border-indigo-200/70 uppercase">
               Security
             </span>
           </div>
-          <div className="mt-1.5">
-            <div className="text-lg font-extrabold text-slate-900 leading-tight">
+          <div className="mt-2">
+            <div className="text-xl font-extrabold text-slate-900 leading-tight tabular-nums tracking-tight">
               {selectedSessionHours} Hour{selectedSessionHours > 1 ? "s" : ""}
             </div>
-            <div className="text-xs font-bold text-slate-800">Session Timeout</div>
-            <div className="text-[10.5px] text-slate-400 mt-0.5">Inactivity re-auth</div>
+            <div className="text-xs font-semibold text-slate-700 mt-0.5">Session Timeout</div>
+            <div className="text-[11px] text-slate-400 mt-0.5">Inactivity re-auth</div>
           </div>
         </div>
 
         {/* KPI 3: Enabled Modules */}
-        <div className="bg-white rounded-2xl border border-slate-200/80 p-3 shadow-xs flex flex-col justify-between">
+        <div className="relative overflow-hidden bg-white rounded-2xl border border-slate-200/90 p-3.5 shadow-[0_1px_3px_rgba(15,23,42,0.03)] hover:shadow-md transition-all flex flex-col justify-between group">
+          <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-cyan-500 to-teal-500" />
           <div className="flex items-center justify-between">
-            <div className="w-7 h-7 rounded-lg bg-cyan-50 text-cyan-600 flex items-center justify-center text-xs">
+            <div className="w-8 h-8 rounded-xl bg-cyan-50 text-cyan-600 flex items-center justify-center text-xs border border-cyan-100 shadow-2xs">
               <FaBoxes />
             </div>
-            <span className="text-[9.5px] font-bold text-cyan-700 bg-cyan-50 px-1.5 py-0.5 rounded uppercase">
+            <span className="text-[10px] font-bold text-cyan-700 bg-cyan-50 px-2 py-0.5 rounded-full border border-cyan-200/70 uppercase">
               Modules
             </span>
           </div>
-          <div className="mt-1.5">
-            <div className="text-lg font-extrabold text-slate-900 leading-tight">
+          <div className="mt-2">
+            <div className="text-xl font-extrabold text-slate-900 leading-tight tabular-nums tracking-tight">
               {enabledModules.length} / {SYSTEM_MODULES.length}
             </div>
-            <div className="text-xs font-bold text-slate-800">Active Modules</div>
-            <div className="text-[10.5px] text-slate-400 mt-0.5">CRM capabilities</div>
+            <div className="text-xs font-semibold text-slate-700 mt-0.5">Active Modules</div>
+            <div className="text-[11px] text-slate-400 mt-0.5">CRM capabilities</div>
           </div>
         </div>
 
         {/* KPI 4: Primary Admin */}
-        <div className="bg-white rounded-2xl border border-slate-200/80 p-3 shadow-xs flex flex-col justify-between">
+        <div className="relative overflow-hidden bg-white rounded-2xl border border-slate-200/90 p-3.5 shadow-[0_1px_3px_rgba(15,23,42,0.03)] hover:shadow-md transition-all flex flex-col justify-between group">
+          <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-emerald-500 to-green-500" />
           <div className="flex items-center justify-between">
-            <div className="w-7 h-7 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center text-xs">
+            <div className="w-8 h-8 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center text-xs border border-emerald-100 shadow-2xs">
               <FaUserCheck />
             </div>
-            <span className="text-[9.5px] font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded uppercase">
+            <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200/70 uppercase">
               Admin
             </span>
           </div>
-          <div className="mt-1.5">
-            <div className="text-lg font-extrabold text-slate-900 leading-tight truncate">
+          <div className="mt-2">
+            <div className="text-xl font-extrabold text-slate-900 leading-tight truncate tracking-tight">
               {user.name || "Primary User"}
             </div>
-            <div className="text-xs font-bold text-slate-800">Root Administrator</div>
-            <div className="text-[10.5px] text-slate-400 mt-0.5 truncate">{user.email}</div>
+            <div className="text-xs font-semibold text-slate-700 mt-0.5">Root Administrator</div>
+            <div className="text-[11px] text-slate-400 mt-0.5 truncate">{user.email}</div>
           </div>
         </div>
 
         {/* KPI 5: Compliance Status */}
-        <div className="bg-white rounded-2xl border border-slate-200/80 p-3 shadow-xs flex flex-col justify-between col-span-2 sm:col-span-1">
+        <div className="relative overflow-hidden bg-white rounded-2xl border border-slate-200/90 p-3.5 shadow-[0_1px_3px_rgba(15,23,42,0.03)] hover:shadow-md transition-all flex flex-col justify-between col-span-2 sm:col-span-1 group">
+          <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-violet-500 to-purple-500" />
           <div className="flex items-center justify-between">
-            <div className="w-7 h-7 rounded-lg bg-violet-50 text-violet-600 flex items-center justify-center text-xs">
+            <div className="w-8 h-8 rounded-xl bg-violet-50 text-violet-600 flex items-center justify-center text-xs border border-violet-100 shadow-2xs">
               <FaShieldAlt />
             </div>
-            <span className="text-[9.5px] font-bold text-violet-700 bg-violet-50 px-1.5 py-0.5 rounded uppercase">
+            <span className="text-[10px] font-bold text-violet-700 bg-violet-50 px-2 py-0.5 rounded-full border border-violet-200/70 uppercase">
               Audit
             </span>
           </div>
-          <div className="mt-1.5">
-            <div className="text-lg font-extrabold text-slate-900 leading-tight">
+          <div className="mt-2">
+            <div className="text-xl font-extrabold text-slate-900 leading-tight tracking-tight">
               {gstin !== "N/A" ? "Verified" : "Pending"}
             </div>
-            <div className="text-xs font-bold text-slate-800">Pharma Compliance</div>
-            <div className="text-[10.5px] text-slate-400 mt-0.5">GSTIN & License</div>
+            <div className="text-xs font-semibold text-slate-700 mt-0.5">Pharma Compliance</div>
+            <div className="text-[11px] text-slate-400 mt-0.5">GSTIN & License</div>
           </div>
         </div>
       </div>
 
       {/* 3. NAVIGATION TABS BAR */}
-      <div className="flex items-center gap-1.5 border-b border-slate-200/80 pb-0.5 text-xs font-bold">
+      <div className="flex items-center gap-2 border-b border-slate-200/80 pb-1 text-xs font-bold pt-1">
         <button
           type="button"
           onClick={() => setActiveTab("overview")}
-          className={`pb-1.5 px-2.5 transition-all cursor-pointer relative ${
+          className={`pb-2 px-3 transition-all cursor-pointer relative ${
             activeTab === "overview"
-              ? "text-blue-600 after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-blue-600"
-              : "text-slate-500 hover:text-slate-800"
+              ? "text-indigo-600 after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-indigo-600"
+              : "text-slate-500 hover:text-slate-900"
           }`}
         >
           Overview
@@ -634,10 +813,10 @@ export default function TenantApprovalPage({
         <button
           type="button"
           onClick={() => setActiveTab("access")}
-          className={`pb-1.5 px-2.5 transition-all cursor-pointer relative ${
+          className={`pb-2 px-3 transition-all cursor-pointer relative ${
             activeTab === "access"
-              ? "text-blue-600 after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-blue-600"
-              : "text-slate-500 hover:text-slate-800"
+              ? "text-indigo-600 after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-indigo-600"
+              : "text-slate-500 hover:text-slate-900"
           }`}
         >
           Subscription & Session Access
@@ -645,10 +824,10 @@ export default function TenantApprovalPage({
         <button
           type="button"
           onClick={() => setActiveTab("modules")}
-          className={`pb-1.5 px-2.5 transition-all cursor-pointer relative ${
+          className={`pb-2 px-3 transition-all cursor-pointer relative ${
             activeTab === "modules"
-              ? "text-blue-600 after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-blue-600"
-              : "text-slate-500 hover:text-slate-800"
+              ? "text-indigo-600 after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-indigo-600"
+              : "text-slate-500 hover:text-slate-900"
           }`}
         >
           Module Permissions

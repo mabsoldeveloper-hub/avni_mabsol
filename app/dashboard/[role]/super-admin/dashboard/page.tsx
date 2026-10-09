@@ -30,27 +30,32 @@ function DashboardOverviewContent() {
 
   return (
     <div className="w-full max-w-[1600px] mx-auto space-y-4 text-slate-800">
-      {/* Top Header / Executive Command Bar */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white rounded-2xl border border-slate-200/80 p-4 sm:p-5 shadow-xs">
-        <div>
-          <div className="flex items-center gap-2.5">
-            <h1 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">
-              Platform Command Center
-            </h1>
-            <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10.5px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200/80">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-              Live Operational
-            </span>
+      {/* Executive Command Bar */}
+      <div className="relative overflow-hidden bg-white rounded-2xl border border-slate-200/90 p-4 sm:p-5 shadow-[0_1px_3px_rgba(15,23,42,0.03)] flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div className="flex items-start sm:items-center gap-3.5">
+          <div className="w-11 h-11 rounded-2xl bg-gradient-to-br from-indigo-600 via-indigo-700 to-slate-900 text-white flex items-center justify-center text-lg shadow-sm shadow-indigo-600/25 shrink-0">
+            <FaShieldAlt />
           </div>
-          <p className="text-xs text-slate-500 mt-1">
-            Real-time enterprise metrics, tenant capacity distribution, and security governance
-          </p>
+          <div>
+            <div className="flex items-center gap-2.5 flex-wrap">
+              <h1 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">
+                Platform Command Center
+              </h1>
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10.5px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200/80">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                Live Operational
+              </span>
+            </div>
+            <p className="text-xs text-slate-500 mt-1">
+              Real-time enterprise metrics, multi-tenant hierarchy governance, and clearance monitoring
+            </p>
+          </div>
         </div>
 
         <div className="flex items-center gap-2.5 self-start sm:self-auto shrink-0">
           <Link
             href="/dashboard/super-admin"
-            className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-full border border-blue-600 shadow-sm shadow-blue-600/25 transition-all flex items-center gap-2 cursor-pointer"
+            className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl border border-indigo-600 shadow-sm shadow-indigo-600/25 transition-all flex items-center gap-2 cursor-pointer"
           >
             <FaUserCheck size={12} />
             <span>Review Approvals</span>
@@ -63,7 +68,7 @@ function DashboardOverviewContent() {
 
           <Link
             href="/dashboard/super-admin/accounts"
-            className="px-3.5 py-2 bg-white hover:bg-slate-50 text-slate-700 text-xs font-bold rounded-full border border-slate-200 shadow-xs transition-all flex items-center gap-1.5 cursor-pointer"
+            className="px-3.5 py-2 bg-slate-50/70 hover:bg-slate-100 border border-slate-200/90 text-slate-700 hover:text-slate-900 text-xs font-bold rounded-xl shadow-2xs transition-all flex items-center gap-1.5 cursor-pointer"
           >
             <FaIdCard size={12} className="text-slate-500" />
             <span>Directory</span>
@@ -73,10 +78,10 @@ function DashboardOverviewContent() {
             type="button"
             onClick={refetch}
             disabled={loading}
-            className="p-2.5 rounded-full bg-white border border-slate-200 text-slate-600 hover:text-slate-900 hover:border-slate-300 shadow-xs transition-all cursor-pointer disabled:opacity-50 flex items-center justify-center"
+            className="p-2.5 rounded-xl bg-slate-50/70 hover:bg-slate-100 border border-slate-200/90 text-slate-700 hover:text-slate-900 shadow-2xs transition-all cursor-pointer disabled:opacity-50 flex items-center justify-center"
             title="Refresh metrics"
           >
-            <FaSync className={`text-xs ${loading ? "animate-spin text-blue-600" : ""}`} />
+            <FaSync className={`text-xs ${loading ? "animate-spin text-indigo-600" : ""}`} />
           </button>
         </div>
       </div>

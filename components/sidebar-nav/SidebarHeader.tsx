@@ -20,20 +20,25 @@ export default React.memo(function SidebarHeader({
     return (
       <div
         className={`relative flex items-center shrink-0 ${
-          iconOnly ? "justify-center px-1" : "px-3.5"
-        } h-[68px] border-b border-slate-800/80 transition-all duration-300`}
+          iconOnly ? "justify-center px-1" : "px-4"
+        } h-[68px] border-0 bg-white transition-all duration-300`}
       >
-        <div className="flex items-center gap-2.5 w-full min-w-0">
-          <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-indigo-500 via-blue-600 to-purple-600 flex items-center justify-center text-white font-black text-base shadow-md shadow-indigo-500/25 shrink-0 select-none">
+        <div className="flex items-center gap-3 w-full min-w-0">
+          <div className="w-9 h-9 rounded-xl bg-indigo-600 text-white font-black text-sm flex items-center justify-center shadow-xs shrink-0 select-none">
             M
           </div>
           {!iconOnly && (
             <div className="flex flex-col min-w-0 flex-1">
-              <span className="text-[13px] font-black text-white tracking-wider leading-none">
-                MABSOL
-              </span>
-              <span className="text-[8.5px] font-extrabold text-white/80 tracking-widest uppercase mt-1">
-                SUPER ADMIN SUITE
+              <div className="flex items-center gap-1.5">
+                <span className="text-[13px] font-black text-slate-900 tracking-wider leading-none">
+                  MABSOL
+                </span>
+                <span className="text-[8.5px] font-bold text-indigo-700 bg-indigo-50 border border-indigo-200/80 px-1.5 py-0.2 rounded">
+                  PRO
+                </span>
+              </div>
+              <span className="text-[9px] font-bold text-slate-400 tracking-wider uppercase mt-1">
+                Super Admin Console
               </span>
             </div>
           )}

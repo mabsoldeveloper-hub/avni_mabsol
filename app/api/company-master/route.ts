@@ -162,6 +162,25 @@ export async function POST(req: Request) {
       }
     }
 
+    // If this is a child branch, inherit status & subscription from parent Head Office
+    let parentCompDoc: any = null;
+    let parentUserDoc: any = null;
+    if (parentCompanyId) {
+      parentCompDoc = await Company.findById(parentCompanyId).lean();
+      parentUserDoc = await User.findOne({
+        companyId: parentCompanyId,
+        isSuperAdmin: { $ne: true },
+      }).lean();
+    }
+
+    const branchStatus = parentCompDoc
+      ? parentCompDoc.status === "Suspended" || parentCompDoc.status === "Inactive"
+        ? "Suspended"
+        : parentCompDoc.status === "Rejected"
+        ? "Rejected"
+        : "Active"
+      : data.status || "Active";
+
     const company = await Company.create({
       tenantId: targetTenantId,
       companyCode: finalCode,
@@ -182,7 +201,7 @@ export async function POST(req: Request) {
       currency: data.currency || null,
       logo: data.logo || "",
       enabledModules: Array.isArray(data.enabledModules) ? data.enabledModules : [],
-      status: data.status || "Active",
+      status: branchStatus,
       isDefault: false,
       isHeadOffice: false,
       parentCompanyId: parentCompanyId,
@@ -190,18 +209,28 @@ export async function POST(req: Request) {
     });
 
     // Create or link Administrator User for this company so they can log in directly
+    // Inherit approval and subscription validity from Head Office
     if (data.email) {
       const cleanEmail = String(data.email).toLowerCase().trim();
       let companyUser = await User.findOne({ email: cleanEmail });
       const hashedPassword = data.password ? await bcrypt.hash(data.password, 10) : "";
 
+      const inheritsApproval = parentUserDoc ? Boolean(parentUserDoc.isApproved) : true;
+      const inheritsStatus = parentUserDoc ? parentUserDoc.status : branchStatus;
+      const inheritsDurationDays = parentUserDoc?.accessDurationDays || 30;
+      const inheritsValidUntil = parentUserDoc?.accessValidUntil || new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+      const inheritsUnlimited = parentUserDoc ? Boolean(parentUserDoc.isUnlimitedAccess) : false;
+      const inheritsTimeout = parentUserDoc?.sessionTimeoutHours || 24;
+
       if (companyUser) {
         companyUser.companyId = company._id;
         if (hashedPassword) companyUser.password = hashedPassword;
-        companyUser.status = "Active";
-        companyUser.isApproved = true;
-        companyUser.isUnlimitedAccess = true;
-        companyUser.accessValidUntil = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000);
+        companyUser.status = inheritsStatus;
+        companyUser.isApproved = inheritsApproval;
+        companyUser.isUnlimitedAccess = inheritsUnlimited;
+        companyUser.accessDurationDays = inheritsDurationDays;
+        companyUser.accessValidUntil = inheritsValidUntil;
+        companyUser.sessionTimeoutHours = inheritsTimeout;
         await companyUser.save();
       } else {
         let adminRole = await Role.findOne({
@@ -238,11 +267,12 @@ export async function POST(req: Request) {
           mobile: data.mobile?.replace(/\D/g, "") || "",
           password: hashedPassword || (await bcrypt.hash("Admin@123", 10)),
           designation: "Company Administrator",
-          status: "Active",
-          isApproved: true,
-          isUnlimitedAccess: true,
-          accessDurationDays: 365,
-          accessValidUntil: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000),
+          status: inheritsStatus,
+          isApproved: inheritsApproval,
+          isUnlimitedAccess: inheritsUnlimited,
+          accessDurationDays: inheritsDurationDays,
+          accessValidUntil: inheritsValidUntil,
+          sessionTimeoutHours: inheritsTimeout,
         });
       }
     }

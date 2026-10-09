@@ -1490,6 +1490,7 @@ function setupEventListeners() {
           pincode: "",
           address: "",
           mobile: "",
+          sameGstAsStep1: false,
           email: "",
           password: "",
           confirmPassword: "",
@@ -1554,39 +1555,8 @@ function setupEventListeners() {
   function validateBranchMobileField(curIdx, cleanMob, showUiError = true) {
     const errEl = document.getElementById("brMobileErrorText");
     const inputEl = document.getElementById("brMobileInput");
-    const hoMob = (regMobile?.value || "").replace(/\D/g, "");
 
-    if (!cleanMob) {
-      if (errEl) errEl.classList.add("hidden");
-      inputEl?.classList.remove("input-has-error");
-      return { valid: false, message: "Branch phone number is required" };
-    }
-
-    // 1. Cannot equal Head Office phone from Step 1
-    if (cleanMob.length === 10 && cleanMob === hoMob) {
-      const msg = `Cannot use Head Office phone (+91 ${hoMob}) for Branch #${curIdx + 1}. Each branch requires a unique phone number.`;
-      if (showUiError) {
-        if (errEl) { errEl.textContent = `❌ ${msg}`; errEl.classList.remove("hidden"); }
-        inputEl?.classList.add("input-has-error");
-      }
-      return { valid: false, message: msg };
-    }
-
-    // 2. Cannot duplicate other branches
-    if (cleanMob.length === 10) {
-      for (let j = 0; j < signupWizardState.additionalBranches.length; j++) {
-        const otherMob = (signupWizardState.additionalBranches[j].mobile || "").replace(/\D/g, "");
-        if (j !== curIdx && otherMob === cleanMob) {
-          const msg = `This phone number is already assigned to Branch #${j + 1}. Each branch requires a unique phone number.`;
-          if (showUiError) {
-            if (errEl) { errEl.textContent = `❌ ${msg}`; errEl.classList.remove("hidden"); }
-            inputEl?.classList.add("input-has-error");
-          }
-          return { valid: false, message: msg };
-        }
-      }
-    }
-
+    // Branch contact phone is optional - no mandatory validation required
     if (errEl) errEl.classList.add("hidden");
     inputEl?.classList.remove("input-has-error");
     return { valid: true };
@@ -1624,7 +1594,7 @@ function setupEventListeners() {
     activeBranchCard.innerHTML = `
       <div class="branch-top-bar">
         <h4>🏢 Branch #${curIdx + 1} Configuration</h4>
-        <button type="button" class="btn-copy-ho" id="brCopyHoBtn">📋 Copy Head Office Details (GST &amp; Address)</button>
+        <button type="button" class="btn-copy-ho" id="brCopyHoBtn">📋 Same as Step 1 Details</button>
       </div>
 
       <div class="clean-field">
@@ -1636,13 +1606,16 @@ function setupEventListeners() {
 
       <div class="clean-field">
         <div class="clean-label-row">
-          <label>Branch GSTIN (Optional if using Head Office GST)</label>
-          <span class="field-hint">Auto-fills branch address</span>
+          <label>Branch GSTIN</label>
+          <label class="same-step1-checkbox-label">
+            <input type="checkbox" id="brSameStep1GstCheckbox" ${curBranch.sameGstAsStep1 || (curBranch.gstNo && curBranch.gstNo === (regGstNo?.value || '').trim().toUpperCase()) ? 'checked' : ''}>
+            <span>Same GST as Step 1 GST ${regGstNo?.value ? `(${escapeHtml(regGstNo.value.trim().toUpperCase())})` : ''}</span>
+          </label>
         </div>
         <div class="clean-input-row">
           <span class="clean-field-icon">📋</span>
-          <input type="text" id="brGstInput" placeholder="ENTER 15-DIGIT GSTIN" maxlength="15" value="${escapeHtml(curBranch.gstNo)}" style="text-transform:uppercase; font-family:monospace;">
-          <button type="button" id="brVerifyGstBtn" class="clean-inline-btn">${curBranch.verified ? 'Verified ✓' : 'Verify GST'}</button>
+          <input type="text" id="brGstInput" placeholder="ENTER 15-DIGIT GSTIN" maxlength="15" value="${escapeHtml(curBranch.gstNo)}" style="text-transform:uppercase; font-family:monospace;" ${curBranch.sameGstAsStep1 ? 'readonly' : ''}>
+          <button type="button" id="brVerifyGstBtn" class="clean-inline-btn" ${curBranch.sameGstAsStep1 ? 'disabled' : ''}>${curBranch.verified ? 'Verified ✓' : 'Verify GST'}</button>
         </div>
         <div id="brGstStatusPill" class="gst-verified-pill ${curBranch.verified ? '' : 'hidden'}">✓ Branch GSTIN Verified</div>
       </div>
@@ -1677,10 +1650,10 @@ function setupEventListeners() {
           </div>
         </div>
         <div class="clean-field">
-          <label><span class="req-star">*</span> Branch Contact Phone (Must be unique)</label>
+          <label>Branch Contact Phone (Optional)</label>
           <div class="clean-input-row">
             <span class="clean-field-icon">📞</span>
-            <input type="tel" id="brMobileInput" placeholder="10-digit mobile number" maxlength="10" value="${escapeHtml(curBranch.mobile)}">
+            <input type="tel" id="brMobileInput" placeholder="10-digit mobile number (optional)" maxlength="10" value="${escapeHtml(curBranch.mobile || '')}">
           </div>
           <div id="brMobileErrorText" class="clean-field-error hidden"></div>
         </div>
@@ -1732,16 +1705,38 @@ function setupEventListeners() {
       </div>
     `;
 
+    // Wire Same GST as Step 1 Checkbox
+    document.getElementById("brSameStep1GstCheckbox")?.addEventListener("change", (e) => {
+      const isChecked = e.target.checked;
+      curBranch.sameGstAsStep1 = isChecked;
+      if (isChecked) {
+        curBranch.gstNo = (regGstNo?.value || "").trim().toUpperCase();
+        curBranch.address = curBranch.address || (regAddress?.value || "").trim();
+        curBranch.city = curBranch.city || (regCity?.value || "").trim();
+        curBranch.state = curBranch.state || (regState?.value || "").trim();
+        curBranch.pincode = curBranch.pincode || (regPincode?.value || "").trim();
+        curBranch.verified = Boolean(signupWizardState.isPrimaryGstVerified);
+        renderBranchTabsAndCard();
+        showToast("Applied Step 1 GST & Address to Branch!", "info");
+      } else {
+        curBranch.gstNo = "";
+        curBranch.verified = false;
+        renderBranchTabsAndCard();
+      }
+    });
+
     // Wire Copy Head Office Details (Copies GST & Address only, NOT email or phone)
     document.getElementById("brCopyHoBtn")?.addEventListener("click", () => {
+      curBranch.sameGstAsStep1 = true;
       curBranch.branchName = curBranch.branchName || `${regCompanyName?.value || 'Branch'} - Branch ${curIdx + 1}`;
-      curBranch.gstNo = curBranch.gstNo || (regGstNo?.value || "").trim();
-      curBranch.address = curBranch.address || (regAddress?.value || "").trim();
-      curBranch.city = curBranch.city || (regCity?.value || "").trim();
-      curBranch.state = curBranch.state || (regState?.value || "").trim();
-      curBranch.pincode = curBranch.pincode || (regPincode?.value || "").trim();
+      curBranch.gstNo = (regGstNo?.value || "").trim().toUpperCase();
+      curBranch.address = (regAddress?.value || "").trim();
+      curBranch.city = (regCity?.value || "").trim();
+      curBranch.state = (regState?.value || "").trim();
+      curBranch.pincode = (regPincode?.value || "").trim();
+      curBranch.verified = Boolean(signupWizardState.isPrimaryGstVerified);
       renderBranchTabsAndCard();
-      showToast("Copied Head Office address, city & GST to Branch!", "info");
+      showToast("Copied Step 1 address, city & GST to Branch!", "info");
     });
 
     // Wire Branch Inputs
@@ -2215,37 +2210,7 @@ function setupEventListeners() {
           return;
         }
 
-        const brMob = (br.mobile || "").replace(/\D/g, "");
-        if (brMob.length !== 10) {
-          const msg = `Please enter a valid 10-digit phone number for Branch #${i + 1}`;
-          if (signupErrorBanner) { signupErrorBanner.textContent = msg; signupErrorBanner.classList.remove("hidden"); }
-          showToast(msg, "error");
-          signupWizardState.activeBranchIndex = i;
-          renderBranchTabsAndCard();
-          return;
-        }
-
-        const hoMob = (regMobile?.value || "").replace(/\D/g, "");
-        if (brMob === hoMob) {
-          const msg = `Branch #${i + 1} phone number cannot be the same as Head Office phone (+91 ${hoMob}). Each branch must have a unique phone number.`;
-          if (signupErrorBanner) { signupErrorBanner.textContent = msg; signupErrorBanner.classList.remove("hidden"); }
-          showToast(msg, "error");
-          signupWizardState.activeBranchIndex = i;
-          renderBranchTabsAndCard();
-          return;
-        }
-
-        for (let k = 0; k < i; k++) {
-          const prevMob = (signupWizardState.additionalBranches[k].mobile || "").replace(/\D/g, "");
-          if (prevMob === brMob) {
-            const msg = `Branch #${i + 1} phone number is already used for Branch #${k + 1}. Each branch requires a unique phone number.`;
-            if (signupErrorBanner) { signupErrorBanner.textContent = msg; signupErrorBanner.classList.remove("hidden"); }
-            showToast(msg, "error");
-            signupWizardState.activeBranchIndex = i;
-            renderBranchTabsAndCard();
-            return;
-          }
-        }
+        // Branch contact phone is optional - no validation required
 
         const brEmail = (br.email || "").trim().toLowerCase();
         if (!brEmail || !brEmail.includes("@")) {

@@ -19,6 +19,10 @@ function ApproveAdminsContent() {
     availableCities,
     availableHeadOffices,
     handleToggleActive,
+    handleReject,
+    handleDelete,
+    handleRestore,
+    handlePermanentDelete,
     refetch,
   } = useSuperAdminData("pending");
 
@@ -87,6 +91,10 @@ function ApproveAdminsContent() {
           loading={loading}
           actionLoading={actionLoading}
           onToggleActive={handleToggleActive}
+          onReject={handleReject}
+          onDelete={handleDelete}
+          onRestore={handleRestore}
+          onPermanentDelete={handlePermanentDelete}
         />
       </div>
     </div>

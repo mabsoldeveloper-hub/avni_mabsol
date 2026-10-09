@@ -13,6 +13,10 @@ import {
   FaPhone,
   FaClock,
   FaShieldAlt,
+  FaTrash,
+  FaUndo,
+  FaTimes,
+  FaBan,
 } from "react-icons/fa";
 import { SuperAdminUserItem } from "./types";
 import { DEFAULT_ACCESS_DAYS } from "@/lib/constants/superAdmin.constant";
@@ -22,6 +26,10 @@ interface AccountsTableProps {
   loading: boolean;
   actionLoading: string | null;
   onToggleActive: (u: SuperAdminUserItem) => void;
+  onReject?: (userId: string, notes?: string) => void;
+  onDelete?: (userId: string, reason?: string) => void;
+  onRestore?: (userId: string) => void;
+  onPermanentDelete?: (userId: string) => void;
   onSelectUser?: (u: SuperAdminUserItem) => void;
   className?: string;
 }
@@ -102,6 +110,10 @@ export default function AccountsTable({
   loading,
   actionLoading,
   onToggleActive,
+  onReject,
+  onDelete,
+  onRestore,
+  onPermanentDelete,
   onSelectUser,
   className = "",
 }: AccountsTableProps) {
@@ -265,7 +277,23 @@ export default function AccountsTable({
 
                     {/* APPROVAL STATUS */}
                     <td className="py-3 px-3.5 align-middle">
-                      {u.isApproved && u.status === "Active" ? (
+                      {u.isDeleted ? (
+                        <span
+                          className="inline-flex items-center gap-1 text-[11px] font-bold text-red-700 bg-red-50 px-2 py-0.5 rounded-full border border-red-200/80"
+                          title={u.deletedReason ? `Reason: ${u.deletedReason}` : "Account deleted by Super Admin"}
+                        >
+                          <FaTrash size={9} />
+                          <span>Deleted</span>
+                        </span>
+                      ) : u.status === "Rejected" ? (
+                        <span
+                          className="inline-flex items-center gap-1 text-[11px] font-bold text-rose-700 bg-rose-50 px-2 py-0.5 rounded-full border border-rose-200/80"
+                          title="Application rejected"
+                        >
+                          <FaBan size={9} />
+                          <span>Rejected</span>
+                        </span>
+                      ) : u.isApproved && u.status === "Active" ? (
                         <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200/80">
                           <FaCheckCircle size={9} />
                           <span>Approved</span>
@@ -286,21 +314,23 @@ export default function AccountsTable({
                     <td className="py-3 px-3.5 align-middle text-center">
                       <button
                         type="button"
-                        disabled={actionLoading === u._id}
+                        disabled={actionLoading === u._id || Boolean(u.isDeleted)}
                         onClick={() => onToggleActive(u)}
                         title={
-                          u.status === "Suspended"
+                          u.isDeleted
+                            ? "Account is deleted. Restore account to reactivate."
+                            : u.status === "Suspended"
                             ? "Click to activate account"
                             : "Click to suspend account (revokes active logins)"
                         }
-                        className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none disabled:opacity-50 ${
-                          isUserActive ? "bg-emerald-600" : "bg-slate-300"
+                        className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none disabled:opacity-40 disabled:cursor-not-allowed ${
+                          !u.isDeleted && isUserActive ? "bg-emerald-600" : "bg-slate-300"
                         }`}
                       >
                         <span
                           aria-hidden="true"
                           className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow-sm ring-0 transition duration-200 ease-in-out ${
-                            isUserActive ? "translate-x-4" : "translate-x-0"
+                            !u.isDeleted && isUserActive ? "translate-x-4" : "translate-x-0"
                           }`}
                         />
                       </button>
@@ -331,15 +361,96 @@ export default function AccountsTable({
                     </td>
 
                     {/* ACTIONS */}
-                    <td className="py-3 px-3.5 align-middle text-center">
-                      <Link
-                        href={`/dashboard/super-admin/approvals/${u._id}`}
-                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold text-blue-700 bg-blue-50 hover:bg-blue-600 hover:text-white border border-blue-200 transition-all duration-150 shadow-2xs cursor-pointer"
-                        title="Review credentials, verify branches, and configure modules"
-                      >
-                        <FaEye size={10} />
-                        <span>Review</span>
-                      </Link>
+                    <td className="py-3 px-3.5 align-middle text-center whitespace-nowrap">
+                      <div className="flex items-center justify-center gap-1.5">
+                        <Link
+                          href={`/dashboard/super-admin/approvals/${u._id}`}
+                          className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-semibold text-blue-700 bg-blue-50 hover:bg-blue-600 hover:text-white border border-blue-200 transition-all duration-150 shadow-2xs cursor-pointer"
+                          title="Review credentials, branches, and account details"
+                        >
+                          <FaEye size={10} />
+                          <span>Review</span>
+                        </Link>
+
+                        {u.isDeleted ? (
+                          <>
+                            {onRestore && (
+                              <button
+                                type="button"
+                                disabled={actionLoading === u._id}
+                                onClick={() => {
+                                  if (
+                                    window.confirm(
+                                      `Restore account "${u.companyId?.companyName || u.name}"? This will re-enable access.`
+                                    )
+                                  ) {
+                                    onRestore(u._id);
+                                  }
+                                }}
+                                className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs font-semibold text-emerald-700 bg-emerald-50 hover:bg-emerald-600 hover:text-white border border-emerald-200 transition-all duration-150 shadow-2xs cursor-pointer disabled:opacity-50"
+                                title="Restore account"
+                              >
+                                <FaUndo size={10} />
+                                <span>Restore</span>
+                              </button>
+                            )}
+                            {onPermanentDelete && (
+                              <button
+                                type="button"
+                                disabled={actionLoading === u._id}
+                                onClick={() => onPermanentDelete(u._id)}
+                                className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs font-semibold text-red-700 bg-red-50 hover:bg-red-700 hover:text-white border border-red-200 transition-all duration-150 shadow-2xs cursor-pointer disabled:opacity-50"
+                                title="Permanently delete from database"
+                              >
+                                <FaTrash size={10} />
+                                <span>Purge</span>
+                              </button>
+                            )}
+                          </>
+                        ) : (
+                          <>
+                            {u.status !== "Rejected" && onReject && (
+                              <button
+                                type="button"
+                                disabled={actionLoading === u._id}
+                                onClick={() => {
+                                  const notes = window.prompt(
+                                    `Reject account "${u.companyId?.companyName || u.name}"? Enter rejection reason / notes:`
+                                  );
+                                  if (notes !== null) {
+                                    onReject(u._id, notes);
+                                  }
+                                }}
+                                className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs font-semibold text-amber-700 bg-amber-50 hover:bg-amber-600 hover:text-white border border-amber-200 transition-all duration-150 shadow-2xs cursor-pointer disabled:opacity-50"
+                                title="Reject application/account"
+                              >
+                                <FaBan size={10} />
+                                <span>Reject</span>
+                              </button>
+                            )}
+                            {onDelete && (
+                              <button
+                                type="button"
+                                disabled={actionLoading === u._id}
+                                onClick={() => {
+                                  const reason = window.prompt(
+                                    `Delete account "${u.companyId?.companyName || u.name}"?\nEnter reason for deletion:`,
+                                    "Decommissioned by Super Admin"
+                                  );
+                                  if (reason !== null) {
+                                    onDelete(u._id, reason);
+                                  }
+                                }}
+                                className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs font-semibold text-red-700 bg-red-50 hover:bg-red-600 hover:text-white border border-red-200 transition-all duration-150 shadow-2xs cursor-pointer disabled:opacity-50"
+                                title="Delete account (soft-delete)"
+                              >
+                                <FaTrash size={10} />
+                                <span>Delete</span>
+                              </button>
+                            )}
+                          </>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 );

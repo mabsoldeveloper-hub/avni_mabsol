@@ -72,6 +72,10 @@ export async function GET(req: Request) {
       return NextResponse.json([]);
     }
 
+    if (!isSuperAdmin) {
+      query.isDeleted = { $ne: true };
+    }
+
     const companies = await Company.find(query).sort({ createdAt: -1 });
     return NextResponse.json(companies);
   } catch (error: any) {

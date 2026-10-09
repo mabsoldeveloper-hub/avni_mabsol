@@ -59,6 +59,10 @@ export interface SuperAdminUserItem {
   isUnlimitedAccess?: boolean;
   sessionTimeoutHours?: number;
   approvalNotes?: string;
+  isDeleted?: boolean;
+  deletedAt?: string | null;
+  deletedBy?: { name?: string; email?: string } | null;
+  deletedReason?: string;
   createdAt: string;
   companyId?: SuperAdminCompanyDetails | null;
 }
@@ -70,6 +74,7 @@ export interface SuperAdminStats {
   expired: number;
   rejected: number;
   suspended?: number;
+  deleted?: number;
   deactive?: number;
   headOffices?: number;
   childBranches?: number;
@@ -78,7 +83,7 @@ export interface SuperAdminStats {
 
 export interface FilterState {
   search: string;
-  status: string; // 'all' | 'approved' | 'pending' | 'suspended' | 'expired'
+  status: string; // 'all' | 'approved' | 'pending' | 'suspended' | 'expired' | 'rejected' | 'deleted'
   branchType: string; // 'all' | 'head_office' | 'child_branch'
   parentCompanyId: string; // 'all' | specific Head Office ID
   plan: string;

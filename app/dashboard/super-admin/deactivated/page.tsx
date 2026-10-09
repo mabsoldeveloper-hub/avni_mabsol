@@ -19,6 +19,10 @@ function DeactivatedAccountsContent() {
     availableCities,
     availableHeadOffices,
     handleToggleActive,
+    handleReject,
+    handleDelete,
+    handleRestore,
+    handlePermanentDelete,
     refetch,
   } = useSuperAdminData("suspended");
 
@@ -87,6 +91,10 @@ function DeactivatedAccountsContent() {
           loading={loading}
           actionLoading={actionLoading}
           onToggleActive={handleToggleActive}
+          onReject={handleReject}
+          onDelete={handleDelete}
+          onRestore={handleRestore}
+          onPermanentDelete={handlePermanentDelete}
         />
       </div>
     </div>

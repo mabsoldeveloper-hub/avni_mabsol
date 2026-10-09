@@ -68,7 +68,9 @@ export async function GET() {
 
     // Non-super-admin: verify if active and approved
     const statusLower = String(userObj.status || "").trim().toLowerCase();
+    const isDeletedAccount = Boolean(userObj.isDeleted || statusLower === "deleted");
     const isSuspendedOrInactive =
+      isDeletedAccount ||
       !userObj.isApproved ||
       statusLower === "suspended" ||
       statusLower === "inactive" ||
@@ -83,7 +85,10 @@ export async function GET() {
         {
           success: false,
           suspended: true,
-          message: "Your account has been deactivated or suspended by the Super Administrator.",
+          deleted: isDeletedAccount,
+          message: isDeletedAccount
+            ? "Your account has been deleted by the Super Administrator."
+            : "Your account has been deactivated or suspended by the Super Administrator.",
         },
         {
           status: 403,

@@ -145,6 +145,15 @@ export async function validateUserLoginAccess(user: any): Promise<AccessCheckRes
 
   const rawStatus = String(user.status || "").trim().toLowerCase();
 
+  // 0. Check if account is deleted
+  if (user.isDeleted || rawStatus === "deleted" || user.status === USER_APPROVAL_STATUS.DELETED) {
+    return {
+      allowed: false,
+      message: "This account has been deleted by the Super Administrator. Access is permanently revoked.",
+      statusCode: 403,
+    };
+  }
+
   // 1. Check if suspended, inactive, or deactivated
   if (
     rawStatus === "suspended" ||

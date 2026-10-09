@@ -149,8 +149,53 @@ export async function PATCH(
       case "reject": {
         targetUser.isApproved = false;
         targetUser.status = USER_APPROVAL_STATUS.REJECTED;
+        if (approvalNotes || body.reason) targetUser.approvalNotes = approvalNotes || body.reason;
+        break;
+      }
+
+      case "delete": {
+        if (isSuperAdminUser(targetUser)) {
+          return NextResponse.json(
+            { success: false, message: "Cannot delete the Super Administrator account." },
+            { status: 400 }
+          );
+        }
+        targetUser.isDeleted = true;
+        targetUser.deletedAt = now;
+        targetUser.deletedBy = currentUser._id;
+        targetUser.status = USER_APPROVAL_STATUS.DELETED;
+        targetUser.isApproved = false;
+        targetUser.deletedReason = approvalNotes || body.reason || "Account deleted by Super Administrator";
+        break;
+      }
+
+      case "restore": {
+        targetUser.isDeleted = false;
+        targetUser.deletedAt = null;
+        targetUser.deletedBy = null;
+        targetUser.deletedReason = "";
+        targetUser.status = USER_APPROVAL_STATUS.ACTIVE;
+        targetUser.isApproved = true;
         if (approvalNotes) targetUser.approvalNotes = approvalNotes;
         break;
+      }
+
+      case "permanent_delete": {
+        if (isSuperAdminUser(targetUser)) {
+          return NextResponse.json(
+            { success: false, message: "Cannot delete the Super Administrator account." },
+            { status: 400 }
+          );
+        }
+        await User.findByIdAndDelete(id);
+        if (targetUser.companyId) {
+          const Company = (await import("@/models/Company")).default;
+          await Company.findByIdAndDelete(targetUser.companyId);
+        }
+        return NextResponse.json({
+          success: true,
+          message: `User account ${targetUser.name} (${targetUser.email}) and related enterprise data permanently purged.`,
+        });
       }
 
       case "deactivate":
@@ -230,10 +275,21 @@ export async function PATCH(
 
       if (action === "approve" || action === "activate") {
         companyUpdates.status = "Active";
+        companyUpdates.isDeleted = false;
       } else if (action === "suspend" || action === "deactivate") {
         companyUpdates.status = "Suspended";
       } else if (action === "reject") {
         companyUpdates.status = "Rejected";
+      } else if (action === "delete") {
+        companyUpdates.status = "Deleted";
+        companyUpdates.isDeleted = true;
+        companyUpdates.deletedAt = now;
+        companyUpdates.deletedBy = currentUser._id;
+      } else if (action === "restore") {
+        companyUpdates.status = "Active";
+        companyUpdates.isDeleted = false;
+        companyUpdates.deletedAt = null;
+        companyUpdates.deletedBy = null;
       }
 
       if (Object.keys(companyUpdates).length > 0) {
@@ -243,13 +299,22 @@ export async function PATCH(
 
     return NextResponse.json({
       success: true,
-      message: `User ${targetUser.name} updated successfully (${action}).`,
+      message:
+        action === "delete"
+          ? `User ${targetUser.name} moved to Deleted Accounts.`
+          : action === "restore"
+          ? `User ${targetUser.name} restored successfully.`
+          : action === "reject"
+          ? `User application ${targetUser.name} rejected.`
+          : `User ${targetUser.name} updated successfully (${action}).`,
       user: {
         _id: targetUser._id,
         name: targetUser.name,
         email: targetUser.email,
         status: targetUser.status,
         isApproved: targetUser.isApproved,
+        isDeleted: targetUser.isDeleted,
+        deletedAt: targetUser.deletedAt,
         accessValidUntil: targetUser.accessValidUntil,
         accessDurationDays: targetUser.accessDurationDays,
         isUnlimitedAccess: targetUser.isUnlimitedAccess,
@@ -281,6 +346,10 @@ export async function DELETE(
     }
 
     const { id } = await context.params;
+    const { searchParams } = new URL(req.url);
+    const isPermanent = searchParams.get("permanent") === "true";
+    const reason = searchParams.get("reason") || "Deleted by Super Administrator";
+
     const targetUser = await User.findById(id);
     if (!targetUser) {
       return NextResponse.json(
@@ -297,11 +366,43 @@ export async function DELETE(
       );
     }
 
-    await User.findByIdAndDelete(id);
+    const Company = (await import("@/models/Company")).default;
+
+    if (isPermanent) {
+      await User.findByIdAndDelete(id);
+      if (targetUser.companyId) {
+        await Company.findByIdAndDelete(targetUser.companyId);
+      }
+      return NextResponse.json({
+        success: true,
+        message: `User account ${targetUser.name} (${targetUser.email}) permanently deleted.`,
+      });
+    }
+
+    // Soft delete so details remain inspectable exclusively by Super Admin
+    const now = new Date();
+    targetUser.isDeleted = true;
+    targetUser.deletedAt = now;
+    targetUser.deletedBy = currentUser._id;
+    targetUser.deletedReason = reason;
+    targetUser.status = USER_APPROVAL_STATUS.DELETED;
+    targetUser.isApproved = false;
+    await targetUser.save();
+
+    if (targetUser.companyId) {
+      await Company.findByIdAndUpdate(targetUser.companyId, {
+        $set: {
+          status: "Deleted",
+          isDeleted: true,
+          deletedAt: now,
+          deletedBy: currentUser._id,
+        },
+      });
+    }
 
     return NextResponse.json({
       success: true,
-      message: `User account ${targetUser.name} (${targetUser.email}) permanently deleted.`,
+      message: `User account ${targetUser.name} (${targetUser.email}) moved to Deleted Accounts.`,
     });
   } catch (err: any) {
     console.error("[SUPER ADMIN DELETE ERROR]:", err);

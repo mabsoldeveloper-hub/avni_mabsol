@@ -32,6 +32,7 @@ import {
   FaChartBar,
   FaFileAlt,
   FaCog,
+  FaTrash,
 } from "react-icons/fa";
 import { checkIsSuperAdmin } from "@/lib/constants/superAdmin.constant";
 
@@ -555,6 +556,20 @@ export default function Sidebar({ collapsed, setCollapsed, mobile }: SidebarProp
                       icon={<FaBan size={14} />}
                       label="Deactivated Accounts"
                       active={pathname === "/dashboard/super-admin/deactivated"}
+                      color="indigo"
+                      iconOnly={iconOnly}
+                      customActiveStyle={true}
+                      onNavigate={handleMobileNavigate}
+                    />
+                  </li>
+
+                  {/* 4b. Deleted Accounts */}
+                  <li>
+                    <SidebarNavLink
+                      href="/dashboard/super-admin/deleted"
+                      icon={<FaTrash size={14} />}
+                      label="Deleted Accounts"
+                      active={pathname === "/dashboard/super-admin/deleted"}
                       color="indigo"
                       iconOnly={iconOnly}
                       customActiveStyle={true}

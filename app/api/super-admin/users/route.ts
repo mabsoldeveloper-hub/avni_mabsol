@@ -48,37 +48,42 @@ export async function GET(req: NextRequest) {
     // Build filter query for User
     const query: any = {};
 
-    if (statusFilter === "pending") {
-      query.$or = [
-        { isApproved: false },
-        { status: USER_APPROVAL_STATUS.PENDING },
-      ];
-    } else if (statusFilter === "active" || statusFilter === "approved") {
-      query.isApproved = true;
-      query.status = USER_APPROVAL_STATUS.ACTIVE;
-      query.$or = [
-        { isUnlimitedAccess: true },
-        { accessValidUntil: null },
-        { accessValidUntil: { $gt: now } },
-      ];
-    } else if (statusFilter === "expired") {
-      query.$or = [
-        { status: USER_APPROVAL_STATUS.EXPIRED },
-        {
-          isUnlimitedAccess: false,
-          accessValidUntil: { $ne: null, $lte: now },
-        },
-      ];
-    } else if (statusFilter === "rejected") {
-      query.status = USER_APPROVAL_STATUS.REJECTED;
-    } else if (statusFilter === "suspended" || statusFilter === "deactive") {
-      query.$or = [
-        { status: USER_APPROVAL_STATUS.SUSPENDED },
-        { status: USER_APPROVAL_STATUS.REJECTED },
-        { status: USER_APPROVAL_STATUS.EXPIRED },
-        { status: "Inactive" },
-        { status: "Deactivated" },
-      ];
+    if (statusFilter === "deleted") {
+      query.isDeleted = true;
+    } else {
+      // All other status filters strictly exclude deleted accounts
+      query.isDeleted = { $ne: true };
+
+      if (statusFilter === "pending") {
+        query.$or = [
+          { isApproved: false },
+          { status: USER_APPROVAL_STATUS.PENDING },
+        ];
+      } else if (statusFilter === "active" || statusFilter === "approved") {
+        query.isApproved = true;
+        query.status = USER_APPROVAL_STATUS.ACTIVE;
+        query.$or = [
+          { isUnlimitedAccess: true },
+          { accessValidUntil: null },
+          { accessValidUntil: { $gt: now } },
+        ];
+      } else if (statusFilter === "expired") {
+        query.$or = [
+          { status: USER_APPROVAL_STATUS.EXPIRED },
+          {
+            isUnlimitedAccess: false,
+            accessValidUntil: { $ne: null, $lte: now },
+          },
+        ];
+      } else if (statusFilter === "rejected") {
+        query.status = USER_APPROVAL_STATUS.REJECTED;
+      } else if (statusFilter === "suspended" || statusFilter === "deactive") {
+        query.$or = [
+          { status: USER_APPROVAL_STATUS.SUSPENDED },
+          { status: "Inactive" },
+          { status: "Deactivated" },
+        ];
+      }
     }
 
     // Branch Type filtering via company IDs
@@ -150,7 +155,7 @@ export async function GET(req: NextRequest) {
       .select("-password")
       .populate({
         path: "companyId",
-        select: "companyName companyCode tenantId isHeadOffice parentCompanyId gstNo panNo drugLicenseNo city state address businessType status enabledModules",
+        select: "companyName companyCode tenantId isHeadOffice parentCompanyId gstNo panNo drugLicenseNo city state address businessType status enabledModules isDeleted deletedAt",
         populate: {
           path: "parentCompanyId",
           select: "companyName companyCode isHeadOffice city state gstNo",
@@ -158,12 +163,14 @@ export async function GET(req: NextRequest) {
       })
       .populate("roleId", "roleName")
       .populate("approvedBy", "name email")
+      .populate("deletedBy", "name email")
       .sort({ createdAt: -1 })
       .lean();
 
     // Map child branches and branch counts for every company
     const childCompanies = await Company.find({
       parentCompanyId: { $ne: null },
+      isDeleted: { $ne: true },
     })
       .select("_id companyName companyCode parentCompanyId status city state gstNo email mobile enabledModules")
       .lean();
@@ -211,19 +218,24 @@ export async function GET(req: NextRequest) {
       }
     });
 
-    // Compute live dashboard stats
-    const [totalCount, pendingCount, activeCount, expiredCount, rejectedCount, suspendedCount, totalCompaniesCount, totalHeadOfficesInDb, totalChildBranchesInDb] =
+    // Compute live dashboard stats (exclusive of soft-deleted records for active lists)
+    const baseNonDeleted = {
+      email: { $ne: currentUser.email.toLowerCase() },
+      isDeleted: { $ne: true },
+    };
+
+    const [totalCount, pendingCount, activeCount, expiredCount, rejectedCount, suspendedCount, deletedCount, totalCompaniesCount, totalHeadOfficesInDb, totalChildBranchesInDb] =
       await Promise.all([
-        User.countDocuments({ email: { $ne: currentUser.email.toLowerCase() } }),
+        User.countDocuments(baseNonDeleted),
         User.countDocuments({
-          email: { $ne: currentUser.email.toLowerCase() },
+          ...baseNonDeleted,
           $or: [
             { isApproved: false },
             { status: USER_APPROVAL_STATUS.PENDING },
           ],
         }),
         User.countDocuments({
-          email: { $ne: currentUser.email.toLowerCase() },
+          ...baseNonDeleted,
           isApproved: true,
           status: USER_APPROVAL_STATUS.ACTIVE,
           $or: [
@@ -233,7 +245,7 @@ export async function GET(req: NextRequest) {
           ],
         }),
         User.countDocuments({
-          email: { $ne: currentUser.email.toLowerCase() },
+          ...baseNonDeleted,
           $or: [
             { status: USER_APPROVAL_STATUS.EXPIRED },
             {
@@ -243,19 +255,24 @@ export async function GET(req: NextRequest) {
           ],
         }),
         User.countDocuments({
-          email: { $ne: currentUser.email.toLowerCase() },
+          ...baseNonDeleted,
           status: USER_APPROVAL_STATUS.REJECTED,
         }),
         User.countDocuments({
-          email: { $ne: currentUser.email.toLowerCase() },
+          ...baseNonDeleted,
           $or: [
             { status: USER_APPROVAL_STATUS.SUSPENDED },
             { status: "Inactive" },
             { status: "Deactivated" },
           ],
         }),
-        Company.countDocuments(),
+        User.countDocuments({
+          email: { $ne: currentUser.email.toLowerCase() },
+          isDeleted: true,
+        }),
+        Company.countDocuments({ isDeleted: { $ne: true } }),
         Company.countDocuments({
+          isDeleted: { $ne: true },
           $or: [
             { parentCompanyId: null },
             { parentCompanyId: { $exists: false } },
@@ -263,11 +280,12 @@ export async function GET(req: NextRequest) {
           ],
         }),
         Company.countDocuments({
+          isDeleted: { $ne: true },
           parentCompanyId: { $ne: null },
         }),
       ]);
 
-    const deactiveCount = suspendedCount + expiredCount + rejectedCount;
+    const deactiveCount = suspendedCount + expiredCount;
 
     return NextResponse.json({
       success: true,
@@ -279,6 +297,7 @@ export async function GET(req: NextRequest) {
         expired: expiredCount,
         rejected: rejectedCount,
         suspended: suspendedCount,
+        deleted: deletedCount,
         deactive: deactiveCount,
         headOffices: totalHeadOfficesInDb,
         childBranches: totalChildBranchesInDb,

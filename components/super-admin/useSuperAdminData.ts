@@ -36,7 +36,10 @@ export function useSuperAdminData(initialStatusFilter?: string) {
   const fetchUsers = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetch("/api/super-admin/users");
+      const url = filter.status === "deleted"
+        ? "/api/super-admin/users?status=deleted"
+        : "/api/super-admin/users";
+      const res = await fetch(url);
       const data = await res.json();
       if (data.users) {
         setUsers(data.users);
@@ -49,7 +52,7 @@ export function useSuperAdminData(initialStatusFilter?: string) {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [filter.status]);
 
   useEffect(() => {
     fetchUsers();
@@ -85,7 +88,7 @@ export function useSuperAdminData(initialStatusFilter?: string) {
   const handleAction = useCallback(
     async (
       userId: string,
-      action: "approve" | "extend" | "reject" | "suspend" | "activate",
+      action: "approve" | "extend" | "reject" | "suspend" | "activate" | "delete" | "restore" | "permanent_delete",
       durationDays?: number,
       notes?: string,
       sessionTimeoutHours?: number
@@ -107,11 +110,66 @@ export function useSuperAdminData(initialStatusFilter?: string) {
           await fetchUsers();
           setSelectedUserForModal(null);
         } else {
-          alert(data.error || "Action failed");
+          alert(data.message || data.error || "Action failed");
         }
       } catch (err) {
         console.error("Action error:", err);
         alert("An error occurred while updating account");
+      } finally {
+        setActionLoading(null);
+      }
+    },
+    [fetchUsers]
+  );
+
+  // Reject an application/account
+  const handleReject = useCallback(
+    async (userId: string, notes?: string) => {
+      await handleAction(userId, "reject", undefined, notes);
+    },
+    [handleAction]
+  );
+
+  // Soft delete an account (moves to Deleted Accounts, visible exclusively to Super Admin)
+  const handleDelete = useCallback(
+    async (userId: string, reason?: string) => {
+      await handleAction(userId, "delete", undefined, reason);
+    },
+    [handleAction]
+  );
+
+  // Restore a deleted account
+  const handleRestore = useCallback(
+    async (userId: string) => {
+      await handleAction(userId, "restore");
+    },
+    [handleAction]
+  );
+
+  // Permanently purge an account from MongoDB
+  const handlePermanentDelete = useCallback(
+    async (userId: string) => {
+      if (
+        !confirm(
+          "Are you sure you want to PERMANENTLY purge this account and its company data from the database? This cannot be undone."
+        )
+      ) {
+        return;
+      }
+      setActionLoading(userId);
+      try {
+        const res = await fetch(`/api/super-admin/users/${userId}?permanent=true`, {
+          method: "DELETE",
+        });
+        const data = await res.json();
+        if (res.ok) {
+          await fetchUsers();
+        } else {
+          alert(data.message || "Failed to purge account");
+        }
+      } catch (err) {
+        console.error("Purge error:", err);
+        alert("An error occurred while purging account");
       } finally {
         setActionLoading(null);
       }
@@ -158,15 +216,22 @@ export function useSuperAdminData(initialStatusFilter?: string) {
       }
 
       // 2. Status / Approval Section
-      if (filter.status === "pending" || filter.status === "unapproved") {
-        if (u.isApproved && u.status === "Active") return false;
+      if (filter.status === "deleted") {
+        if (!u.isDeleted) return false;
+      } else if (filter.status === "rejected") {
+        if (u.isDeleted || u.status !== "Rejected") return false;
+      } else if (filter.status === "pending" || filter.status === "unapproved") {
+        if (u.isDeleted || (u.isApproved && u.status === "Active") || u.status === "Rejected") return false;
       } else if (filter.status === "approved" || filter.status === "active") {
-        if (!u.isApproved || u.status === "Suspended" || u.status === "Inactive") return false;
+        if (u.isDeleted || !u.isApproved || u.status === "Suspended" || u.status === "Inactive" || u.status === "Rejected") return false;
       } else if (filter.status === "suspended") {
-        if (u.status !== "Suspended" && u.status !== "Inactive" && u.status !== "Deactivated") return false;
+        if (u.isDeleted || (u.status !== "Suspended" && u.status !== "Inactive" && u.status !== "Deactivated")) return false;
       } else if (filter.status === "expired") {
-        if (!u.accessValidUntil) return false;
+        if (u.isDeleted || !u.accessValidUntil) return false;
         if (new Date(u.accessValidUntil).getTime() > Date.now()) return false;
+      } else {
+        // 'all' excludes deleted accounts (they are in the dedicated Deleted view)
+        if (u.isDeleted) return false;
       }
 
       // 3. Branch Type Filter ('all' | 'head_office' | 'child_branch')
@@ -228,6 +293,10 @@ export function useSuperAdminData(initialStatusFilter?: string) {
     setSelectedUserForModal,
     handleAction,
     handleToggleActive,
+    handleReject,
+    handleDelete,
+    handleRestore,
+    handlePermanentDelete,
     refetch: fetchUsers,
   };
 }

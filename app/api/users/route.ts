@@ -75,6 +75,9 @@ export async function fetchUsersList(req?: Request) {
       : { _id: { $in: access.accessibleUserIds.map(String) }, status: "Active" };
   }
 
+  // Ensure soft-deleted accounts are completely hidden from regular user views
+  userQuery.isDeleted = { $ne: true };
+
   const users = await User.find(userQuery)
     .populate("companyId", "companyName")
     .populate("roleId", "roleName")

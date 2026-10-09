@@ -24,6 +24,8 @@ import {
   FaPlus,
   FaExclamationTriangle,
   FaCodeBranch,
+  FaTrash,
+  FaUndo,
 } from "react-icons/fa";
 import { DEFAULT_ACCESS_DAYS } from "@/lib/constants/superAdmin.constant";
 import { SESSION_TIMEOUT_PRESETS, DEFAULT_USER_SESSION_HOURS } from "@/lib/constants/session.constant";
@@ -176,6 +178,85 @@ export default function TenantApprovalPage({
     } catch (err) {
       console.error(err);
       alert("An unexpected error occurred.");
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleDelete = async () => {
+    const reason = window.prompt(
+      `Delete account "${user?.companyId?.companyName || user?.name}"?\nEnter reason for deletion:`,
+      "Decommissioned by Super Admin"
+    );
+    if (reason === null) return;
+    setActionLoading(true);
+    try {
+      const res = await fetch(`/api/super-admin/users/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "delete", notes: reason }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        alert("Account deleted and moved to Deleted Accounts (visible exclusively to Super Admin).");
+        await fetchUser();
+      } else {
+        alert(data.message || "Failed to delete account");
+      }
+    } catch (err: any) {
+      alert(err?.message || "Failed to delete account");
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleRestore = async () => {
+    if (!window.confirm(`Restore account "${user?.companyId?.companyName || user?.name}"? This will re-enable access.`)) {
+      return;
+    }
+    setActionLoading(true);
+    try {
+      const res = await fetch(`/api/super-admin/users/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "restore" }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        alert("Account restored successfully.");
+        await fetchUser();
+      } else {
+        alert(data.message || "Failed to restore account");
+      }
+    } catch (err: any) {
+      alert(err?.message || "Failed to restore account");
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handlePermanentDelete = async () => {
+    if (
+      !window.confirm(
+        `WARNING: PERMANENTLY PURGE account "${user?.companyId?.companyName || user?.name}" and its company record from MongoDB?\nThis CANNOT be undone.`
+      )
+    ) {
+      return;
+    }
+    setActionLoading(true);
+    try {
+      const res = await fetch(`/api/super-admin/users/${id}?permanent=true`, {
+        method: "DELETE",
+      });
+      const data = await res.json();
+      if (res.ok) {
+        alert("Account permanently purged from database.");
+        router.push("/dashboard/super-admin/deleted");
+      } else {
+        alert(data.message || "Failed to purge account");
+      }
+    } catch (err: any) {
+      alert(err?.message || "Failed to purge account");
     } finally {
       setActionLoading(false);
     }
@@ -365,6 +446,48 @@ export default function TenantApprovalPage({
 
   return (
     <div className="w-full max-w-[1600px] mx-auto space-y-3 text-slate-800">
+      {/* DELETED ACCOUNT ALERT BANNER */}
+      {user.isDeleted && (
+        <div className="bg-red-50 border-2 border-red-200 rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-red-900 shadow-xs">
+          <div className="flex items-start sm:items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-red-100 text-red-600 flex items-center justify-center shrink-0 text-base shadow-2xs">
+              <FaTrash />
+            </div>
+            <div>
+              <div className="flex items-center gap-2 flex-wrap">
+                <h3 className="font-bold text-sm text-red-950">Archived / Deleted Account</h3>
+                <span className="text-[10px] font-bold bg-red-200/80 text-red-900 px-2 py-0.5 rounded-full border border-red-300/80">
+                  Visible Exclusively To Super Admin
+                </span>
+              </div>
+              <p className="text-xs text-red-700 mt-0.5">
+                Deleted on {user.deletedAt ? new Date(user.deletedAt).toLocaleString() : "Recently"}
+                {user.deletedReason ? ` • Reason: "${user.deletedReason}"` : ""}
+                {user.deletedBy?.name ? ` • Performed by: ${user.deletedBy.name}` : ""}
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 self-start sm:self-auto shrink-0">
+            <button
+              type="button"
+              disabled={actionLoading}
+              onClick={handleRestore}
+              className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-xs cursor-pointer disabled:opacity-50"
+            >
+              <FaUndo size={11} /> Restore Account
+            </button>
+            <button
+              type="button"
+              disabled={actionLoading}
+              onClick={handlePermanentDelete}
+              className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-red-600 hover:bg-red-700 text-white font-bold text-xs shadow-xs cursor-pointer disabled:opacity-50"
+            >
+              <FaTrash size={11} /> Purge Forever
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* 1. TOP HERO BANNER & AVATAR CARD */}
       <div className="bg-white rounded-2xl border border-slate-200/80 overflow-hidden shadow-xs">
         {/* Gradient Top Half with Action Buttons */}
@@ -377,45 +500,86 @@ export default function TenantApprovalPage({
           </Link>
 
           {/* Quick Action Buttons in Top Right */}
-          <div className="flex items-center gap-2">
-            {!user.isApproved ? (
-              <button
-                type="button"
-                onClick={() => handleAction("reject")}
-                disabled={actionLoading}
-                className="px-3.5 py-1.5 rounded-full bg-white/20 hover:bg-rose-500 text-white text-xs font-semibold backdrop-blur-xs transition-all cursor-pointer border border-white/30"
-              >
-                Reject Application
-              </button>
+          <div className="flex items-center gap-2 flex-wrap justify-end">
+            {user.isDeleted ? (
+              <>
+                <button
+                  type="button"
+                  onClick={handleRestore}
+                  disabled={actionLoading}
+                  className="px-3.5 py-1.5 rounded-full bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition-all cursor-pointer shadow-xs flex items-center gap-1.5 disabled:opacity-50"
+                >
+                  <FaUndo size={11} /> Restore
+                </button>
+                <button
+                  type="button"
+                  onClick={handlePermanentDelete}
+                  disabled={actionLoading}
+                  className="px-3.5 py-1.5 rounded-full bg-red-600 hover:bg-red-700 text-white text-xs font-bold transition-all cursor-pointer shadow-xs flex items-center gap-1.5 disabled:opacity-50"
+                >
+                  <FaTrash size={11} /> Purge Forever
+                </button>
+              </>
             ) : (
-              <button
-                type="button"
-                onClick={() => handleAction(isSuspended ? "activate" : "suspend")}
-                disabled={actionLoading}
-                className="px-3.5 py-1.5 rounded-full bg-white/20 hover:bg-rose-500 text-white text-xs font-semibold backdrop-blur-xs transition-all cursor-pointer border border-white/30"
-              >
-                {isSuspended ? "Reactivate" : "Suspend"}
-              </button>
-            )}
+              <>
+                {user.status !== "Rejected" && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const reason = window.prompt("Enter rejection notes / reason:");
+                      if (reason !== null) {
+                        setNotes(reason);
+                        handleAction("reject");
+                      }
+                    }}
+                    disabled={actionLoading}
+                    className="px-3 py-1.5 rounded-full bg-white/20 hover:bg-amber-600 text-white text-xs font-semibold backdrop-blur-xs transition-all cursor-pointer border border-white/30 flex items-center gap-1"
+                  >
+                    <FaBan size={10} /> Reject
+                  </button>
+                )}
 
-            <button
-              type="button"
-              onClick={() => handleAction(user.isApproved ? "update_settings" : "approve")}
-              disabled={actionLoading || (user.isApproved && !isDirty)}
-              className={`px-3.5 py-1.5 rounded-full text-xs font-bold transition-all ${
-                user.isApproved && !isDirty
-                  ? "bg-white/30 text-white/50 cursor-not-allowed border border-white/20"
-                  : "bg-white text-blue-700 hover:bg-blue-50 cursor-pointer shadow-sm"
-              }`}
-            >
-              {actionLoading
-                ? "Saving..."
-                : !user.isApproved
-                ? "Confirm Approval"
-                : isDirty
-                ? "Save Changes"
-                : "Saved"}
-            </button>
+                {user.isApproved && (
+                  <button
+                    type="button"
+                    onClick={() => handleAction(isSuspended ? "activate" : "suspend")}
+                    disabled={actionLoading}
+                    className="px-3 py-1.5 rounded-full bg-white/20 hover:bg-rose-500 text-white text-xs font-semibold backdrop-blur-xs transition-all cursor-pointer border border-white/30"
+                  >
+                    {isSuspended ? "Reactivate" : "Suspend"}
+                  </button>
+                )}
+
+                <button
+                  type="button"
+                  onClick={handleDelete}
+                  disabled={actionLoading}
+                  className="px-3 py-1.5 rounded-full bg-white/20 hover:bg-red-600 text-white text-xs font-semibold backdrop-blur-xs transition-all cursor-pointer border border-white/30 flex items-center gap-1"
+                  title="Soft delete this account"
+                >
+                  <FaTrash size={10} /> Delete
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => handleAction(user.isApproved ? "update_settings" : "approve")}
+                  disabled={actionLoading || (user.isApproved && !isDirty)}
+                  className={`px-3.5 py-1.5 rounded-full text-xs font-bold transition-all ${
+                    user.isApproved && !isDirty
+                      ? "bg-white/30 text-white/50 cursor-not-allowed border border-white/20"
+                      : "bg-white text-blue-700 hover:bg-blue-50 cursor-pointer shadow-sm"
+                  }`}
+                >
+                  {actionLoading
+                    ? "Saving..."
+                    : !user.isApproved
+                    ? "Confirm Approval"
+                    : isDirty
+                    ? "Save Changes"
+                    : "Saved"}
+                </button>
+              </>
+            )}
           </div>
         </div>
 
@@ -436,14 +600,26 @@ export default function TenantApprovalPage({
                   </h1>
                   <span
                     className={`text-[10.5px] font-bold px-2 py-0.5 rounded-full border ${
-                      !user.isApproved
+                      user.isDeleted
+                        ? "bg-red-50 text-red-700 border-red-200"
+                        : user.status === "Rejected"
+                        ? "bg-rose-50 text-rose-700 border-rose-200"
+                        : !user.isApproved
                         ? "bg-amber-50 text-amber-700 border-amber-200"
                         : isSuspended
                         ? "bg-rose-50 text-rose-700 border-rose-200"
                         : "bg-emerald-50 text-emerald-700 border-emerald-200"
                     }`}
                   >
-                    {!user.isApproved ? "Pending Review" : isSuspended ? "Suspended" : "Approved"}
+                    {user.isDeleted
+                      ? "Deleted"
+                      : user.status === "Rejected"
+                      ? "Rejected"
+                      : !user.isApproved
+                      ? "Pending Review"
+                      : isSuspended
+                      ? "Suspended"
+                      : "Approved"}
                   </span>
                   <span className={`text-[10.5px] font-semibold px-2 py-0.5 rounded-full border ${degradation.badgeClass}`}>
                     {degradation.remainingDays} Days Active

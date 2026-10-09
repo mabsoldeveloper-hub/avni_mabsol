@@ -170,21 +170,71 @@ export default function AccountsFilterBar({
             onClick={() => setStatusTab("suspended")}
             className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-2 ${
               currentStatus === "suspended"
-                ? "bg-rose-600 text-white shadow-xs shadow-rose-600/20"
-                : "text-slate-600 hover:text-slate-900 hover:bg-rose-50/70"
+                ? "bg-slate-700 text-white shadow-xs"
+                : "text-slate-600 hover:text-slate-900 hover:bg-slate-100"
             }`}
           >
-            <FaBan size={11} className={currentStatus === "suspended" ? "text-rose-100" : "text-rose-500"} />
+            <FaBan size={11} className={currentStatus === "suspended" ? "text-slate-200" : "text-slate-400"} />
             <span>Deactivated / Locked</span>
             {stats && (
               <span
                 className={`text-[10px] px-1.5 py-0.2 rounded-md font-mono ${
                   currentStatus === "suspended"
                     ? "bg-white/25 text-white"
-                    : "bg-rose-50 text-rose-800 border border-rose-200/60"
+                    : "bg-slate-100 text-slate-800 border border-slate-200/60"
                 }`}
               >
                 {stats.suspended || 0}
+              </span>
+            )}
+          </button>
+
+          {/* TAB 5: Rejected Applications */}
+          <button
+            type="button"
+            onClick={() => setStatusTab("rejected")}
+            className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-2 ${
+              currentStatus === "rejected"
+                ? "bg-rose-600 text-white shadow-xs shadow-rose-600/20"
+                : "text-slate-600 hover:text-slate-900 hover:bg-rose-50/70"
+            }`}
+          >
+            <FaTimes size={11} className={currentStatus === "rejected" ? "text-rose-100" : "text-rose-500"} />
+            <span>Rejected</span>
+            {stats && (
+              <span
+                className={`text-[10px] px-1.5 py-0.2 rounded-md font-mono ${
+                  currentStatus === "rejected"
+                    ? "bg-white/25 text-white"
+                    : "bg-rose-50 text-rose-800 border border-rose-200/60"
+                }`}
+              >
+                {stats.rejected || 0}
+              </span>
+            )}
+          </button>
+
+          {/* TAB 6: Deleted Accounts */}
+          <button
+            type="button"
+            onClick={() => setStatusTab("deleted")}
+            className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-2 ${
+              currentStatus === "deleted"
+                ? "bg-red-700 text-white shadow-xs shadow-red-700/20"
+                : "text-slate-600 hover:text-slate-900 hover:bg-red-50/70"
+            }`}
+          >
+            <FaBan size={11} className={currentStatus === "deleted" ? "text-red-200" : "text-red-500"} />
+            <span>Deleted Accounts</span>
+            {stats && (
+              <span
+                className={`text-[10px] px-1.5 py-0.2 rounded-md font-mono ${
+                  currentStatus === "deleted"
+                    ? "bg-white/25 text-white"
+                    : "bg-red-50 text-red-800 border border-red-200/60"
+                }`}
+              >
+                {stats.deleted || 0}
               </span>
             )}
           </button>

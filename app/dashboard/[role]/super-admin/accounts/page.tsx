@@ -19,6 +19,10 @@ function AllAccountsContent() {
     availableCities,
     availableHeadOffices,
     handleToggleActive,
+    handleReject,
+    handleDelete,
+    handleRestore,
+    handlePermanentDelete,
     refetch,
   } = useSuperAdminData("all");
 
@@ -87,6 +91,10 @@ function AllAccountsContent() {
           loading={loading}
           actionLoading={actionLoading}
           onToggleActive={handleToggleActive}
+          onReject={handleReject}
+          onDelete={handleDelete}
+          onRestore={handleRestore}
+          onPermanentDelete={handlePermanentDelete}
         />
       </div>
     </div>

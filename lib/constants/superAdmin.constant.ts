@@ -22,6 +22,7 @@ export const USER_APPROVAL_STATUS = {
   EXPIRED: "Expired",
   REJECTED: "Rejected",
   SUSPENDED: "Suspended",
+  DELETED: "Deleted",
 } as const;
 
 export type UserApprovalStatus =

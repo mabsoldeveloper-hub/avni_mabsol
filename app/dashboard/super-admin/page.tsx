@@ -17,6 +17,7 @@ function ApproveAdminsContent() {
     filter,
     setFilter,
     availableCities,
+    availableHeadOffices,
     handleToggleActive,
     refetch,
   } = useSuperAdminData("pending");
@@ -44,7 +45,7 @@ function ApproveAdminsContent() {
           <div className="relative">
             <select
               value={filter.timeRange}
-              onChange={(e) => setFilter({ ...filter, timeRange: e.target.value as any })}
+              onChange={(e) => setFilter((prev) => ({ ...prev, timeRange: e.target.value as any }))}
               className="appearance-none bg-white border border-slate-200 rounded-full px-4 py-2 pr-8 text-xs font-bold text-slate-700 hover:border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500/20 shadow-xs cursor-pointer"
             >
               {TIME_RANGE_OPTIONS.map((opt) => (
@@ -77,6 +78,8 @@ function ApproveAdminsContent() {
           filter={filter}
           onFilterChange={setFilter}
           cities={availableCities}
+          headOffices={availableHeadOffices}
+          stats={stats}
         />
 
         <AccountsTable

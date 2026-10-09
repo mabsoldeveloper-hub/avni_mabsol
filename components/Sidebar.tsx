@@ -44,6 +44,7 @@ import {
   SIDEBAR_PRESET_THEMES,
   SIDEBAR_SECTIONS,
   MODULE_KEY_MAP,
+  CORE_MODULE_IDS,
   isColorDark,
   hexToRgba,
   SidebarHeader,
@@ -306,51 +307,117 @@ export default function Sidebar({ collapsed, setCollapsed, mobile }: SidebarProp
 
   // Filter items by visibility, company enabled modules, and user permissions
   const visibleMenuItems = useMemo(() => {
-    const enabledModules = (selectedCompany as any)?.enabledModules;
+    const rawEnabled = (selectedCompany as any)?.enabledModules;
+    const isChildBranch = Boolean(
+      selectedCompany &&
+      ((selectedCompany as any).isHeadOffice === false || (selectedCompany as any).parentCompanyId)
+    );
 
-    return menuItems.filter((item) => {
-      if (item.isVisible === false) return false;
-
-      // Module-level company permission check: strictly respect company's enabledModules
-      if (enabledModules && Array.isArray(enabledModules) && enabledModules.length > 0 && !isSuperAdmin) {
-        const itemHref = item.href || (item.subItems && item.subItems[0]?.href) || "";
-        const isEnabled = enabledModules.some((modKey: string) => {
-          if (item.id === modKey) return true;
-          const mappedIds = MODULE_KEY_MAP[modKey] || [];
-          if (mappedIds.includes(item.id)) return true;
-          if (itemHref === `/dashboard/${modKey}` || itemHref.startsWith(`/dashboard/${modKey}/`)) return true;
-          if (
-            item.subItems?.some(
-              (sub) =>
-                mappedIds.includes(sub.id) ||
-                sub.id === modKey ||
-                sub.href === `/dashboard/${modKey}` ||
-                sub.href?.startsWith(`/dashboard/${modKey}/`)
-            )
-          ) {
-            return true;
-          }
-          return false;
-        });
-
-        if (!isEnabled) return false;
+    // Normalize enabled modules array if defined
+    const hasModuleRestrictions = Array.isArray(rawEnabled) && !isSuperAdmin;
+    const enabledSet = new Set<string>();
+    if (hasModuleRestrictions) {
+      for (const m of rawEnabled) {
+        if (!m) continue;
+        const lower = String(m).toLowerCase().trim();
+        enabledSet.add(lower);
+        // Add aliases
+        if (lower === "purchases") enabledSet.add("purchase");
+        if (lower === "purchase") enabledSet.add("purchases");
+        if (lower === "financial_years") enabledSet.add("financial-year");
+        if (lower === "financial-year") enabledSet.add("financial_years");
+        if (lower === "custom_forms") enabledSet.add("custom-forms");
+        if (lower === "custom-forms") enabledSet.add("custom_forms");
+        if (lower === "fieldforce") enabledSet.add("mr");
+        if (lower === "mr") enabledSet.add("fieldforce");
       }
+    }
 
-      // User role permission check for main item
-      if (item.permission && !can(item.permission)) {
-        if (item.isGroup && item.subItems && item.subItems.length > 0) {
-          const hasAnyPermittedSub = item.subItems.some(
-            (sub) => sub.isVisible !== false && (!sub.permission || can(sub.permission))
-          );
-          if (!hasAnyPermittedSub) return false;
-        } else {
-          return false;
+    const isSubItemAllowed = (sub: SubMenuItemConfig): boolean => {
+      if (sub.isVisible === false) return false;
+      if (!hasModuleRestrictions) return true;
+      if (CORE_MODULE_IDS.includes(sub.id)) return true;
+
+      // Check if sub.id is permitted by any enabled module
+      for (const modKey of Array.from(enabledSet)) {
+        if (sub.id === modKey) return true;
+        const mapped = MODULE_KEY_MAP[modKey] || [];
+        if (mapped.includes(sub.id)) return true;
+        if (sub.href === `/dashboard/${modKey}` || sub.href?.startsWith(`/dashboard/${modKey}/`)) return true;
+      }
+      return false;
+    };
+
+    return menuItems
+      .map((item) => {
+        let subItems = item.subItems;
+
+        // When operating in a child branch context, hide "+ Create Company" subItem
+        if (item.id === "company" && isChildBranch && !isSuperAdmin && subItems) {
+          subItems = subItems.filter((sub) => sub.id !== "company-create");
         }
-      }
 
-      return true;
-    });
-  }, [menuItems, can, selectedCompany]);
+        // If company has restricted modules, filter subItems according to enabledModules
+        if (hasModuleRestrictions && subItems) {
+          subItems = subItems.filter((sub) => isSubItemAllowed(sub));
+        }
+
+        return {
+          ...item,
+          subItems,
+        };
+      })
+      .filter((item) => {
+        if (item.isVisible === false) return false;
+
+        // Module-level company permission check: strictly respect company's enabledModules
+        if (hasModuleRestrictions) {
+          const isCore = CORE_MODULE_IDS.includes(item.id);
+          if (!isCore) {
+            if (item.subItems && item.subItems.length > 0) {
+              // Group has remaining permitted subItems, allow it
+            } else if (item.isGroup) {
+              // Group has 0 permitted subItems remaining, hide it
+              return false;
+            } else {
+              // Standalone item: check if item itself is mapped to an enabled module
+              let isEnabled = false;
+              for (const modKey of Array.from(enabledSet)) {
+                if (item.id === modKey) {
+                  isEnabled = true;
+                  break;
+                }
+                const mapped = MODULE_KEY_MAP[modKey] || [];
+                if (mapped.includes(item.id)) {
+                  isEnabled = true;
+                  break;
+                }
+                const itemHref = item.href || "";
+                if (itemHref === `/dashboard/${modKey}` || itemHref.startsWith(`/dashboard/${modKey}/`)) {
+                  isEnabled = true;
+                  break;
+                }
+              }
+              if (!isEnabled) return false;
+            }
+          }
+        }
+
+        // User role permission check for main item
+        if (item.permission && !can(item.permission)) {
+          if (item.isGroup && item.subItems && item.subItems.length > 0) {
+            const hasAnyPermittedSub = item.subItems.some(
+              (sub) => sub.isVisible !== false && (!sub.permission || can(sub.permission))
+            );
+            if (!hasAnyPermittedSub) return false;
+          } else {
+            return false;
+          }
+        }
+
+        return true;
+      });
+  }, [menuItems, can, selectedCompany, isSuperAdmin]);
 
   // Group visible items into logical sections defined in SIDEBAR_SECTIONS
   const groupedSections = useMemo(() => {

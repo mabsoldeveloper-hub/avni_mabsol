@@ -17,11 +17,16 @@ export function useSuperAdminData(initialStatusFilter?: string) {
     rejected: 0,
     suspended: 0,
     deactive: 0,
+    headOffices: 0,
+    childBranches: 0,
+    totalCompanies: 0,
   });
 
   const [filter, setFilter] = useState<FilterState>({
     search: "",
     status: initialStatusFilter || "all",
+    branchType: "all",
+    parentCompanyId: "all",
     plan: "all",
     city: "all",
     timeRange: "all",
@@ -58,6 +63,22 @@ export function useSuperAdminData(initialStatusFilter?: string) {
       if (c && c.trim()) set.add(c.trim());
     });
     return Array.from(set).sort();
+  }, [users]);
+
+  // Extract distinct Head Offices for the parent branch filter dropdown
+  const availableHeadOffices = useMemo(() => {
+    const map = new Map<string, { _id: string; companyName: string; companyCode: string }>();
+    users.forEach((u) => {
+      const comp = u.companyId;
+      if (comp?._id && (!comp.parentCompanyId || comp.isHeadOffice)) {
+        map.set(comp._id.toString(), {
+          _id: comp._id.toString(),
+          companyName: comp.companyName || "Organization",
+          companyCode: comp.companyCode || "",
+        });
+      }
+    });
+    return Array.from(map.values()).sort((a, b) => a.companyName.localeCompare(b.companyName));
   }, [users]);
 
   // Execute admin action (approve, extend, suspend, activate, reject)
@@ -114,37 +135,73 @@ export function useSuperAdminData(initialStatusFilter?: string) {
       if (filter.search.trim()) {
         const q = filter.search.toLowerCase();
         const companyMatch = (u.companyId?.companyName || "").toLowerCase().includes(q);
+        const codeMatch = (u.companyId?.companyCode || "").toLowerCase().includes(q);
+        const tenantMatch = (u.companyId?.tenantId || "").toLowerCase().includes(q);
         const nameMatch = u.name.toLowerCase().includes(q);
         const emailMatch = u.email.toLowerCase().includes(q);
+        const mobileMatch = (u.mobile || "").toLowerCase().includes(q);
         const gstinMatch = (u.companyId?.gstNo || "").toLowerCase().includes(q);
-        if (!companyMatch && !nameMatch && !emailMatch && !gstinMatch) return false;
+        const cityMatch = (u.companyId?.city || "").toLowerCase().includes(q);
+
+        if (
+          !companyMatch &&
+          !codeMatch &&
+          !tenantMatch &&
+          !nameMatch &&
+          !emailMatch &&
+          !mobileMatch &&
+          !gstinMatch &&
+          !cityMatch
+        ) {
+          return false;
+        }
       }
 
-      // 2. Status
-      if (filter.status === "pending" && u.isApproved) return false;
-      if (filter.status === "approved" && (!u.isApproved || u.status === "Suspended")) return false;
-      if (filter.status === "suspended" && u.status !== "Suspended") return false;
-      if (filter.status === "expired") {
+      // 2. Status / Approval Section
+      if (filter.status === "pending" || filter.status === "unapproved") {
+        if (u.isApproved && u.status === "Active") return false;
+      } else if (filter.status === "approved" || filter.status === "active") {
+        if (!u.isApproved || u.status === "Suspended" || u.status === "Inactive") return false;
+      } else if (filter.status === "suspended") {
+        if (u.status !== "Suspended" && u.status !== "Inactive" && u.status !== "Deactivated") return false;
+      } else if (filter.status === "expired") {
         if (!u.accessValidUntil) return false;
         if (new Date(u.accessValidUntil).getTime() > Date.now()) return false;
       }
 
-      // 3. Plan
+      // 3. Branch Type Filter ('all' | 'head_office' | 'child_branch')
+      if (filter.branchType === "head_office") {
+        const isHO = !u.companyId?.parentCompanyId || u.companyId?.isHeadOffice === true;
+        if (!isHO) return false;
+      } else if (filter.branchType === "child_branch") {
+        const isBranch = Boolean(u.companyId?.parentCompanyId) || u.companyId?.isHeadOffice === false;
+        if (!isBranch) return false;
+      }
+
+      // 4. Specific Head Office / Parent Filter
+      if (filter.parentCompanyId && filter.parentCompanyId !== "all") {
+        const parentId =
+          (u.companyId?.parentCompanyId as any)?._id?.toString() ||
+          u.companyId?.parentCompanyId?.toString();
+        if (parentId !== filter.parentCompanyId) return false;
+      }
+
+      // 5. Plan
       if (filter.plan === "free_trial" && u.isUnlimitedAccess) return false;
       if (filter.plan === "unlimited" && !u.isUnlimitedAccess) return false;
 
-      // 4. City
+      // 6. City
       if (filter.city !== "all") {
         if ((u.companyId?.city || "").toLowerCase() !== filter.city.toLowerCase()) return false;
       }
 
-      // 5. Date
+      // 7. Date
       if (filter.date) {
         const createdDateStr = new Date(u.createdAt).toISOString().split("T")[0];
         if (createdDateStr !== filter.date) return false;
       }
 
-      // 6. Time Range
+      // 8. Time Range
       if (filter.timeRange !== "all") {
         const createdTime = new Date(u.createdAt).getTime();
         const now = Date.now();
@@ -166,6 +223,7 @@ export function useSuperAdminData(initialStatusFilter?: string) {
     filter,
     setFilter,
     availableCities,
+    availableHeadOffices,
     selectedUserForModal,
     setSelectedUserForModal,
     handleAction,

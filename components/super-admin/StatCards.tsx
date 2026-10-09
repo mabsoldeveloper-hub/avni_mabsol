@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import { FaHospital, FaCheckCircle, FaClock, FaBan } from "react-icons/fa";
+import { FaHospital, FaCheckCircle, FaClock, FaBan, FaCodeBranch, FaBuilding } from "react-icons/fa";
 import { SuperAdminStats } from "./types";
 
 interface StatCardsProps {
@@ -16,12 +16,15 @@ export default function StatCards({ stats }: StatCardsProps) {
   const pendingPct = total > 0 ? Math.round((stats.pending / total) * 100) : 0;
   const deactivePct = total > 0 ? Math.round((computedDeactive / total) * 100) : 0;
 
+  const headOffices = stats.headOffices || 0;
+  const childBranches = stats.childBranches || 0;
+
   return (
     <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
       {/* Card 1: TOTAL ENTERPRISES */}
       <div className="bg-white rounded-2xl border border-slate-200/80 p-3.5 sm:p-4 shadow-xs hover:shadow-sm transition-shadow flex flex-col justify-between">
         <div className="flex items-center justify-between gap-2">
-          <span className="text-[10.5px] font-extrabold text-slate-400 uppercase tracking-wider truncate">
+          <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider truncate">
             Total Enterprises
           </span>
           <div className="w-8 h-8 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center text-xs shrink-0 border border-blue-100/60">
@@ -32,8 +35,10 @@ export default function StatCards({ stats }: StatCardsProps) {
           <div className="text-2xl sm:text-3xl font-black text-slate-900 leading-tight">
             {total}
           </div>
-          <div className="text-[10.5px] text-blue-600 font-semibold mt-0.5 truncate">
-            All registered tenants
+          <div className="text-[10.5px] text-blue-600 font-semibold mt-0.5 flex items-center gap-1.5 truncate">
+            <span>{headOffices} Head Offices</span>
+            <span>•</span>
+            <span>{childBranches} Branches</span>
           </div>
         </div>
       </div>
@@ -41,8 +46,8 @@ export default function StatCards({ stats }: StatCardsProps) {
       {/* Card 2: APPROVED & ACTIVE */}
       <div className="bg-white rounded-2xl border border-slate-200/80 p-3.5 sm:p-4 shadow-xs hover:shadow-sm transition-shadow flex flex-col justify-between">
         <div className="flex items-center justify-between gap-2">
-          <span className="text-[10.5px] font-extrabold text-slate-400 uppercase tracking-wider truncate">
-            Active / Subscribed
+          <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider truncate">
+            Approved & Active
           </span>
           <div className="w-8 h-8 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center text-xs shrink-0 border border-emerald-100/60">
             <FaCheckCircle />
@@ -58,7 +63,7 @@ export default function StatCards({ stats }: StatCardsProps) {
             </span>
           </div>
           <div className="text-[10.5px] text-emerald-600 font-semibold mt-0.5 truncate">
-            Active verified licenses
+            Approved operational licenses
           </div>
         </div>
       </div>
@@ -66,7 +71,7 @@ export default function StatCards({ stats }: StatCardsProps) {
       {/* Card 3: PENDING APPROVAL */}
       <div className="bg-white rounded-2xl border border-slate-200/80 p-3.5 sm:p-4 shadow-xs hover:shadow-sm transition-shadow flex flex-col justify-between">
         <div className="flex items-center justify-between gap-2">
-          <span className="text-[10.5px] font-extrabold text-slate-400 uppercase tracking-wider truncate">
+          <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider truncate">
             Pending Clearance
           </span>
           <div className="w-8 h-8 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center text-xs shrink-0 border border-amber-100/60">
@@ -78,12 +83,13 @@ export default function StatCards({ stats }: StatCardsProps) {
             <span className="text-2xl sm:text-3xl font-black text-slate-900 leading-tight">
               {stats.pending}
             </span>
-            <span className="text-[10px] font-bold text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded-md border border-amber-100">
+            <span className="text-[10px] font-bold text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded-md border border-amber-100 flex items-center gap-1">
+              <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
               {pendingPct}%
             </span>
           </div>
           <div className="text-[10.5px] text-amber-600 font-semibold mt-0.5 truncate">
-            Requires admin action
+            Awaiting Super Admin clearance
           </div>
         </div>
       </div>
@@ -91,7 +97,7 @@ export default function StatCards({ stats }: StatCardsProps) {
       {/* Card 4: SUSPENDED / LOCKED */}
       <div className="bg-white rounded-2xl border border-slate-200/80 p-3.5 sm:p-4 shadow-xs hover:shadow-sm transition-shadow flex flex-col justify-between">
         <div className="flex items-center justify-between gap-2">
-          <span className="text-[10.5px] font-extrabold text-slate-400 uppercase tracking-wider truncate">
+          <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider truncate">
             Suspended / Locked
           </span>
           <div className="w-8 h-8 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center text-xs shrink-0 border border-rose-100/60">
@@ -108,7 +114,7 @@ export default function StatCards({ stats }: StatCardsProps) {
             </span>
           </div>
           <div className="text-[10.5px] text-rose-600 font-semibold mt-0.5 truncate">
-            Revoked access
+            Access revoked or expired
           </div>
         </div>
       </div>

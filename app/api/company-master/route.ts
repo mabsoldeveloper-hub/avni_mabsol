@@ -9,7 +9,7 @@ import { ROLE_TYPE } from "@/lib/constants/roles.constant";
 
 export const dynamic = "force-dynamic";
 
-export async function GET() {
+export async function GET(req: Request) {
   try {
     await connectDB();
     const user = await getCurrentUser();
@@ -18,17 +18,44 @@ export async function GET() {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
+    const { searchParams } = new URL(req.url);
+    const activeCompanyId =
+      searchParams.get("activeCompanyId") ||
+      searchParams.get("companyId") ||
+      req.headers.get("x-company-id");
+
     const userCompany = user.companyId ? await Company.findById(user.companyId) : null;
     const isSuperAdmin = user.roleType === ROLE_TYPE.SUPER_ADMIN;
 
     // Visibility Rules:
-    // 1. SuperAdmin: can see all companies across all tenants
+    // 1. SuperAdmin: can see all companies across all tenants (or scoped to active if specified)
     // 2. Head Office (isHeadOffice === true): can see its own company AND all child branches under it
-    // 3. Child Branch (isHeadOffice === false): can ONLY see itself (cannot access parent or sibling company data)
+    // 3. Child Branch (isHeadOffice === false): can ONLY see itself (cannot see, edit, or delete parent or sibling companies)
     let query: Record<string, any> = {};
 
     if (isSuperAdmin) {
-      query = {};
+      if (activeCompanyId && activeCompanyId !== "ALL") {
+        query = { _id: activeCompanyId };
+      } else {
+        query = {};
+      }
+    } else if (activeCompanyId && activeCompanyId !== "ALL") {
+      const activeCompany = await Company.findById(activeCompanyId);
+      if (!activeCompany) {
+        return NextResponse.json([]);
+      }
+      if (!activeCompany.isHeadOffice) {
+        // Active company is a child branch: strictly return only itself
+        query = { _id: activeCompany._id };
+      } else {
+        // Active company is Head Office: return Head Office and its child branches
+        query = {
+          $or: [
+            { _id: activeCompany._id },
+            { parentCompanyId: activeCompany._id },
+          ],
+        };
+      }
     } else if (userCompany?.isHeadOffice) {
       query = {
         $or: [
@@ -64,10 +91,34 @@ export async function POST(req: Request) {
 
     const data = await req.json();
 
+    // Check active context: Child branches CANNOT create new companies
+    const { searchParams } = new URL(req.url);
+    const activeCompanyId =
+      req.headers.get("x-company-id") ||
+      searchParams.get("activeCompanyId") ||
+      data.activeCompanyId;
+
+    const userCompany = user.companyId ? await Company.findById(user.companyId) : null;
+    let activeComp = userCompany;
+    if (activeCompanyId) {
+      activeComp = await Company.findById(activeCompanyId);
+    }
+
+    const isSuperAdmin = user.roleType === ROLE_TYPE.SUPER_ADMIN;
+    if (!isSuperAdmin && activeComp && !activeComp.isHeadOffice) {
+      return NextResponse.json(
+        { success: false, error: "Only Head Office administrators can create new companies or branches." },
+        { status: 403 }
+      );
+    }
+
     // Always use the logged-in user's tenantId
     const targetTenantId = user.tenantId || `TENANT_${user._id}`;
-    const userCompany = user.companyId ? await Company.findById(user.companyId) : null;
-    const parentCompanyId = userCompany ? userCompany._id : null;
+    const parentCompanyId = activeComp?.isHeadOffice
+      ? activeComp._id
+      : userCompany?.isHeadOffice
+      ? userCompany._id
+      : null;
 
     // Validate company name
     if (!data.companyName?.trim()) {

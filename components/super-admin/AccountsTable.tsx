@@ -2,7 +2,18 @@
 
 import React from "react";
 import Link from "next/link";
-import { FaEye, FaCheckCircle, FaSync } from "react-icons/fa";
+import {
+  FaEye,
+  FaCheckCircle,
+  FaSync,
+  FaBuilding,
+  FaCodeBranch,
+  FaMapMarkerAlt,
+  FaEnvelope,
+  FaPhone,
+  FaClock,
+  FaShieldAlt,
+} from "react-icons/fa";
 import { SuperAdminUserItem } from "./types";
 import { DEFAULT_ACCESS_DAYS } from "@/lib/constants/superAdmin.constant";
 
@@ -28,9 +39,9 @@ function getRelativeTime(dateString: string): string {
   const diffDays = Math.floor(diffHours / 24);
   if (diffDays < 30) return `${diffDays} days ago`;
   const diffMonths = Math.floor(diffDays / 30);
-  if (diffMonths < 12) return `${diffMonths} month${diffMonths > 1 ? "s" : ""} ago`;
+  if (diffMonths < 12) return `${diffMonths} mo ago`;
   const diffYears = Math.floor(diffMonths / 12);
-  return `${diffYears} year${diffYears > 1 ? "s" : ""} ago`;
+  return `${diffYears} yr ago`;
 }
 
 function getFormattedDateTime(dateString: string): string {
@@ -54,7 +65,7 @@ function getSubscriptionInfo(u: SuperAdminUserItem) {
     return {
       text: "Unlimited Access",
       status: "ACTIVE",
-      color: "text-emerald-600",
+      color: "text-emerald-600 bg-emerald-50 border-emerald-200/80",
     };
   }
   const totalDays = u.accessDurationDays || DEFAULT_ACCESS_DAYS;
@@ -62,7 +73,9 @@ function getSubscriptionInfo(u: SuperAdminUserItem) {
     return {
       text: `${totalDays} / ${totalDays} days`,
       status: u.isApproved ? "ACTIVE" : "PENDING",
-      color: u.isApproved ? "text-emerald-600" : "text-amber-600",
+      color: u.isApproved
+        ? "text-emerald-700 bg-emerald-50 border-emerald-200/80"
+        : "text-amber-700 bg-amber-50 border-amber-200/80",
     };
   }
   const expiry = new Date(u.accessValidUntil).getTime();
@@ -74,7 +87,13 @@ function getSubscriptionInfo(u: SuperAdminUserItem) {
   return {
     text: `${remainingDays} / ${totalDays} days`,
     status: isSuspended ? "SUSPENDED" : isExpired ? "EXPIRED" : "ACTIVE",
-    color: isSuspended ? "text-slate-400" : isExpired ? "text-rose-600" : "text-emerald-600",
+    color: isSuspended
+      ? "text-slate-600 bg-slate-100 border-slate-200"
+      : isExpired
+      ? "text-rose-700 bg-rose-50 border-rose-200/80"
+      : remainingDays <= 5
+      ? "text-amber-700 bg-amber-50 border-amber-200/80"
+      : "text-emerald-700 bg-emerald-50 border-emerald-200/80",
   };
 }
 
@@ -89,96 +108,181 @@ export default function AccountsTable({
   return (
     <div className={`bg-white rounded-2xl border border-slate-200/80 overflow-hidden shadow-xs ${className}`}>
       {loading ? (
-        <div className="p-12 text-center text-slate-400 flex flex-col items-center justify-center gap-2.5">
+        <div className="p-14 text-center text-slate-400 flex flex-col items-center justify-center gap-2.5">
           <FaSync className="animate-spin text-xl text-blue-600" />
-          <p className="text-xs font-semibold text-slate-600">Loading accounts...</p>
+          <p className="text-xs font-semibold text-slate-600">Retrieving multi-tenant directory...</p>
         </div>
       ) : users.length === 0 ? (
-        <div className="p-12 text-center text-slate-400 flex flex-col items-center justify-center gap-2">
-          <FaCheckCircle className="text-2xl text-slate-300" />
-          <p className="text-sm font-bold text-slate-700">No Accounts Found</p>
+        <div className="p-14 text-center text-slate-400 flex flex-col items-center justify-center gap-2">
+          <div className="w-12 h-12 rounded-full bg-slate-100 flex items-center justify-center text-slate-400 text-xl mb-1">
+            <FaCheckCircle />
+          </div>
+          <p className="text-sm font-bold text-slate-800">No Enterprise Accounts Found</p>
           <p className="text-xs text-slate-400 max-w-sm">
-            No registration requests match the selected filters or criteria.
+            No registration records match the current status, branch-wise filter, or search query.
           </p>
         </div>
       ) : (
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs">
+          <table className="w-full text-left text-xs border-collapse">
             <thead>
-              <tr className="border-b border-slate-200/80 bg-slate-50/80 text-slate-500 uppercase text-[10.5px] font-bold tracking-wider">
-                <th className="py-3 px-3.5">ORGANIZATION / COMPANY</th>
-                <th className="py-3 px-3.5">EMAIL</th>
-                <th className="py-3 px-3.5">PLAN</th>
-                <th className="py-3 px-3.5 text-center">TOTAL BRANCHES</th>
+              <tr className="border-b border-slate-200/80 bg-slate-50/80 text-slate-500 uppercase text-[10px] font-bold tracking-wider">
+                <th className="py-3 px-3.5">ENTERPRISE / BRANCH</th>
+                <th className="py-3 px-3.5">BRANCH HIERARCHY</th>
+                <th className="py-3 px-3.5">CONTACT & ADMIN</th>
+                <th className="py-3 px-3.5 text-center">BRANCHES</th>
                 <th className="py-3 px-3.5">STATUS</th>
-                <th className="py-3 px-3.5 text-center">ACTIVE</th>
+                <th className="py-3 px-3.5 text-center">ACCESS</th>
                 <th className="py-3 px-3.5">SUBSCRIPTION</th>
-                <th className="py-3 px-3.5">REGISTERED AT</th>
+                <th className="py-3 px-3.5">REGISTERED</th>
                 <th className="py-3 px-3.5 text-center">ACTIONS</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
               {users.map((u) => {
-                const companyName = u.companyId?.companyName || u.name || "MABSOL ENTERPRISE";
-                const gstin = u.companyId?.gstNo || "06AALCM8009M1Z1";
-                const initials = (companyName.slice(0, 2) || "MA").toUpperCase();
+                const company = u.companyId;
+                const companyName = company?.companyName || u.name || "Pharma Enterprise";
+                const companyCode = company?.companyCode || "";
+                const gstin = company?.gstNo || "";
+                const isHeadOffice = !company?.parentCompanyId || company?.isHeadOffice === true;
+                const parentComp = company?.parentCompanyId;
+                const branchCount = company?.branchCount || 0;
+                const city = company?.city || "";
+                const state = company?.state || "";
+
+                const initials = companyName
+                  .split(" ")
+                  .map((w: string) => w[0])
+                  .filter(Boolean)
+                  .slice(0, 2)
+                  .join("")
+                  .toUpperCase() || "PE";
+
                 const subInfo = getSubscriptionInfo(u);
-                const isUserActive = u.status !== "Suspended" && u.isApproved;
+                const isUserActive = u.status !== "Suspended" && u.status !== "Inactive" && u.isApproved;
 
                 return (
-                  <tr key={u._id} className="hover:bg-slate-50/50 transition-colors">
-                    {/* PHARMA COMPANY / ENTERPRISE */}
-                    <td className="py-3 px-3.5 align-middle">
-                      <div className="flex items-center gap-3">
-                        <div className="w-9 h-9 rounded-full bg-blue-100 text-blue-600 font-bold text-xs flex items-center justify-center shrink-0 select-none">
+                  <tr key={u._id} className="hover:bg-slate-50/60 transition-colors">
+                    {/* ENTERPRISE / BRANCH */}
+                    <td className="py-3 px-3.5 align-middle max-w-[260px]">
+                      <div className="flex items-start gap-2.5">
+                        <div
+                          className={`w-8 h-8 rounded-xl font-extrabold text-[11px] flex items-center justify-center shrink-0 shadow-2xs border ${
+                            isHeadOffice
+                              ? "bg-indigo-50 text-indigo-700 border-indigo-200"
+                              : "bg-teal-50 text-teal-700 border-teal-200"
+                          }`}
+                        >
                           {initials}
                         </div>
-                        <div>
-                          <div className="font-bold text-slate-900 text-xs uppercase tracking-tight">
+                        <div className="min-w-0 flex-1">
+                          <div className="font-bold text-slate-900 text-xs tracking-tight line-clamp-1">
                             {companyName}
                           </div>
-                          <div className="text-[10px] text-slate-400 uppercase mt-0.5 font-mono">
-                            GSTIN: {gstin}
+                          <div className="flex items-center flex-wrap gap-1 mt-0.5 font-mono text-[10px]">
+                            {companyCode && (
+                              <span className="px-1.5 py-0.2 rounded bg-slate-100 text-slate-800 font-bold border border-slate-200">
+                                {companyCode}
+                              </span>
+                            )}
+                            {gstin && (
+                              <span className="text-slate-500 font-medium truncate">
+                                GST: {gstin}
+                              </span>
+                            )}
                           </div>
+                          {(city || state) && (
+                            <div className="text-[10px] text-slate-400 flex items-center gap-1 mt-0.5">
+                              <FaMapMarkerAlt size={9} className="text-slate-400 shrink-0" />
+                              <span className="truncate">{[city, state].filter(Boolean).join(", ")}</span>
+                            </div>
+                          )}
                         </div>
                       </div>
                     </td>
 
-                    {/* EMAIL */}
-                    <td className="py-3 px-3.5 align-middle text-slate-600 text-xs font-medium">
-                      {u.email}
-                    </td>
-
-                    {/* PLAN */}
+                    {/* BRANCH HIERARCHY BADGE */}
                     <td className="py-3 px-3.5 align-middle">
-                      <span className="inline-block px-2.5 py-0.5 rounded-md text-[10.5px] font-bold bg-slate-100/80 border border-slate-200/80 text-slate-700 tracking-wider">
-                        {u.isUnlimitedAccess ? "UNLIMITED" : "FREE_TRIAL"}
-                      </span>
+                      {isHeadOffice ? (
+                        <div className="inline-flex flex-col gap-0.5">
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-200/80 w-fit">
+                            <FaBuilding size={9} />
+                            <span>Head Office</span>
+                          </span>
+                          <span className="text-[9.5px] text-slate-400 font-medium">Main Hub</span>
+                        </div>
+                      ) : (
+                        <div className="inline-flex flex-col gap-0.5 max-w-[180px]">
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-teal-50 text-teal-700 border border-teal-200/80 w-fit">
+                            <FaCodeBranch size={9} />
+                            <span>Child Branch</span>
+                          </span>
+                          {parentComp && (
+                            <span
+                              className="text-[10px] text-slate-600 font-medium truncate"
+                              title={`Parent: ${parentComp.companyName || ""} (${parentComp.companyCode || ""})`}
+                            >
+                              Of: <strong className="font-semibold text-slate-800">{parentComp.companyCode || parentComp.companyName}</strong>
+                            </span>
+                          )}
+                        </div>
+                      )}
                     </td>
 
-                    {/* TOTAL BRANCHES */}
-                    <td className="py-3 px-3.5 align-middle text-center text-slate-700 text-xs font-bold">
-                      2
-                    </td>
-
-                    {/* STATUS */}
+                    {/* CONTACT & ADMIN */}
                     <td className="py-3 px-3.5 align-middle">
-                      {u.isApproved ? (
-                        <span className="text-xs font-bold text-emerald-600">
-                          Approved
+                      <div className="font-bold text-slate-800 text-xs truncate">{u.name}</div>
+                      <div className="text-[11px] text-slate-500 truncate flex items-center gap-1 mt-0.5 font-medium">
+                        <FaEnvelope size={9} className="text-slate-400 shrink-0" />
+                        <span className="truncate">{u.email}</span>
+                      </div>
+                      {u.mobile && (
+                        <div className="text-[10px] text-slate-400 font-mono flex items-center gap-1 mt-0.5">
+                          <FaPhone size={8} className="text-slate-400 shrink-0" />
+                          <span>{u.mobile}</span>
+                        </div>
+                      )}
+                    </td>
+
+                    {/* TOTAL BRANCHES (Branch-wise real count) */}
+                    <td className="py-3 px-3.5 align-middle text-center">
+                      {isHeadOffice ? (
+                        <div className="inline-flex flex-col items-center">
+                          <span
+                            className={`px-2 py-0.5 rounded-lg text-xs font-mono font-bold ${
+                              branchCount > 0
+                                ? "bg-blue-50 text-blue-700 border border-blue-200"
+                                : "bg-slate-100 text-slate-600"
+                            }`}
+                          >
+                            {branchCount} {branchCount === 1 ? "Branch" : "Branches"}
+                          </span>
+                        </div>
+                      ) : (
+                        <span className="text-[10.5px] font-medium text-slate-400">Node</span>
+                      )}
+                    </td>
+
+                    {/* APPROVAL STATUS */}
+                    <td className="py-3 px-3.5 align-middle">
+                      {u.isApproved && u.status === "Active" ? (
+                        <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200/80">
+                          <FaCheckCircle size={9} />
+                          <span>Approved</span>
                         </span>
-                      ) : u.status === "Suspended" ? (
-                        <span className="text-xs font-bold text-slate-400">
-                          Suspended
+                      ) : u.status === "Suspended" || u.status === "Inactive" ? (
+                        <span className="inline-flex items-center gap-1 text-[11px] font-bold text-rose-700 bg-rose-50 px-2 py-0.5 rounded-full border border-rose-200/80">
+                          <span>Suspended</span>
                         </span>
                       ) : (
-                        <span className="text-xs font-bold text-amber-600">
-                          Pending
+                        <span className="inline-flex items-center gap-1 text-[11px] font-bold text-amber-700 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-200/80">
+                          <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
+                          <span>Pending Review</span>
                         </span>
                       )}
                     </td>
 
-                    {/* ACTIVE (Interactive Modern iOS Toggle Switch) */}
+                    {/* ACTIVE SWITCH (Toggle) */}
                     <td className="py-3 px-3.5 align-middle text-center">
                       <button
                         type="button"
@@ -187,16 +291,16 @@ export default function AccountsTable({
                         title={
                           u.status === "Suspended"
                             ? "Click to activate account"
-                            : "Click to suspend account (auto-logout immediately)"
+                            : "Click to suspend account (revokes active logins)"
                         }
-                        className={`relative inline-flex h-5 w-10 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none disabled:opacity-50 ${
-                          isUserActive ? "bg-blue-600" : "bg-slate-200"
+                        className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none disabled:opacity-50 ${
+                          isUserActive ? "bg-emerald-600" : "bg-slate-300"
                         }`}
                       >
                         <span
                           aria-hidden="true"
                           className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow-sm ring-0 transition duration-200 ease-in-out ${
-                            isUserActive ? "translate-x-5" : "translate-x-0"
+                            isUserActive ? "translate-x-4" : "translate-x-0"
                           }`}
                         />
                       </button>
@@ -204,20 +308,24 @@ export default function AccountsTable({
 
                     {/* SUBSCRIPTION */}
                     <td className="py-3 px-3.5 align-middle">
-                      <div className="font-semibold text-slate-800 text-xs">
+                      <div className="font-bold text-slate-800 text-xs">
                         {subInfo.text}
                       </div>
-                      <div className={`text-[10px] font-bold uppercase mt-0.5 ${subInfo.color}`}>
-                        {subInfo.status}
+                      <div className="mt-0.5">
+                        <span
+                          className={`text-[9.5px] font-bold px-1.5 py-0.2 rounded border ${subInfo.color}`}
+                        >
+                          {subInfo.status}
+                        </span>
                       </div>
                     </td>
 
                     {/* RECEIVED AT */}
-                    <td className="py-3 px-3.5 align-middle">
-                      <div className="text-xs font-semibold text-slate-800">
+                    <td className="py-3 px-3.5 align-middle whitespace-nowrap">
+                      <div className="text-xs font-bold text-slate-800">
                         {getRelativeTime(u.createdAt)}
                       </div>
-                      <div className="text-[10.5px] text-slate-400 mt-0.5">
+                      <div className="text-[10px] text-slate-400 mt-0.5">
                         {getFormattedDateTime(u.createdAt)}
                       </div>
                     </td>
@@ -226,10 +334,10 @@ export default function AccountsTable({
                     <td className="py-3 px-3.5 align-middle text-center">
                       <Link
                         href={`/dashboard/super-admin/approvals/${u._id}`}
-                        className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-bold text-blue-700 bg-blue-50 hover:bg-blue-600 hover:text-white border border-blue-200 transition-all duration-150 shadow-2xs cursor-pointer"
-                        title="Review credentials and configure permissions"
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold text-blue-700 bg-blue-50 hover:bg-blue-600 hover:text-white border border-blue-200 transition-all duration-150 shadow-2xs cursor-pointer"
+                        title="Review credentials, verify branches, and configure modules"
                       >
-                        <FaEye size={11} />
+                        <FaEye size={10} />
                         <span>Review</span>
                       </Link>
                     </td>

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import connectDB from "@/lib/mongodb";
 import User from "@/models/User";
-import "@/models/Company";
+import Company from "@/models/Company";
 import "@/models/Role";
 import { getCurrentUser } from "@/lib/auth";
 import { isSuperAdminUser } from "@/lib/services/superAdmin.service";
@@ -26,6 +26,8 @@ export async function GET(req: NextRequest) {
 
     const { searchParams } = new URL(req.url);
     const statusFilter = searchParams.get("status") || "all";
+    const branchTypeFilter = searchParams.get("branchType") || "all"; // 'all' | 'head_office' | 'child_branch'
+    const parentCompanyFilter = searchParams.get("parentCompanyId") || "all";
     const searchQuery = (searchParams.get("search") || "").trim();
 
     const now = new Date();
@@ -43,7 +45,7 @@ export async function GET(req: NextRequest) {
       }
     );
 
-    // Build filter query
+    // Build filter query for User
     const query: any = {};
 
     if (statusFilter === "pending") {
@@ -51,7 +53,7 @@ export async function GET(req: NextRequest) {
         { isApproved: false },
         { status: USER_APPROVAL_STATUS.PENDING },
       ];
-    } else if (statusFilter === "active") {
+    } else if (statusFilter === "active" || statusFilter === "approved") {
       query.isApproved = true;
       query.status = USER_APPROVAL_STATUS.ACTIVE;
       query.$or = [
@@ -79,18 +81,66 @@ export async function GET(req: NextRequest) {
       ];
     }
 
+    // Branch Type filtering via company IDs
+    let companyQuery: any = null;
+    if (branchTypeFilter === "head_office") {
+      companyQuery = {
+        $or: [
+          { parentCompanyId: null },
+          { parentCompanyId: { $exists: false } },
+          { isHeadOffice: true },
+        ],
+      };
+    } else if (branchTypeFilter === "child_branch") {
+      companyQuery = {
+        $or: [
+          { parentCompanyId: { $ne: null } },
+          { isHeadOffice: false },
+        ],
+      };
+    }
+
+    if (parentCompanyFilter && parentCompanyFilter !== "all") {
+      companyQuery = companyQuery || {};
+      companyQuery.parentCompanyId = parentCompanyFilter;
+    }
+
+    if (companyQuery) {
+      const matchingCompanies = await Company.find(companyQuery).select("_id").lean();
+      const matchingCompIds = matchingCompanies.map((c) => c._id);
+      query.companyId = { $in: matchingCompIds };
+    }
+
     if (searchQuery) {
       const regex = new RegExp(searchQuery.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i");
-      query.$and = query.$and || [];
-      query.$and.push({
+      
+      // Also search against companies (name, code, gstin, city)
+      const matchingCompanies = await Company.find({
         $or: [
-          { name: { $regex: regex } },
-          { email: { $regex: regex } },
-          { mobile: { $regex: regex } },
-          { designation: { $regex: regex } },
-          { employeeCode: { $regex: regex } },
+          { companyName: { $regex: regex } },
+          { companyCode: { $regex: regex } },
+          { gstNo: { $regex: regex } },
+          { city: { $regex: regex } },
+          { tenantId: { $regex: regex } },
         ],
-      });
+      }).select("_id").lean();
+
+      const compIdsFromSearch = matchingCompanies.map((c) => c._id);
+
+      const userOrConditions: any[] = [
+        { name: { $regex: regex } },
+        { email: { $regex: regex } },
+        { mobile: { $regex: regex } },
+        { designation: { $regex: regex } },
+        { employeeCode: { $regex: regex } },
+      ];
+
+      if (compIdsFromSearch.length > 0) {
+        userOrConditions.push({ companyId: { $in: compIdsFromSearch } });
+      }
+
+      query.$and = query.$and || [];
+      query.$and.push({ $or: userOrConditions });
     }
 
     // Exclude the Super Admin from the list of users being managed
@@ -98,14 +148,71 @@ export async function GET(req: NextRequest) {
 
     const users = await User.find(query)
       .select("-password")
-      .populate("companyId", "companyName gstNo city state address businessType")
+      .populate({
+        path: "companyId",
+        select: "companyName companyCode tenantId isHeadOffice parentCompanyId gstNo panNo drugLicenseNo city state address businessType status enabledModules",
+        populate: {
+          path: "parentCompanyId",
+          select: "companyName companyCode isHeadOffice city state gstNo",
+        },
+      })
       .populate("roleId", "roleName")
       .populate("approvedBy", "name email")
       .sort({ createdAt: -1 })
       .lean();
 
+    // Map child branches and branch counts for every company
+    const childCompanies = await Company.find({
+      parentCompanyId: { $ne: null },
+    })
+      .select("_id companyName companyCode parentCompanyId status city state gstNo email mobile enabledModules")
+      .lean();
+
+    const branchCountMap = new Map<string, number>();
+    const childBranchesMap = new Map<string, any[]>();
+
+    for (const child of childCompanies) {
+      const pId = child.parentCompanyId?.toString();
+      if (pId) {
+        branchCountMap.set(pId, (branchCountMap.get(pId) || 0) + 1);
+        const list = childBranchesMap.get(pId) || [];
+        list.push({
+          _id: child._id,
+          companyName: child.companyName,
+          companyCode: child.companyCode,
+          city: child.city,
+          state: child.state,
+          gstNo: child.gstNo,
+          status: child.status,
+          email: child.email,
+          mobile: child.mobile,
+          enabledModules: child.enabledModules || [],
+        });
+        childBranchesMap.set(pId, list);
+      }
+    }
+
+    // Attach real branch data to each returned user
+    let headOfficesCount = 0;
+    let childBranchesCount = 0;
+
+    users.forEach((u: any) => {
+      const comp = u.companyId;
+      if (comp && comp._id) {
+        const cId = comp._id.toString();
+        comp.branchCount = branchCountMap.get(cId) || 0;
+        comp.childBranches = childBranchesMap.get(cId) || [];
+
+        if (comp.parentCompanyId) {
+          childBranchesCount++;
+        } else {
+          headOfficesCount++;
+        }
+      }
+    });
+
     // Compute live dashboard stats
-    const [totalCount, pendingCount, activeCount, expiredCount, rejectedCount, suspendedCount] =
+    const [totalCount, pendingCount, activeCount, expiredCount, rejectedCount, suspendedCount, totalCompaniesCount, totalHeadOfficesInDb, totalChildBranchesInDb] =
       await Promise.all([
         User.countDocuments({ email: { $ne: currentUser.email.toLowerCase() } }),
         User.countDocuments({
@@ -147,6 +254,17 @@ export async function GET(req: NextRequest) {
             { status: "Deactivated" },
           ],
         }),
+        Company.countDocuments(),
+        Company.countDocuments({
+          $or: [
+            { parentCompanyId: null },
+            { parentCompanyId: { $exists: false } },
+            { isHeadOffice: true },
+          ],
+        }),
+        Company.countDocuments({
+          parentCompanyId: { $ne: null },
+        }),
       ]);
 
     const deactiveCount = suspendedCount + expiredCount + rejectedCount;
@@ -162,6 +280,9 @@ export async function GET(req: NextRequest) {
         rejected: rejectedCount,
         suspended: suspendedCount,
         deactive: deactiveCount,
+        headOffices: totalHeadOfficesInDb,
+        childBranches: totalChildBranchesInDb,
+        totalCompanies: totalCompaniesCount,
       },
     });
   } catch (err: any) {

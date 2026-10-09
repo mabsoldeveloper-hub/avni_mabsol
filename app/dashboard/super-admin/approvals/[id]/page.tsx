@@ -23,6 +23,7 @@ import {
   FaBoxes,
   FaPlus,
   FaExclamationTriangle,
+  FaCodeBranch,
 } from "react-icons/fa";
 import { DEFAULT_ACCESS_DAYS } from "@/lib/constants/superAdmin.constant";
 import { SESSION_TIMEOUT_PRESETS, DEFAULT_USER_SESSION_HOURS } from "@/lib/constants/session.constant";
@@ -91,6 +92,9 @@ export default function TenantApprovalPage({
         setCustomSessionHours("");
         setInitialSessionHours(sess);
         setNotes(data.user.approvalNotes || "");
+        if (data.user.companyId?.enabledModules && Array.isArray(data.user.companyId.enabledModules) && data.user.companyId.enabledModules.length > 0) {
+          setEnabledModules(data.user.companyId.enabledModules);
+        }
       } else {
         setError(data.message || "Failed to load tenant record");
       }
@@ -120,7 +124,9 @@ export default function TenantApprovalPage({
   const currentEffectiveHours = customSessionHours && !isNaN(Number(customSessionHours))
     ? Math.max(1, Number(customSessionHours))
     : selectedSessionHours;
-  const isDirty = !user?.isApproved || currentEffectiveHours !== initialSessionHours;
+  const userModules = user?.companyId?.enabledModules || [];
+  const modulesChanged = JSON.stringify([...enabledModules].sort()) !== JSON.stringify([...userModules].sort());
+  const isDirty = !user?.isApproved || currentEffectiveHours !== initialSessionHours || modulesChanged;
 
   const handleAction = async (
     action: "approve" | "update_settings" | "extend" | "reject" | "suspend" | "activate"
@@ -135,6 +141,7 @@ export default function TenantApprovalPage({
       const body: any = {
         action,
         sessionTimeoutHours: finalSessionHours,
+        enabledModules,
       };
 
       // ONLY send durationDays when first approving or explicitly adjusting tenure
@@ -250,16 +257,21 @@ export default function TenantApprovalPage({
 
   const company = user.companyId || {};
   const companyName = company.companyName || user.name || "Pharma Enterprise";
+  const companyCode = company.companyCode || "";
   const gstin = company.gstNo || "N/A";
   const drugLicense = company.drugLicenseNo || "N/A";
   const pan = company.panNo || "N/A";
-  const address = company.address || "N/A";
-  const city = company.city || "Panchkula";
-  const state = company.state || "Haryana";
+  const address = company.address || "";
+  const city = company.city || "";
+  const state = company.state || "";
   const country = company.country || "India";
   const pincode = company.pincode || "";
-  const fullAddress = [address, city, state, pincode].filter((p) => p && p !== "N/A").join(", ") || "SCO NO 76, SECTOR 19, PANCHKULA, Haryana, 134113";
+  const fullAddress = [address, city, state, pincode].filter((p) => p && p !== "N/A").join(", ") || "Address not provided";
   const isSuspended = user.status === "Suspended";
+  const isHeadOffice = !company.parentCompanyId || company.isHeadOffice === true;
+  const parentComp = company.parentCompanyId;
+  const childBranches = user.childBranches || [];
+  const branchCount = user.branchCount || childBranches.length || 0;
 
   // Calculate initials for avatar
   const initials = companyName
@@ -437,8 +449,14 @@ export default function TenantApprovalPage({
                     {degradation.remainingDays} Days Active
                   </span>
                 </div>
-                <div className="flex items-center flex-wrap gap-2.5 text-xs text-slate-500 font-mono mt-1">
-                  <span>ID: MBR-{user._id ? user._id.slice(-6).toUpperCase() : "579250"}</span>
+                <div className="flex items-center flex-wrap gap-2 text-xs text-slate-500 font-mono mt-1">
+                  {companyCode ? (
+                    <span className="font-bold text-slate-800 bg-slate-100 border border-slate-200 px-1.5 py-0.5 rounded">
+                      CODE: {companyCode}
+                    </span>
+                  ) : (
+                    <span>ID: MBR-{user._id ? user._id.slice(-6).toUpperCase() : ""}</span>
+                  )}
                   <span>•</span>
                   <span>GST: {gstin}</span>
                   {pan !== "N/A" && (
@@ -447,6 +465,21 @@ export default function TenantApprovalPage({
                       <span>PAN: {pan}</span>
                     </>
                   )}
+                  {isHeadOffice ? (
+                    <>
+                      <span>•</span>
+                      <span className="text-indigo-700 font-bold bg-indigo-50 border border-indigo-200 px-1.5 py-0.5 rounded">
+                        Head Office ({branchCount} Branches)
+                      </span>
+                    </>
+                  ) : parentComp ? (
+                    <>
+                      <span>•</span>
+                      <span className="text-teal-700 font-bold bg-teal-50 border border-teal-200 px-1.5 py-0.5 rounded">
+                        Branch of {parentComp.companyCode || parentComp.companyName}
+                      </span>
+                    </>
+                  ) : null}
                 </div>
               </div>
             </div>
@@ -460,14 +493,16 @@ export default function TenantApprovalPage({
             >
               <FaEnvelope className="text-slate-400" size={12} /> {user.email}
             </a>
-            <a
-              href={user.mobile ? `tel:${user.mobile}` : undefined}
-              className="flex items-center gap-1.5 hover:text-blue-600 transition-colors font-medium"
-            >
-              <FaPhone className="text-slate-400" size={12} /> {user.mobile || "9888914287"}
-            </a>
+            {(user.mobile || company.mobile) && (
+              <a
+                href={`tel:${user.mobile || company.mobile}`}
+                className="flex items-center gap-1.5 hover:text-blue-600 transition-colors font-medium"
+              >
+                <FaPhone className="text-slate-400" size={12} /> {user.mobile || company.mobile}
+              </a>
+            )}
             <span className="flex items-center gap-1.5 text-slate-500 font-medium">
-              <FaMapMarkerAlt className="text-slate-400" size={12} /> {city}, {state}, {country}
+              <FaMapMarkerAlt className="text-slate-400" size={12} /> {[city, state, country].filter(Boolean).join(", ") || "India"}
             </span>
             <span className="flex items-center gap-1.5 text-slate-400 ml-auto text-[11px]">
               <FaClock className="text-slate-400" size={11} />
@@ -650,7 +685,7 @@ export default function TenantApprovalPage({
 
               <div className="py-1.5 flex items-center justify-between">
                 <span className="text-slate-400 font-medium">Contact Phone</span>
-                <span className="font-mono text-slate-800 font-semibold">{user.mobile || "9888914287"}</span>
+                <span className="font-mono text-slate-800 font-semibold">{user.mobile || company.mobile || "N/A"}</span>
               </div>
 
               <div className="py-1.5 flex items-center justify-between">
@@ -677,39 +712,56 @@ export default function TenantApprovalPage({
 
           {/* Card 2: Company Information */}
           <div className="bg-white rounded-2xl border border-slate-200/80 p-3.5 sm:p-4 shadow-xs">
-            <h3 className="text-sm font-bold text-slate-900 pb-2 border-b border-slate-100 mb-2.5">
-              Company Information
-            </h3>
+            <div className="flex items-center justify-between pb-2 border-b border-slate-100 mb-2.5">
+              <h3 className="text-sm font-bold text-slate-900">
+                Company & Branch Details
+              </h3>
+              <span
+                className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
+                  isHeadOffice
+                    ? "bg-indigo-50 text-indigo-700 border-indigo-200"
+                    : "bg-teal-50 text-teal-700 border-teal-200"
+                }`}
+              >
+                {isHeadOffice ? "Head Office" : "Child Branch"}
+              </span>
+            </div>
 
             <div className="grid grid-cols-2 gap-y-2.5 gap-x-4 text-xs">
+              <div>
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
+                  CRM COMPANY CODE
+                </span>
+                <span className="font-mono font-bold text-slate-900 mt-0.5 block bg-slate-50 border border-slate-200 px-1.5 py-0.5 rounded w-fit">
+                  {companyCode || "N/A"}
+                </span>
+              </div>
+
+              <div>
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
+                  BRANCH HIERARCHY
+                </span>
+                <span className="font-bold text-slate-900 mt-0.5 block">
+                  {isHeadOffice ? `Head Office (${branchCount} Sub-Branches)` : `Branch of ${parentComp?.companyName || "Head Office"}`}
+                </span>
+              </div>
+
               <div>
                 <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
                   ENTITY TYPE
                 </span>
                 <span className="font-bold text-slate-900 mt-0.5 block">
-                  PHARMA DISTRIBUTOR & HEALTHCARE
+                  {(company.businessType || "Pharma Distribution").toUpperCase().replace(/_/g, " ")}
                 </span>
               </div>
 
               <div>
                 <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
-                  CITY
+                  CITY & STATE
                 </span>
-                <span className="font-bold text-slate-900 mt-0.5 block">{city}</span>
-              </div>
-
-              <div>
-                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
-                  STATE
+                <span className="font-bold text-slate-900 mt-0.5 block">
+                  {[city, state].filter(Boolean).join(", ") || "Unassigned"}
                 </span>
-                <span className="font-bold text-slate-900 mt-0.5 block">{state}</span>
-              </div>
-
-              <div>
-                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
-                  COUNTRY
-                </span>
-                <span className="font-bold text-slate-900 mt-0.5 block">{country}</span>
               </div>
 
               <div>
@@ -752,6 +804,27 @@ export default function TenantApprovalPage({
                   {fullAddress}
                 </span>
               </div>
+
+              {/* Connected Sub-Branches list if Head Office */}
+              {isHeadOffice && childBranches.length > 0 && (
+                <div className="col-span-2 pt-2 mt-1 border-t border-slate-100">
+                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
+                    CONNECTED SUB-BRANCHES ({childBranches.length})
+                  </span>
+                  <div className="flex flex-wrap gap-1.5">
+                    {childBranches.map((cb: any) => (
+                      <span
+                        key={cb._id}
+                        className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-teal-50 border border-teal-200 text-teal-800 text-[11px] font-semibold"
+                      >
+                        <FaCodeBranch size={9} />
+                        <span>{cb.companyName} ({cb.companyCode})</span>
+                        <span className="text-[9.5px] text-teal-600 font-mono">[{cb.city || "Branch"}]</span>
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           </div>
 

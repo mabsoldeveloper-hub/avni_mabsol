@@ -1,8 +1,9 @@
 "use client";
 
 import React, { Suspense } from "react";
-import { FaSync, FaBan, FaShieldAlt, FaChevronDown } from "react-icons/fa";
+import { FaSync, FaBan, FaChevronDown } from "react-icons/fa";
 import { TIME_RANGE_OPTIONS } from "@/components/super-admin/constants";
+import StatCards from "@/components/super-admin/StatCards";
 import AccountsFilterBar from "@/components/super-admin/AccountsFilterBar";
 import AccountsTable from "@/components/super-admin/AccountsTable";
 import { useSuperAdminData } from "@/components/super-admin/useSuperAdminData";
@@ -16,6 +17,7 @@ function DeactivatedAccountsContent() {
     filter,
     setFilter,
     availableCities,
+    availableHeadOffices,
     handleToggleActive,
     refetch,
   } = useSuperAdminData("suspended");
@@ -43,7 +45,7 @@ function DeactivatedAccountsContent() {
           <div className="relative">
             <select
               value={filter.timeRange}
-              onChange={(e) => setFilter({ ...filter, timeRange: e.target.value as any })}
+              onChange={(e) => setFilter((prev) => ({ ...prev, timeRange: e.target.value as any }))}
               className="appearance-none bg-white border border-slate-200 rounded-full px-4 py-2 pr-8 text-xs font-bold text-slate-700 hover:border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500/20 shadow-xs cursor-pointer"
             >
               {TIME_RANGE_OPTIONS.map((opt) => (
@@ -67,22 +69,17 @@ function DeactivatedAccountsContent() {
         </div>
       </div>
 
-      {/* Security Enforcement Banner */}
-      <div className="p-3.5 sm:p-4 rounded-2xl bg-amber-50/70 border border-amber-200/80 text-xs text-amber-900 flex items-start gap-3 shadow-2xs">
-        <div className="w-8 h-8 rounded-xl bg-amber-100 text-amber-700 flex items-center justify-center shrink-0 mt-0.5 border border-amber-200/70">
-          <FaShieldAlt />
-        </div>
-        <div className="leading-relaxed flex-1">
-          <span className="font-bold">Real-time Revocation Security:</span> Suspended or deactivated tenants are immediately blocked from logging in. Any active browser sessions are auto-terminated within seconds. Use the toggle switch in the table to instantly reactivate any account.
-        </div>
-      </div>
+      {/* Row 1: KPI Cards */}
+      <StatCards stats={stats} />
 
-      {/* Unified Filter & Data Table */}
+      {/* Row 2: Unified Filter & Data Table */}
       <div className="space-y-3">
         <AccountsFilterBar
           filter={filter}
           onFilterChange={setFilter}
           cities={availableCities}
+          headOffices={availableHeadOffices}
+          stats={stats}
         />
 
         <AccountsTable

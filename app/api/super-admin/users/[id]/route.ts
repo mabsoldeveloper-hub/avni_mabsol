@@ -24,8 +24,14 @@ export async function GET(
     }
 
     const { id } = await context.params;
-    const user = await User.findById(id)
-      .populate("companyId")
+    const user: any = await User.findById(id)
+      .populate({
+        path: "companyId",
+        populate: {
+          path: "parentCompanyId",
+          select: "companyName companyCode isHeadOffice city state gstNo",
+        },
+      })
       .populate("approvedBy", "name email")
       .lean();
 
@@ -34,6 +40,19 @@ export async function GET(
         { success: false, message: "User not found" },
         { status: 404 }
       );
+    }
+
+    // If company exists, retrieve any attached child branches
+    if (user.companyId?._id) {
+      const Company = (await import("@/models/Company")).default;
+      const childBranches = await Company.find({
+        parentCompanyId: user.companyId._id,
+      })
+        .select("companyName companyCode gstNo city state status email mobile enabledModules isHeadOffice")
+        .lean();
+
+      user.childBranches = childBranches || [];
+      user.branchCount = childBranches ? childBranches.length : 0;
     }
 
     return NextResponse.json({ success: true, user });
@@ -199,6 +218,28 @@ export async function PATCH(
     }
 
     await targetUser.save();
+
+    // Synchronize changes to Company record if applicable
+    if (targetUser.companyId) {
+      const Company = (await import("@/models/Company")).default;
+      const companyUpdates: any = {};
+
+      if (Array.isArray(body.enabledModules)) {
+        companyUpdates.enabledModules = body.enabledModules;
+      }
+
+      if (action === "approve" || action === "activate") {
+        companyUpdates.status = "Active";
+      } else if (action === "suspend" || action === "deactivate") {
+        companyUpdates.status = "Suspended";
+      } else if (action === "reject") {
+        companyUpdates.status = "Rejected";
+      }
+
+      if (Object.keys(companyUpdates).length > 0) {
+        await Company.findByIdAndUpdate(targetUser.companyId, { $set: companyUpdates });
+      }
+    }
 
     return NextResponse.json({
       success: true,

@@ -131,8 +131,26 @@ function DashboardOverviewContent() {
                           {initials}
                         </div>
                         <div className="min-w-0 flex-1">
-                          <div className="text-xs font-bold text-slate-900 truncate uppercase tracking-tight">
-                            {companyName}
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-xs font-bold text-slate-900 truncate uppercase tracking-tight">
+                              {companyName}
+                            </span>
+                            {u.companyId?.companyCode && (
+                              <span className="font-mono text-[9.5px] font-bold px-1.5 py-0.2 rounded bg-slate-100 text-slate-700 border border-slate-200">
+                                {u.companyId.companyCode}
+                              </span>
+                            )}
+                            <span
+                              className={`text-[9px] font-bold px-1.5 py-0.2 rounded ${
+                                !u.companyId?.parentCompanyId || u.companyId?.isHeadOffice
+                                  ? "bg-indigo-50 text-indigo-700"
+                                  : "bg-teal-50 text-teal-700"
+                              }`}
+                            >
+                              {!u.companyId?.parentCompanyId || u.companyId?.isHeadOffice
+                                ? "HQ"
+                                : "BRANCH"}
+                            </span>
                           </div>
                           <div className="text-[10.5px] text-slate-400 truncate mt-0.5">
                             {u.email} • {u.companyId?.city || "Unassigned"} • GSTIN: {u.companyId?.gstNo || "N/A"}

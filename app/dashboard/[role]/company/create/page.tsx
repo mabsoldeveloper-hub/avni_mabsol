@@ -48,7 +48,11 @@ interface Toast {
 
 export default function CreateCompanyPage() {
   const router = useRouter();
-  const { refreshCompanies } = useCompany();
+  const { selectedCompany, refreshCompanies } = useCompany();
+
+  const isOperatingAsChild = Boolean(
+    selectedCompany && (selectedCompany.isHeadOffice === false || selectedCompany.parentCompanyId)
+  );
 
   const [currentStep, setCurrentStep] = useState<1 | 2 | 3>(1);
   const [toasts, setToasts] = useState<Toast[]>([]);
@@ -408,7 +412,10 @@ export default function CreateCompanyPage() {
     try {
       const res = await fetch("/api/company-master", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "x-company-id": selectedCompany?._id || "",
+        },
         body: JSON.stringify({
           companyName: companyName.trim(),
           ownerName: ownerName.trim() || companyName.trim(),
@@ -524,6 +531,33 @@ export default function CreateCompanyPage() {
   const companyPrefixPreview = companyName.trim()
     ? (companyName.trim().split(/\s+/)[0].replace(/[^a-zA-Z0-9]/g, "").toUpperCase().slice(0, 5) || "CO") + "###"
     : "NAME###";
+
+  if (isOperatingAsChild) {
+    return (
+      <div className={`cw-page ${displayFont.variable} ${bodyFont.variable} ${monoFont.variable}`}>
+        <div className="max-w-xl mx-auto my-12 bg-white rounded-2xl border border-slate-200/90 shadow-sm p-8 text-center space-y-4">
+          <div className="w-14 h-14 mx-auto rounded-2xl bg-amber-50 text-amber-600 flex items-center justify-center text-2xl font-bold">
+            🔒
+          </div>
+          <h2 className="text-lg font-black text-slate-900 m-0">
+            Head Office Privilege Required
+          </h2>
+          <p className="text-xs text-slate-600 leading-relaxed m-0">
+            You are currently operating in branch context: <strong className="text-slate-800">{selectedCompany?.companyName} ({selectedCompany?.companyCode})</strong>. Only the Head Office administrator can create new companies or branches. Please switch back to Head Office in the top bar to create a company.
+          </p>
+          <div className="pt-2 flex items-center justify-center gap-3">
+            <button
+              type="button"
+              onClick={() => router.push("/dashboard/company/list")}
+              className="px-5 py-2.5 rounded-xl text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 transition-colors cursor-pointer"
+            >
+              Return to Company Directory
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className={`cw-page ${displayFont.variable} ${bodyFont.variable} ${monoFont.variable}`}>

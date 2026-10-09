@@ -232,17 +232,7 @@ export default function CustomerAlertBanner({
           </div>
 
           <div className="flex items-center gap-2">
-            {onAutoAlertSettingsClick && (
-              <button
-                type="button"
-                onClick={onAutoAlertSettingsClick}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold text-purple-700 bg-purple-50 hover:bg-purple-100 transition border border-purple-200"
-                title="Configure Days & Bills Auto Alert Rules"
-              >
-                <FaCog size={10} />
-                <span>Alert Rules</span>
-              </button>
-            )}
+
             <button
               type="button"
               onClick={onSendAlertClick}

@@ -5,6 +5,7 @@ import Customer from "@/models/Customer";
 import AccountGroup from "@/models/AccountGroup";
 import Order from "@/models/Order";
 import SaleType from "@/models/SaleType";
+import FinancialYear from "@/models/FinancialYear";
 
 import { getMrTerritoryRestriction } from "@/lib/mrTerritoryHelper";
 import {
@@ -192,6 +193,14 @@ export async function GET(req: Request) {
 
         BALANCE: 1,
         CREDIT: 1,
+        DUEDAYS: 1,
+        DAYS: 1,
+        BILL_LIMIT: 1,
+        BILLLIMIT: 1,
+        MAXBILLS: 1,
+        MAILNAM: 1,
+        REF: 1,
+        PHONE2: 1,
 
         STATUS: 1,
         COMPANY: 1,
@@ -216,6 +225,11 @@ export async function GET(req: Request) {
 
         PRICE: 1,
         SALDR: 1,
+
+        _vfpTable: 1,
+        _vfpFileName: 1,
+        fyCode: 1,
+        companyCode: 1,
       }
     )
       .sort({ PARNAM: 1 })
@@ -475,6 +489,23 @@ export async function GET(req: Request) {
     }
 
     /* ------------------------------------------------------ */
+    /* Financial Year Mapping                                   */
+    /* ------------------------------------------------------ */
+
+    const financialYears: any[] = await FinancialYear.find(
+      {},
+      { fyCode: 1, fyName: 1, startDate: 1, endDate: 1, isCurrent: 1 }
+    ).lean();
+
+    const fyMap = new Map<string, any>();
+    financialYears.forEach((fy: any) => {
+      const code = clean(fy.fyCode).toUpperCase();
+      if (code) {
+        fyMap.set(code, fy);
+      }
+    });
+
+    /* ------------------------------------------------------ */
     /* Build final response                                     */
     /* ------------------------------------------------------ */
 
@@ -593,6 +624,21 @@ export async function GET(req: Request) {
           : "Y";
 
       /* ---------------------------------------------------- */
+      /* Financial Year resolution                            */
+      /* ---------------------------------------------------- */
+
+      let resolvedFyCode = clean(c.fyCode).toUpperCase();
+      if (!resolvedFyCode && c._vfpTable) {
+        const m = String(c._vfpTable).match(/_([A-Za-z0-9]+)$/);
+        if (m && m[1]) {
+          resolvedFyCode = m[1].toUpperCase();
+        }
+      }
+
+      const fyDoc = resolvedFyCode ? fyMap.get(resolvedFyCode) : null;
+      const resolvedFyName = fyDoc?.fyName || (resolvedFyCode ? `FY ${resolvedFyCode}` : "");
+
+      /* ---------------------------------------------------- */
       /* Final customer                                        */
       /* ---------------------------------------------------- */
 
@@ -605,6 +651,19 @@ export async function GET(req: Request) {
         GROUPNAME: grp?.PARNAM || "",
         MAINGROUP: grp?.GROUP || "",
         PARENTGROUP: grp?.GCODE || "",
+
+        _vfpTable: clean(c._vfpTable),
+        fyCode: resolvedFyCode,
+        fyName: resolvedFyName,
+        _fyDoc: fyDoc
+          ? {
+              _id: fyDoc._id,
+              fyCode: fyDoc.fyCode,
+              fyName: fyDoc.fyName,
+              startDate: fyDoc.startDate,
+              isCurrent: fyDoc.isCurrent,
+            }
+          : null,
 
         /*
          * Territory fields
@@ -636,6 +695,164 @@ export async function GET(req: Request) {
           : null,
       };
     });
+
+    /* ------------------------------------------------------ */
+    /* Consolidate / Merge across Financial Years             */
+    /* ------------------------------------------------------ */
+
+    const mergeParam = searchParams.get("mergeYears");
+    const selectedFyId = searchParams.get("fyId");
+    // Merge if mergeYears=true, or if fyId is "ALL" or not provided, unless mergeYears is explicitly "false"
+    const shouldMerge =
+      mergeParam === "true" ||
+      (mergeParam !== "false" && (!selectedFyId || selectedFyId === "ALL"));
+
+    if (shouldMerge) {
+      function getCustomerGroupKey(cust: any): string {
+        const ordno = clean(cust.ORDNO).toUpperCase();
+        const parnam = clean(cust.PARNAM).toUpperCase().replace(/[^A-Z0-9]/g, "");
+        const gstno = clean(cust.GSTNO).toUpperCase().replace(/[^A-Z0-9]/g, "");
+
+        if (ordno && parnam) {
+          return `ORD_${ordno}_${parnam}`;
+        }
+        if (gstno && gstno.length >= 10) {
+          return `GST_${gstno}`;
+        }
+        if (parnam) {
+          const city = clean(cust.CITY).toUpperCase().replace(/[^A-Z0-9]/g, "");
+          return `NAME_${parnam}_${city}`;
+        }
+        return String(cust._id);
+      }
+
+      const groups = new Map<string, any[]>();
+      for (const item of result) {
+        const key = getCustomerGroupKey(item);
+        if (!groups.has(key)) {
+          groups.set(key, []);
+        }
+        groups.get(key)!.push(item);
+      }
+
+      const mergedResult: any[] = [];
+      for (const groupRows of Array.from(groups.values())) {
+        if (groupRows.length === 1) {
+          const single = groupRows[0];
+          mergedResult.push({
+            ...single,
+            yearsCount: 1,
+            yearBreakdown: [
+              {
+                fyCode: single.fyCode || "",
+                fyName: single.fyName || "",
+                balance: Number(single.BALANCE) || 0,
+                _id: single._id,
+                _vfpTable: single._vfpTable || "",
+              },
+            ],
+          });
+          continue;
+        }
+
+        // Multiple rows across years:
+        // Sort so the latest / current year comes first as primary!
+        groupRows.sort((a, b) => {
+          if (a._fyDoc?.isCurrent && !b._fyDoc?.isCurrent) return -1;
+          if (!a._fyDoc?.isCurrent && b._fyDoc?.isCurrent) return 1;
+          const dateA = a._fyDoc?.startDate ? new Date(a._fyDoc.startDate).getTime() : 0;
+          const dateB = b._fyDoc?.startDate ? new Date(b._fyDoc.startDate).getTime() : 0;
+          if (dateA !== dateB) return dateB - dateA; // newest date first
+          return String(b.fyCode || "").localeCompare(String(a.fyCode || ""));
+        });
+
+        const primary = groupRows[0];
+        let totalBalance = 0;
+        const yearBreakdown: any[] = [];
+        const allIds: string[] = [];
+
+        let bestMailnam = clean(primary.MAILNAM);
+        let bestPhone1 = clean(primary.PHONE1);
+        let bestPhone2 = clean(primary.PHONE2);
+        let bestCredit = Number(primary.CREDIT) || 0;
+        let bestDueDays = Number(primary.DUEDAYS || primary.DAYS) || 0;
+        let bestBillLimit = primary.BILL_LIMIT ?? primary.BILLLIMIT ?? primary.MAXBILLS ?? 0;
+        let bestGstno = clean(primary.GSTNO);
+        let bestDlno = clean(primary.DLNO);
+        let bestCity = clean(primary.CITY);
+        let isActive = primary.STATUS === "Y";
+
+        for (const r of groupRows) {
+          const rowBal = Number(r.BALANCE) || 0;
+          totalBalance += rowBal;
+          allIds.push(String(r._id));
+          yearBreakdown.push({
+            fyCode: r.fyCode || "",
+            fyName: r.fyName || "",
+            balance: rowBal,
+            _id: r._id,
+            _vfpTable: r._vfpTable || "",
+          });
+
+          // Check if another row has a real email
+          const m = clean(r.MAILNAM);
+          if (m && m.includes("@") && !bestMailnam.includes("@")) {
+            bestMailnam = m;
+          }
+
+          // Check if another row has a real phone with digits
+          const p = clean(r.PHONE1);
+          if (p && /\d{5,}/.test(p) && !/\d{5,}/.test(bestPhone1)) {
+            bestPhone1 = p;
+          }
+
+          const p2 = clean(r.PHONE2);
+          if (p2 && /\d{5,}/.test(p2) && !/\d{5,}/.test(bestPhone2)) {
+            bestPhone2 = p2;
+          }
+
+          // Credit limit: take max non-zero
+          const cr = Number(r.CREDIT) || 0;
+          if (cr > bestCredit) bestCredit = cr;
+
+          // Days limit: take max non-zero
+          const dy = Number(r.DUEDAYS || r.DAYS) || 0;
+          if (dy > bestDueDays) bestDueDays = dy;
+
+          // Bill limit: take max non-zero
+          const bl = Number(r.BILL_LIMIT ?? r.BILLLIMIT ?? r.MAXBILLS) || 0;
+          if (bl > Number(bestBillLimit)) bestBillLimit = bl;
+
+          if (!bestGstno && clean(r.GSTNO)) bestGstno = clean(r.GSTNO);
+          if (!bestDlno && clean(r.DLNO)) bestDlno = clean(r.DLNO);
+          if (!bestCity && clean(r.CITY)) bestCity = clean(r.CITY);
+          if (r.STATUS === "Y") isActive = true;
+        }
+
+        mergedResult.push({
+          ...primary,
+          MAILNAM: bestMailnam || primary.MAILNAM,
+          PHONE1: bestPhone1 || primary.PHONE1,
+          PHONE2: bestPhone2 || primary.PHONE2,
+          CREDIT: bestCredit,
+          DUEDAYS: bestDueDays,
+          DAYS: bestDueDays,
+          BILL_LIMIT: bestBillLimit,
+          BILLLIMIT: bestBillLimit,
+          MAXBILLS: bestBillLimit,
+          GSTNO: bestGstno || primary.GSTNO,
+          DLNO: bestDlno || primary.DLNO,
+          CITY: bestCity || primary.CITY,
+          BALANCE: totalBalance,
+          STATUS: isActive ? "Y" : "N",
+          yearsCount: groupRows.length,
+          yearBreakdown,
+          _allIds: allIds,
+        });
+      }
+
+      return NextResponse.json(mergedResult);
+    }
 
     return NextResponse.json(result);
   } catch (error: any) {

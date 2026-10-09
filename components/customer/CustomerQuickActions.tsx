@@ -50,7 +50,7 @@ export default function CustomerQuickActions({
 
           <div className="flex flex-col gap-2">
             {/* 1. Edit Customer & Limits */}
-            {onEditClick && (
+            {/* {onEditClick && (
               <button
                 type="button"
                 onClick={onEditClick}
@@ -60,10 +60,10 @@ export default function CustomerQuickActions({
                 <FaEdit size={13} />
                 <span>Edit Profile & Limits</span>
               </button>
-            )}
+            )} */}
 
             {/* 2. Send Alert to Customer */}
-            {onSendAlertClick && (
+            {/* {onSendAlertClick && (
               <button
                 type="button"
                 onClick={onSendAlertClick}
@@ -77,22 +77,9 @@ export default function CustomerQuickActions({
                 <FaPaperPlane size={13} />
                 <span>{isLimitBreached ? "Send Credit Alert" : "Send Account Alert"}</span>
               </button>
-            )}
+            )} */}
 
-            {/* 3. Auto Alert Rules Form */}
-            {onAutoAlertSettingsClick && (
-              <button
-                type="button"
-                onClick={onAutoAlertSettingsClick}
-                className="group relative flex items-center justify-center gap-2 w-full py-2.5 px-3 rounded-xl text-xs font-bold overflow-hidden transition-all duration-300 bg-gradient-to-r from-indigo-600 to-purple-600 text-white shadow-md shadow-indigo-500/20 hover:shadow-lg hover:shadow-indigo-500/35 hover:-translate-y-0.5 cursor-pointer"
-              >
-                <span className="pointer-events-none absolute -inset-y-8 -left-1/2 w-1/3 rotate-12 bg-white/30 blur-md opacity-0 group-hover:opacity-100 group-hover:translate-x-[250%] transition-all duration-700 ease-out" />
-                <FaCog size={13} />
-                <span>Alert Rules & Scanner</span>
-              </button>
-            )}
-
-            {/* 4. Ledger Account */}
+            {/* 3. Ledger Account */}
             <Link
               href={`/dashboard/customers/ledger/${customer._id}`}
               className="group relative flex items-center justify-center gap-2 w-full py-2.5 px-3 rounded-xl text-xs font-bold overflow-hidden transition-all duration-300 bg-gradient-to-r from-emerald-600 to-teal-600 text-white shadow-md shadow-emerald-500/20 hover:shadow-lg hover:shadow-emerald-500/35 hover:-translate-y-0.5"

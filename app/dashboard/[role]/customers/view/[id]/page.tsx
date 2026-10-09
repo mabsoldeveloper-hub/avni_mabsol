@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { FaChevronRight, FaUsers, FaArrowLeft } from "react-icons/fa";
 
@@ -10,20 +10,16 @@ import CustomerSummaryCards from "@/components/customer/CustomerSummaryCards";
 import CustomerQuickActions from "@/components/customer/CustomerQuickActions";
 import CustomerOverview from "@/components/customer/CustomerOverview";
 import CustomerAlertBanner from "@/components/customer/CustomerAlertBanner";
-import EditCustomerModal from "@/components/customer/EditCustomerModal";
-import CustomerSendAlertModal from "@/components/customer/CustomerSendAlertModal";
-import CustomerAutoAlertSettingsModal from "@/components/customer/CustomerAutoAlertSettingsModal";
 
 export default function CustomerViewPage() {
-  const { id } = useParams();
+  const params = useParams();
+  const router = useRouter();
+  const id = params?.id as string;
+  const role = (params?.role as string) || "admin";
+
   const [customer, setCustomer] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-
-  // Modal visibility states
-  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
-  const [isAlertModalOpen, setIsAlertModalOpen] = useState(false);
-  const [isAutoAlertSettingsOpen, setIsAutoAlertSettingsOpen] = useState(false);
 
   useEffect(() => {
     if (!id) return;
@@ -131,17 +127,15 @@ export default function CustomerViewPage() {
           <div className="lg:col-span-9 print:col-span-12">
             <CustomerHeader
               customer={customer}
-              onEditClick={() => setIsEditModalOpen(true)}
-              onSendAlertClick={() => setIsAlertModalOpen(true)}
-              onAutoAlertSettingsClick={() => setIsAutoAlertSettingsOpen(true)}
+              onEditClick={() => router.push(`/dashboard/${role}/customers/edit/${id}`)}
+              onSendAlertClick={() => router.push(`/dashboard/${role}/customers/alert/${id}`)}
             />
           </div>
           <div className="lg:col-span-3 print:hidden">
             <CustomerQuickActions
               customer={customer}
-              onEditClick={() => setIsEditModalOpen(true)}
-              onSendAlertClick={() => setIsAlertModalOpen(true)}
-              onAutoAlertSettingsClick={() => setIsAutoAlertSettingsOpen(true)}
+              onEditClick={() => router.push(`/dashboard/${role}/customers/edit/${id}`)}
+              onSendAlertClick={() => router.push(`/dashboard/${role}/customers/alert/${id}`)}
             />
           </div>
         </div>
@@ -149,43 +143,19 @@ export default function CustomerViewPage() {
         {/* Real-Time Credit Limit & Day Limit Alert Banner */}
         <CustomerAlertBanner
           customer={customer}
-          onSendAlertClick={() => setIsAlertModalOpen(true)}
-          onEditClick={() => setIsEditModalOpen(true)}
-          onAutoAlertSettingsClick={() => setIsAutoAlertSettingsOpen(true)}
+          onSendAlertClick={() => router.push(`/dashboard/${role}/customers/alert/${id}`)}
+          onEditClick={() => router.push(`/dashboard/${role}/customers/edit/${id}`)}
         />
 
         {/* Financial Summary Cards */}
         <CustomerSummaryCards
           customer={customer}
-          onEditClick={() => setIsEditModalOpen(true)}
+          onEditClick={() => router.push(`/dashboard/${role}/customers/edit/${id}`)}
         />
 
         {/* Complete Customer Overview */}
         <CustomerOverview customer={customer} />
       </div>
-
-      {/* Edit Customer Profile & Limits Modal */}
-      <EditCustomerModal
-        isOpen={isEditModalOpen}
-        onClose={() => setIsEditModalOpen(false)}
-        customer={customer}
-        onSuccess={() => loadCustomer()}
-      />
-
-      {/* Dispatch Customer Alert Modal */}
-      <CustomerSendAlertModal
-        isOpen={isAlertModalOpen}
-        onClose={() => setIsAlertModalOpen(false)}
-        customer={customer}
-        onOpenAutoAlertSettings={() => setIsAutoAlertSettingsOpen(true)}
-      />
-
-      {/* Automatic Alert Thresholds Configuration Form Modal */}
-      <CustomerAutoAlertSettingsModal
-        isOpen={isAutoAlertSettingsOpen}
-        onClose={() => setIsAutoAlertSettingsOpen(false)}
-        onSaved={() => loadCustomer()}
-      />
     </div>
   );
 }

@@ -141,19 +141,9 @@ export default function CustomerHeader({
               </a>
             )}
 
-            {onAutoAlertSettingsClick && (
-              <button
-                type="button"
-                onClick={onAutoAlertSettingsClick}
-                className="flex-1 sm:flex-initial inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold bg-indigo-500/15 text-indigo-700 border border-indigo-500/30 hover:bg-indigo-600 hover:text-white transition-all duration-200 shadow-sm cursor-pointer"
-                title="Configure Days & Bills Auto Alert Rules"
-              >
-                <FaCog size={11} />
-                <span>Alert Rules</span>
-              </button>
-            )}
 
-            {onSendAlertClick && (
+
+            {/* {onSendAlertClick && (
               <button
                 type="button"
                 onClick={onSendAlertClick}
@@ -163,9 +153,9 @@ export default function CustomerHeader({
                 <FaPaperPlane size={11} />
                 <span>Send Alert</span>
               </button>
-            )}
+            )} */}
 
-            {onEditClick && (
+            {/* {onEditClick && (
               <button
                 type="button"
                 onClick={onEditClick}
@@ -174,7 +164,7 @@ export default function CustomerHeader({
                 <FaEdit size={12} />
                 <span>Edit Profile & Limits</span>
               </button>
-            )}
+            )} */}
           </div>
         </div>
 

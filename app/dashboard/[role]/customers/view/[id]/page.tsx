@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { FaChevronRight, FaUsers, FaArrowLeft } from "react-icons/fa";
 
@@ -9,9 +9,14 @@ import CustomerHeader from "@/components/customer/CustomerHeader";
 import CustomerSummaryCards from "@/components/customer/CustomerSummaryCards";
 import CustomerQuickActions from "@/components/customer/CustomerQuickActions";
 import CustomerOverview from "@/components/customer/CustomerOverview";
+import CustomerAlertBanner from "@/components/customer/CustomerAlertBanner";
 
 export default function CustomerViewPage() {
-  const { id } = useParams();
+  const params = useParams();
+  const router = useRouter();
+  const id = params?.id as string;
+  const role = (params?.role as string) || "admin";
+
   const [customer, setCustomer] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -20,8 +25,6 @@ export default function CustomerViewPage() {
     if (!id) return;
     loadCustomer();
   }, [id]);
-
-  
 
   const loadCustomer = async () => {
     setLoading(true);
@@ -122,15 +125,33 @@ export default function CustomerViewPage() {
         {/* Header + Quick Actions */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 print:block">
           <div className="lg:col-span-9 print:col-span-12">
-            <CustomerHeader customer={customer} />
+            <CustomerHeader
+              customer={customer}
+              onEditClick={() => router.push(`/dashboard/${role}/customers/edit/${id}`)}
+              onSendAlertClick={() => router.push(`/dashboard/${role}/customers/alert/${id}`)}
+            />
           </div>
           <div className="lg:col-span-3 print:hidden">
-            <CustomerQuickActions customer={customer} />
+            <CustomerQuickActions
+              customer={customer}
+              onEditClick={() => router.push(`/dashboard/${role}/customers/edit/${id}`)}
+              onSendAlertClick={() => router.push(`/dashboard/${role}/customers/alert/${id}`)}
+            />
           </div>
         </div>
 
+        {/* Real-Time Credit Limit & Day Limit Alert Banner */}
+        <CustomerAlertBanner
+          customer={customer}
+          onSendAlertClick={() => router.push(`/dashboard/${role}/customers/alert/${id}`)}
+          onEditClick={() => router.push(`/dashboard/${role}/customers/edit/${id}`)}
+        />
+
         {/* Financial Summary Cards */}
-        <CustomerSummaryCards customer={customer} />
+        <CustomerSummaryCards
+          customer={customer}
+          onEditClick={() => router.push(`/dashboard/${role}/customers/edit/${id}`)}
+        />
 
         {/* Complete Customer Overview */}
         <CustomerOverview customer={customer} />

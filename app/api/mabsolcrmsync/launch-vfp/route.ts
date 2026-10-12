@@ -21,11 +21,12 @@ export async function POST() {
     const config = await VfpConfig.findOne({ email: user.email }) || await VfpConfig.findOne({ key: "vfp_sync_config" });
     let vfpExePath = config && (config as any).vfpExePath ? (config as any).vfpExePath : (process.env.VFP_EXE_PATH || "MabsolCRM.EXE");
     const startupCommand = config && (config as any).startupCommand ? (config as any).startupCommand : "";
-    let configPrgPath = config && (config as any).prgPath ? (config as any).prgPath : "7.PRG";
+    let configPrgPath = config && (config as any).prgPath ? (config as any).prgPath : "";
 
     // Helper to resolve candidate files across Linux server and Windows paths
     const resolveCandidate = (fileNameOrPath: string, defaultName: string) => {
-      if (!fileNameOrPath) fileNameOrPath = defaultName;
+      if (!fileNameOrPath) return "";
+      if (/7\.prg/i.test(fileNameOrPath)) return "";
       const baseName = path.basename(fileNameOrPath);
       const candidates = [
         fileNameOrPath,
@@ -36,7 +37,6 @@ export async function POST() {
         path.join("/home/vfpuser/Mabsol_pharma_crm/VfpNew", baseName),
         path.join("/home/vfpuser/VfpNew", baseName),
         path.join("/home/vfpuser", baseName),
-        `C:\\Users\\Administrator\\Downloads\\VfpNew\\VfpNew\\${baseName}`,
       ];
       for (const cand of candidates) {
         try {
@@ -46,8 +46,12 @@ export async function POST() {
       return fileNameOrPath;
     };
 
-    vfpExePath = resolveCandidate(vfpExePath, "MabsolCRM.EXE");
-    configPrgPath = resolveCandidate(configPrgPath, "7.PRG");
+    vfpExePath = resolveCandidate(vfpExePath, "MabsolCRM.EXE") || vfpExePath;
+    if (/7\.prg/i.test(configPrgPath)) {
+      configPrgPath = "";
+    } else if (configPrgPath) {
+      configPrgPath = resolveCandidate(configPrgPath, "");
+    }
 
     // Validate executable and startup command or prgPath exist
     if (!vfpExePath || (!startupCommand.trim() && !configPrgPath.trim())) {
@@ -173,17 +177,17 @@ export async function POST() {
     }
 
     fs.writeFileSync(prgPath, prgContent);
-    fs.writeFileSync(fpwPath, `SCREEN = OFF\r\nRESOURCE = OFF\r\nCOMMAND = DO "${prgPath}"\r\n`);
+    fs.writeFileSync(fpwPath, `SCREEN = OFF\r\nRESOURCE = OFF\r\nTITLE = \r\nSYSMENU = OFF\r\nSTATUS BAR = OFF\r\nDEVELOPMENT = OFF\r\nNOTIFY = OFF\r\nTALK = OFF\r\nSAFETY = OFF\r\nCOMMAND = DO "${prgPath}"\r\n`);
 
     const vfpDir = path.dirname(vfpExePath);
 
     // Support Windows executable on Linux AWS server via Wine & XRDP Display
     let execCmd = vfpExePath;
-    let execArgs = ["-c" + fpwPath];
+    let execArgs = ["-t", "-c" + fpwPath];
 
     if (process.platform !== "win32" && (vfpExePath.toLowerCase().endsWith(".exe") || !fs.existsSync(vfpExePath))) {
       execCmd = "wine";
-      execArgs = [vfpExePath, "-c" + fpwPath];
+      execArgs = [vfpExePath, "-t", "-c" + fpwPath];
     }
 
     const displayEnv = process.env.DISPLAY || ":10.0" || ":0";

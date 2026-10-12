@@ -83,17 +83,36 @@ export async function GET(request: NextRequest) {
       return isPlaceholderComp(s) ? "" : s;
     };
 
-    if (tenantId || primaryCompanyId) {
-      const queryOr: any[] = [];
-      if (tenantId) queryOr.push({ tenantId });
-      if (primaryCompanyId) {
-        queryOr.push({ _id: primaryCompanyId });
-        queryOr.push({ parentCompanyId: primaryCompanyId });
+    const cleanEmail = (userEmail || "").toLowerCase().trim();
+
+    if (tenantId || primaryCompanyId || cleanEmail) {
+      let query: any = {};
+      if (tenantId) {
+        query = {
+          tenantId,
+          status: { $ne: "Deleted" },
+        };
+      } else if (primaryCompanyId) {
+        query = {
+          $and: [
+            { $or: [{ _id: primaryCompanyId }, { parentCompanyId: primaryCompanyId }, { email: cleanEmail }] },
+            { status: { $ne: "Deleted" } },
+          ],
+        };
+      } else if (cleanEmail) {
+        query = {
+          email: cleanEmail,
+          status: { $ne: "Deleted" },
+        };
       }
 
-      const matchingCompanies: any[] = await Company.find({ $or: queryOr })
+      const matchingCompanies: any[] = await Company.find(query)
         .sort({ isHeadOffice: -1, createdAt: 1 })
         .lean();
+
+      const existingCodes = new Set<string>();
+      const existingGstins = new Set<string>();
+      const existingNames = new Set<string>();
 
       for (const comp of matchingCompanies) {
         const rawName = (comp.companyName || comp.name || "").trim();
@@ -101,32 +120,50 @@ export async function GET(request: NextRequest) {
         const compCode = (comp.companyCode || comp.code || "").trim().toUpperCase();
 
         if (compName && !isPlaceholderComp(compName)) {
+          const codeKey = isPlaceholderComp(compCode) ? "" : compCode;
+          if (codeKey) existingCodes.add(codeKey);
+          if (comp.gstNo) existingGstins.add(String(comp.gstNo).trim().toUpperCase());
+          existingNames.add(compName.toLowerCase());
+
           branchesList.push({
             id: comp._id.toString(),
             companyName: compName,
-            companyCode: isPlaceholderComp(compCode) ? "" : compCode,
+            companyCode: codeKey,
             isHeadOffice: Boolean(comp.isHeadOffice),
             gstNo: comp.gstNo || "",
             city: comp.city || "",
           });
         }
+      }
 
-        // Include any branch units defined in additionalGstins
+      // Only include additionalGstins if branch does not already have an active standalone Company record
+      for (const comp of matchingCompanies) {
         if (Array.isArray(comp.additionalGstins)) {
           for (let i = 0; i < comp.additionalGstins.length; i++) {
             const sub = comp.additionalGstins[i];
-            const rawSub = (sub.branchName || `${compName} - Branch ${i + 1}`).trim();
+            const rawSub = (sub.branchName || "").trim();
             const subName = cleanCompText(rawSub);
+            const subGst = (sub.gstNo || "").trim().toUpperCase();
+
+            if (subGst && existingGstins.has(subGst)) continue;
+            if (subName && existingNames.has(subName.toLowerCase())) continue;
+
             if (subName) {
-              const subCode = sub.stateCode ? `B${sub.stateCode}` : `${compCode}_B${i + 1}`;
-              branchesList.push({
-                id: `${comp._id}_branch_${i + 1}`,
-                companyName: subName,
-                companyCode: subCode,
-                isHeadOffice: false,
-                gstNo: sub.gstNo || "",
-                city: sub.city || "",
-              });
+              const compCode = (comp.companyCode || comp.code || "").trim().toUpperCase();
+              const subCode = `${compCode}_B${i + 1}`;
+              if (!existingCodes.has(subCode)) {
+                existingCodes.add(subCode);
+                existingNames.add(subName.toLowerCase());
+                if (subGst) existingGstins.add(subGst);
+                branchesList.push({
+                  id: `${comp._id}_branch_${i + 1}`,
+                  companyName: subName,
+                  companyCode: subCode,
+                  isHeadOffice: false,
+                  gstNo: sub.gstNo || "",
+                  city: sub.city || "",
+                });
+              }
             }
           }
         }

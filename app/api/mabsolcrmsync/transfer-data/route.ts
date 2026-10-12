@@ -156,15 +156,18 @@ export async function POST(request: NextRequest) {
       const fpwPath = path.join(process.cwd(), "vfp_config.fpw");
 
       try {
-        // Show VFP screen in foreground
-        fs.writeFileSync(fpwPath, "SCREEN = ON\r\n");
+        // Completely headless VFP config
+        fs.writeFileSync(fpwPath, "SCREEN = OFF\r\nRESOURCE = OFF\r\nTITLE = \r\nSYSMENU = OFF\r\nSTATUS BAR = OFF\r\nDEVELOPMENT = OFF\r\nNOTIFY = OFF\r\nTALK = OFF\r\nSAFETY = OFF\r\nCOMMAND = DO \"" + prgPath + "\"\r\n");
 
-        // Generate VFP export script with status wait windows
+        // Generate headless VFP export script
         const dbfFiles = listDbfFiles(sourceDir);
         let prgLines = [
+          "ON ERROR QUIT",
+          "SET NOTIFY OFF",
+          "SET CONFIRM OFF",
           "SET SAFETY OFF",
           "SET TALK OFF",
-          'WAIT WINDOW "MabsolCrm - Starting MabsolCRM Import..." TIMEOUT 1',
+          "_SCREEN.Visible = .F.",
           ""
         ];
 
@@ -179,7 +182,6 @@ export async function POST(request: NextRequest) {
             fs.mkdirSync(destFolder, { recursive: true });
           }
 
-          prgLines.push(`WAIT WINDOW "Importing table: ${baseName}..." NOWAIT`);
           prgLines.push(`TRY`);
           prgLines.push(`  USE "${srcPath}" SHARED NOUPDATE`);
           prgLines.push(`  COPY TO "${destPath}"`);
@@ -190,14 +192,15 @@ export async function POST(request: NextRequest) {
           copiedCount++;
         }
 
-        prgLines.push('WAIT WINDOW "MabsolCrm - VFP Import Complete!" TIMEOUT 1.5');
+        prgLines.push("ON ERROR *");
         prgLines.push("QUIT");
         fs.writeFileSync(prgPath, prgLines.join("\r\n"));
 
-        // Execute in foreground setting cwd to VFP folder so DLLs are found
+        // Execute in headless background setting cwd to VFP folder so DLLs are found
         const vfpDir = path.dirname(vfpExePath);
-        await execFileAsync(vfpExePath, ["-c" + fpwPath, prgPath], {
-          cwd: vfpDir
+        await execFileAsync(vfpExePath, ["-t", "-c" + fpwPath], {
+          cwd: vfpDir,
+          windowsHide: true
         });
 
       } catch (execError: any) {

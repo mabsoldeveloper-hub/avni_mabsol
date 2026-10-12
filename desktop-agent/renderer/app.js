@@ -414,7 +414,12 @@ async function loadBranches(forceRefresh = false) {
     const res = await window.electronAPI.fetchBranches({ email, token, cloudUrl: cfg?.cloudUrl });
     if (res && res.success && Array.isArray(res.branches)) {
       currentBranchProfiles = res.branches;
-      renderBranchDropdown(res.branches, res.selectedCompanyCode || cfg?.selectedCompanyCode || cfg?.companyCode);
+      const targetCode = res.selectedCompanyCode || cfg?.selectedCompanyCode || (res.branches[0] && (res.branches[0].crmCompanyCode || res.branches[0].companyCode));
+      renderBranchDropdown(res.branches, targetCode);
+      const activeCode = branchSelectDropdown?.value || targetCode;
+      if (activeCode) {
+        await handleBranchChange(activeCode, true);
+      }
     }
   } catch (err) {
     console.error("Failed to load branches:", err);
@@ -430,7 +435,7 @@ function renderBranchDropdown(branches, selectedCode) {
   if (!branches || branches.length === 0) {
     const opt = document.createElement("option");
     opt.value = "";
-    opt.textContent = "-- Click 'Fetch Branches' to load companies --";
+    opt.textContent = "-- No companies available for this account --";
     branchSelectDropdown.appendChild(opt);
     if (branchBadgeStatus) {
       branchBadgeStatus.textContent = "Unconfigured";
@@ -485,7 +490,7 @@ function renderBranchDropdown(branches, selectedCode) {
   }
 }
 
-async function handleBranchChange(newCode) {
+async function handleBranchChange(newCode, silent = false) {
   if (!newCode || !window.electronAPI?.switchBranchProfile) return;
   try {
     const res = await window.electronAPI.switchBranchProfile(newCode);
@@ -493,13 +498,20 @@ async function handleBranchChange(newCode) {
       const p = res.profile;
       const cleanName = cleanCompanyName(p.companyName);
       if (companyNameInput) companyNameInput.value = cleanName || "";
-      if (crmCompanyCodeInput) crmCompanyCodeInput.value = p.crmCompanyCode || p.companyCode || "";
-      const extractVal = p.decryptCode || p.extractCode || (p.companyCode !== (p.crmCompanyCode || "") ? p.companyCode : "");
+      const crmAccountCode = (p.crmCompanyCode || newCode || "").toUpperCase();
+      if (crmCompanyCodeInput) crmCompanyCodeInput.value = crmAccountCode;
+      const extractVal = (p.decryptCode && p.decryptCode !== crmAccountCode)
+        ? p.decryptCode
+        : (p.extractCode && p.extractCode !== crmAccountCode)
+          ? p.extractCode
+          : (p.companyCode && p.companyCode !== crmAccountCode)
+            ? p.companyCode
+            : "";
       if (companyCodeInput) companyCodeInput.value = extractVal || "";
       if (sourceDirInput) sourceDirInput.value = p.sourceDir || "";
 
       if (p.sourceDir) {
-        updateFolderValidation(p.sourceDir, p.companyCode);
+        updateFolderValidation(p.sourceDir, extractVal);
         setFormLocked(true);
       } else {
         if (sourceDirStatusBadge) {
@@ -522,11 +534,15 @@ async function handleBranchChange(newCode) {
       }
       updateSyncButtonRequirementState();
       const displayTitle = cleanName || p.crmCompanyCode || p.companyCode || "Company";
-      showToast(`Switched active branch to ${displayTitle}`, "info");
+      if (!silent) {
+        showToast(`Switched active branch to ${displayTitle}`, "info");
+      }
     }
   } catch (err) {
     console.error("Failed to switch branch:", err);
-    showToast(`Error switching branch: ${err.message}`, "error");
+    if (!silent) {
+      showToast(`Error switching branch: ${err.message}`, "error");
+    }
   }
 }
 
@@ -2636,6 +2652,7 @@ function setupEventListeners() {
     saveNotice.classList.add("hidden");
 
     const isAutoSync = autoSyncCheckbox ? (autoSyncCheckbox.checked && intervalSelect.value !== "0") : (intervalSelect.value !== "0");
+    const activeCrmCode = (crmCompanyCodeInput?.value || branchSelectDropdown?.value || "").trim().toUpperCase();
     const newCfg = {
       operatorName: operatorNameInput ? operatorNameInput.value.trim() : "",
       userEmail: operatorEmailInput ? operatorEmailInput.value.trim() : (currentAuthEmail || emailInput.value.trim()),
@@ -2649,7 +2666,8 @@ function setupEventListeners() {
       syncTarget: syncTargetSelect ? syncTargetSelect.value : "mabsolcrm",
       autoSync: isAutoSync,
       intervalMins: isAutoSync ? (intervalSelect.value === "realtime" ? "realtime" : (Number(intervalSelect.value) || 10)) : 0,
-      cloudUrl: cloudUrlInput.value.trim()
+      cloudUrl: cloudUrlInput.value.trim(),
+      selectedCompanyCode: activeCrmCode
     };
 
     // Before saving the config, if a license key is entered, verify email OTP first!
@@ -2847,7 +2865,7 @@ function setupEventListeners() {
     // Persist active branch profile with latest configuration
     if (crmCompanyCode) {
       await window.electronAPI?.saveBranchProfile({
-        companyCode: crmCompanyCode,
+        companyCode,
         crmCompanyCode,
         companyName,
         decryptCode: companyCode,
@@ -2860,6 +2878,7 @@ function setupEventListeners() {
       const res = await window.electronAPI.startSync({
         branchCode: crmCompanyCode,
         companyCode,
+        decryptCode: companyCode,
         sourceDir,
         companyName
       });
@@ -3197,27 +3216,9 @@ function updateServerEnvDisplay(url) {
   }
 }
 
-serverEnvToggleBtn?.addEventListener("click", async () => {
-  const currentVal = normalizeTargetUrl(devActServerSelect?.value || cloudUrlInput?.value);
-  let nextVal = "https://phcrm.mabsolinfotech.cloud";
-  if (currentVal.includes("phcrm")) {
-    nextVal = "https://mbh.crm.mabsolinfotech.cloud";
-  } else if (currentVal.includes("mbh")) {
-    nextVal = "http://localhost:3000";
-  } else {
-    nextVal = "https://phcrm.mabsolinfotech.cloud";
-  }
-
-  if (window.electronAPI?.setCloudUrl) {
-    await window.electronAPI.setCloudUrl(nextVal);
-  }
-  updateServerEnvDisplay(nextVal);
-  showToast(`Target server switched to: ${nextVal}`, "info");
-
-  if (deviceActivationModal && !deviceActivationModal.classList.contains("hidden")) {
-    currentActiveAgentPin = "";
-    await requestAndDisplayAgentPin();
-  }
+serverEnvToggleBtn?.addEventListener("click", () => {
+  const currentVal = normalizeTargetUrl(cloudUrlInput?.value || "http://localhost:3000");
+  showToast(`Current target server: ${currentVal}`, "info");
 });
 
 devActServerSelect?.addEventListener("change", async () => {

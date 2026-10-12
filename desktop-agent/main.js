@@ -4,8 +4,13 @@ const fs = require("fs");
 const os = require("os");
 const crypto = require("crypto");
 const { spawn, execSync } = require("child_process");
+const zlib = require("zlib");
 const axios = require("axios");
 const FormData = require("form-data");
+
+// Secure internal packaging key & IV (matching pack-engine.js)
+const BUNDLE_KEY = crypto.createHash("sha256").update("MABSOL_PHARMA_CRM_SECURE_ENGINE_VAULT_2026").digest();
+const BUNDLE_IV = crypto.createHash("md5").update("MABSOL_ENGINE_IV").digest();
 
 function getMachineIdentifier() {
   try {
@@ -48,29 +53,75 @@ const CONFIG_PATH = path.join(USER_DATA_DIR, "mabsol_sync_config.json");
 const SESSION_PATH = path.join(USER_DATA_DIR, "mabsol_auth_session.json");
 const QUEUE_PATH = path.join(USER_DATA_DIR, "mabsol_sync_queue.json");
 
-// Multi-candidate Engine directory resolver (contains MabsolCRM.EXE, security core, and dependencies)
-function getEngineDir() {
-  const candidates = [];
-  if (process.resourcesPath) {
-    candidates.push(path.join(process.resourcesPath, "engine"));
-    candidates.push(path.join(process.resourcesPath, "app.asar.unpacked", "engine"));
-  }
-  if (process.execPath) {
-    const execDir = path.dirname(process.execPath);
-    candidates.push(path.join(execDir, "resources", "engine"));
-    candidates.push(path.join(execDir, "engine"));
-  }
-  candidates.push(path.join(__dirname, "engine"));
-  candidates.push(path.join(__dirname, "..", "engine"));
+// Ensure encrypted engine bundle is securely unpacked into hidden runtime folder
+function ensureEngineExtracted(targetDir) {
+  try {
+    const requiredFiles = ["MabsolCRM.EXE", "efWin11.fll", "vfp9enu.dll", "msvcr71.dll", "gdiplus.dll", "config.fpw"];
+    const allExist = fs.existsSync(targetDir) && requiredFiles.every(f => fs.existsSync(path.join(targetDir, f)));
+    if (allExist) {
+      return true;
+    }
 
-  for (const dir of candidates) {
-    try {
-      if (fs.existsSync(path.join(dir, "MabsolCRM.EXE")) && fs.existsSync(path.join(dir, "efWin11.fll"))) {
-        return dir;
+    fs.mkdirSync(targetDir, { recursive: true });
+
+    // Look for encrypted bundle in candidate locations
+    const bundleCandidates = [
+      path.join(__dirname, "engine_bundle.dat"),
+      path.join(process.resourcesPath || "", "app.asar", "engine_bundle.dat"),
+      path.join(process.resourcesPath || "", "engine_bundle.dat"),
+      path.join(__dirname, "..", "engine_bundle.dat")
+    ];
+
+    let bundlePath = bundleCandidates.find(p => {
+      try { return p && fs.existsSync(p); } catch { return false; }
+    });
+
+    if (bundlePath) {
+      const encryptedData = fs.readFileSync(bundlePath);
+      const decipher = crypto.createDecipheriv("aes-256-cbc", BUNDLE_KEY, BUNDLE_IV);
+      const decrypted = Buffer.concat([decipher.update(encryptedData), decipher.final()]);
+      const decompressed = zlib.gunzipSync(decrypted);
+      const fileMap = JSON.parse(decompressed.toString("utf8"));
+
+      for (const [filename, base64Content] of Object.entries(fileMap)) {
+        const filePath = path.join(targetDir, filename);
+        fs.writeFileSync(filePath, Buffer.from(base64Content, "base64"));
       }
-    } catch {}
+
+      // Hide the extracted folder on Windows
+      try {
+        if (process.platform === "win32") {
+          execSync(`attrib +h "${targetDir}"`, { windowsHide: true, stdio: "ignore" });
+        }
+      } catch { }
+
+      return true;
+    }
+
+    // Fallback in local development if raw engine folder exists
+    const devEngineDir = path.join(__dirname, "engine");
+    if (fs.existsSync(devEngineDir)) {
+      for (const f of fs.readdirSync(devEngineDir)) {
+        const src = path.join(devEngineDir, f);
+        if (fs.statSync(src).isFile()) {
+          fs.copyFileSync(src, path.join(targetDir, f));
+        }
+      }
+      return true;
+    }
+
+    return false;
+  } catch (err) {
+    emitLog("error", `Engine initialization error: ${err.message}`);
+    return false;
   }
-  return app.isPackaged ? path.join(process.resourcesPath, "engine") : path.join(__dirname, "engine");
+}
+
+// Engine directory resolver - uses protected hidden runtime folder (invisible in 7-Zip/package inspection)
+function getEngineDir() {
+  const targetDir = path.join(USER_DATA_DIR, ".runtime_core");
+  ensureEngineExtracted(targetDir);
+  return targetDir;
 }
 
 // Hidden secure vault directory for offline DBF storage (never visible to users)
@@ -1031,6 +1082,18 @@ ipcMain.handle("config:save", async (_event, newCfg) => {
   const cloudUrl = resolveCloudUrl(merged.cloudUrl || getDefaultCloudUrl());
   const session = loadSession();
 
+  // Keep branch profiles synchronized with active edits:
+  const activeCode = (merged.selectedCompanyCode || current.selectedCompanyCode || "").trim().toUpperCase();
+  if (activeCode && merged.branchProfiles && merged.branchProfiles[activeCode]) {
+    merged.branchProfiles[activeCode].companyName = merged.companyName || merged.branchProfiles[activeCode].companyName;
+    merged.branchProfiles[activeCode].sourceDir = merged.sourceDir || merged.branchProfiles[activeCode].sourceDir;
+    if (merged.companyCode && merged.companyCode !== activeCode) {
+      merged.branchProfiles[activeCode].decryptCode = merged.companyCode;
+      merged.branchProfiles[activeCode].extractCode = merged.companyCode;
+      merged.branchProfiles[activeCode].companyCode = merged.companyCode;
+    }
+  }
+
   // ALWAYS save the user's settings (folder path, company codes, etc.) to local disk first!
   const res = saveConfig(merged);
   if (merged.autoSync) {
@@ -1206,29 +1269,57 @@ ipcMain.handle("config:fetch-branches", async (_event, payload = {}) => {
 
     if (res.data && res.data.success && Array.isArray(res.data.branches)) {
       const serverBranches = res.data.branches;
-      current.branchProfiles = current.branchProfiles || {};
+      // Strictly scope branchProfiles to the server branches returned for this logged-in account
+      const newProfiles = {};
       for (const b of serverBranches) {
         const crmKey = (b.companyCode || "").trim().toUpperCase();
         if (!crmKey) continue;
-        const existing = current.branchProfiles[crmKey] || {};
+        const existing = (current.branchProfiles && current.branchProfiles[crmKey]) || {};
         const cleanedName = cleanCompanyName(b.companyName || existing.companyName || "");
-        current.branchProfiles[crmKey] = {
+
+        // Sanitize extract code: must never equal CRM account code (e.g. MABS_BR1_575)
+        let validExtract = (existing.decryptCode || existing.extractCode || "").trim().toUpperCase();
+        if (validExtract === crmKey) {
+          validExtract = "";
+        }
+        if (!validExtract && existing.companyCode && existing.companyCode.toUpperCase() !== crmKey) {
+          validExtract = existing.companyCode.trim().toUpperCase();
+        }
+        if (!validExtract && current.selectedCompanyCode === crmKey && current.companyCode && current.companyCode.toUpperCase() !== crmKey) {
+          validExtract = current.companyCode.trim().toUpperCase();
+        }
+
+        newProfiles[crmKey] = {
           ...existing,
           crmCompanyCode: crmKey,
           companyName: cleanedName,
-          companyCode: existing.decryptCode || existing.companyCode || "",
-          decryptCode: existing.decryptCode || existing.companyCode || "",
+          companyCode: validExtract || "",
+          decryptCode: validExtract || "",
+          extractCode: validExtract || "",
           gstin: b.gstin || existing.gstin || "",
           sourceDir: existing.sourceDir || "",
           isHeadOffice: !!b.isHeadOffice
         };
       }
-      if (!current.selectedCompanyCode && serverBranches.length > 0) {
-        current.selectedCompanyCode = (serverBranches[0].companyCode || "").trim().toUpperCase();
+      current.branchProfiles = newProfiles;
+
+      // Auto-select active branch (default to head office or first branch)
+      if (!current.selectedCompanyCode || !current.branchProfiles[current.selectedCompanyCode]) {
+        const hoBranch = serverBranches.find(b => b.isHeadOffice) || serverBranches[0];
+        current.selectedCompanyCode = (hoBranch?.companyCode || "").trim().toUpperCase();
       }
       if (current.selectedCompanyCode && current.branchProfiles[current.selectedCompanyCode]) {
         const active = current.branchProfiles[current.selectedCompanyCode];
-        current.companyCode = active.decryptCode || active.companyCode || "";
+        const extractCode = (active.decryptCode && active.decryptCode !== current.selectedCompanyCode)
+          ? active.decryptCode
+          : (active.extractCode && active.extractCode !== current.selectedCompanyCode)
+            ? active.extractCode
+            : (active.companyCode && active.companyCode !== current.selectedCompanyCode)
+              ? active.companyCode
+              : (current.companyCode && current.companyCode !== current.selectedCompanyCode)
+                ? current.companyCode
+                : "";
+        current.companyCode = extractCode;
         current.companyName = active.companyName || current.companyName || "";
         current.sourceDir = active.sourceDir || current.sourceDir || "";
       }
@@ -1264,7 +1355,16 @@ ipcMain.handle("config:switch-branch", async (_event, companyCode) => {
     const profile = current.branchProfiles[codeKey];
     profile.companyName = cleanCompanyName(profile.companyName);
     current.selectedCompanyCode = codeKey;
-    current.companyCode = profile.decryptCode || profile.companyCode || "";
+
+    let extractCode = (profile.decryptCode && profile.decryptCode !== codeKey)
+      ? profile.decryptCode
+      : (profile.extractCode && profile.extractCode !== codeKey)
+        ? profile.extractCode
+        : (profile.companyCode && profile.companyCode !== codeKey)
+          ? profile.companyCode
+          : "";
+
+    current.companyCode = extractCode;
     current.companyName = profile.companyName || "";
     current.sourceDir = profile.sourceDir || "";
     saveConfig(current);
@@ -1277,28 +1377,43 @@ ipcMain.handle("config:switch-branch", async (_event, companyCode) => {
 ipcMain.handle("config:save-branch-profile", async (_event, branchData) => {
   const current = loadConfig();
   current.branchProfiles = current.branchProfiles || {};
-  const codeKey = (branchData.companyCode || "").trim().toUpperCase();
-  if (!codeKey) {
+  const crmKey = (branchData.crmCompanyCode || branchData.companyCode || "").trim().toUpperCase();
+  if (!crmKey) {
     return { success: false, message: "Company code is required." };
   }
-  const cleanDir = branchData.sourceDir ? sanitizeFolderPath(branchData.sourceDir) : (current.branchProfiles[codeKey]?.sourceDir || "");
-  const cleanedName = cleanCompanyName(branchData.companyName || current.branchProfiles[codeKey]?.companyName || "");
-  current.branchProfiles[codeKey] = {
-    ...(current.branchProfiles[codeKey] || {}),
-    companyCode: codeKey,
+  const cleanDir = branchData.sourceDir ? sanitizeFolderPath(branchData.sourceDir) : (current.branchProfiles[crmKey]?.sourceDir || "");
+  const cleanedName = cleanCompanyName(branchData.companyName || current.branchProfiles[crmKey]?.companyName || "");
+
+  // Extract code should be short ERP code (e.g. D01, C02), never the CRM account code
+  let extractCode = (branchData.decryptCode || branchData.extractCode || "").trim().toUpperCase();
+  if (extractCode === crmKey) extractCode = "";
+  if (!extractCode && branchData.companyCode && branchData.companyCode.toUpperCase() !== crmKey) {
+    extractCode = branchData.companyCode.trim().toUpperCase();
+  }
+  if (!extractCode && current.branchProfiles[crmKey]?.decryptCode && current.branchProfiles[crmKey].decryptCode !== crmKey) {
+    extractCode = current.branchProfiles[crmKey].decryptCode;
+  }
+
+  current.branchProfiles[crmKey] = {
+    ...(current.branchProfiles[crmKey] || {}),
+    crmCompanyCode: crmKey,
     companyName: cleanedName,
     sourceDir: cleanDir,
+    decryptCode: extractCode || "",
+    extractCode: extractCode || "",
+    companyCode: extractCode || "",
     gstin: (branchData.gstin || "").trim()
   };
-  if (current.selectedCompanyCode === codeKey || !current.selectedCompanyCode) {
-    current.selectedCompanyCode = codeKey;
-    current.companyCode = codeKey;
-    current.companyName = branchData.companyName || current.companyName;
+
+  if (current.selectedCompanyCode === crmKey || !current.selectedCompanyCode) {
+    current.selectedCompanyCode = crmKey;
+    if (extractCode) current.companyCode = extractCode;
+    current.companyName = cleanedName || current.companyName;
     current.sourceDir = cleanDir;
   }
   saveConfig(current);
-  emitLog("info", `Branch profile [${codeKey}] saved successfully.`);
-  return { success: true, branches: Object.values(current.branchProfiles), activeProfile: current.branchProfiles[codeKey] };
+  emitLog("info", `Branch profile [${crmKey}] saved successfully.`);
+  return { success: true, branches: Object.values(current.branchProfiles), activeProfile: current.branchProfiles[crmKey] };
 });
 
 ipcMain.handle("license:get-details", async () => {
@@ -1695,11 +1810,16 @@ ipcMain.handle("sync:start", async (_event, payload) => {
   if (branchCode && cfg.branchProfiles && cfg.branchProfiles[branchCode]) {
     targetProfile = { ...cfg.branchProfiles[branchCode] };
   } else if (branchCode) {
-    targetProfile = { companyCode: branchCode, crmCompanyCode: branchCode };
+    targetProfile = { crmCompanyCode: branchCode };
   }
   if (typeof payload === "object" && payload !== null) {
     if (!targetProfile) targetProfile = {};
-    if (payload.companyCode) targetProfile.decryptCode = payload.companyCode;
+    const extractCode = (payload.decryptCode || payload.companyCode || "").trim().toUpperCase();
+    if (extractCode && extractCode !== branchCode) {
+      targetProfile.decryptCode = extractCode;
+      targetProfile.extractCode = extractCode;
+      targetProfile.companyCode = extractCode;
+    }
     if (payload.sourceDir) targetProfile.sourceDir = payload.sourceDir;
     if (payload.companyName) targetProfile.companyName = payload.companyName;
     if (payload.branchCode) targetProfile.crmCompanyCode = payload.branchCode;
@@ -1711,7 +1831,10 @@ ipcMain.handle("sync:start-all-branches", async () => {
   if (isSyncing) return { success: false, message: "Sync is already in progress." };
   const current = loadConfig();
   const profiles = Object.values(current.branchProfiles || {});
-  const configuredProfiles = profiles.filter(p => p.companyCode && p.sourceDir && fs.existsSync(p.sourceDir));
+  const configuredProfiles = profiles.filter(p => {
+    const hasExtract = (p.decryptCode && p.decryptCode !== p.crmCompanyCode) || (p.companyCode && p.companyCode !== p.crmCompanyCode);
+    return hasExtract && p.sourceDir && fs.existsSync(p.sourceDir);
+  });
 
   if (configuredProfiles.length === 0) {
     if (current.companyCode && current.sourceDir && fs.existsSync(current.sourceDir)) {
@@ -1725,9 +1848,9 @@ ipcMain.handle("sync:start-all-branches", async () => {
   emitLog("info", `🚀 Starting sequential sync for ${configuredProfiles.length} configured branch profile(s)...`);
   const results = [];
   for (const prof of configuredProfiles) {
-    emitLog("info", `\n=== Processing Branch: ${prof.companyName || prof.companyCode} [${prof.companyCode}] ===`);
+    emitLog("info", `\n=== Processing Branch: ${prof.companyName || prof.crmCompanyCode} [${prof.crmCompanyCode || prof.companyCode}] ===`);
     const res = await executeDecryptionAndSync("multi_branch", prof);
-    results.push({ companyCode: prof.companyCode, companyName: prof.companyName, result: res });
+    results.push({ companyCode: prof.crmCompanyCode || prof.companyCode, companyName: prof.companyName, result: res });
     await new Promise(r => setTimeout(r, 1000));
   }
   emitLog("success", `🎉 Multi-Branch batch sync completed for ${configuredProfiles.length} branch(es).`);
@@ -1779,10 +1902,36 @@ async function executeDecryptionAndSync(triggerReason = "manual", targetProfile 
   const config = loadConfig();
   const session = loadSession();
   const activeProfile = targetProfile || (config.selectedCompanyCode && config.branchProfiles && config.branchProfiles[config.selectedCompanyCode]) || null;
-  const rawCodes = ((activeProfile && (activeProfile.decryptCode || activeProfile.extractCode || activeProfile.companyCode)) || config.companyCode || "").trim();
-  const companyCodes = rawCodes.split(/[,\s;]+/).map(c => c.trim().toUpperCase()).filter(Boolean);
+  const activeCrmCode = (activeProfile && (activeProfile.crmCompanyCode || activeProfile.companyCode)) || config.selectedCompanyCode || "";
+
+  // Strictly resolve the ERP extract code(s) (e.g. D01, C02, B01)
+  // NEVER use the CRM account identifier (e.g. MABS_BR1_575, MABS665) as the ERP file extension!
+  let rawCodes = "";
+  if (targetProfile && (targetProfile.decryptCode || targetProfile.extractCode)) {
+    const cand = (targetProfile.decryptCode || targetProfile.extractCode).trim();
+    if (cand.toUpperCase() !== activeCrmCode.toUpperCase()) rawCodes = cand;
+  }
+  if (!rawCodes && activeProfile && (activeProfile.decryptCode || activeProfile.extractCode)) {
+    const cand = (activeProfile.decryptCode || activeProfile.extractCode).trim();
+    if (cand.toUpperCase() !== activeCrmCode.toUpperCase()) rawCodes = cand;
+  }
+  if (!rawCodes && config.companyCode && config.companyCode.toUpperCase() !== activeCrmCode.toUpperCase()) {
+    rawCodes = config.companyCode;
+  }
+  if (!rawCodes && activeProfile && activeProfile.companyCode && activeProfile.companyCode.toUpperCase() !== activeCrmCode.toUpperCase()) {
+    rawCodes = activeProfile.companyCode;
+  }
+  if (!rawCodes) {
+    rawCodes = (config.companyCode || "").trim();
+  }
+
+  const companyCodes = rawCodes
+    .split(/[,\s;]+/)
+    .map(c => c.trim().toUpperCase())
+    .filter(c => Boolean(c) && c !== activeCrmCode.toUpperCase());
+
   if (companyCodes.length === 0) {
-    const msg = "ERP Extract Code is not set. Please click Edit Configuration and enter your ERP Data Code(s) (e.g. A01 or B01).";
+    const msg = `ERP Extract Code is not set for ${activeProfile?.companyName || "this company"}. Please click Edit Configuration and enter your ERP Data Code (e.g. D01 or C02).`;
     emitLog("error", msg);
     isSyncing = false;
     emitStatus({ isSyncing: false, error: msg });
@@ -1791,7 +1940,6 @@ async function executeDecryptionAndSync(triggerReason = "manual", targetProfile 
 
   const sourceDir = sanitizeFolderPath((activeProfile && activeProfile.sourceDir) || config.sourceDir);
   const activeCompanyName = (activeProfile && activeProfile.companyName) || config.companyName || "";
-  const activeCrmCode = (activeProfile && (activeProfile.crmCompanyCode || activeProfile.companyCode)) || config.selectedCompanyCode || "";
   // Destination staging folder is internal and automated! No need to configure manually.
   const baseStagingDir = config.destDir || path.join(USER_DATA_DIR, "staging");
 
@@ -2093,23 +2241,44 @@ async function executeDecryptionAndSync(triggerReason = "manual", targetProfile 
       }
     }
 
-    // 4. Generate dynamic, headless extraction script
+    // 4. Generate dynamic, 100% headless extraction script with total suppression of windows and errors
     const prgPath = path.join(compDestDir, "mabsol_core.prg");
     const fpwPath = path.join(compDestDir, "mabsol_core.fpw");
+    const defaultFpwPath = path.join(compDestDir, "config.fpw");
+    const engineFpwPath = path.join(engineDir, "config.fpw");
     const escapedEngineFll = engineFllPath.replace(/\\/g, "\\\\");
     const escapedDestFll = destFllPath.replace(/\\/g, "\\\\");
 
+    // Ensure engine directory also has permanent headless config.fpw
+    try {
+      if (!fs.existsSync(engineFpwPath)) {
+        fs.writeFileSync(engineFpwPath, "SCREEN = OFF\r\nRESOURCE = OFF\r\nTITLE = \r\nSYSMENU = OFF\r\nSTATUS BAR = OFF\r\nDEVELOPMENT = OFF\r\nESCAPE = OFF\r\nCONFIRM = OFF\r\nNOTIFY = OFF\r\nTALK = OFF\r\nSAFETY = OFF\r\n", "utf8");
+      }
+    } catch { }
+
     let decryptScript =
+      `ON ERROR QUIT\r\n` +
+      `SET NOTIFY OFF\r\n` +
+      `SET CONFIRM OFF\r\n` +
+      `SET TALK OFF\r\n` +
+      `SET SAFETY OFF\r\n` +
+      `SET ESCAPE OFF\r\n` +
+      `SET DEVELOPMENT OFF\r\n` +
+      `SET ECHO OFF\r\n` +
+      `SET MULTILOCKS ON\r\n` +
+      `SET REPROCESS TO 1 SECONDS\r\n` +
       `_SCREEN.Visible = .F.\r\n` +
-      `_SCREEN.WindowState = 1\r\n` +
+      `_SCREEN.Left = -32000\r\n` +
+      `_SCREEN.Top = -32000\r\n` +
+      `_SCREEN.Width = 0\r\n` +
+      `_SCREEN.Height = 0\r\n` +
+      `_SCREEN.ShowTips = .F.\r\n` +
       `_SCREEN.Caption = ""\r\n` +
       `CLOSE ALL\r\n` +
       `CLEAR\r\n` +
-      `SET SAFETY OFF\r\n` +
       `SET CENTURY ON\r\n` +
       `SET DATE BRITISH\r\n` +
       `SET EXCLUSIVE OFF\r\n` +
-      `SET TALK OFF\r\n` +
       `SET DELETED ON\r\n\r\n` +
       `LOCAL destpath, libpath, compcode, tbl, srcfile, outdbf\r\n` +
       `compcode = "${compCode}"\r\n` +
@@ -2120,7 +2289,10 @@ async function executeDecryptionAndSync(triggerReason = "manual", targetProfile 
       `    libpath = "${escapedDestFll}"\r\n` +
       `ENDIF\r\n` +
       `IF FILE(libpath)\r\n` +
-      `    SET LIBRARY TO (libpath) ADDITIVE\r\n` +
+      `    TRY\r\n` +
+      `        SET LIBRARY TO (libpath) ADDITIVE\r\n` +
+      `    CATCH\r\n` +
+      `    ENDTRY\r\n` +
       `ENDIF\r\n\r\n`;
 
     for (const tbl of allTables) {
@@ -2154,26 +2326,34 @@ async function executeDecryptionAndSync(triggerReason = "manual", targetProfile 
     }
 
     decryptScript +=
+      `ON ERROR *\r\n` +
       `SET LIBRARY TO\r\n` +
       `CLOSE ALL\r\n` +
       `QUIT\r\n`;
 
     const fpwContent =
       `SCREEN = OFF\r\n` +
-      `TITLE = \r\n` +
       `RESOURCE = OFF\r\n` +
-      `STATUS = OFF\r\n` +
+      `TITLE = \r\n` +
+      `SYSMENU = OFF\r\n` +
+      `STATUS BAR = OFF\r\n` +
+      `DEVELOPMENT = OFF\r\n` +
+      `ESCAPE = OFF\r\n` +
+      `CONFIRM = OFF\r\n` +
+      `NOTIFY = OFF\r\n` +
       `TALK = OFF\r\n` +
+      `SAFETY = OFF\r\n` +
       `COMMAND = DO "${prgPath}"\r\n`;
 
     fs.writeFileSync(prgPath, decryptScript, "utf8");
     fs.writeFileSync(fpwPath, fpwContent, "utf8");
+    fs.writeFileSync(defaultFpwPath, fpwContent, "utf8");
 
-    // 5. Run MabsolCRM.EXE headless (with relative config flag to avoid Windows username spaces)
+    // 5. Run MabsolCRM.EXE completely headless (guaranteed no windows or dialogs)
     try {
       await new Promise((resolve, reject) => {
         const fpwFilename = path.basename(fpwPath);
-        const engineProcess = spawn(engineBinaryPath, ["-t", `-c${fpwFilename}`], {
+        const engineProcess = spawn(engineBinaryPath, ["-t", `-C${fpwPath}`], {
           cwd: compDestDir,
           stdio: "ignore",
           windowsHide: true,
@@ -2208,6 +2388,7 @@ async function executeDecryptionAndSync(triggerReason = "manual", targetProfile 
       const bakPath = prgPath.replace(/\.prg$/i, ".bak");
       try { if (fs.existsSync(prgPath)) fs.unlinkSync(prgPath); } catch { }
       try { if (fs.existsSync(fpwPath)) fs.unlinkSync(fpwPath); } catch { }
+      try { if (fs.existsSync(defaultFpwPath)) fs.unlinkSync(defaultFpwPath); } catch { }
       try { if (fs.existsSync(fxpPath)) fs.unlinkSync(fxpPath); } catch { }
       try { if (fs.existsSync(bakPath)) fs.unlinkSync(bakPath); } catch { }
 

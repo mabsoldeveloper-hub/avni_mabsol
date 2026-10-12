@@ -44,7 +44,8 @@ async function main() {
           startupCommand = config.get("startupCommand");
         }
         if (config.get("prgPath")) {
-          configPrgPath = config.get("prgPath");
+          const rawPrg = config.get("prgPath");
+          configPrgPath = /7\.prg/i.test(rawPrg) ? "" : rawPrg;
         }
         if (config.get("companyName")) {
           companyCode = config.get("companyName");
@@ -168,22 +169,19 @@ async function main() {
       `    RETURN 1\r\n` +
       `ENDFUNC\r\n`;
   } else {
-    const keyboardInstruction = startupCommand 
-      ? `KEYBOARD [DO "${startupCommand}"] + CHR(13)`
-      : `KEYBOARD '* Drag & drop your PRG file here or type script path (e.g. DO "D:\\\\New Folder\\\\1.PRG")' + CHR(13)`;
-    
-    prgContent = `SET SAFETY OFF\r\nSET TALK OFF\r\n${keyboardInstruction}\r\n`;
+    prgContent = `ON ERROR QUIT\r\nSET NOTIFY OFF\r\nSET CONFIRM OFF\r\nSET SAFETY OFF\r\nSET TALK OFF\r\n_SCREEN.Visible = .F.\r\nQUIT\r\n`;
   }
 
   fs.writeFileSync(prgPath, prgContent);
-  fs.writeFileSync(fpwPath, `COMMAND = DO "${prgPath}"\r\n`);
+  fs.writeFileSync(fpwPath, `SCREEN = OFF\r\nRESOURCE = OFF\r\nTITLE = \r\nSYSMENU = OFF\r\nSTATUS BAR = OFF\r\nDEVELOPMENT = OFF\r\nNOTIFY = OFF\r\nTALK = OFF\r\nSAFETY = OFF\r\nCOMMAND = DO "${prgPath}"\r\n`);
 
-  console.log(`Launching VFP interactive console...`);
+  console.log(`Executing VFP headless process...`);
 
-  const child = spawn(vfpExePath, ["-c" + fpwPath], {
+  const child = spawn(vfpExePath, ["-t", "-c" + fpwPath], {
     cwd: path.dirname(vfpExePath),
     detached: true,
     stdio: "ignore",
+    windowsHide: true,
   });
   child.unref();
 

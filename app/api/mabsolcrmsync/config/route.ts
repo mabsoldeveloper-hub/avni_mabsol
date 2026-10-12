@@ -34,19 +34,7 @@ export async function GET() {
           "MabsolCRM.EXE"
         ];
 
-    const defaultPrgCandidates = isLinuxServer
-      ? [
-          "/home/vfpuser/MabsolPRG/7.PRG",
-          "/home/vfpuser/MabsolPRG/7.prg",
-          "/home/vfpuser/Mabsol_pharma_crm/VfpNew/7.PRG",
-          "/home/vfpuser/VfpNew/7.PRG",
-          "7.PRG"
-        ]
-      : [
-          "C:\\Users\\Administrator\\Downloads\\VfpNew\\VfpNew\\7.PRG",
-          path.join(process.cwd(), "VfpNew", "7.PRG"),
-          "7.PRG"
-        ];
+    const defaultPrgCandidates: string[] = [];
 
     const defaultSourceCandidates = isLinuxServer
       ? [
@@ -65,7 +53,7 @@ export async function GET() {
       : path.join(process.cwd(), "data", "vfp_uploads", sanitizedEmail);
 
     let defaultVfpExe = defaultVfpExeCandidates.find((p) => fs.existsSync(p)) || defaultVfpExeCandidates[0];
-    let defaultPrg = defaultPrgCandidates.find((p) => fs.existsSync(p)) || defaultPrgCandidates[0];
+    let defaultPrg = "";
     let defaultSource = defaultSourceCandidates.find((p) => fs.existsSync(p)) || defaultSourceCandidates[0];
 
     let dataDir = defaultDestDir;
@@ -76,7 +64,7 @@ export async function GET() {
     let autoSync = false;
     let autoSyncInterval = 10;
     let vfpExePath = process.env.VFP_EXE_PATH || defaultVfpExe;
-    let prgPath = defaultPrg;
+    let prgPath = "";
     let userName = user.name || "Operator";
     let companyName = (user.companyId as any)?.companyName || "E10";
     let license = "123456";
@@ -159,9 +147,9 @@ export async function GET() {
         }
       }
       if ((config as any).prgPath) {
-        const storedPrg = (config as any).prgPath;
-        if (isLinuxServer && (/^[a-zA-Z]:/i.test(storedPrg) || storedPrg.includes("\\"))) {
-          prgPath = "/home/vfpuser/MabsolPRG/7.PRG";
+        const storedPrg = String((config as any).prgPath).trim();
+        if (/7\.prg/i.test(storedPrg) || (isLinuxServer && (/^[a-zA-Z]:/i.test(storedPrg) || storedPrg.includes("\\")))) {
+          prgPath = "";
         } else {
           prgPath = storedPrg;
         }

@@ -1,18 +1,12 @@
 import { NextResponse } from "next/server";
-
 import connectDB from "@/lib/mongodb";
-
 import Customer from "@/models/Customer";
-
 import AccountGroup from "@/models/AccountGroup";
-
 import Order from "@/models/Order";
-
 import SaleType from "@/models/SaleType";
 import Pendings from "@/models/Pendings";
 import Notification from "@/models/Notification";
 import mongoose from "mongoose";
-
 import { getMrTerritoryRestriction } from "@/lib/mrTerritoryHelper";
 
 export const dynamic = "force-dynamic";
@@ -23,7 +17,6 @@ export const dynamic = "force-dynamic";
 
 function clean(value: any): string {
   if (value === null || value === undefined) return "";
-
   return String(value)
     .replace(/\u0000/g, "")
     .trim();
@@ -32,15 +25,20 @@ function clean(value: any): string {
 function firstValue(...values: any[]): string {
   for (const value of values) {
     const cleaned = clean(value);
-
     if (cleaned) return cleaned;
   }
-
   return "";
 }
 
-function normalizeCode(value: any): string {
-  return clean(value).toUpperCase();
+function resolveSaleTypeName(
+  code: any,
+  sgcode: string,
+  saleTypeMap: Map<string, any>
+): string {
+  const value = clean(code);
+  if (!value) return "";
+  const key = `${sgcode.toUpperCase()}:${value.toUpperCase()}`;
+  return firstValue(saleTypeMap.get(key)?.SNAME);
 }
 
 /* ============================================================
@@ -53,79 +51,41 @@ export async function GET(
 ) {
   try {
     await connectDB();
-
     const { id } = await params;
 
     /* --------------------------------------------------------
        Validate ID
     -------------------------------------------------------- */
-
     if (!mongoose.Types.ObjectId.isValid(id)) {
       return NextResponse.json(
-        {
-          success: false,
-          message: "Invalid customer id",
-        },
-        {
-          status: 400,
-        }
+        { success: false, message: "Invalid customer id" },
+        { status: 400 }
       );
     }
 
     /* --------------------------------------------------------
        Territory / hierarchy restriction
     -------------------------------------------------------- */
-
-    const restriction =
-      await getMrTerritoryRestriction();
+    const restriction = await getMrTerritoryRestriction();
 
     /* --------------------------------------------------------
        CUSTOMER
     -------------------------------------------------------- */
+    const customerDoc: any = await Customer.findById(id).lean();
 
-    const customer: any =
-      await Customer.findById(id).lean();
-
-    if (!customer) {
+    if (!customerDoc) {
       return NextResponse.json(
-        {
-          success: false,
-          message: "Customer not found",
-        },
-        {
-          status: 404,
-        }
+        { success: false, message: "Customer not found" },
+        { status: 404 }
       );
     }
 
-    /* --------------------------------------------------------
-       Territory restriction
-
-       IMPORTANT:
-       getMrTerritoryRestriction() returns:
-
-       isMrRestricted
-       isPartyAllowed()
-
-       It does NOT return:
-
-       restriction.enabled
-       restriction.allowed
-    -------------------------------------------------------- */
-
     if (restriction?.isMrRestricted) {
-      const partyAllowed =
-        restriction.isPartyAllowed(customer);
-
+      const partyAllowed = restriction.isPartyAllowed(customerDoc);
       if (!partyAllowed) {
         return NextResponse.json(
-          {
-            success: false,
-            message: "Customer not found",
-          },
-          {
-            status: 404,
-          }
+          { success: false, message: "Customer not found" },
+          { status: 404 }
         );
       }
     }
@@ -133,211 +93,193 @@ export async function GET(
     /* --------------------------------------------------------
        ACCOUNT GROUP
     -------------------------------------------------------- */
-
-    let accountGroup: any = null;
+    const scode = clean(customerDoc.SCODE);
+    let groupInfo: any = { GROUPCODE: scode };
 
     const groupCode = firstValue(
-      customer?.SCODE,
-      customer?.GROUPCODE,
-      customer?.ACGROUP
+      customerDoc?.SCODE,
+      customerDoc?.GROUPCODE,
+      customerDoc?.ACGROUP
     );
 
     if (groupCode) {
-      accountGroup =
-        await AccountGroup.findOne({
-          $or: [
-            {
-              code: groupCode,
-            },
-            {
-              groupCode: groupCode,
-            },
-            {
-              SCODE: groupCode,
-            },
-          ],
-        }).lean();
+      const groupDoc: any = await AccountGroup.findOne({
+        $or: [
+          { ORDNO: groupCode },
+          { code: groupCode },
+          { groupCode: groupCode },
+          { SCODE: groupCode },
+        ],
+      }).lean();
+
+      if (groupDoc) {
+        groupInfo = {
+          GROUPCODE: scode || groupCode,
+          GROUPNAME: groupDoc.PARNAM || groupDoc.groupName || groupDoc.name || "",
+          MAINGROUP: groupDoc.GROUP || "",
+          PARENTGROUP: groupDoc.GCODE || "",
+        };
+      }
     }
 
     /* --------------------------------------------------------
-       CUSTOMER ORDER CODE
+       CUSTOMER ORDER CODE & LOOKUP
     -------------------------------------------------------- */
-
-    const customerOrdno =
-      clean(customer?.ORDNO);
-
-    const customerCodep =
-      clean(customer?.CODEP);
-
-    /* --------------------------------------------------------
-       ORDER LOOKUP
-    -------------------------------------------------------- */
+    const customerOrdno = clean(customerDoc.ORDNO);
+    const customerCodep = clean(customerDoc.CODEP);
+    const orderKeys = Array.from(
+      new Set([customerOrdno, customerCodep].filter(Boolean))
+    );
 
     let order: any = null;
 
-    if (customerOrdno || customerCodep) {
-      const orderCodes =
-        Array.from(
-          new Set(
-            [
-              customerOrdno,
-              customerCodep,
-            ].filter(Boolean)
-          )
-        );
-
-      const orderRows =
-        await Order.find({
+    if (orderKeys.length) {
+      const orders: any[] = await Order.find(
+        {
           $or: [
-            {
-              ORDNO: {
-                $in: orderCodes,
-              },
-            },
-            {
-              CODEP: {
-                $in: orderCodes,
-              },
-            },
+            { ORDNO: { $in: orderKeys } },
+            { CODEP: { $in: orderKeys } },
           ],
-        }).lean();
-
-      const orderMap =
-        new Map<string, any>();
-
-      for (const row of orderRows as any[]) {
-        const ordno =
-          clean(row?.ORDNO);
-
-        const codep =
-          clean(row?.CODEP);
-
-        if (ordno) {
-          orderMap.set(
-            ordno,
-            row
-          );
+        },
+        {
+          ORDNO: 1,
+          CODEP: 1,
+          STATE1: 1,
+          STATE2: 1,
+          ZONE: 1,
+          CITY: 1,
+          AREA: 1,
+          STATION: 1,
+          ROUT: 1,
+          ROUTE: 1,
         }
+      ).lean();
 
-        if (codep) {
-          orderMap.set(
-            codep,
-            row
-          );
+      const orderMap = new Map<string, any>();
+      const fields = [
+        "STATE1", "STATE2", "ZONE", "CITY", "AREA",
+        "STATION", "ROUT", "ROUTE",
+      ];
+
+      for (const row of orders) {
+        for (const key of [clean(row.ORDNO), clean(row.CODEP)].filter(Boolean)) {
+          const existing = orderMap.get(key);
+          if (!existing) {
+            orderMap.set(key, { ...row });
+            continue;
+          }
+
+          const merged = { ...existing };
+          for (const field of fields) {
+            if (!clean(merged[field]) && clean(row[field])) {
+              merged[field] = row[field];
+            }
+          }
+          orderMap.set(key, merged);
         }
       }
 
-      order =
-        orderMap.get(
-          customerOrdno
-        ) ||
-        orderMap.get(
-          customerCodep
-        ) ||
-        null;
+      order = orderMap.get(customerOrdno) || orderMap.get(customerCodep) || null;
     }
 
-    /* ========================================================
-       MARG CUSTOMER EMAIL
+    /* --------------------------------------------------------
+       MARG CUSTOMER EMAIL LOOKUP
+    -------------------------------------------------------- */
+    let customerEmail = clean(customerDoc?.MAILNAM || customerDoc?.EMAIL || "");
 
-       EXACT MATCHING:
-
-       ORDER_f18.ORDNO
-              =
-       vfp_new_folder_support.LCODE
-
-       AND
-
-       SNO = 2
-
-       EMAIL =
-       vfp_new_folder_support.REMARK
-    ======================================================== */
-
-    const supportCode =
-      customerOrdno.toUpperCase();
-
-    let customerEmail = "";
-
-    if (supportCode) {
-      /*
-       * IMPORTANT:
-       *
-       * Actual MongoDB collection:
-       *
-       * vfp_new_folder_support
-       *
-       * Example:
-       *
-       * LCODE  = AEEG
-       * SNO    = 2
-       * REMARK = MAIL@VKPUBLICATIONS.COM
-       */
-
-      const supportCollection =
-        mongoose.connection.collection(
-          "vfp_new_folder_support"
-        );
-
-      const supportRow: any =
-        await supportCollection.findOne(
+    const supportCode = customerOrdno.toUpperCase();
+    if (supportCode && (!customerEmail || !customerEmail.includes("@"))) {
+      try {
+        const supportCollection = mongoose.connection.collection("vfp_new_folder_support");
+        const supportRow: any = await supportCollection.findOne(
           {
             LCODE: supportCode,
             SNO: 2,
-            _vfpDeleted: {
-              $ne: true,
-            },
+            _vfpDeleted: { $ne: true },
           },
           {
-            projection: {
-              LCODE: 1,
-              SNO: 1,
-              REMARK: 1,
-            },
+            projection: { LCODE: 1, SNO: 1, REMARK: 1 },
           }
         );
 
-      const remark =
-        clean(
-          supportRow?.REMARK
-        );
-
-      if (remark) {
-        /*
-         * Extract email from REMARK.
-         *
-         * Example:
-         *
-         * MAIL@VKPUBLICATIONS.COM
-         */
-
-        const emailMatch =
-          remark.match(
-            /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i
-          );
-
-        customerEmail =
-          emailMatch?.[0]
-            ?.trim()
-            .toUpperCase() || "";
+        const remark = clean(supportRow?.REMARK);
+        if (remark) {
+          const emailMatch = remark.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i);
+          if (emailMatch?.[0]) {
+            customerEmail = emailMatch[0].trim().toUpperCase();
+          }
+        }
+      } catch (err) {
+        console.warn("Support email lookup error:", err);
       }
+    }
 
-      /* ------------------------------------------------------
-         DEBUG
-      ------------------------------------------------------ */
+    /* --------------------------------------------------------
+       ORDER TERRITORY CODES & SALETYPE
+    -------------------------------------------------------- */
+    const orderState1 = clean(order?.STATE1);
+    const orderState2 = clean(order?.STATE2);
+    const orderZone = clean(order?.ZONE);
+    const orderCity = clean(order?.CITY);
+    const orderArea = clean(order?.AREA);
+    const orderStation = clean(order?.STATION);
+    const orderRoute = firstValue(order?.ROUTE, order?.ROUT);
 
-      console.log(
-        "======================================"
-      );
+    const territoryCodes = Array.from(
+      new Set(
+        [
+          orderState1,
+          orderState2,
+          orderZone,
+          orderCity,
+          orderArea,
+          orderStation,
+          orderRoute,
+        ]
+          .map((v) => clean(v).toUpperCase())
+          .filter(Boolean)
+      )
+    );
 
-      console.log(
-        "MARG CUSTOMER SUPPORT EMAIL"
-      );
+    const saleTypeQuery: any = {
+      $or: [
+        ...(territoryCodes.length ? [{ SCODE: { $in: territoryCodes } }] : []),
+        { SGCODE: "STATE1" },
+        { SGCODE: "STATE2" },
+        { SGCODE: "ROUT" },
+        { SGCODE: "ROUTE" },
+      ],
+    };
 
-      console.log(
-        "ORDER ORDNO:",
-        customerOrdno
-      );
+    const saleTypes: any[] = await SaleType.find(
+      saleTypeQuery,
+      { SCODE: 1, SGCODE: 1, SNAME: 1, TGCODE: 1 }
+    ).lean();
+
+    const saleTypeMap = new Map<string, any>();
+    for (const saleType of saleTypes) {
+      const code = clean(saleType.SCODE).toUpperCase();
+      const sgcode = clean(saleType.SGCODE).toUpperCase();
+      if (code && sgcode) saleTypeMap.set(`${sgcode}:${code}`, saleType);
+    }
+
+    const gstStateMap = new Map<string, string>();
+    for (const saleType of saleTypes) {
+      const sgcode = clean(saleType.SGCODE).toUpperCase();
+      const tgcode = clean(saleType.TGCODE);
+      if (sgcode !== "STATE1" || !tgcode) continue;
+
+      const prefix = tgcode.substring(0, 2);
+      const name = firstValue(saleType.SNAME);
+      if (prefix && name && !gstStateMap.has(prefix)) {
+        gstStateMap.set(prefix, name);
+      }
+    }
+
+    const resolveStateFromGst = (gstNo: any): string => {
+      const gst = clean(gstNo).toUpperCase();
+      return gst.length >= 2 ? gstStateMap.get(gst.substring(0, 2)) || "" : "";
+    };
 
     /* ------------------------------------------------------ */
     /* PRIORITY: saved Customer value -> GST -> ORDER/SALETYPE */
@@ -490,6 +432,8 @@ export async function GET(
       ...customerDoc,
       ...groupInfo,
       STATUS: status,
+      EMAIL: customerEmail || customerDoc.MAILNAM || "",
+      MAILNAM: customerEmail || customerDoc.MAILNAM || "",
       state1,
       country,
       ZONE: zone,
@@ -552,95 +496,28 @@ export async function PATCH(
     await connectDB();
     const { id } = await params;
 
-      console.log(
-        "SUPPORT REMARK:",
-        supportRow?.REMARK || null
-      );
-
-      console.log(
-        "FINAL CUSTOMER EMAIL:",
-        customerEmail ||
-          "NOT_FOUND"
-      );
-
-      console.log(
-        "======================================"
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return NextResponse.json(
+        { success: false, message: "Invalid customer id" },
+        { status: 400 }
       );
     }
 
-    /* --------------------------------------------------------
-       ORDER TERRITORY VALUES
-    -------------------------------------------------------- */
+    const restriction = await getMrTerritoryRestriction();
+    const existingCustomer: any = await Customer.findById(id).lean();
 
-    const orderState1 =
-      clean(order?.STATE1);
-
-    const orderState2 =
-      clean(order?.STATE2);
-
-    const orderZone =
-      clean(order?.ZONE);
-
-    const orderCity =
-      clean(order?.CITY);
-
-    const orderArea =
-      clean(order?.AREA);
-
-    const orderStation =
-      clean(order?.STATION);
-
-    const orderRoute =
-      firstValue(
-        order?.ROUTE,
-        order?.ROUT
+    if (!existingCustomer) {
+      return NextResponse.json(
+        { success: false, message: "Customer not found" },
+        { status: 404 }
       );
+    }
 
-    /* --------------------------------------------------------
-       SALE TYPE LOOKUP
-    -------------------------------------------------------- */
-
-    const territoryCodes =
-      Array.from(
-        new Set(
-          [
-            orderState1,
-            orderState2,
-            orderZone,
-            orderCity,
-            orderArea,
-            orderStation,
-            orderRoute,
-          ]
-            .map((value) =>
-              clean(value).toUpperCase()
-            )
-            .filter(Boolean)
-        )
+    if (restriction.isMrRestricted && !restriction.isPartyAllowed(existingCustomer)) {
+      return NextResponse.json(
+        { success: false, message: "Customer not found" },
+        { status: 404 }
       );
-
-    let saleTypeRows: any[] = [];
-
-    if (territoryCodes.length) {
-      saleTypeRows =
-        (await SaleType.find({
-          $or: [
-            {
-              SCODE: {
-                $in: territoryCodes,
-              },
-            },
-            {
-              code: {
-                $in: territoryCodes,
-              },
-            },
-          ],
-        })
-          .select(
-            "SCODE SNAME STYPE code name type"
-          )
-          .lean()) as any[];
     }
 
     const body = await request.json();
@@ -776,7 +653,7 @@ export async function PATCH(
         { success: false, message: "No valid fields received to update" },
         { status: 400 }
       );
-    };
+    }
 
     const updatedCustomer: any = await Customer.findByIdAndUpdate(
       id,
@@ -784,15 +661,33 @@ export async function PATCH(
       { new: true, runValidators: true, strict: false }
     ).lean();
 
-    const state2Name =
-      getSaleTypeName(
-        orderState2,
-        "STATE2"
-      ) ||
-      getSaleTypeName(
-        orderState2,
-        ""
+    if (!updatedCustomer) {
+      return NextResponse.json(
+        { success: false, message: "Customer not found" },
+        { status: 404 }
       );
+    }
+
+    // Also update peer financial year records if ORDNO/GSTNO matches
+    if (existingCustomer.ORDNO || existingCustomer.GSTNO) {
+      const peerFilter: any = { _id: { $ne: id } };
+      const orList: any[] = [];
+      if (clean(existingCustomer.ORDNO)) {
+        orList.push({ ORDNO: clean(existingCustomer.ORDNO), PARNAM: clean(existingCustomer.PARNAM) });
+      }
+      if (clean(existingCustomer.GSTNO) && clean(existingCustomer.GSTNO).length >= 10) {
+        orList.push({ GSTNO: clean(existingCustomer.GSTNO) });
+      }
+      if (orList.length > 0) {
+        peerFilter.$or = orList;
+        const { BALANCE, FINAL, ...peerUpdates } = updates;
+        if (Object.keys(peerUpdates).length > 0) {
+          await Customer.updateMany(peerFilter, { $set: peerUpdates }).catch((err) =>
+            console.error("Peer customer update error:", err)
+          );
+        }
+      }
+    }
 
     // Check if updated values breach credit limit and record Notification
     const currentBal = Number(updatedCustomer.BALANCE ?? updatedCustomer.FINAL ?? 0);
@@ -830,21 +725,13 @@ export async function PATCH(
       isCreditLimitExceeded,
     });
   } catch (error: any) {
-    console.error(
-      "GET /api/customers/[id] ERROR:",
-      error
-    );
-
+    console.error("PATCH /api/customers/[id] error:", error);
     return NextResponse.json(
       {
         success: false,
-        message:
-          error?.message ||
-          "Failed to fetch customer",
+        message: error?.message || "Failed to save customer details",
       },
-      {
-        status: 500,
-      }
+      { status: 500 }
     );
   }
 }

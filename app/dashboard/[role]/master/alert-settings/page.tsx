@@ -566,7 +566,7 @@ export default function MasterAlertSettingsPage() {
               type="email"
               value={form.adminNotificationEmail}
               onChange={(e) => setForm({ ...form, adminNotificationEmail: e.target.value })}
-              placeholder="Leave blank OR enter your Gmail (e.g. abhishek.mabsolinfotech@gmail.com)"
+              placeholder="Leave blank OR enter your Gmail (e.g. abc@gmail.com)"
               className="flex-1 px-4 py-2.5 rounded-xl border border-blue-300 bg-white text-xs font-semibold text-slate-800 placeholder:text-slate-400 focus:ring-2 focus:ring-blue-500 shadow-xs"
             />
             <button

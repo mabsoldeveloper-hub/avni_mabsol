@@ -5,7 +5,7 @@
 import { useEffect, useState, useMemo } from "react";
 
 import Link from "next/link";
-
+import { useParams } from "next/navigation";
 import {
 
   FaUsers,
@@ -88,7 +88,13 @@ type MrTerritoryInfo = {
 
 };
 
-
+interface YearBreakdownItem {
+  fyCode: string;
+  fyName: string;
+  balance: number;
+  _id?: string;
+  _vfpTable?: string;
+}
 
 interface Customer {
 
@@ -102,7 +108,7 @@ interface Customer {
   EMAIL?: string;
 
   PHONE1?: string;
-
+  PHONE2?: string;
   CITY?: string;
 
   GSTNO?: string;
@@ -112,7 +118,11 @@ interface Customer {
   BALANCE?: number;
 
   CREDIT?: number;
-
+  DUEDAYS?: number;
+  DAYS?: number;
+  BILL_LIMIT?: number | string;
+  BILLLIMIT?: number | string;
+  MAXBILLS?: number | string;
   STATUS?: string;
 
   REF?: string;
@@ -120,7 +130,11 @@ interface Customer {
   GROUPNAME?: string;
 
   SCODE?: string;
-
+  fyCode?: string;
+  fyName?: string;
+  yearsCount?: number;
+  yearBreakdown?: YearBreakdownItem[];
+  _allIds?: string[];
 }
 
 
@@ -236,11 +250,10 @@ const columnHelper = createColumnHelper<Customer>();
 
 
 export default function CustomerPage() {
-
+  const params = useParams();
+  const role = (params?.role as string) || "admin";
   const { selectedCompany } = useCompany();
-
-  const { selectedFY } = useFinancialYear();
-
+  const { fyList, selectedFY, setSelectedFY } = useFinancialYear();
   const [customers, setCustomers] = useState<Customer[]>([]);
 
   const [loading, setLoading] = useState(true);
@@ -250,32 +263,18 @@ export default function CustomerPage() {
   const [statusFilter, setStatusFilter] = useState<"All" | "Active" | "Inactive" | "Outstanding">("All");
 
   const [groupFilter, setGroupFilter] = useState("All");
-
+  const [viewMode, setViewMode] = useState<"consolidated" | "yearwise">("consolidated");
   const [sorting, setSorting] = useState<SortingState>([]);
 
   const [mrTerritoryInfo, setMrTerritoryInfo] = useState<MrTerritoryInfo | null>(null);
 
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
 
-
-
-
-
   useEffect(() => {
 
     loadMrTerritoryInfo();
 
   }, []);
-
-
-
-  useEffect(() => {
-
-    loadCustomers();
-
-  }, [selectedCompany?._id, selectedFY?._id]);
-
-
 
   const loadMrTerritoryInfo = async () => {
 
@@ -311,12 +310,6 @@ export default function CustomerPage() {
 
   };
 
-
-
-
-
-
-
   const loadCustomers = async () => {
 
     try {
@@ -328,7 +321,11 @@ export default function CustomerPage() {
       if (selectedCompany?._id) params.set("companyId", selectedCompany._id);
 
       if (selectedFY?._id) params.set("fyId", selectedFY._id);
-
+      if (viewMode === "yearwise") {
+        params.set("mergeYears", "false");
+      } else {
+        params.set("mergeYears", "true");
+      }
       const res = await fetch(`/api/customers?${params.toString()}`);
 
       const data = await res.json();
@@ -347,7 +344,9 @@ export default function CustomerPage() {
 
   };
 
-
+  useEffect(() => {
+    loadCustomers();
+  }, [selectedCompany?._id, selectedFY?._id, viewMode]);
 
   const groups = useMemo(() => {
 
@@ -383,15 +382,10 @@ export default function CustomerPage() {
 
   }, [customers, statusFilter, groupFilter]);
 
-
-
-  const totalCustomers = customers.length;
-
-  const activeCustomers = customers.filter((c) => c.STATUS === "Y").length;
-
-  const totalOutstanding = customers.reduce((sum, c) => sum + (Number(c.BALANCE) || 0), 0);
-
-  const totalCredit = customers.reduce((sum, c) => sum + (Number(c.CREDIT) || 0), 0);
+  const totalCustomers = preFiltered.length;
+  const activeCustomers = preFiltered.filter((c) => c.STATUS === "Y").length;
+  const totalOutstanding = preFiltered.reduce((sum, c) => sum + (Number(c.BALANCE) || 0), 0);
+  const totalCredit = preFiltered.reduce((sum, c) => sum + (Number(c.CREDIT) || 0), 0);
 
 
 
@@ -418,53 +412,110 @@ export default function CustomerPage() {
       columnHelper.accessor("PARNAM", {
 
         header: "Customer Name",
-
-        cell: (info) => (
-
-          <div>
-
-            <div className="font-semibold text-slate-800">{info.getValue() || "-"}</div>
-
-            <div className="text-xs text-slate-500">{info.row.original.EMAIL || info.row.original.MAILNAM || "No email"}</div>
-
-          </div>
-
-        ),
-
+        cell: (info) => {
+          const c = info.row.original;
+          return (
+            <div className="min-w-[240px] whitespace-nowrap">
+              <div className="font-semibold text-slate-800 text-sm flex items-center gap-2">
+                <span>{info.getValue() || "-"}</span>
+                {viewMode === "consolidated" && (c.yearsCount ?? 0) > 1 && (
+                  <span
+                    className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-200/80 shadow-2xs"
+                    title={`Merged across ${c.yearsCount} financial years`}
+                  >
+                    {c.yearsCount} Yrs
+                  </span>
+                )}
+              </div>
+              <div className="text-xs text-slate-500 mt-0.5">{c.MAILNAM || "No email"}</div>
+            </div>
+          );
+        },
       }),
+
+      ...(viewMode === "yearwise"
+        ? [
+            columnHelper.accessor((row) => row.fyName || row.fyCode || "-", {
+              id: "fyName",
+              header: "Financial Year",
+              cell: (info) => (
+                <span className="inline-flex items-center gap-1 font-semibold text-indigo-800 bg-indigo-50 px-2.5 py-1 rounded-lg text-xs border border-indigo-200/80 whitespace-nowrap">
+                  📅 {info.getValue()}
+                </span>
+              ),
+            }),
+          ]
+        : []),
 
       columnHelper.accessor((row) => row.PHONE1 || row.REF, {
 
         id: "contact",
 
         header: "Contact",
-
-        cell: (info) => info.getValue() || "-",
-
+        cell: (info) => <span className="whitespace-nowrap">{info.getValue() || "-"}</span>,
       }),
 
       columnHelper.accessor("CITY", {
 
         header: "City",
-
-        cell: (info) => info.getValue() || "-",
-
+        cell: (info) => <span className="whitespace-nowrap">{info.getValue() || "-"}</span>,
       }),
 
       columnHelper.accessor("GSTNO", {
 
         header: "GST No",
-
-        cell: (info) => info.getValue() || "-",
-
+        cell: (info) => <span className="font-mono text-xs whitespace-nowrap">{info.getValue() || "-"}</span>,
       }),
 
       columnHelper.accessor("DLNO", {
 
         header: "DL No",
+        cell: (info) => <span className="text-xs whitespace-nowrap">{info.getValue() || "-"}</span>,
+      }),
+      columnHelper.accessor("CREDIT", {
+        header: "Credit Limit",
+        cell: (info) => {
+          const credit = Number(info.getValue() || 0);
+          const balance = Number(info.row.original.BALANCE || 0);
+          const isOverLimit = credit > 0 && balance > credit;
 
-        cell: (info) => info.getValue() || "-",
-
+          return (
+            <div className="whitespace-nowrap">
+              <div className="font-semibold text-slate-800">
+                {credit > 0 ? formatCurrency(credit) : <span className="text-slate-400 font-normal">₹0</span>}
+              </div>
+              {isOverLimit && (
+                <span className="inline-flex items-center gap-1 text-[10px] font-bold text-rose-600 bg-rose-50 border border-rose-200 px-1.5 py-0.5 rounded mt-0.5">
+                  ⚠️ Over Limit
+                </span>
+              )}
+            </div>
+          );
+        },
+      }),
+      columnHelper.accessor((row) => row.DUEDAYS || row.DAYS || 0, {
+        id: "dayLimit",
+        header: "Day Limit",
+        cell: (info) => {
+          const days = Number(info.getValue() || 0);
+          return (
+            <span className="inline-flex items-center gap-1 font-semibold text-slate-700 bg-amber-50 text-amber-800 px-2.5 py-1 rounded-lg text-xs border border-amber-200/80 whitespace-nowrap">
+              {days > 0 ? `${days} Days` : "0 Days"}
+            </span>
+          );
+        },
+      }),
+      columnHelper.accessor((row) => row.BILL_LIMIT ?? row.BILLLIMIT ?? row.MAXBILLS ?? 5, {
+        id: "billLimit",
+        header: "Bill Limit",
+        cell: (info) => {
+          const bills = info.getValue();
+          return (
+            <span className="inline-flex items-center gap-1 font-semibold text-slate-700 bg-purple-50 text-purple-800 px-2.5 py-1 rounded-lg text-xs border border-purple-200/80 whitespace-nowrap">
+              {bills} Bills
+            </span>
+          );
+        },
       }),
 
       columnHelper.accessor("BALANCE", {
@@ -474,15 +525,28 @@ export default function CustomerPage() {
         cell: (info) => {
 
           const v = Number(info.getValue() || 0);
+          const c = info.row.original;
+          const yearBreakdown = c.yearBreakdown || [];
+          const hasMultipleYears = viewMode === "consolidated" && yearBreakdown.length > 1;
 
           return (
-
-            <span className={`font-semibold ${v > 0 ? "text-rose-600" : "text-emerald-600"}`}>
-
-              {formatCurrency(v)}
-
-            </span>
-
+            <div className="whitespace-nowrap">
+              <span className={`font-semibold ${v > 0 ? "text-rose-600" : "text-emerald-600"}`}>
+                {formatCurrency(v)}
+              </span>
+              {hasMultipleYears && (
+                <div
+                  className="mt-0.5"
+                  title={yearBreakdown
+                    .map((y) => `${y.fyName || y.fyCode}: ${formatCurrency(y.balance)}`)
+                    .join(" | ")}
+                >
+                  <span className="inline-flex items-center gap-1 text-[10px] font-medium text-indigo-700 bg-indigo-50 px-1.5 py-0.5 rounded border border-indigo-200/70 cursor-help">
+                    {yearBreakdown.length} Yrs Merged
+                  </span>
+                </div>
+              )}
+            </div>
           );
 
         },
@@ -496,17 +560,13 @@ export default function CustomerPage() {
         cell: (info) =>
 
           info.getValue() === "Y" ? (
-
-            <span className="inline-flex items-center rounded-full bg-emerald-100/80 text-emerald-700 text-xs font-medium px-2.5 py-1 ring-1 ring-emerald-300/50">
-
+            <span className="inline-flex items-center rounded-full bg-emerald-100/80 text-emerald-700 text-xs font-medium px-2.5 py-1 ring-1 ring-emerald-300/50 whitespace-nowrap">
               Active
 
             </span>
 
           ) : (
-
-            <span className="inline-flex items-center rounded-full bg-rose-100/80 text-rose-700 text-xs font-medium px-2.5 py-1 ring-1 ring-rose-300/50">
-
+            <span className="inline-flex items-center rounded-full bg-rose-100/80 text-rose-700 text-xs font-medium px-2.5 py-1 ring-1 ring-rose-300/50 whitespace-nowrap">
               Inactive
 
             </span>
@@ -526,15 +586,11 @@ export default function CustomerPage() {
           const c = info.row.original;
 
           return (
-
-            <div className="flex gap-2 justify-center">
-
+            <div className="flex items-center gap-1.5 justify-center whitespace-nowrap">
               <Link
-
-                href={`/dashboard/customers/view/${c._id}`}
-
-                className="rounded-lg bg-[#343872]/10 text-[#343872] text-xs font-medium px-3 py-1.5 hover:bg-[#343872]/20 transition-colors"
-
+                href={`/dashboard/${role}/customers/view/${c._id}`}
+                className="rounded-lg bg-[#343872]/10 text-[#343872] text-xs font-semibold px-2.5 py-1.5 hover:bg-[#343872]/20 transition-colors shadow-2xs"
+                title="View Customer Profile"
               >
 
                 View
@@ -542,23 +598,28 @@ export default function CustomerPage() {
               </Link>
 
               <Link
-
-                href={`/dashboard/customers/ledger/${c._id}`}
-
-                className="rounded-lg bg-emerald-100/80 text-emerald-700 text-xs font-medium px-3 py-1.5 hover:bg-emerald-200/80 transition-colors"
-
+                href={`/dashboard/${role}/customers/ledger/${c._id}`}
+                className="rounded-lg bg-emerald-100/80 text-emerald-700 text-xs font-semibold px-2.5 py-1.5 hover:bg-emerald-200/80 transition-colors shadow-2xs"
+                title="View Customer Ledger"
               >
 
                 Ledger
 
               </Link>
-
-              <button className="rounded-lg bg-amber-100/80 text-amber-700 text-xs font-medium px-3 py-1.5 hover:bg-amber-200/80 transition-colors">
-
+              <Link
+                href={`/dashboard/${role}/customers/edit/${c._id}`}
+                className="rounded-lg bg-amber-100/80 text-amber-800 text-xs font-semibold px-2.5 py-1.5 hover:bg-amber-200/80 transition-colors shadow-2xs"
+                title="Edit Customer Profile & Alert Limits"
+              >
                 Edit
-
-              </button>
-
+              </Link>
+              <Link
+                href={`/dashboard/${role}/customers/alert/${c._id}`}
+                className="rounded-lg bg-rose-100/80 text-rose-700 text-xs font-semibold px-2.5 py-1.5 hover:bg-rose-200/80 transition-colors shadow-2xs"
+                title="Send Account & Payment Alert"
+              >
+                Alert
+              </Link>
             </div>
 
           );
@@ -568,9 +629,7 @@ export default function CustomerPage() {
       }),
 
     ],
-
-    []
-
+    [role, viewMode]
   );
 
 
@@ -728,11 +787,21 @@ export default function CustomerPage() {
       <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
 
         <div>
-
-          <h2 className="text-2xl font-bold text-slate-800">Customer Master</h2>
-
-          <p className="text-sm text-slate-500 mt-0.5">Manage all customers from one place</p>
-
+          <div className="flex items-center gap-2.5">
+            <h2 className="text-2xl font-bold text-slate-800">Customer Master</h2>
+            {viewMode === "consolidated" ? (
+              <span className="text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200">
+                Consolidated Multi-Year
+              </span>
+            ) : (
+              <span className="text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
+                Year-wise Rows
+              </span>
+            )}
+          </div>
+          <p className="text-sm text-slate-500 mt-0.5">
+            Manage all customers from one place · {viewMode === "consolidated" ? "Merged Outstanding across all financial years" : "Individual records shown year-wise"}
+          </p>
         </div>
 
 
@@ -803,7 +872,53 @@ export default function CustomerPage() {
 
           </div>
 
+          {/* Financial Year Selector */}
+          <select
+            className="rounded-xl bg-white/70 border border-white/70 px-3 py-2.5 text-sm font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#343872]/40 cursor-pointer"
+            value={selectedFY?._id || "ALL"}
+            onChange={(e) => {
+              const targetId = e.target.value;
+              const found = fyList.find((f) => f._id === targetId);
+              if (found) {
+                setSelectedFY(found);
+              }
+            }}
+            title="Filter by Financial Year"
+          >
+            {fyList.map((f) => (
+              <option key={f._id} value={f._id}>
+                {f.isAll ? "🏢 All Financial Years" : `📅 FY ${f.fyName.replace(/^FY\s*/i, "")}`}
+              </option>
+            ))}
+          </select>
 
+          {/* View Mode Toggle (Consolidated vs Year-wise Rows) */}
+          <div className="inline-flex items-center rounded-xl bg-slate-100/90 p-1 border border-slate-200/80 shadow-2xs">
+            <button
+              type="button"
+              onClick={() => setViewMode("consolidated")}
+              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer flex items-center gap-1.5 ${
+                viewMode === "consolidated"
+                  ? "bg-white text-indigo-900 shadow-sm"
+                  : "text-slate-600 hover:text-slate-900"
+              }`}
+              title="Consolidated view: merge duplicate rows across financial years with merged outstanding balance"
+            >
+              <span>🔗 Merged (All Years)</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setViewMode("yearwise")}
+              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer flex items-center gap-1.5 ${
+                viewMode === "yearwise"
+                  ? "bg-white text-indigo-900 shadow-sm"
+                  : "text-slate-600 hover:text-slate-900"
+              }`}
+              title="Year-wise view: show individual customer rows for each financial year"
+            >
+              <span>📑 Year-wise Rows</span>
+            </button>
+          </div>
 
           <select
 
@@ -906,9 +1021,7 @@ export default function CustomerPage() {
         <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-white/40 via-white/5 to-transparent" />
 
         <div className="relative overflow-x-auto">
-
-          <table className="w-full text-sm">
-
+          <table className="w-full min-w-[1350px] text-sm">
             <thead>
 
               {table.getHeaderGroups().map((headerGroup) => (

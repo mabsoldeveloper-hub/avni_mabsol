@@ -9,7 +9,8 @@ import AccountGroup from "@/models/AccountGroup";
 import Order from "@/models/Order";
 
 import SaleType from "@/models/SaleType";
-
+import Pendings from "@/models/Pendings";
+import Notification from "@/models/Notification";
 import mongoose from "mongoose";
 
 import { getMrTerritoryRestriction } from "@/lib/mrTerritoryHelper";
@@ -338,15 +339,218 @@ export async function GET(
         customerOrdno
       );
 
-      console.log(
-        "SUPPORT LCODE:",
-        supportRow?.LCODE || null
-      );
+    /* ------------------------------------------------------ */
+    /* PRIORITY: saved Customer value -> GST -> ORDER/SALETYPE */
+    /* ------------------------------------------------------ */
+    const state1 =
+      clean(customerDoc.state1) ||
+      resolveStateFromGst(customerDoc.GSTNO) ||
+      resolveSaleTypeName(orderState1, "STATE1", saleTypeMap) ||
+      clean(customerDoc.STATE);
 
-      console.log(
-        "SUPPORT SNO:",
-        supportRow?.SNO ?? null
-      );
+    const country =
+      clean(customerDoc.country) ||
+      resolveSaleTypeName(orderState2, "STATE2", saleTypeMap) ||
+      "India";
+
+    const zone =
+      clean(customerDoc.ZONE) ||
+      resolveSaleTypeName(orderZone, "ZONE", saleTypeMap);
+
+    const city =
+      clean(customerDoc.CITY) ||
+      resolveSaleTypeName(orderCity, "CITY", saleTypeMap);
+
+    const area =
+      clean(customerDoc.Area) ||
+      resolveSaleTypeName(orderArea, "AREA", saleTypeMap);
+
+    const station =
+      clean(customerDoc.station) ||
+      resolveSaleTypeName(orderStation, "STATION", saleTypeMap);
+
+    const route =
+      clean(customerDoc.route) ||
+      resolveSaleTypeName(orderRoute, "ROUTE", saleTypeMap) ||
+      resolveSaleTypeName(orderRoute, "ROUT", saleTypeMap);
+
+    const status =
+      customerDoc.STATUS === "N" || customerDoc.SALDR === "N" ? "N" : "Y";
+
+    /* ------------------------------------------------------ */
+    /* Financial Health: Credit Limit, Days Remaining, Bill Limit Alerts */
+    /* ------------------------------------------------------ */
+    const creditLimit = Number(customerDoc.CREDIT ?? 0);
+    const outstandingBalance = Number(customerDoc.BALANCE ?? customerDoc.FINAL ?? 0);
+    const dueDaysLimit = Number(customerDoc.DUEDAYS ?? customerDoc.DAYS ?? 0);
+    const billLimit = Number(
+      customerDoc.BILL_LIMIT ?? customerDoc.BILLLIMIT ?? customerDoc.MAXBILLS ?? 0
+    );
+
+    // 1. Credit Limit Exceeded Check
+    const isCreditLimitExceeded = creditLimit > 0 && outstandingBalance > creditLimit;
+    const excessCreditAmount = isCreditLimitExceeded ? Math.round(outstandingBalance - creditLimit) : 0;
+    const creditUtilization = creditLimit > 0 ? Math.round((outstandingBalance / creditLimit) * 100) : 0;
+
+    let totalPendingBills = 0;
+    let overdueBillsCount = 0;
+    let maxOverdueDays = 0;
+    let overdueAmount = 0;
+    let minDaysRemaining = 999;
+    let oldestPendingBillNo = "";
+    let oldestBillDate = "";
+
+    try {
+      if (orderKeys.length) {
+        const pendingInvoices: any[] = await Pendings.find({
+          ORD: { $in: orderKeys },
+        }).sort({ DDATE: 1 }).lean();
+
+        const todayMs = Date.now();
+        for (const inv of pendingInvoices) {
+          const bal = Math.abs(Number(inv.BALANCE ?? 0));
+          if (bal > 0) {
+            totalPendingBills++;
+            if (!oldestPendingBillNo) {
+              oldestPendingBillNo = String(inv.VCN || inv.VOUCHER || "");
+              oldestBillDate = String(inv.DDATE || "");
+            }
+
+            let billOverdueDays = 0;
+            if (inv.DDATE) {
+              const billMs = new Date(inv.DDATE).getTime();
+              const diffDays = Math.floor((todayMs - billMs) / (1000 * 60 * 60 * 24));
+              const allowedDays = dueDaysLimit > 0 ? dueDaysLimit : (Number(inv.DUEDAYS) || 0);
+
+              const remaining = allowedDays - diffDays;
+              if (remaining < minDaysRemaining) {
+                minDaysRemaining = remaining;
+              }
+
+              if (diffDays > allowedDays) {
+                billOverdueDays = diffDays - allowedDays;
+              }
+            }
+
+            if (billOverdueDays > 0 || Number(inv.DUEDAYS || 0) > 0) {
+              overdueBillsCount++;
+              overdueAmount += bal;
+              if (billOverdueDays > maxOverdueDays) {
+                maxOverdueDays = billOverdueDays;
+              }
+            }
+          }
+        }
+      }
+    } catch (pendingsErr) {
+      console.warn("Error calculating pendings overdue:", pendingsErr);
+    }
+
+    if (minDaysRemaining === 999) {
+      minDaysRemaining = dueDaysLimit;
+    }
+
+    // 2. Days Kam Bache / Days Expiring Soon Check
+    const isDaysKamBache = dueDaysLimit > 0 && minDaysRemaining <= 3 && minDaysRemaining >= 0 && totalPendingBills > 0;
+    const isDaysExpired = maxOverdueDays > 0;
+    const isDayLimitExceeded = isDaysKamBache || isDaysExpired;
+
+    // 3. Bill Limit / Number of Bills Exceeded Check
+    const isBillLimitExceeded = billLimit > 0 && totalPendingBills > billLimit;
+    const excessBillsCount = isBillLimitExceeded ? totalPendingBills - billLimit : 0;
+
+    const financialAlerts = {
+      // Credit Limit
+      creditLimit,
+      outstandingBalance,
+      isCreditLimitExceeded,
+      excessCreditAmount,
+      creditUtilization,
+
+      // Days Limit
+      dueDaysLimit,
+      minDaysRemaining: minDaysRemaining === 999 ? 0 : minDaysRemaining,
+      isDaysKamBache,
+      isDaysExpired,
+      isDayLimitExceeded,
+      maxOverdueDays,
+      overdueBillsCount,
+      overdueAmount,
+      oldestPendingBillNo,
+      oldestBillDate,
+
+      // Bill Limit
+      billLimit,
+      totalPendingBills,
+      isBillLimitExceeded,
+      excessBillsCount,
+    };
+
+    return NextResponse.json({
+      ...customerDoc,
+      ...groupInfo,
+      STATUS: status,
+      state1,
+      country,
+      ZONE: zone,
+      CITY: city,
+      Area: area,
+      station,
+      route,
+
+      /* Financial alerts */
+      financialAlerts,
+      isCreditLimitExceeded,
+      excessCreditAmount,
+      creditUtilization,
+      isDayLimitExceeded,
+      isDaysKamBache,
+      isDaysExpired,
+      minDaysRemaining: minDaysRemaining === 999 ? 0 : minDaysRemaining,
+      maxOverdueDays,
+      overdueAmount,
+      overdueBillsCount,
+      billLimit,
+      totalPendingBills,
+      isBillLimitExceeded,
+      excessBillsCount,
+
+      /* Original ORDER_K19 source codes retained for software logic/debugging. */
+      _orderTerritory: order
+        ? {
+            STATE1: orderState1,
+            STATE2: orderState2,
+            ZONE: orderZone,
+            CITY: orderCity,
+            AREA: orderArea,
+            STATION: orderStation,
+            ROUT: clean(order.ROUT),
+            ROUTE: clean(order.ROUTE),
+          }
+        : null,
+    });
+  } catch (error: any) {
+    console.error("GET /api/customers/[id] error:", error);
+    return NextResponse.json(
+      {
+        success: false,
+        message: error?.message || "Failed to fetch customer details",
+      },
+      { status: 500 }
+    );
+  }
+}
+
+/* ---------------------------------------------------------- */
+/* PATCH - Update customer details, credit limit, terms, etc. */
+/* ---------------------------------------------------------- */
+export async function PATCH(
+  request: Request,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    await connectDB();
+    const { id } = await params;
 
       console.log(
         "SUPPORT REMARK:",
@@ -439,85 +643,146 @@ export async function GET(
           .lean()) as any[];
     }
 
-    const saleTypeMap =
-      new Map<string, any>();
+    const body = await request.json();
 
-    for (const row of saleTypeRows) {
-      const code =
-        normalizeCode(
-          firstValue(
-            row?.SCODE,
-            row?.code
-          )
-        );
+    const numericFields = [
+      "CREDIT",
+      "DUEDAYS",
+      "DAYS",
+      "BILL_LIMIT",
+      "BILLLIMIT",
+      "MAXBILLS",
+      "BALANCE",
+      "DISCOUNT",
+      "OPNING",
+      "OPENING",
+      "CLBAL",
+      "DEBIT",
+      "FINAL",
+    ] as const;
 
-      const type =
-        normalizeCode(
-          firstValue(
-            row?.STYPE,
-            row?.type
-          )
-        );
+    const stringFields = [
+      "PARNAM",
+      "REF",
+      "PHONE1",
+      "PHONE2",
+      "MAILNAM",
+      "STATUS",
+      "PRICE",
+      "PARADD",
+      "PARADD2",
+      "PARADD3",
+      "CITY",
+      "STATE",
+      "state1",
+      "country",
+      "PINCODE",
+      "PIN",
+      "Area",
+      "AREA",
+      "station",
+      "route",
+      "ROUT",
+      "ZONE",
+      "GSTNO",
+      "DLNO",
+      "DLNO2",
+      "PANNO",
+      "FSSAINO",
+      "DSM",
+      "SALESMAN",
+      "ASM",
+      "RSM",
+      "COMPANY",
+      "TINNO",
+      "STAXNO",
+      "CSTNO",
+      "GCODE",
+      "SCODE",
+    ] as const;
 
-      if (!code) continue;
+    const updates: Record<string, any> = {};
 
-      saleTypeMap.set(
-        `${code}:${type}`,
-        row
-      );
-
-      if (!type) {
-        saleTypeMap.set(
-          `${code}:`,
-          row
-        );
+    // String fields
+    for (const field of stringFields) {
+      if (Object.prototype.hasOwnProperty.call(body, field)) {
+        updates[field] = clean(body[field]);
       }
     }
 
-    const getSaleTypeName = (
-      code: any,
-      type: any
-    ): string => {
-      const normalizedCode =
-        normalizeCode(code);
-
-      const normalizedType =
-        normalizeCode(type);
-
-      if (!normalizedCode) {
-        return "";
+    // Numeric fields
+    for (const field of numericFields) {
+      if (Object.prototype.hasOwnProperty.call(body, field)) {
+        const val = body[field];
+        if (val === "" || val === null || val === undefined) {
+          updates[field] = 0;
+        } else {
+          const num = Number(val);
+          updates[field] = isNaN(num) ? 0 : num;
+        }
       }
+    }
 
-      const exact =
-        saleTypeMap.get(
-          `${normalizedCode}:${normalizedType}`
-        );
+    // Field normalizations & synchronizations
+    if (Object.prototype.hasOwnProperty.call(body, "country") && !updates.country) {
+      updates.country = "India";
+    }
 
-      if (exact?.SNAME) {
-        return firstValue(
-          exact.SNAME
-        );
-      }
+    if (Object.prototype.hasOwnProperty.call(body, "DUEDAYS")) {
+      updates.DAYS = updates.DUEDAYS;
+    } else if (Object.prototype.hasOwnProperty.call(body, "DAYS")) {
+      updates.DUEDAYS = updates.DAYS;
+    }
 
-      const fallback =
-        saleTypeMap.get(
-          `${normalizedCode}:`
-        );
+    if (Object.prototype.hasOwnProperty.call(body, "BILL_LIMIT")) {
+      updates.BILLLIMIT = updates.BILL_LIMIT;
+      updates.MAXBILLS = updates.BILL_LIMIT;
+    } else if (Object.prototype.hasOwnProperty.call(body, "BILLLIMIT")) {
+      updates.BILL_LIMIT = updates.BILLLIMIT;
+      updates.MAXBILLS = updates.BILLLIMIT;
+    }
 
-      return firstValue(
-        fallback?.SNAME
+    if (Object.prototype.hasOwnProperty.call(body, "state1")) {
+      updates.STATE = updates.state1;
+    } else if (Object.prototype.hasOwnProperty.call(body, "STATE")) {
+      updates.state1 = updates.STATE;
+    }
+
+    if (Object.prototype.hasOwnProperty.call(body, "Area")) {
+      updates.AREA = updates.Area;
+    } else if (Object.prototype.hasOwnProperty.call(body, "AREA")) {
+      updates.Area = updates.AREA;
+    }
+
+    if (Object.prototype.hasOwnProperty.call(body, "route")) {
+      updates.ROUT = updates.route;
+    } else if (Object.prototype.hasOwnProperty.call(body, "ROUT")) {
+      updates.route = updates.ROUT;
+    }
+
+    if (Object.prototype.hasOwnProperty.call(body, "STATUS")) {
+      const st = String(body.STATUS || "").trim().toUpperCase();
+      updates.STATUS = (st === "Y" || st === "ACTIVE" || st === "YES") ? "Y" : "N";
+    }
+
+    if (Object.prototype.hasOwnProperty.call(body, "OPNING")) {
+      updates.OPENING = updates.OPNING;
+    } else if (Object.prototype.hasOwnProperty.call(body, "OPENING")) {
+      updates.OPNING = updates.OPENING;
+    }
+
+    if (!Object.keys(updates).length) {
+      return NextResponse.json(
+        { success: false, message: "No valid fields received to update" },
+        { status: 400 }
       );
     };
 
-    const state1Name =
-      getSaleTypeName(
-        orderState1,
-        "STATE1"
-      ) ||
-      getSaleTypeName(
-        orderState1,
-        ""
-      );
+    const updatedCustomer: any = await Customer.findByIdAndUpdate(
+      id,
+      { $set: updates },
+      { new: true, runValidators: true, strict: false }
+    ).lean();
 
     const state2Name =
       getSaleTypeName(
@@ -529,252 +794,41 @@ export async function GET(
         ""
       );
 
-    const zoneName =
-      getSaleTypeName(
-        orderZone,
-        "ZONE"
-      ) ||
-      getSaleTypeName(
-        orderZone,
-        ""
-      );
+    // Check if updated values breach credit limit and record Notification
+    const currentBal = Number(updatedCustomer.BALANCE ?? updatedCustomer.FINAL ?? 0);
+    const currentCredit = Number(updatedCustomer.CREDIT ?? 0);
+    const isCreditLimitExceeded = currentCredit > 0 && currentBal > currentCredit;
 
-    const cityName =
-      getSaleTypeName(
-        orderCity,
-        "CITY"
-      ) ||
-      getSaleTypeName(
-        orderCity,
-        ""
-      );
-
-    const areaName =
-      getSaleTypeName(
-        orderArea,
-        "AREA"
-      ) ||
-      getSaleTypeName(
-        orderArea,
-        ""
-      );
-
-    const stationName =
-      getSaleTypeName(
-        orderStation,
-        "STATION"
-      ) ||
-      getSaleTypeName(
-        orderStation,
-        ""
-      );
-
-    const routeName =
-      getSaleTypeName(
-        orderRoute,
-        "ROUTE"
-      ) ||
-      getSaleTypeName(
-        orderRoute,
-        ""
-      );
-
-    /* --------------------------------------------------------
-       FINAL CUSTOMER RESPONSE
-    -------------------------------------------------------- */
-
-    const result: any = {
-      ...customer,
-
-      _id:
-        String(
-          customer?._id || ""
-        ),
-
-      PARNAM:
-        customer?.PARNAM || "",
-
-      ORDNO:
-        customer?.ORDNO || "",
-
-      CODEP:
-        customer?.CODEP || "",
-
-      SCODE:
-        customer?.SCODE || "",
-
-      PHONE1:
-        customer?.PHONE1 || "",
-
-      PHONE2:
-        customer?.PHONE2 || "",
-
-      CITY:
-        customer?.CITY || "",
-
-      GSTNO:
-        customer?.GSTNO || "",
-
-      DLNO:
-        customer?.DLNO || "",
-
-      REF:
-        customer?.REF || "",
-
-      GROUPNAME:
-        customer?.GROUPNAME ||
-        accountGroup?.groupName ||
-        accountGroup?.name ||
-        "",
-
-      GROUPCODE:
-        customer?.GROUPCODE ||
-        customer?.SCODE ||
-        groupCode ||
-        "",
-
-      BALANCE:
-        customer?.BALANCE ?? 0,
-
-      CREDIT:
-        customer?.CREDIT ?? 0,
-
-      STATUS:
-        customer?.STATUS || "Y",
-
-      /* ======================================================
-         IMPORTANT MARG EMAIL
-
-         AEEG
-          ↓
-         SUPPORT LCODE AEEG
-          ↓
-         SNO 2
-          ↓
-         REMARK
-          ↓
-         MAIL@VKPUBLICATIONS.COM
-      ====================================================== */
-
-      EMAIL:
-        customerEmail,
-
-      /* ------------------------------------------------------
-         Territory values
-      ------------------------------------------------------ */
-
-      state1:
-        orderState1,
-
-      state2:
-        orderState2,
-
-      zone:
-        orderZone,
-
-      city:
-        orderCity,
-
-      area:
-        orderArea,
-
-      station:
-        orderStation,
-
-      route:
-        orderRoute,
-
-      /* ------------------------------------------------------
-         Territory names
-      ------------------------------------------------------ */
-
-      state1Name:
-        state1Name,
-
-      state2Name:
-        state2Name,
-
-      zoneName:
-        zoneName,
-
-      cityName:
-        cityName,
-
-      areaName:
-        areaName,
-
-      stationName:
-        stationName,
-
-      routeName:
-        routeName,
-
-      /* ------------------------------------------------------
-         Order territory
-      ------------------------------------------------------ */
-
-      orderTerritory: {
-        STATE1:
-          orderState1,
-
-        STATE2:
-          orderState2,
-
-        ZONE:
-          orderZone,
-
-        CITY:
-          orderCity,
-
-        AREA:
-          orderArea,
-
-        STATION:
-          orderStation,
-
-        ROUTE:
-          orderRoute,
-
-        state1:
-          state1Name,
-
-        state2:
-          state2Name,
-
-        zone:
-          zoneName,
-
-        city:
-          cityName,
-
-        area:
-          areaName,
-
-        station:
-          stationName,
-
-        route:
-          routeName,
-      },
-
-      /* ------------------------------------------------------
-         Account Group
-      ------------------------------------------------------ */
-
-      accountGroup:
-        accountGroup || null,
-    };
-
-    /* --------------------------------------------------------
-       RESPONSE
-    -------------------------------------------------------- */
-
-    return NextResponse.json(
-      result,
-      {
-        status: 200,
+    if (isCreditLimitExceeded) {
+      try {
+        await Notification.create({
+          title: `⚠️ Credit Limit Exceeded: ${updatedCustomer.PARNAM}`,
+          message: `Customer ${updatedCustomer.PARNAM} has exceeded credit limit! Balance: ₹${currentBal.toLocaleString("en-IN")}, Limit: ₹${currentCredit.toLocaleString("en-IN")}.`,
+          type: "CREDIT_LIMIT_EXCEEDED",
+          category: "FINANCIAL",
+          severity: "warning",
+          targetRole: "All",
+          entityId: String(id),
+          actionUrl: `/dashboard/customers/view/${id}`,
+          metadata: {
+            customerId: id,
+            customerName: updatedCustomer.PARNAM,
+            balance: currentBal,
+            creditLimit: currentCredit,
+            dueDays: updatedCustomer.DUEDAYS,
+          },
+        });
+      } catch (notifErr) {
+        console.warn("Failed to create credit limit notification:", notifErr);
       }
-    );
+    }
+
+    return NextResponse.json({
+      success: true,
+      message: "Customer details and limits updated successfully",
+      data: updatedCustomer,
+      isCreditLimitExceeded,
+    });
   } catch (error: any) {
     console.error(
       "GET /api/customers/[id] ERROR:",

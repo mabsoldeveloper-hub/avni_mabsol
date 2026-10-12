@@ -9,13 +9,26 @@ import {
   FaCopy,
   FaCheck,
   FaShieldAlt,
+  FaIdCard,
+  FaEdit,
+  FaPaperPlane,
+  FaExclamationTriangle,
+  FaCog,
 } from "react-icons/fa";
 
 interface Props {
   customer: any;
+  onEditClick?: () => void;
+  onSendAlertClick?: () => void;
+  onAutoAlertSettingsClick?: () => void;
 }
 
-export default function CustomerHeader({ customer }: Props) {
+export default function CustomerHeader({
+  customer,
+  onEditClick,
+  onSendAlertClick,
+  onAutoAlertSettingsClick,
+}: Props) {
   const [copiedField, setCopiedField] = useState<string | null>(null);
 
   const copyToClipboard = (text: string, fieldName: string) => {
@@ -77,6 +90,13 @@ export default function CustomerHeader({ customer }: Props) {
                   <FaShieldAlt size={10} />
                   {isActive ? "Active Customer" : "Inactive Customer"}
                 </span>
+
+                {(customer.isCreditLimitExceeded || (Number(customer.CREDIT) > 0 && Number(customer.BALANCE) > Number(customer.CREDIT))) && (
+                  <span className="inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-bold bg-rose-500/15 text-rose-700 ring-1 ring-rose-500/30 animate-pulse">
+                    <FaExclamationTriangle size={10} />
+                    Limit Exceeded
+                  </span>
+                )}
               </div>
 
               <div className="flex items-center gap-3 mt-1 text-xs text-slate-500 flex-wrap">
@@ -97,7 +117,8 @@ export default function CustomerHeader({ customer }: Props) {
             </div>
           </div>
 
-          <div className="flex items-center gap-2 self-stretch sm:self-auto print:hidden">
+          {/* Quick Contact & Edit Actions */}
+          <div className="flex items-center gap-2 self-stretch sm:self-auto print:hidden flex-wrap">
             {customer.PHONE1 && (
               <a
                 href={`tel:${customer.PHONE1}`}
@@ -117,6 +138,31 @@ export default function CustomerHeader({ customer }: Props) {
                 <span>Email</span>
               </a>
             )}
+
+
+
+            {/* {onSendAlertClick && (
+              <button
+                type="button"
+                onClick={onSendAlertClick}
+                className="flex-1 sm:flex-initial inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold bg-rose-500/15 text-rose-700 border border-rose-500/30 hover:bg-rose-600 hover:text-white transition-all duration-200 shadow-sm cursor-pointer"
+                title="Send Alert to Customer"
+              >
+                <FaPaperPlane size={11} />
+                <span>Send Alert</span>
+              </button>
+            )} */}
+
+            {/* {onEditClick && (
+              <button
+                type="button"
+                onClick={onEditClick}
+                className="flex-1 sm:flex-initial inline-flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold bg-gradient-to-r from-amber-500 to-orange-500 text-white shadow-md shadow-amber-500/20 hover:shadow-lg hover:shadow-amber-500/35 hover:-translate-y-0.5 transition-all duration-200 cursor-pointer"
+              >
+                <FaEdit size={12} />
+                <span>Edit Profile & Limits</span>
+              </button>
+            )} */}
           </div>
         </div>
 

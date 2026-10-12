@@ -31,14 +31,20 @@ import { DEFAULT_ACCESS_DAYS } from "@/lib/constants/superAdmin.constant";
 import { SESSION_TIMEOUT_PRESETS, DEFAULT_USER_SESSION_HOURS } from "@/lib/constants/session.constant";
 
 const SYSTEM_MODULES = [
-  { id: "billing", name: "Billing & Invoicing", desc: "GST sales, invoices, and credit notes" },
-  { id: "inventory", name: "Inventory & Stock", desc: "Batch tracking, expiry, and godown stock" },
-  { id: "purchases", name: "Purchases & Inward", desc: "PO management and supplier inward challans" },
-  { id: "sales", name: "Sales & Distribution", desc: "Sales orders, rate lists, and dispatch" },
+  { id: "sales", name: "Sales & Distribution", desc: "Sales orders, invoices, receipts, and dispatch" },
+  { id: "purchases", name: "Purchases & Inward (GRN)", desc: "PO management, AI bill entry, and supplier bills" },
+  { id: "inventory", name: "Inventory & Stock Control", desc: "Batch tracking, expiry liquidation, and godown stock" },
+  { id: "billing", name: "Billing & Invoicing", desc: "GST sales, invoices, bills, and credit notes" },
+  { id: "customer", name: "Customer & Party Accounts", desc: "Customer directory, ledgers, and contact profiles" },
+  { id: "master", name: "Pharma Master Data", desc: "Accounting groups, MR master, products, HSN, and divisions" },
   { id: "fieldforce", name: "Field Force & MR Reporting", desc: "Daily MR calls, tour programs, and expenses" },
+  { id: "area", name: "Territory & Area Management", desc: "Territory assignment, regional HQ, zones, and maps" },
+  { id: "compare", name: "Comparative Analytics & Radar", desc: "Financial Year wise and area map analytics" },
+  { id: "leads", name: "Leads & Marketing Campaigns", desc: "Email campaigns, WhatsApp, and broadcast hub" },
+  { id: "reports", name: "Reports & Compliance", desc: "Drug schedule registers, MIS, and tax analytics" },
   { id: "financial_years", name: "Financial Year Transitions", desc: "Accounting year closing and balance forward" },
   { id: "custom_forms", name: "AI Form Studio", desc: "Dynamic field forms and custom inspection templates" },
-  { id: "reports", name: "Reports & Compliance", desc: "Drug schedule registers and tax analytics" },
+  { id: "mabsolcrmsync", name: "Desktop Sync Agent", desc: "ERP sync bridge and multi-branch data synchronization" },
 ];
 
 export default function TenantApprovalPage({
@@ -58,16 +64,9 @@ export default function TenantApprovalPage({
   const [selectedSessionHours, setSelectedSessionHours] = useState<number>(DEFAULT_USER_SESSION_HOURS);
   const [customSessionHours, setCustomSessionHours] = useState<string>("");
   const [notes, setNotes] = useState<string>("");
-  const [enabledModules, setEnabledModules] = useState<string[]>([
-    "billing",
-    "inventory",
-    "purchases",
-    "sales",
-    "fieldforce",
-    "financial_years",
-    "custom_forms",
-    "reports",
-  ]);
+  const [enabledModules, setEnabledModules] = useState<string[]>(
+    SYSTEM_MODULES.map((m) => m.id)
+  );
 
   // Track initial saved values to enable Save button only on actual changes
   const [initialSessionHours, setInitialSessionHours] = useState<number>(DEFAULT_USER_SESSION_HOURS);
@@ -96,6 +95,9 @@ export default function TenantApprovalPage({
         setNotes(data.user.approvalNotes || "");
         if (data.user.companyId?.enabledModules && Array.isArray(data.user.companyId.enabledModules) && data.user.companyId.enabledModules.length > 0) {
           setEnabledModules(data.user.companyId.enabledModules);
+        } else {
+          // If company has no restrictions set, default to all modules enabled
+          setEnabledModules(SYSTEM_MODULES.map((m) => m.id));
         }
       } else {
         setError(data.message || "Failed to load tenant record");
@@ -126,7 +128,10 @@ export default function TenantApprovalPage({
   const currentEffectiveHours = customSessionHours && !isNaN(Number(customSessionHours))
     ? Math.max(1, Number(customSessionHours))
     : selectedSessionHours;
-  const userModules = user?.companyId?.enabledModules || [];
+  const userModules =
+    user?.companyId?.enabledModules && user.companyId.enabledModules.length > 0
+      ? user.companyId.enabledModules
+      : SYSTEM_MODULES.map((m) => m.id);
   const modulesChanged = JSON.stringify([...enabledModules].sort()) !== JSON.stringify([...userModules].sort());
   const isDirty = !user?.isApproved || currentEffectiveHours !== initialSessionHours || modulesChanged;
 

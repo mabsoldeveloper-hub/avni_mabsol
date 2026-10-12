@@ -314,8 +314,10 @@ export default function Sidebar({ collapsed, setCollapsed, mobile }: SidebarProp
       ((selectedCompany as any).isHeadOffice === false || (selectedCompany as any).parentCompanyId)
     );
 
-    // Normalize enabled modules array if defined
-    const hasModuleRestrictions = Array.isArray(rawEnabled) && !isSuperAdmin;
+    // Normalize enabled modules array if defined and non-empty.
+    // If enabledModules is empty or undefined, NO module restrictions apply (all standard modules visible).
+    const hasModuleRestrictions =
+      Array.isArray(rawEnabled) && rawEnabled.length > 0 && !isSuperAdmin;
     const enabledSet = new Set<string>();
     if (hasModuleRestrictions) {
       for (const m of rawEnabled) {
@@ -323,21 +325,49 @@ export default function Sidebar({ collapsed, setCollapsed, mobile }: SidebarProp
         const lower = String(m).toLowerCase().trim();
         enabledSet.add(lower);
         // Add aliases
-        if (lower === "purchases") enabledSet.add("purchase");
-        if (lower === "purchase") enabledSet.add("purchases");
-        if (lower === "financial_years") enabledSet.add("financial-year");
-        if (lower === "financial-year") enabledSet.add("financial_years");
-        if (lower === "custom_forms") enabledSet.add("custom-forms");
-        if (lower === "custom-forms") enabledSet.add("custom_forms");
-        if (lower === "fieldforce") enabledSet.add("mr");
-        if (lower === "mr") enabledSet.add("fieldforce");
+        if (lower === "purchases" || lower === "purchase") {
+          enabledSet.add("purchase");
+          enabledSet.add("purchases");
+        }
+        if (lower === "financial_years" || lower === "financial-year") {
+          enabledSet.add("financial-year");
+          enabledSet.add("financial_years");
+        }
+        if (lower === "custom_forms" || lower === "custom-forms") {
+          enabledSet.add("custom-forms");
+          enabledSet.add("custom_forms");
+        }
+        if (lower === "fieldforce" || lower === "mr") {
+          enabledSet.add("fieldforce");
+          enabledSet.add("mr");
+        }
+        if (lower === "billing") {
+          enabledSet.add("billing");
+          enabledSet.add("sales");
+          enabledSet.add("purchase");
+          enabledSet.add("customer");
+          enabledSet.add("inventory");
+        }
+        if (lower === "leads") {
+          enabledSet.add("leads");
+          enabledSet.add("email-campaign");
+          enabledSet.add("whatsapp-campaign");
+          enabledSet.add("broadcast-hub");
+        }
       }
     }
 
-    const isSubItemAllowed = (sub: SubMenuItemConfig): boolean => {
+    const isSubItemAllowed = (sub: SubMenuItemConfig, parentGroupId?: string): boolean => {
       if (sub.isVisible === false) return false;
       if (!hasModuleRestrictions) return true;
       if (CORE_MODULE_IDS.includes(sub.id)) return true;
+      if (parentGroupId && CORE_MODULE_IDS.includes(parentGroupId)) return true;
+
+      // If parent group itself is enabled (e.g. parent "sales" and "sales" is in enabledSet)
+      if (parentGroupId && enabledSet.has(parentGroupId.toLowerCase())) return true;
+
+      // Direct ID check
+      if (enabledSet.has(sub.id.toLowerCase())) return true;
 
       // Check if sub.id is permitted by any enabled module
       for (const modKey of Array.from(enabledSet)) {
@@ -360,7 +390,7 @@ export default function Sidebar({ collapsed, setCollapsed, mobile }: SidebarProp
 
         // If company has restricted modules, filter subItems according to enabledModules
         if (hasModuleRestrictions && subItems) {
-          subItems = subItems.filter((sub) => isSubItemAllowed(sub));
+          subItems = subItems.filter((sub) => isSubItemAllowed(sub, item.id));
         }
 
         return {
@@ -382,6 +412,7 @@ export default function Sidebar({ collapsed, setCollapsed, mobile }: SidebarProp
               return false;
             } else {
               // Standalone item: check if item itself is mapped to an enabled module
+              if (enabledSet.has(item.id.toLowerCase())) return true;
               let isEnabled = false;
               for (const modKey of Array.from(enabledSet)) {
                 if (item.id === modKey) {

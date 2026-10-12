@@ -39,7 +39,7 @@ export async function getCurrentUser() {
   const user = await User.findById((payload as any).id)
     .populate(
       "companyId",
-      "companyName logo"
+      "companyName logo enabledModules isHeadOffice parentCompanyId status companyCode"
     )
     .populate(
       "roleId",

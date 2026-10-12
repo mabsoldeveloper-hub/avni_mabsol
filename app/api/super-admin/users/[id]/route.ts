@@ -303,6 +303,14 @@ export async function PATCH(
       const childCompIds = childCompanies.map((c) => c._id);
 
       if (childCompIds.length > 0) {
+        // Cascade enabledModules permissions to all child branch companies
+        if (Array.isArray(body.enabledModules)) {
+          await Company.updateMany(
+            { _id: { $in: childCompIds } },
+            { $set: { enabledModules: body.enabledModules } }
+          );
+        }
+
         if (action === "approve" || action === "activate") {
           await Company.updateMany(
             { _id: { $in: childCompIds } },

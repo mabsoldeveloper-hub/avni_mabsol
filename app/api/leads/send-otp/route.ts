@@ -1,27 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import nodemailer from "nodemailer";
+import connectDB from "@/lib/mongodb";
+import Otp from "@/models/Otp";
+import { sendWhatsAppOTP } from "@/lib/whatsapp";
 
 export const dynamic = "force-dynamic";
-
-// ─── Shared global OTP store (persists across hot-reloads in dev) ────────────
-declare global {
-  // eslint-disable-next-line no-var
-  var _leadOtpStore: Map<string, { otp: string; expiry: number }> | undefined;
-}
-if (!global._leadOtpStore) {
-  global._leadOtpStore = new Map();
-}
-const otpStore: Map<string, { otp: string; expiry: number }> = global._leadOtpStore;
 
 function generateOTP(): string {
   return Math.floor(100000 + Math.random() * 900000).toString();
 }
-
-function storeKey(type: string, value: string) {
-  return `${type}:${value.trim().toLowerCase()}`;
-}
-
-import { sendWhatsAppOTP } from "@/lib/whatsapp";
 
 // ─── Send WhatsApp OTP helper wrapper ───────────────────────────────────────
 async function triggerWhatsAppOTP(phone: string, otp: string): Promise<void> {
@@ -70,6 +57,7 @@ async function sendEmailOTP(email: string, otp: string): Promise<void> {
 // ─── POST /api/leads/send-otp ─────────────────────────────────────────────────
 export async function POST(req: NextRequest) {
   try {
+    await connectDB();
     const body = await req.json();
     const { type, value } = body; // type: "whatsapp" | "email", value: phone or email
 
@@ -81,11 +69,23 @@ export async function POST(req: NextRequest) {
     }
 
     const otp = generateOTP();
-    const expiry = Date.now() + 10 * 60 * 1000; // 10 minutes
-    const key = storeKey(type, value);
+    const targetType = type === "whatsapp" ? "mobile" : "email";
+    const cleanVal = String(value).trim().toLowerCase();
+    const filter = targetType === "email" ? { email: cleanVal, type: "email" } : { mobile: cleanVal, type: "mobile" };
 
-    // Store OTP
-    otpStore.set(key, { otp, expiry });
+    // Persist to MongoDB with TTL
+    await Otp.findOneAndUpdate(
+      filter,
+      {
+        ...(targetType === "email" ? { email: cleanVal } : { mobile: cleanVal }),
+        type: targetType,
+        otp,
+        verified: false,
+        attempts: 0,
+        expiresAt: new Date(Date.now() + 10 * 60 * 1000),
+      },
+      { upsert: true, new: true }
+    );
 
     // Send OTP
     if (type === "whatsapp") {
@@ -108,4 +108,3 @@ export async function POST(req: NextRequest) {
     );
   }
 }
-

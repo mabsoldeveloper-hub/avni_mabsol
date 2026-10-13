@@ -46,9 +46,7 @@ export async function POST(req: Request) {
       { upsert: true, new: true }
     );
 
-    console.log(`\n======================================================`);
-    console.log(`[EMAIL VERIFICATION OTP] Sent to: ${cleanEmail} | OTP: ${otp}`);
-    console.log(`======================================================\n`);
+    console.log(`[EMAIL VERIFICATION OTP] Code dispatched to: ${cleanEmail}`);
 
     // Send email asynchronously in background so response returns instantly
     sendEmailOTP(cleanEmail, otp).catch((err) => {

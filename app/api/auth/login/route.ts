@@ -45,7 +45,7 @@ export async function POST(req: Request) {
       await ensureSuperAdminUser();
     }
 
-    const user = await User.findOne({ email: cleanEmail });
+    const user = await User.findOne({ email: cleanEmail }).select("+password");
 
     if (!user) {
       return NextResponse.json(
@@ -100,7 +100,7 @@ export async function POST(req: Request) {
         expiresAt: new Date(Date.now() + OTP_TTL_MS),
       });
 
-      console.log(`[DESKTOP AGENT LOGIN OTP] Verification code for ${user.email}: ${rawOtp}`);
+      console.log(`[DESKTOP AGENT LOGIN OTP] Verification code dispatched for ${user.email}`);
 
       try {
         await sendOtpEmail(user.email, rawOtp);

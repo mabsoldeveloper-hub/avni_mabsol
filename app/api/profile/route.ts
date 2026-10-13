@@ -170,7 +170,7 @@ export async function PUT(
 
           currentPassword,
 
-          currentUser.password
+          (await User.findById(currentUser._id).select("+password"))?.password || ""
 
         );
 

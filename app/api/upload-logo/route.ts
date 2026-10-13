@@ -4,11 +4,14 @@ import path from "path";
 import fs from "fs";
 import { v4 as uuid } from "uuid";
 
+import { withAuth } from "@/app/api/_middlewares/auth.middleware";
+
 export const dynamic = "force-dynamic";
 
-export async function POST(req: NextRequest) {
-  try {
-    const data = await req.formData();
+export async function POST(request: NextRequest, props: any) {
+  return withAuth(async (req) => {
+    try {
+      const data = await req.formData();
     const file = data.get("file") as File;
 
     if (!file) {
@@ -82,16 +85,17 @@ export async function POST(req: NextRequest) {
       dataUrl,
       fileName,
     });
-  } catch (err: any) {
-    console.error("Logo upload error:", err);
-    return NextResponse.json(
-      {
-        success: false,
-        message: err.message || "Upload Failed",
-      },
-      {
-        status: 500,
-      }
-    );
-  }
+    } catch (err: any) {
+      console.error("Logo upload error:", err);
+      return NextResponse.json(
+        {
+          success: false,
+          message: err.message || "Upload Failed",
+        },
+        {
+          status: 500,
+        }
+      );
+    }
+  }, { requireAdmin: true })(request, props);
 }

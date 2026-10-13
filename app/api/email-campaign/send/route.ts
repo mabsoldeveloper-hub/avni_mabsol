@@ -3,13 +3,17 @@ import connectDB from "@/lib/mongodb";
 import EmailCampaign from "@/models/EmailCampaign";
 import { sendCampaignEmail, MailAttachment } from "@/lib/mail";
 
+import { NextRequest } from "next/server";
+import { withAuth } from "@/app/api/_middlewares/auth.middleware";
+
 export const runtime = "nodejs";
 
-export async function POST(req: Request) {
-  try {
-    await connectDB();
+export async function POST(request: NextRequest, props: any) {
+  return withAuth(async (req) => {
+    try {
+      await connectDB();
 
-    const formData = await req.formData();
+      const formData = await req.formData();
     const subject = formData.get("subject") as string;
     const message = formData.get("message") as string;
     const recipientsRaw = formData.get("recipients") as string;
@@ -213,11 +217,12 @@ export async function POST(req: Request) {
         Connection: "keep-alive",
       },
     });
-  } catch (err: any) {
-    console.error("EMAIL CAMPAIGN API ERROR:", err);
-    return NextResponse.json(
-      { success: false, error: err?.message || "Internal server error" },
-      { status: 500 }
-    );
-  }
+    } catch (err: any) {
+      console.error("EMAIL CAMPAIGN API ERROR:", err);
+      return NextResponse.json(
+        { success: false, error: err?.message || "Internal server error" },
+        { status: 500 }
+      );
+    }
+  })(request, props);
 }

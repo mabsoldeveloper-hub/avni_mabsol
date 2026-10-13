@@ -16,9 +16,13 @@ function normalizePhoneNumber(raw: string): string {
   return cleaned;
 }
 
-export async function POST(req: Request) {
-  try {
-    await connectDB();
+import { NextRequest } from "next/server";
+import { withAuth } from "@/app/api/_middlewares/auth.middleware";
+
+export async function POST(request: NextRequest, props: any) {
+  return withAuth(async (req) => {
+    try {
+      await connectDB();
 
     const body = await req.json();
     const {
@@ -368,11 +372,12 @@ export async function POST(req: Request) {
         Connection: "keep-alive",
       },
     });
-  } catch (err: any) {
-    console.error("WHATSAPP CAMPAIGN API ERROR:", err);
-    return NextResponse.json(
-      { success: false, error: err?.message || "Internal server error" },
-      { status: 500 }
-    );
-  }
+    } catch (err: any) {
+      console.error("WHATSAPP CAMPAIGN API ERROR:", err);
+      return NextResponse.json(
+        { success: false, error: err?.message || "Internal server error" },
+        { status: 500 }
+      );
+    }
+  })(request, props);
 }

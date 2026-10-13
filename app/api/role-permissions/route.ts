@@ -1,25 +1,9 @@
-import { NextRequest,NextResponse } from "next/server";
+import { NextRequest } from "next/server";
+import { withAuth } from "@/app/api/_middlewares/auth.middleware";
+import { RoleController } from "@/app/api/roles/role.controller";
 
-import connectDB from "@/lib/mongodb";
+export const dynamic = "force-dynamic";
 
-import RolePermission from "@/models/RolePermission";
-
-export async function POST(req:NextRequest){
-
-await connectDB();
-
-const body=await req.json();
-
-await RolePermission.deleteMany({
-roleId:body.roleId
-});
-
-await RolePermission.insertMany(
-body.permissions
-);
-
-return NextResponse.json({
-success:true
-});
-
+export async function POST(req: NextRequest, props: any) {
+  return withAuth(RoleController.setRolePermissions, { requireAdmin: true })(req, props);
 }

@@ -20,6 +20,9 @@ export interface CompanyType {
   pincode?: string;
   logo?: string;
   isDefault?: boolean;
+  isHeadOffice?: boolean;
+  parentCompanyId?: string | null;
+  enabledModules?: string[];
   status?: string;
 }
 
@@ -126,9 +129,19 @@ export function CompanyProvider({ children }: { children: React.ReactNode }) {
 
       if (chosen) {
         setSelectedCompanyState((prev: any) => {
-          if (prev && prev._id === chosen?._id) return prev;
+          const isIdentical =
+            prev &&
+            prev._id === chosen?._id &&
+            JSON.stringify(prev.enabledModules) === JSON.stringify(chosen?.enabledModules) &&
+            prev.status === chosen?.status &&
+            prev.companyName === chosen?.companyName;
+
+          if (isIdentical) return prev;
+
           if (typeof window !== "undefined") {
-            try { localStorage.setItem("mabsol_selected_company", JSON.stringify(chosen)); } catch {}
+            try {
+              localStorage.setItem("mabsol_selected_company", JSON.stringify(chosen));
+            } catch {}
           }
           return chosen;
         });

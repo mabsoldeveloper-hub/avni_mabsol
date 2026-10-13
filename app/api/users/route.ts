@@ -36,17 +36,15 @@ export async function fetchUsersList(req?: Request) {
   let targetCompanyId: string | null = null;
   if (isChildBranchUser && userCompany) {
     targetCompanyId = String(userCompany._id);
-  } else if (requestedCompanyId && requestedCompanyId !== "ALL") {
+  } else if (requestedCompanyId && requestedCompanyId !== "ALL" && requestedCompanyId !== "undefined" && requestedCompanyId !== "null") {
     targetCompanyId = requestedCompanyId;
   } else if (currentUser?.companyId && !requestedCompanyId) {
     targetCompanyId = String(currentUser.companyId);
   }
 
   let userQuery: any = {};
-  if (targetCompanyId) {
-    const targetObjId = mongoose.Types.ObjectId.isValid(targetCompanyId)
-      ? new mongoose.Types.ObjectId(targetCompanyId)
-      : targetCompanyId;
+  if (targetCompanyId && targetCompanyId !== "undefined" && targetCompanyId !== "null" && mongoose.Types.ObjectId.isValid(targetCompanyId)) {
+    const targetObjId = new mongoose.Types.ObjectId(targetCompanyId);
 
     if (access.isAdmin) {
       userQuery = { companyId: targetObjId, status: { $ne: "Inactive" } };
@@ -74,6 +72,9 @@ export async function fetchUsersList(req?: Request) {
       ? { ...(currentUser?.tenantId ? { tenantId: currentUser.tenantId } : {}), status: { $ne: "Inactive" } }
       : { _id: { $in: access.accessibleUserIds.map(String) }, status: "Active" };
   }
+
+  // Ensure soft-deleted accounts are completely hidden from regular user views
+  userQuery.isDeleted = { $ne: true };
 
   const users = await User.find(userQuery)
     .populate("companyId", "companyName")
@@ -238,9 +239,12 @@ export async function POST(
         10
       );
 
+    const currentUser = await getCurrentUser();
+    const effectiveCompanyId = companyId || currentUser?.companyId || null;
+
     let targetTenantId = body.tenantId || "TENANT001";
-    if (companyId) {
-      const comp = await Company.findById(companyId);
+    if (effectiveCompanyId) {
+      const comp = await Company.findById(effectiveCompanyId);
       if (comp?.tenantId) {
         targetTenantId = comp.tenantId;
       }
@@ -294,7 +298,7 @@ async function generateUniqueEmployeeCode(userName: string): Promise<string> {
         email,
         password: hashedPassword,
         mobile,
-        companyId: companyId || null,
+        companyId: effectiveCompanyId,
         roleId: roleId || null,
         roleName,
         roleType,

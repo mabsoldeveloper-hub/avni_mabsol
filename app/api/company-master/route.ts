@@ -9,7 +9,7 @@ import { ROLE_TYPE } from "@/lib/constants/roles.constant";
 
 export const dynamic = "force-dynamic";
 
-export async function GET() {
+export async function GET(req: Request) {
   try {
     await connectDB();
     const user = await getCurrentUser();
@@ -18,17 +18,44 @@ export async function GET() {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
+    const { searchParams } = new URL(req.url);
+    const activeCompanyId =
+      searchParams.get("activeCompanyId") ||
+      searchParams.get("companyId") ||
+      req.headers.get("x-company-id");
+
     const userCompany = user.companyId ? await Company.findById(user.companyId) : null;
     const isSuperAdmin = user.roleType === ROLE_TYPE.SUPER_ADMIN;
 
     // Visibility Rules:
-    // 1. SuperAdmin: can see all companies across all tenants
+    // 1. SuperAdmin: can see all companies across all tenants (or scoped to active if specified)
     // 2. Head Office (isHeadOffice === true): can see its own company AND all child branches under it
-    // 3. Child Branch (isHeadOffice === false): can ONLY see itself (cannot access parent or sibling company data)
+    // 3. Child Branch (isHeadOffice === false): can ONLY see itself (cannot see, edit, or delete parent or sibling companies)
     let query: Record<string, any> = {};
 
     if (isSuperAdmin) {
-      query = {};
+      if (activeCompanyId && activeCompanyId !== "ALL") {
+        query = { _id: activeCompanyId };
+      } else {
+        query = {};
+      }
+    } else if (activeCompanyId && activeCompanyId !== "ALL") {
+      const activeCompany = await Company.findById(activeCompanyId);
+      if (!activeCompany) {
+        return NextResponse.json([]);
+      }
+      if (!activeCompany.isHeadOffice) {
+        // Active company is a child branch: strictly return only itself
+        query = { _id: activeCompany._id };
+      } else {
+        // Active company is Head Office: return Head Office and its child branches
+        query = {
+          $or: [
+            { _id: activeCompany._id },
+            { parentCompanyId: activeCompany._id },
+          ],
+        };
+      }
     } else if (userCompany?.isHeadOffice) {
       query = {
         $or: [
@@ -43,6 +70,10 @@ export async function GET() {
       query = { tenantId: user.tenantId };
     } else {
       return NextResponse.json([]);
+    }
+
+    if (!isSuperAdmin) {
+      query.isDeleted = { $ne: true };
     }
 
     const companies = await Company.find(query).sort({ createdAt: -1 });
@@ -64,10 +95,34 @@ export async function POST(req: Request) {
 
     const data = await req.json();
 
+    // Check active context: Child branches CANNOT create new companies
+    const { searchParams } = new URL(req.url);
+    const activeCompanyId =
+      req.headers.get("x-company-id") ||
+      searchParams.get("activeCompanyId") ||
+      data.activeCompanyId;
+
+    const userCompany = user.companyId ? await Company.findById(user.companyId) : null;
+    let activeComp = userCompany;
+    if (activeCompanyId) {
+      activeComp = await Company.findById(activeCompanyId);
+    }
+
+    const isSuperAdmin = user.roleType === ROLE_TYPE.SUPER_ADMIN;
+    if (!isSuperAdmin && activeComp && !activeComp.isHeadOffice) {
+      return NextResponse.json(
+        { success: false, error: "Only Head Office administrators can create new companies or branches." },
+        { status: 403 }
+      );
+    }
+
     // Always use the logged-in user's tenantId
     const targetTenantId = user.tenantId || `TENANT_${user._id}`;
-    const userCompany = user.companyId ? await Company.findById(user.companyId) : null;
-    const parentCompanyId = userCompany ? userCompany._id : null;
+    const parentCompanyId = activeComp?.isHeadOffice
+      ? activeComp._id
+      : userCompany?.isHeadOffice
+      ? userCompany._id
+      : null;
 
     // Validate company name
     if (!data.companyName?.trim()) {
@@ -107,6 +162,25 @@ export async function POST(req: Request) {
       }
     }
 
+    // If this is a child branch, inherit status & subscription from parent Head Office
+    let parentCompDoc: any = null;
+    let parentUserDoc: any = null;
+    if (parentCompanyId) {
+      parentCompDoc = await Company.findById(parentCompanyId).lean();
+      parentUserDoc = await User.findOne({
+        companyId: parentCompanyId,
+        isSuperAdmin: { $ne: true },
+      }).lean();
+    }
+
+    const branchStatus = parentCompDoc
+      ? parentCompDoc.status === "Suspended" || parentCompDoc.status === "Inactive"
+        ? "Suspended"
+        : parentCompDoc.status === "Rejected"
+        ? "Rejected"
+        : "Active"
+      : data.status || "Active";
+
     const company = await Company.create({
       tenantId: targetTenantId,
       companyCode: finalCode,
@@ -125,9 +199,13 @@ export async function POST(req: Request) {
       invoicePrefix: data.invoicePrefix || null,
       purchasePrefix: data.purchasePrefix || null,
       currency: data.currency || null,
-      logo: data.logo || "",
-      enabledModules: Array.isArray(data.enabledModules) ? data.enabledModules : [],
-      status: data.status || "Active",
+      enabledModules: Array.isArray(data.enabledModules) && data.enabledModules.length > 0
+        ? data.enabledModules
+        : (parentCompDoc?.enabledModules && Array.isArray(parentCompDoc.enabledModules) && parentCompDoc.enabledModules.length > 0
+            ? parentCompDoc.enabledModules
+            : [
+                "dashboard", "sales", "purchases", "purchase", "inventory", "customer", "master", "area", "compare", "leads", "custom-forms", "financial-year", "reports", "mabsolcrmsync", "users", "settings", "company", "billing", "fieldforce", "financial_years", "custom_forms"
+              ]),
       isDefault: false,
       isHeadOffice: false,
       parentCompanyId: parentCompanyId,
@@ -135,18 +213,28 @@ export async function POST(req: Request) {
     });
 
     // Create or link Administrator User for this company so they can log in directly
+    // Inherit approval and subscription validity from Head Office
     if (data.email) {
       const cleanEmail = String(data.email).toLowerCase().trim();
       let companyUser = await User.findOne({ email: cleanEmail });
       const hashedPassword = data.password ? await bcrypt.hash(data.password, 10) : "";
 
+      const inheritsApproval = parentUserDoc ? Boolean(parentUserDoc.isApproved) : true;
+      const inheritsStatus = parentUserDoc ? parentUserDoc.status : branchStatus;
+      const inheritsDurationDays = parentUserDoc?.accessDurationDays || 30;
+      const inheritsValidUntil = parentUserDoc?.accessValidUntil || new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+      const inheritsUnlimited = parentUserDoc ? Boolean(parentUserDoc.isUnlimitedAccess) : false;
+      const inheritsTimeout = parentUserDoc?.sessionTimeoutHours || 24;
+
       if (companyUser) {
         companyUser.companyId = company._id;
         if (hashedPassword) companyUser.password = hashedPassword;
-        companyUser.status = "Active";
-        companyUser.isApproved = true;
-        companyUser.isUnlimitedAccess = true;
-        companyUser.accessValidUntil = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000);
+        companyUser.status = inheritsStatus;
+        companyUser.isApproved = inheritsApproval;
+        companyUser.isUnlimitedAccess = inheritsUnlimited;
+        companyUser.accessDurationDays = inheritsDurationDays;
+        companyUser.accessValidUntil = inheritsValidUntil;
+        companyUser.sessionTimeoutHours = inheritsTimeout;
         await companyUser.save();
       } else {
         let adminRole = await Role.findOne({
@@ -183,11 +271,12 @@ export async function POST(req: Request) {
           mobile: data.mobile?.replace(/\D/g, "") || "",
           password: hashedPassword || (await bcrypt.hash("Admin@123", 10)),
           designation: "Company Administrator",
-          status: "Active",
-          isApproved: true,
-          isUnlimitedAccess: true,
-          accessDurationDays: 365,
-          accessValidUntil: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000),
+          status: inheritsStatus,
+          isApproved: inheritsApproval,
+          isUnlimitedAccess: inheritsUnlimited,
+          accessDurationDays: inheritsDurationDays,
+          accessValidUntil: inheritsValidUntil,
+          sessionTimeoutHours: inheritsTimeout,
         });
       }
     }

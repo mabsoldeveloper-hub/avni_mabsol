@@ -838,6 +838,15 @@ export const DEFAULT_MENU_ITEMS: MenuItemConfig[] = [
         order: 0,
       },
       {
+        id: "users-create",
+        label: "Create User",
+        href: "/dashboard/users/create",
+        icon: "FaUserPlus",
+        permission: "users.create",
+        isVisible: true,
+        order: 0.5,
+      },
+      {
         id: "users-permissions",
         label: "Permission",
         href: "/dashboard/permissions",

@@ -66,27 +66,19 @@ export async function GET() {
       userObj.isAdmin = true;
     }
 
-    // Non-super-admin: verify if active and approved
-    const statusLower = String(userObj.status || "").trim().toLowerCase();
-    const isSuspendedOrInactive =
-      !userObj.isApproved ||
-      statusLower === "suspended" ||
-      statusLower === "inactive" ||
-      statusLower === "deactivated" ||
-      statusLower === "deactive" ||
-      statusLower === "disabled" ||
-      statusLower === "pendingapproval" ||
-      statusLower === "rejected";
-
-    if (isSuspendedOrInactive) {
+    // Validate Super Admin approval, time-bound access expiry, and parent Head Office status
+    const { validateUserLoginAccess } = await import("@/lib/services/superAdmin.service");
+    const accessCheck = await validateUserLoginAccess(userObj);
+    if (!accessCheck.allowed) {
       const response = NextResponse.json(
         {
           success: false,
           suspended: true,
-          message: "Your account has been deactivated or suspended by the Super Administrator.",
+          deleted: Boolean(userObj.isDeleted),
+          message: accessCheck.message,
         },
         {
-          status: 403,
+          status: accessCheck.statusCode || 403,
           headers: {
             "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate",
           },
@@ -94,28 +86,6 @@ export async function GET() {
       );
       response.cookies.delete("token");
       return response;
-    }
-
-    // Check time-bound validity expiry
-    if (!userObj.isUnlimitedAccess && userObj.accessValidUntil) {
-      const expiryDate = new Date(userObj.accessValidUntil);
-      if (expiryDate.getTime() <= Date.now()) {
-        const response = NextResponse.json(
-          {
-            success: false,
-            expired: true,
-            message: "Your account access period has expired. Please contact the Super Administrator.",
-          },
-          {
-            status: 403,
-            headers: {
-              "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate",
-            },
-          }
-        );
-        response.cookies.delete("token");
-        return response;
-      }
     }
   }
 

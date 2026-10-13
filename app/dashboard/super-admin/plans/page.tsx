@@ -100,7 +100,7 @@ function SubscriptionPlansContent() {
             }`}
           >
             {plan.popular && (
-              <div className="absolute -top-3 right-6 bg-blue-600 text-white text-[10.5px] font-extrabold uppercase tracking-wider px-3 py-0.5 rounded-full shadow-xs">
+              <div className="absolute -top-3 right-6 bg-indigo-600 text-white text-[10.5px] font-extrabold uppercase tracking-wider px-3 py-0.5 rounded-full shadow-xs">
                 Popular Tier
               </div>
             )}
@@ -126,7 +126,7 @@ function SubscriptionPlansContent() {
                 <ul className="space-y-2.5 text-xs text-slate-600">
                   {plan.features.map((f, idx) => (
                     <li key={idx} className="flex items-start gap-2.5">
-                      <FaCheck className="text-blue-600 mt-0.5 shrink-0 text-xs" />
+                      <FaCheck className="text-indigo-600 mt-0.5 shrink-0 text-xs" />
                       <span>{f}</span>
                     </li>
                   ))}
@@ -137,9 +137,9 @@ function SubscriptionPlansContent() {
             <div className="mt-6 pt-4 border-t border-slate-100">
               <button
                 type="button"
-                className={`w-full py-2.5 rounded-full text-xs font-bold border transition-all cursor-pointer ${
+                className={`w-full py-2.5 rounded-xl text-xs font-bold border transition-all cursor-pointer ${
                   plan.popular
-                    ? "bg-blue-600 hover:bg-blue-700 text-white border-blue-600 shadow-sm shadow-blue-600/25"
+                    ? "bg-indigo-600 hover:bg-indigo-700 text-white border-indigo-600 shadow-sm shadow-indigo-600/25"
                     : "bg-slate-100 hover:bg-slate-200 text-slate-800 border-slate-200"
                 }`}
               >
@@ -171,7 +171,7 @@ function SubscriptionPlansContent() {
           </div>
           <div className="p-4 rounded-xl bg-slate-50 border border-slate-100">
             <span className="text-slate-400 block font-medium">Total Tenant Revenue</span>
-            <span className="text-2xl font-bold text-blue-600 mt-1 block">
+            <span className="text-2xl font-bold text-indigo-600 mt-1 block">
               ₹{(users.length * 1999).toLocaleString()}
             </span>
           </div>

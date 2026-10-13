@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useMemo } from "react";
 import Link from "next/link";
+import { useParams } from "next/navigation";
 import {
   FaUserTie,
   FaSitemap,
@@ -112,6 +113,13 @@ interface TerritoryScopeItem {
 }
 
 export default function UserAssignmentWorkbenchPage() {
+  const params = useParams();
+  const currentRouteRole = (typeof params?.role === "string" ? params.role : "admin")
+    .toLowerCase()
+    .trim()
+    .replace(/[\s_]+/g, "-");
+  const usersListHref = `/dashboard/${currentRouteRole}/users`;
+
   // Master Data States
   const [users, setUsers] = useState<UserItem[]>([]);
   const [dynamicRoles, setDynamicRoles] = useState<RoleItem[]>([]);
@@ -788,7 +796,7 @@ export default function UserAssignmentWorkbenchPage() {
 
           <div className="flex items-center gap-3">
             <Link
-              href="/dashboard/users"
+              href={usersListHref}
               className="inline-flex items-center gap-2 px-3.5 py-2 text-xs font-bold rounded-xl bg-white/10 hover:bg-white/20 text-white backdrop-blur border border-white/20 transition-all"
             >
               <FaArrowLeft /> Back to Users

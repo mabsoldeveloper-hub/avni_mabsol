@@ -24,30 +24,45 @@ export default React.memo(function SidebarNavLink({
         href={href}
         title={iconOnly ? label : undefined}
         onClick={onNavigate}
-        className={`relative flex items-center h-[42px] w-full rounded-xl transition-all duration-200 group no-underline select-none px-3 ${
+        className={`relative flex items-center h-[38px] w-full rounded-xl transition-all duration-150 group no-underline select-none px-2.5 ${
           active
-            ? "bg-blue-600 text-white font-semibold shadow-md shadow-blue-600/25"
-            : "text-white hover:text-white hover:bg-white/10 font-medium"
+            ? "bg-indigo-50/90 text-indigo-700 font-semibold shadow-2xs border-0"
+            : "text-slate-600 hover:text-slate-900 hover:bg-slate-100/70 font-medium border-0"
         }`}
       >
+        {active && (
+          <span className="absolute left-0.5 top-1/2 -translate-y-1/2 w-1 h-5 rounded-full bg-indigo-600" />
+        )}
         <span
-          className="flex items-center justify-center w-7 h-7 shrink-0 text-[14px] text-white"
+          className={`flex items-center justify-center w-7 h-7 rounded-lg shrink-0 text-[13px] transition-all duration-150 ${
+            active
+              ? "bg-white text-indigo-600 shadow-2xs border-0"
+              : "text-slate-400 group-hover:text-slate-600 group-hover:bg-slate-200/50"
+          }`}
         >
           {icon}
         </span>
         <span
-          className="whitespace-nowrap overflow-hidden transition-all duration-200 flex-1 text-left text-xs font-medium text-white"
+          className={`whitespace-nowrap overflow-hidden transition-all duration-150 flex-1 text-left text-xs ${
+            active ? "font-bold text-indigo-950" : "font-medium text-slate-600 group-hover:text-slate-900"
+          }`}
           style={{
             opacity: iconOnly ? 0 : 1,
             maxWidth: iconOnly ? 0 : "180px",
-            marginLeft: iconOnly ? 0 : "8px",
+            marginLeft: iconOnly ? 0 : "10px",
             display: iconOnly ? "none" : "block",
           }}
         >
           {label}
         </span>
         {badge && !iconOnly && (
-          <span className="ml-auto text-[9.5px] font-bold px-1.5 py-0.5 rounded-md bg-white/15 text-white border border-white/20">
+          <span
+            className={`ml-auto text-[9.5px] font-bold px-1.5 py-0.5 rounded-md ${
+              active
+                ? "bg-indigo-100 text-indigo-800 border border-indigo-200"
+                : "bg-slate-100 text-slate-600 border border-slate-200"
+            }`}
+          >
             {badge}
           </span>
         )}

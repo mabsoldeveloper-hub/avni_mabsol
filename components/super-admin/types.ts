@@ -1,3 +1,45 @@
+export interface ChildBranchSummary {
+  _id: string;
+  companyName: string;
+  companyCode: string;
+  city?: string;
+  state?: string;
+  gstNo?: string;
+  status?: string;
+  email?: string;
+  mobile?: string;
+}
+
+export interface ParentCompanySummary {
+  _id: string;
+  companyName?: string;
+  companyCode?: string;
+  isHeadOffice?: boolean;
+  city?: string;
+  state?: string;
+  gstNo?: string;
+}
+
+export interface SuperAdminCompanyDetails {
+  _id?: string;
+  companyName?: string;
+  companyCode?: string;
+  tenantId?: string;
+  isHeadOffice?: boolean;
+  parentCompanyId?: ParentCompanySummary | null;
+  branchCount?: number;
+  childBranches?: ChildBranchSummary[];
+  gstNo?: string;
+  panNo?: string;
+  drugLicenseNo?: string;
+  city?: string;
+  state?: string;
+  address?: string;
+  businessType?: string;
+  status?: string;
+  enabledModules?: string[];
+}
+
 export interface SuperAdminUserItem {
   _id: string;
   name: string;
@@ -7,6 +49,7 @@ export interface SuperAdminUserItem {
   employeeCode?: string;
   roleName?: string;
   roleType?: string;
+  role?: string;
   status: string;
   isApproved: boolean;
   approvedAt?: string | null;
@@ -16,15 +59,12 @@ export interface SuperAdminUserItem {
   isUnlimitedAccess?: boolean;
   sessionTimeoutHours?: number;
   approvalNotes?: string;
+  isDeleted?: boolean;
+  deletedAt?: string | null;
+  deletedBy?: { name?: string; email?: string } | null;
+  deletedReason?: string;
   createdAt: string;
-  companyId?: {
-    companyName?: string;
-    gstNo?: string;
-    city?: string;
-    state?: string;
-    address?: string;
-    businessType?: string;
-  } | null;
+  companyId?: SuperAdminCompanyDetails | null;
 }
 
 export interface SuperAdminStats {
@@ -34,12 +74,18 @@ export interface SuperAdminStats {
   expired: number;
   rejected: number;
   suspended?: number;
+  deleted?: number;
   deactive?: number;
+  headOffices?: number;
+  childBranches?: number;
+  totalCompanies?: number;
 }
 
 export interface FilterState {
   search: string;
-  status: string;
+  status: string; // 'all' | 'approved' | 'pending' | 'suspended' | 'expired' | 'rejected' | 'deleted'
+  branchType: string; // 'all' | 'head_office' | 'child_branch'
+  parentCompanyId: string; // 'all' | specific Head Office ID
   plan: string;
   city: string;
   date: string;

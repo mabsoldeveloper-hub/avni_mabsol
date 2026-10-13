@@ -83,23 +83,23 @@ export default function UserAccessModal({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs transition-opacity duration-200"
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs transition-opacity duration-200"
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
     >
-      <div className="bg-white w-full max-w-2xl rounded-2xl border border-slate-200 shadow-2xl overflow-hidden flex flex-col max-h-[92vh] animate-in fade-in zoom-in-95 duration-150">
+      <div className="bg-white w-full max-w-2xl rounded-2xl border border-slate-200/90 shadow-2xl overflow-hidden flex flex-col max-h-[92vh] animate-in fade-in zoom-in-95 duration-150">
         {/* Modal Header */}
-        <div className="px-6 py-4.5 border-b border-slate-100 flex items-center justify-between bg-slate-50/70">
+        <div className="px-6 py-4.5 border-b border-slate-100 flex items-center justify-between bg-gradient-to-r from-slate-50 via-white to-indigo-50/30">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-blue-600 text-white flex items-center justify-center text-lg shadow-sm shadow-blue-600/20 shrink-0">
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-indigo-600 to-indigo-500 text-white flex items-center justify-center text-lg shadow-sm shadow-indigo-600/25 shrink-0">
               <FaShieldAlt />
             </div>
             <div>
-              <h2 className="text-base font-bold text-slate-900">
+              <h2 className="text-base font-bold text-slate-900 tracking-tight">
                 {user.isApproved ? "Manage Account Access" : "Approve Account Request"}
               </h2>
-              <p className="text-xs text-slate-500 mt-0.5">
+              <p className="text-xs text-slate-500 mt-0.5 font-normal">
                 Configure account validity duration and session timeout for this tenant
               </p>
             </div>
@@ -107,7 +107,7 @@ export default function UserAccessModal({
           <button
             type="button"
             onClick={onClose}
-            className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:text-slate-700 hover:bg-slate-200/60 transition-colors cursor-pointer"
+            className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors cursor-pointer"
             title="Close modal"
           >
             <FaTimes size={15} />
@@ -118,8 +118,8 @@ export default function UserAccessModal({
         <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-6 space-y-6">
           {/* Section 1: Tenant Information Summary */}
           <div className="bg-slate-50/80 rounded-xl border border-slate-200/80 p-4">
-            <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2.5 flex items-center gap-1.5">
-              <FaHospital className="text-blue-500" /> Pharma Enterprise Profile
+            <div className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-2.5 flex items-center gap-1.5">
+              <FaHospital className="text-indigo-600" /> Pharma Enterprise Profile
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
               <div>
@@ -145,7 +145,7 @@ export default function UserAccessModal({
           <div className="space-y-2.5">
             <div className="flex items-center justify-between">
               <label className="text-xs font-bold text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
-                <FaCalendarAlt className="text-blue-600" />
+                <FaCalendarAlt className="text-indigo-600" />
                 Access Duration (Account Validity)
               </label>
               <span className="text-[11px] text-slate-400 font-medium">
@@ -164,7 +164,7 @@ export default function UserAccessModal({
                   }}
                   className={`py-2 px-2 rounded-xl text-xs font-semibold border transition-all text-center cursor-pointer ${
                     selectedDuration === opt.days && !customDays
-                      ? "bg-blue-600 text-white border-blue-600 shadow-sm shadow-blue-600/25"
+                      ? "bg-indigo-600 text-white border-indigo-600 shadow-sm shadow-indigo-600/25"
                       : "bg-white border-slate-200 text-slate-700 hover:bg-slate-50 hover:border-slate-300"
                   }`}
                 >
@@ -183,7 +183,7 @@ export default function UserAccessModal({
                   placeholder="e.g. 45 or 120"
                   value={customDays}
                   onChange={(e) => setCustomDays(e.target.value)}
-                  className="w-full pl-3 pr-12 py-1.5 rounded-lg text-xs bg-white border border-slate-200 text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600"
+                  className="w-full pl-3 pr-12 py-1.5 rounded-lg text-xs bg-white border border-slate-200 text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-600"
                 />
                 <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-semibold text-slate-400">
                   Days
@@ -196,10 +196,10 @@ export default function UserAccessModal({
           <div className="space-y-2.5">
             <div className="flex items-center justify-between">
               <label className="text-xs font-bold text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
-                <FaClock className="text-blue-600" />
+                <FaClock className="text-indigo-600" />
                 Login Session Timeout (Re-login Frequency)
               </label>
-              <span className="text-[10.5px] font-semibold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-md border border-blue-100">
+              <span className="text-[10.5px] font-semibold text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded-md border border-indigo-100">
                 Super Admin = 365 Days
               </span>
             </div>
@@ -215,7 +215,7 @@ export default function UserAccessModal({
                   }}
                   className={`py-2 px-2 rounded-xl text-xs font-semibold border transition-all text-center cursor-pointer ${
                     selectedSessionHours === preset.hours && !customSessionHours
-                      ? "bg-blue-600 text-white border-blue-600 shadow-sm shadow-blue-600/25"
+                      ? "bg-indigo-600 text-white border-indigo-600 shadow-sm shadow-indigo-600/25"
                       : "bg-white border-slate-200 text-slate-700 hover:bg-slate-50 hover:border-slate-300"
                   }`}
                 >
@@ -234,7 +234,7 @@ export default function UserAccessModal({
                   placeholder="e.g. 3 or 6"
                   value={customSessionHours}
                   onChange={(e) => setCustomSessionHours(e.target.value)}
-                  className="w-full pl-3 pr-14 py-1.5 rounded-lg text-xs bg-white border border-slate-200 text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600"
+                  className="w-full pl-3 pr-14 py-1.5 rounded-lg text-xs bg-white border border-slate-200 text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-600"
                 />
                 <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-semibold text-slate-400">
                   Hours
@@ -253,7 +253,7 @@ export default function UserAccessModal({
               placeholder="Internal notes regarding this approval or access validity..."
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
-              className="w-full px-3 py-2 rounded-lg text-xs bg-white border border-slate-200 text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600"
+              className="w-full px-3 py-2 rounded-lg text-xs bg-white border border-slate-200 text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-600"
             />
           </div>
 
@@ -296,7 +296,7 @@ export default function UserAccessModal({
               <button
                 type="submit"
                 disabled={actionLoading}
-                className="px-5 py-2 rounded-xl text-xs font-bold bg-blue-600 hover:bg-blue-700 text-white shadow-md shadow-blue-600/25 transition-all cursor-pointer disabled:opacity-50 flex items-center gap-2"
+                className="px-5 py-2 rounded-xl text-xs font-bold bg-indigo-600 hover:bg-indigo-700 text-white shadow-md shadow-indigo-600/25 transition-all cursor-pointer disabled:opacity-50 flex items-center gap-2"
               >
                 <FaUserCheck size={12} />
                 {user.isApproved ? "Save Changes" : "Confirm & Approve Access"}

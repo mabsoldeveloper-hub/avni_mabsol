@@ -25,8 +25,15 @@ import {
 } from "react-icons/fa";
 
 export default function EditUserPage() {
-  const { id } = useParams();
+  const params = useParams();
+  const id = params?.id;
   const router = useRouter();
+
+  const activeRole = (typeof params?.role === "string" ? params.role : "admin")
+    .toLowerCase()
+    .trim()
+    .replace(/[\s_]+/g, "-");
+  const usersListHref = `/dashboard/${activeRole}/users`;
 
   const [loading, setLoading] = useState(false);
   const [initialLoading, setInitialLoading] = useState(true);
@@ -287,7 +294,7 @@ export default function EditUserPage() {
       }
 
       alert("User account updated successfully!");
-      router.push("/dashboard/users");
+      router.push(usersListHref);
     } catch {
       alert("Update Failed");
     } finally {
@@ -318,7 +325,7 @@ export default function EditUserPage() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <div className="flex items-center gap-2 text-xs text-slate-400 mb-1">
-            <Link href="/dashboard/users" className="hover:text-indigo-600 dark:hover:text-indigo-400 flex items-center gap-1">
+            <Link href={usersListHref} className="hover:text-indigo-600 dark:hover:text-indigo-400 flex items-center gap-1">
               <FaArrowLeft size={10} /> Users Management
             </Link>
             <span>/</span>
@@ -334,7 +341,7 @@ export default function EditUserPage() {
 
         <div className="flex items-center gap-2">
           <Link
-            href="/dashboard/users"
+            href={usersListHref}
             className="px-4 py-2 rounded-xl text-xs font-bold text-slate-600 dark:text-slate-300 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:bg-slate-50 transition-colors"
           >
             Cancel

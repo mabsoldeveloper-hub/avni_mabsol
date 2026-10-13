@@ -100,15 +100,18 @@ export async function POST() {
       fs.mkdirSync(dataDir, { recursive: true });
     }
 
-    // Show VFP screen in foreground
-    fs.writeFileSync(fpwPath, "SCREEN = ON\r\n");
+    // Write completely headless VFP config
+    fs.writeFileSync(fpwPath, "SCREEN = OFF\r\nRESOURCE = OFF\r\nTITLE = \r\nSYSMENU = OFF\r\nSTATUS BAR = OFF\r\nDEVELOPMENT = OFF\r\nNOTIFY = OFF\r\nTALK = OFF\r\nSAFETY = OFF\r\nCOMMAND = DO \"" + prgPath + "\"\r\n");
 
-    // Generate VFP script to copy files
+    // Generate headless VFP script to copy files
     const dbfFiles = listDbfFiles(sourceDir);
     let prgLines = [
+      "ON ERROR QUIT",
+      "SET NOTIFY OFF",
+      "SET CONFIRM OFF",
       "SET SAFETY OFF",
       "SET TALK OFF",
-      'WAIT WINDOW "MabsolCrm - Starting MabsolCRM Import..." TIMEOUT 1',
+      "_SCREEN.Visible = .F.",
       ""
     ];
     let copiedCount = 0;
@@ -123,7 +126,6 @@ export async function POST() {
         fs.mkdirSync(destFolder, { recursive: true });
       }
 
-      prgLines.push(`WAIT WINDOW "Importing table: ${baseName}..." NOWAIT`);
       prgLines.push(`TRY`);
       prgLines.push(`  USE "${srcPath}" SHARED NOUPDATE`);
       prgLines.push(`  COPY TO "${destPath}"`);
@@ -134,7 +136,7 @@ export async function POST() {
       copiedCount++;
     }
 
-    prgLines.push('WAIT WINDOW "MabsolCrm - MabsolCRM Import Complete!" TIMEOUT 1.5');
+    prgLines.push("ON ERROR *");
     prgLines.push("QUIT");
     fs.writeFileSync(prgPath, prgLines.join("\r\n"));
 
@@ -154,10 +156,11 @@ export async function POST() {
       message: "Direct MabsolCRM import and rescan triggered from dashboard.",
     });
 
-    // Run VFP command in foreground setting cwd to VFP folder so DLLs are found
+    // Run VFP command in headless background setting cwd to VFP folder so DLLs are found
     const vfpDir = path.dirname(activeVfpExe);
-    await execFileAsync(activeVfpExe, ["-c" + fpwPath, prgPath], {
-      cwd: vfpDir
+    await execFileAsync(activeVfpExe, ["-t", "-c" + fpwPath], {
+      cwd: vfpDir,
+      windowsHide: true
     });
 
     return NextResponse.json({

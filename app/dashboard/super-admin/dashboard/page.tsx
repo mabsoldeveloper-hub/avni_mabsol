@@ -30,27 +30,32 @@ function DashboardOverviewContent() {
 
   return (
     <div className="w-full max-w-[1600px] mx-auto space-y-4 text-slate-800">
-      {/* Top Header / Executive Command Bar */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white rounded-2xl border border-slate-200/80 p-4 sm:p-5 shadow-xs">
-        <div>
-          <div className="flex items-center gap-2.5">
-            <h1 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">
-              Platform Command Center
-            </h1>
-            <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10.5px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200/80">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-              Live Operational
-            </span>
+      {/* Executive Command Bar */}
+      <div className="relative overflow-hidden bg-white rounded-2xl border border-slate-200/90 p-4 sm:p-5 shadow-[0_1px_3px_rgba(15,23,42,0.03)] flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div className="flex items-start sm:items-center gap-3.5">
+          <div className="w-11 h-11 rounded-2xl bg-gradient-to-br from-indigo-600 via-indigo-700 to-slate-900 text-white flex items-center justify-center text-lg shadow-sm shadow-indigo-600/25 shrink-0">
+            <FaShieldAlt />
           </div>
-          <p className="text-xs text-slate-500 mt-1">
-            Real-time enterprise metrics, tenant capacity distribution, and security governance
-          </p>
+          <div>
+            <div className="flex items-center gap-2.5 flex-wrap">
+              <h1 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">
+                Platform Command Center
+              </h1>
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10.5px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200/80">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                Live Operational
+              </span>
+            </div>
+            <p className="text-xs text-slate-500 mt-1">
+              Real-time enterprise metrics, multi-tenant hierarchy governance, and clearance monitoring
+            </p>
+          </div>
         </div>
 
         <div className="flex items-center gap-2.5 self-start sm:self-auto shrink-0">
           <Link
             href="/dashboard/super-admin"
-            className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-full border border-blue-600 shadow-sm shadow-blue-600/25 transition-all flex items-center gap-2 cursor-pointer"
+            className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl border border-indigo-600 shadow-sm shadow-indigo-600/25 transition-all flex items-center gap-2 cursor-pointer"
           >
             <FaUserCheck size={12} />
             <span>Review Approvals</span>
@@ -63,7 +68,7 @@ function DashboardOverviewContent() {
 
           <Link
             href="/dashboard/super-admin/accounts"
-            className="px-3.5 py-2 bg-white hover:bg-slate-50 text-slate-700 text-xs font-bold rounded-full border border-slate-200 shadow-xs transition-all flex items-center gap-1.5 cursor-pointer"
+            className="px-3.5 py-2 bg-slate-50/70 hover:bg-slate-100 border border-slate-200/90 text-slate-700 hover:text-slate-900 text-xs font-bold rounded-xl shadow-2xs transition-all flex items-center gap-1.5 cursor-pointer"
           >
             <FaIdCard size={12} className="text-slate-500" />
             <span>Directory</span>
@@ -73,10 +78,10 @@ function DashboardOverviewContent() {
             type="button"
             onClick={refetch}
             disabled={loading}
-            className="p-2.5 rounded-full bg-white border border-slate-200 text-slate-600 hover:text-slate-900 hover:border-slate-300 shadow-xs transition-all cursor-pointer disabled:opacity-50 flex items-center justify-center"
+            className="p-2.5 rounded-xl bg-slate-50/70 hover:bg-slate-100 border border-slate-200/90 text-slate-700 hover:text-slate-900 shadow-2xs transition-all cursor-pointer disabled:opacity-50 flex items-center justify-center"
             title="Refresh metrics"
           >
-            <FaSync className={`text-xs ${loading ? "animate-spin text-blue-600" : ""}`} />
+            <FaSync className={`text-xs ${loading ? "animate-spin text-indigo-600" : ""}`} />
           </button>
         </div>
       </div>
@@ -102,7 +107,7 @@ function DashboardOverviewContent() {
 
               <Link
                 href="/dashboard/super-admin/accounts"
-                className="text-xs font-bold text-blue-600 hover:text-blue-700 flex items-center gap-1.5 transition-colors"
+                className="text-xs font-bold text-indigo-600 hover:text-indigo-700 flex items-center gap-1.5 transition-colors"
               >
                 <span>View Full Directory</span>
                 <FaArrowRight size={10} />
@@ -127,12 +132,30 @@ function DashboardOverviewContent() {
                       className="px-4 py-3 flex items-center justify-between hover:bg-slate-50/50 transition-colors gap-3"
                     >
                       <div className="flex items-center gap-3 min-w-0 flex-1">
-                        <div className="w-9 h-9 rounded-xl bg-blue-50 border border-blue-100/80 text-blue-600 font-extrabold text-xs flex items-center justify-center shrink-0 select-none shadow-2xs">
+                        <div className="w-9 h-9 rounded-xl bg-indigo-50 border border-indigo-100/80 text-indigo-700 font-extrabold text-xs flex items-center justify-center shrink-0 select-none shadow-2xs">
                           {initials}
                         </div>
                         <div className="min-w-0 flex-1">
-                          <div className="text-xs font-bold text-slate-900 truncate uppercase tracking-tight">
-                            {companyName}
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-xs font-bold text-slate-900 truncate uppercase tracking-tight">
+                              {companyName}
+                            </span>
+                            {u.companyId?.companyCode && (
+                              <span className="font-mono text-[9.5px] font-bold px-1.5 py-0.2 rounded bg-slate-100 text-slate-700 border border-slate-200">
+                                {u.companyId.companyCode}
+                              </span>
+                            )}
+                            <span
+                              className={`text-[9px] font-bold px-1.5 py-0.2 rounded ${
+                                !u.companyId?.parentCompanyId || u.companyId?.isHeadOffice
+                                   ? "bg-indigo-50 text-indigo-700"
+                                   : "bg-teal-50 text-teal-700"
+                              }`}
+                            >
+                              {!u.companyId?.parentCompanyId || u.companyId?.isHeadOffice
+                                ? "HQ"
+                                : "BRANCH"}
+                            </span>
                           </div>
                           <div className="text-[10.5px] text-slate-400 truncate mt-0.5">
                             {u.email} • {u.companyId?.city || "Unassigned"} • GSTIN: {u.companyId?.gstNo || "N/A"}
@@ -155,7 +178,7 @@ function DashboardOverviewContent() {
 
                         <Link
                           href={`/dashboard/super-admin/approvals/${u._id}`}
-                          className="px-3 py-1.5 bg-blue-50 hover:bg-blue-600 hover:text-white border border-blue-200 text-blue-700 rounded-full text-xs font-bold transition-all shadow-2xs cursor-pointer inline-flex items-center gap-1"
+                          className="px-3.5 py-1.5 bg-indigo-50 hover:bg-indigo-600 hover:text-white border border-indigo-200/90 text-indigo-700 rounded-xl text-xs font-bold transition-all shadow-2xs cursor-pointer inline-flex items-center gap-1"
                         >
                           Review
                         </Link>
@@ -171,7 +194,7 @@ function DashboardOverviewContent() {
           <div className="space-y-2">
             <div className="flex items-center justify-between px-1">
               <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider flex items-center gap-2">
-                <FaBoxes className="text-blue-600" />
+                <FaBoxes className="text-indigo-600" />
                 Pharma Sector Distribution
               </h3>
               <span className="text-[11px] text-slate-400 font-medium">
@@ -188,7 +211,7 @@ function DashboardOverviewContent() {
           <div className="bg-white rounded-2xl border border-slate-200/80 p-4 shadow-xs">
             <div className="flex items-center justify-between mb-3">
               <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider flex items-center gap-2">
-                <FaShieldAlt className="text-blue-600" />
+                <FaShieldAlt className="text-indigo-600" />
                 Security & Policies
               </h3>
               <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200/60">
@@ -296,15 +319,15 @@ function DashboardOverviewContent() {
 
               <Link
                 href="/dashboard/super-admin/accounts"
-                className="flex items-center justify-between p-2.5 rounded-xl border border-slate-100 hover:border-blue-200 hover:bg-blue-50/40 transition-all group"
+                className="flex items-center justify-between p-2.5 rounded-xl border border-slate-100 hover:border-indigo-200 hover:bg-indigo-50/40 transition-all group"
               >
                 <div className="flex items-center gap-2.5">
-                  <div className="w-7 h-7 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center font-bold text-xs shrink-0">
+                  <div className="w-7 h-7 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center font-bold text-xs shrink-0">
                     <FaIdCard size={11} />
                   </div>
                   <span className="font-semibold text-slate-800">Tenant Directory</span>
                 </div>
-                <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-blue-100/80 text-blue-800">
+                <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-indigo-100/80 text-indigo-800">
                   {total}
                 </span>
               </Link>

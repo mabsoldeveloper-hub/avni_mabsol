@@ -78,6 +78,9 @@ export async function POST(req: NextRequest) {
       ownerName: name.trim(),
       email: cleanEmail,
       mobile: cleanMobile,
+      enabledModules: [
+        "dashboard", "sales", "purchases", "purchase", "inventory", "customer", "master", "area", "compare", "leads", "custom-forms", "financial-year", "reports", "mabsolcrmsync", "users", "settings", "company", "billing", "fieldforce", "financial_years", "custom_forms"
+      ],
       status: "Active",
       isDefault: true,
       isHeadOffice: true,

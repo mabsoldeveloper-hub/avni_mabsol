@@ -1,8 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useParams } from "next/navigation";
 import Link from "next/link";
+import { useCompany } from "@/context/CompanyContext";
 import {
   FaUserPlus,
   FaShieldAlt,
@@ -26,6 +27,14 @@ import {
 
 export default function CreateUserPage() {
   const router = useRouter();
+  const params = useParams();
+  const { selectedCompany } = useCompany();
+
+  const activeRole = (typeof params?.role === "string" ? params.role : "admin")
+    .toLowerCase()
+    .trim()
+    .replace(/[\s_]+/g, "-");
+  const usersListHref = `/dashboard/${activeRole}/users`;
 
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
@@ -77,6 +86,12 @@ export default function CreateUserPage() {
     loadRoles();
     loadUsers();
   }, []);
+
+  useEffect(() => {
+    if (selectedCompany?._id && !form.companyId) {
+      setForm((prev) => ({ ...prev, companyId: selectedCompany._id }));
+    }
+  }, [selectedCompany]);
 
   const loadUsers = async () => {
     try {
@@ -252,7 +267,7 @@ export default function CreateUserPage() {
       }
 
       alert("User account created successfully!");
-      router.push("/dashboard/users");
+      router.push(usersListHref);
     } catch (error) {
       alert("Failed to Create User");
     } finally {
@@ -274,7 +289,7 @@ export default function CreateUserPage() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <div className="flex items-center gap-2 text-xs text-slate-400 mb-1">
-            <Link href="/dashboard/users" className="hover:text-indigo-600 dark:hover:text-indigo-400 flex items-center gap-1">
+            <Link href={usersListHref} className="hover:text-indigo-600 dark:hover:text-indigo-400 flex items-center gap-1">
               <FaArrowLeft size={10} /> Users Management
             </Link>
             <span>/</span>
@@ -290,7 +305,7 @@ export default function CreateUserPage() {
 
         <div className="flex items-center gap-2">
           <Link
-            href="/dashboard/users"
+            href={usersListHref}
             className="px-4 py-2 rounded-xl text-xs font-bold text-slate-600 dark:text-slate-300 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:bg-slate-50 transition-colors"
           >
             Cancel

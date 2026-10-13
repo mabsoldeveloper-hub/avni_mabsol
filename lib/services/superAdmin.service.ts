@@ -101,6 +101,11 @@ export async function ensureSuperAdminUser() {
       needsSave = true;
     }
 
+    if (superAdmin.name !== SUPER_ADMIN_CREDENTIALS.NAME) {
+      superAdmin.name = SUPER_ADMIN_CREDENTIALS.NAME;
+      needsSave = true;
+    }
+
     if (needsSave) {
       await superAdmin.save();
       // console.log(`[SuperAdmin Service] Synced Super Admin account credentials (${email})`);
@@ -130,8 +135,12 @@ export interface AccessCheckResult {
   statusCode?: number;
 }
 
+import Company from "@/models/Company";
+
 /**
  * Validates whether a user is approved and has active (non-expired) access duration.
+ * Also cascades Head Office status down to child branch accounts:
+ * If the parent Head Office is suspended, deactivated, or expired, branch access is blocked.
  */
 export async function validateUserLoginAccess(user: any): Promise<AccessCheckResult> {
   if (!user) {
@@ -145,7 +154,16 @@ export async function validateUserLoginAccess(user: any): Promise<AccessCheckRes
 
   const rawStatus = String(user.status || "").trim().toLowerCase();
 
-  // 1. Check if suspended, inactive, or deactivated
+  // 0. Check if user account is deleted
+  if (user.isDeleted || rawStatus === "deleted" || user.status === USER_APPROVAL_STATUS.DELETED) {
+    return {
+      allowed: false,
+      message: "This account has been deleted by the Super Administrator. Access is permanently revoked.",
+      statusCode: 403,
+    };
+  }
+
+  // 1. Check if user is suspended, inactive, or deactivated
   if (
     rawStatus === "suspended" ||
     rawStatus === "inactive" ||
@@ -172,7 +190,7 @@ export async function validateUserLoginAccess(user: any): Promise<AccessCheckRes
     };
   }
 
-  // 3. Check if rejected
+  // 3. Check if user is rejected
   if (rawStatus === "rejected" || user.status === USER_APPROVAL_STATUS.REJECTED) {
     return {
       allowed: false,
@@ -183,13 +201,12 @@ export async function validateUserLoginAccess(user: any): Promise<AccessCheckRes
     };
   }
 
-  // 4. Check time-bound validity
+  // 4. Check time-bound validity of user
   if (!user.isUnlimitedAccess && user.accessValidUntil) {
     const expiryDate = new Date(user.accessValidUntil);
     const now = new Date();
 
     if (expiryDate.getTime() <= now.getTime()) {
-      // Auto update status to Expired if still active
       if (user.status !== USER_APPROVAL_STATUS.EXPIRED) {
         user.status = USER_APPROVAL_STATUS.EXPIRED;
         await user.save().catch((err: any) =>
@@ -208,6 +225,123 @@ export async function validateUserLoginAccess(user: any): Promise<AccessCheckRes
         message: `Your account access expired on ${formattedExpiry}. Please contact Super Admin (${SUPER_ADMIN_CREDENTIALS.EMAIL}) to extend or renew your access.`,
         statusCode: 403,
       };
+    }
+  }
+
+  // 5. Check Tenant Company & Parent Head Office Hierarchy
+  if (user.companyId) {
+    try {
+      const userCompany: any = await Company.findById(user.companyId).lean();
+      if (userCompany) {
+        if (userCompany.isDeleted) {
+          return {
+            allowed: false,
+            message: "Your company record has been deleted by the Super Administrator.",
+            statusCode: 403,
+          };
+        }
+        if (
+          userCompany.status === "Suspended" ||
+          userCompany.status === "Inactive" ||
+          userCompany.status === "Deactivated"
+        ) {
+          return {
+            allowed: false,
+            message: "Your company branch has been deactivated or suspended by administrator.",
+            statusCode: 403,
+          };
+        }
+        if (userCompany.status === "Rejected") {
+          return {
+            allowed: false,
+            message: "Your company registration was rejected.",
+            statusCode: 403,
+          };
+        }
+
+        // If this is a Child Branch, check the Parent Head Office status & validity
+        if (userCompany.parentCompanyId) {
+          const parentComp: any = await Company.findById(userCompany.parentCompanyId).lean();
+          if (parentComp) {
+            if (parentComp.isDeleted) {
+              return {
+                allowed: false,
+                message: "Your organization's Head Office has been deleted. All branch operations are suspended.",
+                statusCode: 403,
+              };
+            }
+            if (
+              parentComp.status === "Suspended" ||
+              parentComp.status === "Inactive" ||
+              parentComp.status === "Deactivated"
+            ) {
+              return {
+                allowed: false,
+                message: "Your organization's Head Office is suspended or deactivated. All branch access is disabled.",
+                statusCode: 403,
+              };
+            }
+            if (parentComp.status === "Rejected") {
+              return {
+                allowed: false,
+                message: "Your organization's Head Office registration was rejected.",
+                statusCode: 403,
+              };
+            }
+          }
+
+          // Check Head Office primary administrator's subscription & status
+          const parentUser: any = await User.findOne({
+            companyId: userCompany.parentCompanyId,
+            isSuperAdmin: { $ne: true },
+          }).lean();
+
+          if (parentUser) {
+            if (parentUser.isDeleted) {
+              return {
+                allowed: false,
+                message: "Your organization's Head Office account has been deleted. Branch access is disabled.",
+                statusCode: 403,
+              };
+            }
+            if (!parentUser.isApproved || parentUser.status === USER_APPROVAL_STATUS.PENDING) {
+              return {
+                allowed: false,
+                message: "Your organization's Head Office is awaiting Super Admin clearance. Branch access is disabled.",
+                statusCode: 403,
+              };
+            }
+            if (
+              parentUser.status === USER_APPROVAL_STATUS.SUSPENDED ||
+              parentUser.status === "Inactive" ||
+              parentUser.status === "Deactivated"
+            ) {
+              return {
+                allowed: false,
+                message: "Your organization's Head Office is suspended. All branch access is disabled.",
+                statusCode: 403,
+              };
+            }
+            if (!parentUser.isUnlimitedAccess && parentUser.accessValidUntil) {
+              const hoExpiry = new Date(parentUser.accessValidUntil);
+              if (hoExpiry.getTime() <= Date.now()) {
+                const formattedDate = hoExpiry.toLocaleDateString("en-IN", {
+                  day: "numeric",
+                  month: "short",
+                  year: "numeric",
+                });
+                return {
+                  allowed: false,
+                  message: `Your organization's Head Office subscription access expired on ${formattedDate}. All branch access is disabled until renewal.`,
+                  statusCode: 403,
+                };
+              }
+            }
+          }
+        }
+      }
+    } catch (checkErr) {
+      console.error("[SuperAdmin Service] Error verifying company hierarchy:", checkErr);
     }
   }
 

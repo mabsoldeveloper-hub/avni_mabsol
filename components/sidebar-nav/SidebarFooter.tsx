@@ -104,7 +104,7 @@ export default React.memo(function SidebarFooter({
   const initials = (displayName.slice(0, 2) || "AD").toUpperCase();
 
   return (
-    <div ref={footerRef} className="p-2 shrink-0 border-t border-slate-100/90 dark:border-slate-800/80">
+    <div ref={footerRef} className={`p-2 shrink-0 ${checkIsSuperAdmin(user) ? "border-t-0" : "border-t border-slate-100/90 dark:border-slate-800/80"}`}>
       {/* Expanded View */}
       <div
         className="transition-all duration-300 ease-out flex flex-col gap-1.5"
@@ -138,18 +138,27 @@ export default React.memo(function SidebarFooter({
 
         {/* Clean User Profile Card */}
         {checkIsSuperAdmin(user) ? (
-          <div className="rounded-xl border border-slate-800/90 bg-[#0B101B] p-2 shadow-xs flex items-center justify-between gap-2">
+          <div className="rounded-xl border-0 bg-slate-50/80 p-2.5 shadow-2xs flex items-center justify-between gap-2.5">
             <div className="flex items-center gap-2.5 min-w-0 flex-1">
-              <div className="w-8 h-8 rounded-lg bg-blue-950/90 border border-blue-800/70 text-blue-300 font-black text-xs flex items-center justify-center shrink-0 select-none">
-                AD
+              <div className="relative shrink-0">
+                <div className="w-8 h-8 rounded-full bg-indigo-600 text-white font-bold text-xs flex items-center justify-center shadow-2xs select-none">
+                  {user?.name
+                    ? (user.name.includes(" ")
+                        ? user.name.split(" ").map((n: string) => n[0]).join("").slice(0, 2).toUpperCase()
+                        : user.name.slice(0, 2).toUpperCase())
+                    : "MI"}
+                </div>
+                <span className="absolute bottom-0 right-0 w-2 h-2 rounded-full bg-emerald-500 ring-2 ring-white" />
               </div>
 
               <div className="min-w-0 flex-1">
-                <div className="text-xs font-bold text-white truncate">
-                  {user?.name || "System Owner"}
+                <div className="text-xs font-bold text-slate-800 truncate leading-tight">
+                  {user?.name || "mabsolinfotech"}
                 </div>
-                <div className="text-[9px] font-extrabold text-blue-400 tracking-wider uppercase mt-0.5">
-                  ROOT ADMIN
+                <div className="flex items-center gap-1 mt-0.5">
+                  <span className="text-[8.5px] font-bold tracking-wider uppercase text-indigo-700 bg-indigo-50 border border-indigo-200/80 px-1.5 py-0.2 rounded leading-tight">
+                    ROOT ADMIN
+                  </span>
                 </div>
               </div>
             </div>
@@ -157,10 +166,10 @@ export default React.memo(function SidebarFooter({
             <button
               type="button"
               onClick={handleLogout}
-              className="w-7 h-7 rounded-lg bg-slate-900 border border-slate-800 text-white/80 hover:text-white hover:bg-rose-950/40 flex items-center justify-center transition-colors cursor-pointer shrink-0"
-              title="Logout"
+              className="w-7 h-7 rounded-lg bg-white hover:bg-rose-50 border-0 text-slate-400 hover:text-rose-600 flex items-center justify-center transition-all duration-150 cursor-pointer shrink-0 shadow-2xs"
+              title="Sign Out"
             >
-              <FaPowerOff size={11} />
+              <FaPowerOff size={10} />
             </button>
           </div>
         ) : (
@@ -209,12 +218,12 @@ export default React.memo(function SidebarFooter({
         {/* Avatar */}
         <div className="relative">
           <span
-            className="flex items-center justify-center w-8 h-8 rounded-full bg-slate-900 text-white font-bold text-xs shadow-xs"
+            className="flex items-center justify-center w-8 h-8 rounded-full bg-indigo-600 text-white font-bold text-xs shadow-2xs"
             title={`${displayName} (${roleName})`}
           >
             {initials}
           </span>
-          <span className="absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full bg-emerald-500 ring-2 ring-white dark:ring-slate-900" />
+          <span className="absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full bg-emerald-500 ring-2 ring-white" />
         </div>
 
         {/* Standalone Logout */}

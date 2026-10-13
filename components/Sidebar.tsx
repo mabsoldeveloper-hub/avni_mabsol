@@ -32,6 +32,7 @@ import {
   FaChartBar,
   FaFileAlt,
   FaCog,
+  FaTrash,
 } from "react-icons/fa";
 import { checkIsSuperAdmin } from "@/lib/constants/superAdmin.constant";
 
@@ -44,6 +45,7 @@ import {
   SIDEBAR_PRESET_THEMES,
   SIDEBAR_SECTIONS,
   MODULE_KEY_MAP,
+  CORE_MODULE_IDS,
   isColorDark,
   hexToRgba,
   SidebarHeader,
@@ -306,51 +308,148 @@ export default function Sidebar({ collapsed, setCollapsed, mobile }: SidebarProp
 
   // Filter items by visibility, company enabled modules, and user permissions
   const visibleMenuItems = useMemo(() => {
-    const enabledModules = (selectedCompany as any)?.enabledModules;
+    const rawEnabled = (selectedCompany as any)?.enabledModules;
+    const isChildBranch = Boolean(
+      selectedCompany &&
+      ((selectedCompany as any).isHeadOffice === false || (selectedCompany as any).parentCompanyId)
+    );
 
-    return menuItems.filter((item) => {
-      if (item.isVisible === false) return false;
-
-      // Module-level company permission check: strictly respect company's enabledModules
-      if (enabledModules && Array.isArray(enabledModules) && enabledModules.length > 0 && !isSuperAdmin) {
-        const itemHref = item.href || (item.subItems && item.subItems[0]?.href) || "";
-        const isEnabled = enabledModules.some((modKey: string) => {
-          if (item.id === modKey) return true;
-          const mappedIds = MODULE_KEY_MAP[modKey] || [];
-          if (mappedIds.includes(item.id)) return true;
-          if (itemHref === `/dashboard/${modKey}` || itemHref.startsWith(`/dashboard/${modKey}/`)) return true;
-          if (
-            item.subItems?.some(
-              (sub) =>
-                mappedIds.includes(sub.id) ||
-                sub.id === modKey ||
-                sub.href === `/dashboard/${modKey}` ||
-                sub.href?.startsWith(`/dashboard/${modKey}/`)
-            )
-          ) {
-            return true;
-          }
-          return false;
-        });
-
-        if (!isEnabled) return false;
-      }
-
-      // User role permission check for main item
-      if (item.permission && !can(item.permission)) {
-        if (item.isGroup && item.subItems && item.subItems.length > 0) {
-          const hasAnyPermittedSub = item.subItems.some(
-            (sub) => sub.isVisible !== false && (!sub.permission || can(sub.permission))
-          );
-          if (!hasAnyPermittedSub) return false;
-        } else {
-          return false;
+    // Normalize enabled modules array if defined and non-empty.
+    // If enabledModules is empty or undefined, NO module restrictions apply (all standard modules visible).
+    const hasModuleRestrictions =
+      Array.isArray(rawEnabled) && rawEnabled.length > 0 && !isSuperAdmin;
+    const enabledSet = new Set<string>();
+    if (hasModuleRestrictions) {
+      for (const m of rawEnabled) {
+        if (!m) continue;
+        const lower = String(m).toLowerCase().trim();
+        enabledSet.add(lower);
+        // Add aliases
+        if (lower === "purchases" || lower === "purchase") {
+          enabledSet.add("purchase");
+          enabledSet.add("purchases");
+        }
+        if (lower === "financial_years" || lower === "financial-year") {
+          enabledSet.add("financial-year");
+          enabledSet.add("financial_years");
+        }
+        if (lower === "custom_forms" || lower === "custom-forms") {
+          enabledSet.add("custom-forms");
+          enabledSet.add("custom_forms");
+        }
+        if (lower === "fieldforce" || lower === "mr") {
+          enabledSet.add("fieldforce");
+          enabledSet.add("mr");
+        }
+        if (lower === "billing") {
+          enabledSet.add("billing");
+          enabledSet.add("sales");
+          enabledSet.add("purchase");
+          enabledSet.add("customer");
+          enabledSet.add("inventory");
+        }
+        if (lower === "leads") {
+          enabledSet.add("leads");
+          enabledSet.add("email-campaign");
+          enabledSet.add("whatsapp-campaign");
+          enabledSet.add("broadcast-hub");
         }
       }
+    }
 
-      return true;
-    });
-  }, [menuItems, can, selectedCompany]);
+    const isSubItemAllowed = (sub: SubMenuItemConfig, parentGroupId?: string): boolean => {
+      if (sub.isVisible === false) return false;
+      if (!hasModuleRestrictions) return true;
+      if (CORE_MODULE_IDS.includes(sub.id)) return true;
+      if (parentGroupId && CORE_MODULE_IDS.includes(parentGroupId)) return true;
+
+      // If parent group itself is enabled (e.g. parent "sales" and "sales" is in enabledSet)
+      if (parentGroupId && enabledSet.has(parentGroupId.toLowerCase())) return true;
+
+      // Direct ID check
+      if (enabledSet.has(sub.id.toLowerCase())) return true;
+
+      // Check if sub.id is permitted by any enabled module
+      for (const modKey of Array.from(enabledSet)) {
+        if (sub.id === modKey) return true;
+        const mapped = MODULE_KEY_MAP[modKey] || [];
+        if (mapped.includes(sub.id)) return true;
+        if (sub.href === `/dashboard/${modKey}` || sub.href?.startsWith(`/dashboard/${modKey}/`)) return true;
+      }
+      return false;
+    };
+
+    return menuItems
+      .map((item) => {
+        let subItems = item.subItems;
+
+        // When operating in a child branch context, hide "+ Create Company" subItem
+        if (item.id === "company" && isChildBranch && !isSuperAdmin && subItems) {
+          subItems = subItems.filter((sub) => sub.id !== "company-create");
+        }
+
+        // If company has restricted modules, filter subItems according to enabledModules
+        if (hasModuleRestrictions && subItems) {
+          subItems = subItems.filter((sub) => isSubItemAllowed(sub, item.id));
+        }
+
+        return {
+          ...item,
+          subItems,
+        };
+      })
+      .filter((item) => {
+        if (item.isVisible === false) return false;
+
+        // Module-level company permission check: strictly respect company's enabledModules
+        if (hasModuleRestrictions) {
+          const isCore = CORE_MODULE_IDS.includes(item.id);
+          if (!isCore) {
+            if (item.subItems && item.subItems.length > 0) {
+              // Group has remaining permitted subItems, allow it
+            } else if (item.isGroup) {
+              // Group has 0 permitted subItems remaining, hide it
+              return false;
+            } else {
+              // Standalone item: check if item itself is mapped to an enabled module
+              if (enabledSet.has(item.id.toLowerCase())) return true;
+              let isEnabled = false;
+              for (const modKey of Array.from(enabledSet)) {
+                if (item.id === modKey) {
+                  isEnabled = true;
+                  break;
+                }
+                const mapped = MODULE_KEY_MAP[modKey] || [];
+                if (mapped.includes(item.id)) {
+                  isEnabled = true;
+                  break;
+                }
+                const itemHref = item.href || "";
+                if (itemHref === `/dashboard/${modKey}` || itemHref.startsWith(`/dashboard/${modKey}/`)) {
+                  isEnabled = true;
+                  break;
+                }
+              }
+              if (!isEnabled) return false;
+            }
+          }
+        }
+
+        // User role permission check for main item
+        if (item.permission && !can(item.permission)) {
+          if (item.isGroup && item.subItems && item.subItems.length > 0) {
+            const hasAnyPermittedSub = item.subItems.some(
+              (sub) => sub.isVisible !== false && (!sub.permission || can(sub.permission))
+            );
+            if (!hasAnyPermittedSub) return false;
+          } else {
+            return false;
+          }
+        }
+
+        return true;
+      });
+  }, [menuItems, can, selectedCompany, isSuperAdmin]);
 
   // Group visible items into logical sections defined in SIDEBAR_SECTIONS
   const groupedSections = useMemo(() => {
@@ -391,15 +490,17 @@ export default function Sidebar({ collapsed, setCollapsed, mobile }: SidebarProp
     <>
 
       <div
-        className={`glass-sidebar flex flex-col ${currentVisuals.isDark || isSuperAdmin ? "sidebar-dark-theme" : ""}`}
+        className={`glass-sidebar flex flex-col ${currentVisuals.isDark && !isSuperAdmin ? "sidebar-dark-theme" : ""}`}
         style={{
           width: mobile ? "270px" : collapsed ? "76px" : "265px",
           height: "100vh",
           position: "fixed",
           left: 0,
           top: 0,
-          background: isSuperAdmin ? "#0B101B" : currentVisuals.bg,
-          borderRight: isSuperAdmin ? "1px solid rgba(30, 41, 59, 0.8)" : `1px solid ${currentVisuals.borderColor}`,
+          background: isSuperAdmin ? "#ffffff" : currentVisuals.bg,
+          borderRight: isSuperAdmin ? "none" : `1px solid ${currentVisuals.borderColor}`,
+          border: isSuperAdmin ? "none" : undefined,
+          boxShadow: isSuperAdmin ? "0 0 24px rgba(15, 23, 42, 0.04)" : undefined,
           transform: mobile && collapsed ? "translateX(-100%)" : "translateX(0)",
           transition:
             "width 0.28s cubic-bezier(0.4, 0, 0.2, 1), transform 0.28s cubic-bezier(0.4, 0, 0.2, 1)",
@@ -408,15 +509,15 @@ export default function Sidebar({ collapsed, setCollapsed, mobile }: SidebarProp
           ...(sidebarCustomTextColor ? { ["--sidebar-custom-text" as any]: sidebarCustomTextColor } : {}),
         }}
       >
-        {/* Specular highlight sweeping down panel */}
-        <div className="pointer-events-none absolute inset-0 glass-sidebar-specular" />
+        {/* Specular highlight sweeping down panel (only in custom theme) */}
+        {!isSuperAdmin && <div className="pointer-events-none absolute inset-0 glass-sidebar-specular" />}
 
         {/* Sleek floating circular toggle button right on the sidebar seam */}
         {!mobile && setCollapsed && (
           <button
             type="button"
             onClick={() => setCollapsed(!collapsed)}
-            className="sidebar-toggle-circle absolute -right-3.5 top-[18px] text-slate-500 dark:text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400"
+            className="sidebar-toggle-circle absolute -right-3.5 top-[18px] text-slate-500 hover:text-indigo-600 bg-white border border-slate-200 shadow-xs"
             style={{ zIndex: 1060 }}
             title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
             aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
@@ -429,146 +530,167 @@ export default function Sidebar({ collapsed, setCollapsed, mobile }: SidebarProp
           {/* Logo / Brand Header */}
           <SidebarHeader
             iconOnly={iconOnly}
-            isDark={currentVisuals.isDark || isSuperAdmin}
+            isDark={isSuperAdmin ? false : currentVisuals.isDark}
             logoUrl={logoUrl}
             isSuperAdmin={isSuperAdmin}
           />
 
           {/* Nav List with categorized sections */}
-          <div className="flex-1 min-h-0 py-3 sidebar-scroll px-2 overflow-y-auto overflow-x-hidden">
+          <div className="flex-1 min-h-0 py-3 sidebar-scroll px-2.5 overflow-y-auto overflow-x-hidden">
             {isSuperAdmin ? (
-              <div className="flex flex-col gap-1">
-                <ul className="flex flex-col p-0 m-0 list-none gap-1">
-                  {/* 1. Dashboard */}
-                  <li>
-                    <SidebarNavLink
-                      href="/dashboard/super-admin/dashboard"
-                      icon={<FaTachometerAlt size={14} />}
-                      label="Dashboard"
-                      active={pathname === "/dashboard/super-admin/dashboard"}
-                      color="indigo"
-                      iconOnly={iconOnly}
-                      customActiveStyle={true}
-                      onNavigate={handleMobileNavigate}
-                    />
-                  </li>
+              <div className="flex flex-col gap-3 py-1">
+                {/* 1. MAIN COMMAND */}
+                <div>
+                  {!iconOnly && (
+                    <div className="px-2.5 pb-1 text-[9.5px] font-black tracking-wider text-slate-400 uppercase select-none">
+                      Main Command
+                    </div>
+                  )}
+                  <ul className="flex flex-col p-0 m-0 list-none gap-1">
+                    <li>
+                      <SidebarNavLink
+                        href="/dashboard/super-admin/dashboard"
+                        icon={<FaTachometerAlt size={14} />}
+                        label="Dashboard"
+                        active={pathname === "/dashboard/super-admin/dashboard"}
+                        color="indigo"
+                        iconOnly={iconOnly}
+                        customActiveStyle={true}
+                        onNavigate={handleMobileNavigate}
+                      />
+                    </li>
+                    <li>
+                      <SidebarNavLink
+                        href="/dashboard/super-admin"
+                        icon={<FaUserCheck size={14} />}
+                        label="Approve Admins"
+                        active={pathname === "/dashboard/super-admin"}
+                        color="indigo"
+                        iconOnly={iconOnly}
+                        customActiveStyle={true}
+                        onNavigate={handleMobileNavigate}
+                      />
+                    </li>
+                    <li>
+                      <SidebarNavLink
+                        href="/dashboard/super-admin/accounts"
+                        icon={<FaAddressCard size={14} />}
+                        label="All Accounts"
+                        active={pathname === "/dashboard/super-admin/accounts"}
+                        color="indigo"
+                        iconOnly={iconOnly}
+                        customActiveStyle={true}
+                        onNavigate={handleMobileNavigate}
+                      />
+                    </li>
+                  </ul>
+                </div>
 
-                  {/* 2. Approve Admins */}
-                  <li>
-                    <SidebarNavLink
-                      href="/dashboard/super-admin"
-                      icon={<FaUserCheck size={14} />}
-                      label="Approve Admins"
-                      active={pathname === "/dashboard/super-admin"}
-                      color="indigo"
-                      iconOnly={iconOnly}
-                      customActiveStyle={true}
-                      onNavigate={handleMobileNavigate}
-                    />
-                  </li>
+                {/* 2. ENTERPRISE LIFECYCLE */}
+                <div>
+                  {!iconOnly && (
+                    <div className="px-2.5 pb-1 text-[9.5px] font-black tracking-wider text-slate-400 uppercase select-none">
+                      Enterprise Lifecycle
+                    </div>
+                  )}
+                  <ul className="flex flex-col p-0 m-0 list-none gap-1">
+                    <li>
+                      <SidebarNavLink
+                        href="/dashboard/super-admin/branches"
+                        icon={<FaCodeBranch size={14} />}
+                        label="Branch Management"
+                        active={pathname === "/dashboard/super-admin/branches"}
+                        color="indigo"
+                        iconOnly={iconOnly}
+                        customActiveStyle={true}
+                        onNavigate={handleMobileNavigate}
+                      />
+                    </li>
+                    <li>
+                      <SidebarNavLink
+                        href="/dashboard/super-admin/deactivated"
+                        icon={<FaBan size={14} />}
+                        label="Deactivated Accounts"
+                        active={pathname === "/dashboard/super-admin/deactivated"}
+                        color="indigo"
+                        iconOnly={iconOnly}
+                        customActiveStyle={true}
+                        onNavigate={handleMobileNavigate}
+                      />
+                    </li>
+                    <li>
+                      <SidebarNavLink
+                        href="/dashboard/super-admin/deleted"
+                        icon={<FaTrash size={14} />}
+                        label="Deleted Accounts"
+                        active={pathname === "/dashboard/super-admin/deleted"}
+                        color="indigo"
+                        iconOnly={iconOnly}
+                        customActiveStyle={true}
+                        onNavigate={handleMobileNavigate}
+                      />
+                    </li>
+                  </ul>
+                </div>
 
-                  {/* 3. All Accounts */}
-                  <li>
-                    <SidebarNavLink
-                      href="/dashboard/super-admin/accounts"
-                      icon={<FaAddressCard size={14} />}
-                      label="All Accounts"
-                      active={pathname === "/dashboard/super-admin/accounts"}
-                      color="indigo"
-                      iconOnly={iconOnly}
-                      customActiveStyle={true}
-                      onNavigate={handleMobileNavigate}
-                    />
-                  </li>
-
-                  {/* 4. Deactivated Accounts */}
-                  <li>
-                    <SidebarNavLink
-                      href="/dashboard/super-admin/deactivated"
-                      icon={<FaBan size={14} />}
-                      label="Deactivated Accounts"
-                      active={pathname === "/dashboard/super-admin/deactivated"}
-                      color="indigo"
-                      iconOnly={iconOnly}
-                      customActiveStyle={true}
-                      onNavigate={handleMobileNavigate}
-                    />
-                  </li>
-
-                  {/* 5. Branch Management */}
-                  <li>
-                    <SidebarNavLink
-                      href="/dashboard/super-admin/branches"
-                      icon={<FaCodeBranch size={14} />}
-                      label="Branch Management"
-                      active={pathname === "/dashboard/super-admin/branches"}
-                      color="indigo"
-                      iconOnly={iconOnly}
-                      badge="Soon"
-                      customActiveStyle={true}
-                      onNavigate={handleMobileNavigate}
-                    />
-                  </li>
-
-                  {/* 6. Subscription Plans */}
-                  <li>
-                    <SidebarNavLink
-                      href="/dashboard/super-admin/plans"
-                      icon={<FaCreditCard size={14} />}
-                      label="Subscription Plans"
-                      active={pathname === "/dashboard/super-admin/plans"}
-                      color="indigo"
-                      iconOnly={iconOnly}
-                      badge="Soon"
-                      customActiveStyle={true}
-                      onNavigate={handleMobileNavigate}
-                    />
-                  </li>
-
-                  {/* 7. Reports */}
-                  <li>
-                    <SidebarNavLink
-                      href="/dashboard/super-admin/reports"
-                      icon={<FaChartBar size={14} />}
-                      label="Reports"
-                      active={pathname === "/dashboard/super-admin/reports"}
-                      color="indigo"
-                      iconOnly={iconOnly}
-                      badge="Soon"
-                      customActiveStyle={true}
-                      onNavigate={handleMobileNavigate}
-                    />
-                  </li>
-
-                  {/* 8. Audit Logs */}
-                  <li>
-                    <SidebarNavLink
-                      href="/dashboard/super-admin/audit-logs"
-                      icon={<FaFileAlt size={14} />}
-                      label="Audit Logs"
-                      active={pathname === "/dashboard/super-admin/audit-logs"}
-                      color="indigo"
-                      iconOnly={iconOnly}
-                      badge="Soon"
-                      customActiveStyle={true}
-                      onNavigate={handleMobileNavigate}
-                    />
-                  </li>
-
-                  {/* 9. System Settings */}
-                  <li>
-                    <SidebarNavLink
-                      href="/dashboard/super-admin/settings"
-                      icon={<FaCog size={14} />}
-                      label="System Settings"
-                      active={pathname === "/dashboard/super-admin/settings"}
-                      color="indigo"
-                      iconOnly={iconOnly}
-                      customActiveStyle={true}
-                      onNavigate={handleMobileNavigate}
-                    />
-                  </li>
-                </ul>
+                {/* 3. PLATFORM GOVERNANCE */}
+                <div>
+                  {!iconOnly && (
+                    <div className="px-2.5 pb-1 text-[9.5px] font-black tracking-wider text-slate-400 uppercase select-none">
+                      Platform Governance
+                    </div>
+                  )}
+                  <ul className="flex flex-col p-0 m-0 list-none gap-1">
+                    <li>
+                      <SidebarNavLink
+                        href="/dashboard/super-admin/plans"
+                        icon={<FaCreditCard size={14} />}
+                        label="Subscription Plans"
+                        active={pathname === "/dashboard/super-admin/plans"}
+                        color="indigo"
+                        iconOnly={iconOnly}
+                        customActiveStyle={true}
+                        onNavigate={handleMobileNavigate}
+                      />
+                    </li>
+                    <li>
+                      <SidebarNavLink
+                        href="/dashboard/super-admin/reports"
+                        icon={<FaChartBar size={14} />}
+                        label="Analytics & Reports"
+                        active={pathname === "/dashboard/super-admin/reports"}
+                        color="indigo"
+                        iconOnly={iconOnly}
+                        customActiveStyle={true}
+                        onNavigate={handleMobileNavigate}
+                      />
+                    </li>
+                    <li>
+                      <SidebarNavLink
+                        href="/dashboard/super-admin/audit-logs"
+                        icon={<FaFileAlt size={14} />}
+                        label="Audit Logs"
+                        active={pathname === "/dashboard/super-admin/audit-logs"}
+                        color="indigo"
+                        iconOnly={iconOnly}
+                        customActiveStyle={true}
+                        onNavigate={handleMobileNavigate}
+                      />
+                    </li>
+                    <li>
+                      <SidebarNavLink
+                        href="/dashboard/super-admin/settings"
+                        icon={<FaCog size={14} />}
+                        label="System Settings"
+                        active={pathname === "/dashboard/super-admin/settings"}
+                        color="indigo"
+                        iconOnly={iconOnly}
+                        customActiveStyle={true}
+                        onNavigate={handleMobileNavigate}
+                      />
+                    </li>
+                  </ul>
+                </div>
               </div>
             ) : (
               <div className="flex flex-col gap-1.5">

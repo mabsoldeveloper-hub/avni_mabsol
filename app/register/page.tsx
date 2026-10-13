@@ -35,7 +35,8 @@ interface AdditionalGstItem {
   city: string;
   pincode: string;
   email: string;
-  mobile: string;
+  mobile?: string;
+  sameGstAsStep1?: boolean;
   password?: string;
   confirmPassword?: string;
   showPassword?: boolean;
@@ -217,9 +218,29 @@ export default function RegisterPage() {
     return () => clearInterval(timer);
   }, [mobileCountdown, emailCountdown, additionalGsts]);
 
+  function handleToggleSameStep1Gst(idx: number, checked: boolean) {
+    const list = [...additionalGsts];
+    if (!list[idx]) return;
+    list[idx].sameGstAsStep1 = checked;
+    if (checked) {
+      list[idx].gstNo = primaryGst;
+      list[idx].state = state;
+      list[idx].city = city;
+      list[idx].address = address;
+      list[idx].pincode = pincode;
+      list[idx].verified = isPrimaryGstVerified;
+      showToast(`Applied Step 1 GST & Address to Branch #${idx + 1}`, "info");
+    } else {
+      list[idx].gstNo = "";
+      list[idx].verified = false;
+    }
+    setAdditionalGsts(list);
+  }
+
   function handleCopyHeadOfficeGst(idx: number) {
     const list = [...additionalGsts];
     if (!list[idx]) return;
+    list[idx].sameGstAsStep1 = true;
     list[idx].gstNo = primaryGst;
     list[idx].state = state;
     list[idx].city = city;
@@ -227,7 +248,7 @@ export default function RegisterPage() {
     list[idx].pincode = pincode;
     list[idx].verified = isPrimaryGstVerified;
     setAdditionalGsts(list);
-    showToast(`Copied Head Office GST & Address to Branch #${idx + 1}`, "info");
+    showToast(`Copied Step 1 GST & Address to Branch #${idx + 1}`, "info");
   }
 
   function handleCopyHeadOfficePhone(idx: number) {
@@ -403,7 +424,6 @@ export default function RegisterPage() {
     state.trim() &&
     pincode.trim().length === 6 &&
     cleanMobileDigits.length === 10 &&
-    mobileVerified &&
     email.trim().includes("@") &&
     emailVerified &&
     password &&
@@ -418,7 +438,6 @@ export default function RegisterPage() {
       additionalGsts.slice(0, branchCount).every(
         (br) =>
           br.branchName.trim() &&
-          (br.mobile || "").replace(/\D/g, "").length === 10 &&
           (br.email || "").trim().includes("@") &&
           (br.email || "").trim().toLowerCase() !== email.trim().toLowerCase() &&
           Boolean(br.emailVerified) &&
@@ -455,6 +474,7 @@ export default function RegisterPage() {
           pincode: "",
           email: "",
           mobile: "",
+          sameGstAsStep1: false,
           password: "",
           confirmPassword: "",
           showPassword: false,
@@ -877,14 +897,7 @@ export default function RegisterPage() {
           setActiveBranchIndex(i);
           return;
         }
-        const cleanBrMob = (br.mobile || "").replace(/\D/g, "");
-        if (cleanBrMob.length !== 10) {
-          const msg = `Please enter a valid 10-digit phone number for Branch #${i + 1}`;
-          setErrorBanner(msg);
-          showToast(msg, "error");
-          setActiveBranchIndex(i);
-          return;
-        }
+
         const cleanBrEmail = (br.email || "").trim().toLowerCase();
         if (!cleanBrEmail || !cleanBrEmail.includes("@")) {
           const msg = `Please enter a valid email address for Branch #${i + 1}`;
@@ -1483,19 +1496,21 @@ export default function RegisterPage() {
 
                     {/* Branch GST Number */}
                     <div className="clean-field">
-                      <div className="clean-label-row" style={{ marginBottom: "4px" }}>
+                      <div className="clean-label-row" style={{ marginBottom: "6px" }}>
                         <label>
-                          <span>GST Number</span>
+                          <span>Branch GST Number</span>
                         </label>
                         {primaryGst && (
-                          <button
-                            type="button"
-                            className="same-as-ho-btn"
-                            onClick={() => handleCopyHeadOfficeGst(idx)}
-                            title="Copy GST & Address from Head Office"
-                          >
-                            📋 Same GST as Head Office
-                          </button>
+                          <label className="same-step1-checkbox-label">
+                            <input
+                              type="checkbox"
+                              checked={Boolean(item.sameGstAsStep1 || (primaryGst && item.gstNo === primaryGst))}
+                              onChange={(e) => handleToggleSameStep1Gst(idx, e.target.checked)}
+                            />
+                            <span>
+                              Same GST as Step 1 GST {primaryGst ? `(${primaryGst})` : ""}
+                            </span>
+                          </label>
                         )}
                       </div>
                       <div className="clean-input-row">
@@ -1504,17 +1519,19 @@ export default function RegisterPage() {
                           placeholder="ENTER GSTIN (E.G. 22AAAAA0000A1Z5)"
                           maxLength={15}
                           value={item.gstNo}
+                          readOnly={Boolean(item.sameGstAsStep1)}
                           onChange={(e) => {
                             const list = [...additionalGsts];
                             list[idx].gstNo = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "");
                             list[idx].verified = false;
+                            list[idx].sameGstAsStep1 = false;
                             setAdditionalGsts(list);
                           }}
                         />
                         <button
                           type="button"
                           className={`clean-inline-btn ${item.verified ? "is-verified" : ""}`}
-                          disabled={item.isVerifying || item.verified}
+                          disabled={item.isVerifying || item.verified || Boolean(item.sameGstAsStep1)}
                           onClick={() => handleVerifyBranchGst(idx)}
                         >
                           {item.isVerifying ? "Verifying…" : item.verified ? "✓ Verified" : "Verify GST"}
@@ -1596,31 +1613,30 @@ export default function RegisterPage() {
                       <div className="clean-field">
                         <div className="clean-label-row" style={{ marginBottom: "4px" }}>
                           <label>
-                            <span className="req-star">*</span> Phone Number
+                            Phone Number <span style={{ fontSize: "11px", fontWeight: "normal", color: "#64748b" }}>(Optional)</span>
                           </label>
                           {mobile && (
                             <button
                               type="button"
                               className="same-as-ho-btn"
                               onClick={() => handleCopyHeadOfficePhone(idx)}
-                              title="Copy Phone from Head Office"
+                              title="Copy Phone from Step 1"
                             >
-                              📋 Same as Head Office
+                              📋 Same as Step 1 Phone
                             </button>
                           )}
                         </div>
                         <div className="clean-input-row">
                           <input
                             type="tel"
-                            placeholder="10-digit phone number"
+                            placeholder="10-digit phone number (optional)"
                             maxLength={10}
-                            value={item.mobile}
+                            value={item.mobile || ""}
                             onChange={(e) => {
                               const list = [...additionalGsts];
                               list[idx].mobile = e.target.value.replace(/\D/g, "");
                               setAdditionalGsts(list);
                             }}
-                            required
                           />
                         </div>
                       </div>
@@ -1797,15 +1813,8 @@ export default function RegisterPage() {
                           style={{ padding: "8px 18px", fontSize: "13px" }}
                           onClick={() => {
                             const cur = additionalGsts[idx];
-                            const curMob = (cur?.mobile || "").replace(/\D/g, "");
                             if (!cur?.branchName?.trim()) {
                               const msg = `Please enter the branch company name for Branch #${idx + 1}`;
-                              setErrorBanner(msg);
-                              showToast(msg, "error");
-                              return;
-                            }
-                            if (curMob.length !== 10) {
-                              const msg = `Please enter a 10-digit phone number for Branch #${idx + 1}`;
                               setErrorBanner(msg);
                               showToast(msg, "error");
                               return;

@@ -6,6 +6,8 @@ import { getCurrentUser } from "@/lib/auth";
 
 
 
+
+
 import Customer from "@/models/Customer";
 
 import AccountGroup from "@/models/AccountGroup";
@@ -1622,7 +1624,9 @@ export async function GET(req: Request) {
 
 
 export async function POST(request: Request) {
+
   try {
+
     await connectDB();
     const user = await getCurrentUser();
     if (!user) {
@@ -1630,6 +1634,7 @@ export async function POST(request: Request) {
         { success: false, message: "Unauthorized" },
         { status: 401 }
       );
+
     }
 
     const body = await request.json();

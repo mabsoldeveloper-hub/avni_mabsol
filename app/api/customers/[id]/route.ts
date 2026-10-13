@@ -186,7 +186,7 @@ export async function GET(
     /* --------------------------------------------------------
        MARG CUSTOMER EMAIL LOOKUP
     -------------------------------------------------------- */
-    let customerEmail = clean(customerDoc?.MAILNAM || customerDoc?.EMAIL || "");
+    let customerEmail = clean(customerDoc?.EMAIL || "NO EMAIL");
 
     const supportCode = customerOrdno.toUpperCase();
     if (supportCode && (!customerEmail || !customerEmail.includes("@"))) {
@@ -436,8 +436,7 @@ export async function GET(
       EMAIL: customerEmail,
       ...groupInfo,
       STATUS: status,
-      // EMAIL: customerEmail || customerDoc.MAILNAM || "",
-      MAILNAM: customerEmail || customerDoc.MAILNAM || "",
+      MAILNAM: customerDoc.MAILNAM,
       state1,
       country,
       ZONE: zone,

@@ -199,11 +199,20 @@ export async function POST(req: Request) {
       accessValidUntil: user.accessValidUntil,
     };
 
-    const roleSlug = user.roleType
-      ? String(user.roleType).toLowerCase().trim().replace(/[\s_]+/g, "-")
-      : "admin";
+    const isSuper =
+      isSuperAdmin ||
+      user.roleType === "SuperAdmin" ||
+      user.roleType === "super-admin" ||
+      effectiveRoleType === "SuperAdmin";
 
-    const redirectUrl = isSuperAdmin || user.roleType === "SuperAdmin"
+    const roleSlug = isSuper
+      ? "super-admin"
+      : String(effectiveRoleType || user.roleType || "admin")
+          .toLowerCase()
+          .trim()
+          .replace(/[\s_]+/g, "-");
+
+    const redirectUrl = isSuper
       ? "/dashboard/super-admin"
       : `/dashboard/${roleSlug}`;
 

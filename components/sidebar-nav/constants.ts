@@ -237,6 +237,7 @@ export const CORE_MODULE_IDS = [
   "company-list",
   "users",
   "users-management",
+  "users-create",
   "users-permissions",
   "users-roles",
   "users-assignment",
@@ -485,6 +486,7 @@ export const MODULE_KEY_MAP: Record<string, string[]> = {
   users: [
     "users",
     "users-management",
+    "users-create",
     "users-permissions",
     "users-roles",
     "users-assignment",

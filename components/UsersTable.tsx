@@ -4,6 +4,7 @@ import { useState, useMemo } from "react";
 import DeleteUserButton from "@/components/DeleteUserButton";
 import PermissionButton from "@/components/PermissionButton";
 import Link from "next/link";
+import { useParams } from "next/navigation";
 import { FaUsers, FaSearch } from "react-icons/fa";
 import { useUser } from "@/context/UserContext";
 
@@ -13,6 +14,12 @@ export default function UsersTable({ users }: { users: any[] }) {
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
   const { user } = useUser();
+  const params = useParams();
+
+  const currentRole = (typeof params?.role === "string" ? params.role : (user?.roleType || "admin"))
+    .toLowerCase()
+    .trim()
+    .replace(/[\s_]+/g, "-");
 
   const filteredUsers = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -291,7 +298,7 @@ export default function UsersTable({ users }: { users: any[] }) {
                       <div className="flex items-center justify-center gap-2">
                         <PermissionButton permission="users.edit">
                           <Link
-                            href={`/dashboard/${user.role}/users/edit/${user._id}`}
+                            href={`/dashboard/${currentRole}/users/edit/${user._id}`}
                             className="px-3 py-1 rounded-lg text-xs font-medium text-white bg-amber-500/90 hover:bg-amber-500 transition-colors"
                           >
                             Edit
@@ -300,7 +307,7 @@ export default function UsersTable({ users }: { users: any[] }) {
                         
                         <PermissionButton permission="users.assign">
                         <Link
-                          href={`/dashboard/${user.role}/users/assignment`}
+                          href={`/dashboard/${currentRole}/users/assignment`}
                           className="px-2.5 py-1 rounded-lg text-xs font-medium text-white bg-teal-600 hover:bg-teal-700 transition-colors whitespace-nowrap"
                           title="Assign Reporting Manager, Products, and Parties"
                         >
@@ -310,7 +317,7 @@ export default function UsersTable({ users }: { users: any[] }) {
                         
                         <PermissionButton permission="users.permission">
                           <Link
-                            href={`/dashboard/${user.role}/users/permission/${user._id}`}
+                            href={`/dashboard/${currentRole}/users/permission/${user._id}`}
                             className="px-3 py-1 rounded-lg text-xs font-medium text-white bg-indigo-500/90 hover:bg-indigo-500 transition-colors"
                           >
                             Permission

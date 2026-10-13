@@ -34,16 +34,22 @@ async function getUsers() {
   }
 }
 
-export default async function UsersPage() {
+export default async function UsersPage({
+  params,
+}: {
+  params: Promise<{ role: string }>;
+}) {
+  const resolvedParams = await params;
   const { users, hierarchy } = await getUsers();
 
-  // Current logged-in user's role
-  const currentRole = hierarchy?.currentRole;
+  // Current active role from URL parameter or hierarchy fallback
+  const currentRole = (resolvedParams?.role || hierarchy?.currentRole || "admin")
+    .toLowerCase()
+    .trim()
+    .replace(/[\s_]+/g, "-");
 
   // Dynamic users/create URL
-  const createUserHref = currentRole
-    ? `/dashboard/${currentRole}/users/create`
-    : "/dashboard";
+  const createUserHref = `/dashboard/${currentRole}/users/create`;
 
   return (
     <ProtectedPage permission="users.view">

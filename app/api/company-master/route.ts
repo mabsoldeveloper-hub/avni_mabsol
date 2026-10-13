@@ -199,9 +199,13 @@ export async function POST(req: Request) {
       invoicePrefix: data.invoicePrefix || null,
       purchasePrefix: data.purchasePrefix || null,
       currency: data.currency || null,
-      logo: data.logo || "",
-      enabledModules: Array.isArray(data.enabledModules) ? data.enabledModules : [],
-      status: branchStatus,
+      enabledModules: Array.isArray(data.enabledModules) && data.enabledModules.length > 0
+        ? data.enabledModules
+        : (parentCompDoc?.enabledModules && Array.isArray(parentCompDoc.enabledModules) && parentCompDoc.enabledModules.length > 0
+            ? parentCompDoc.enabledModules
+            : [
+                "dashboard", "sales", "purchases", "purchase", "inventory", "customer", "master", "area", "compare", "leads", "custom-forms", "financial-year", "reports", "mabsolcrmsync", "users", "settings", "company", "billing", "fieldforce", "financial_years", "custom_forms"
+              ]),
       isDefault: false,
       isHeadOffice: false,
       parentCompanyId: parentCompanyId,

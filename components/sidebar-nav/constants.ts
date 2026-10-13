@@ -237,6 +237,7 @@ export const CORE_MODULE_IDS = [
   "company-list",
   "users",
   "users-management",
+  "users-create",
   "users-permissions",
   "users-roles",
   "users-assignment",
@@ -255,9 +256,21 @@ export const CORE_MODULE_IDS = [
 ];
 
 export const MODULE_KEY_MAP: Record<string, string[]> = {
+  // Executive & Standard Dashboard
+  dashboard: [
+    "standard-dashboard",
+    "executive-ai",
+    "ai-notifications",
+    "global-search",
+    "targets",
+    "purchase-sales-analytics",
+  ],
   // Billing & Invoicing
   billing: [
+    "billing",
     "sales",
+    "purchase",
+    "inventory",
     "sales-invoice-list",
     "sales-invoice-create",
     "sales-receipt",
@@ -268,8 +281,11 @@ export const MODULE_KEY_MAP: Record<string, string[]> = {
     "customers",
     "customer-list",
     "modify-customer",
+    "master",
+    "master-dashboard",
     "master-hsn",
     "master-voucher-series",
+    "master-alert-settings",
   ],
   // Sales & Distribution
   sales: [
@@ -289,12 +305,16 @@ export const MODULE_KEY_MAP: Record<string, string[]> = {
     "customers",
     "customer-list",
     "modify-customer",
+    "master",
+    "master-dashboard",
     "master-customer",
     "master-division",
+    "master-alert-settings",
   ],
   // Purchases & Inward (Plural & Singular)
   purchases: [
     "purchase",
+    "purchases",
     "purchase-dashboard",
     "purchase-invoice-list",
     "purchase-outstanding",
@@ -307,6 +327,7 @@ export const MODULE_KEY_MAP: Record<string, string[]> = {
   ],
   purchase: [
     "purchase",
+    "purchases",
     "purchase-dashboard",
     "purchase-invoice-list",
     "purchase-outstanding",
@@ -371,23 +392,27 @@ export const MODULE_KEY_MAP: Record<string, string[]> = {
   // Financial Year Transitions
   financial_years: [
     "financial-year",
+    "financial_years",
     "financial-year-create",
     "financial-year-list",
   ],
   "financial-year": [
     "financial-year",
+    "financial_years",
     "financial-year-create",
     "financial-year-list",
   ],
   // AI Form Studio
   custom_forms: [
     "custom-forms",
+    "custom_forms",
     "custom-forms-hub",
     "custom-forms-builder",
     "custom-forms-guide",
   ],
   "custom-forms": [
     "custom-forms",
+    "custom_forms",
     "custom-forms-hub",
     "custom-forms-builder",
     "custom-forms-guide",
@@ -411,6 +436,12 @@ export const MODULE_KEY_MAP: Record<string, string[]> = {
     "modify-customer",
     "customers",
   ],
+  customers: [
+    "customer",
+    "customer-list",
+    "modify-customer",
+    "customers",
+  ],
   // Masters
   master: [
     "master",
@@ -429,6 +460,7 @@ export const MODULE_KEY_MAP: Record<string, string[]> = {
   ],
   area: [
     "area",
+    "master-area",
   ],
   compare: [
     "compare",
@@ -443,6 +475,10 @@ export const MODULE_KEY_MAP: Record<string, string[]> = {
     "broadcast-hub",
     "order-stock-tracking",
   ],
+  targets: [
+    "targets",
+    "master-targets",
+  ],
   mabsolcrmsync: [
     "migration",
     "migration-sync",
@@ -452,6 +488,7 @@ export const MODULE_KEY_MAP: Record<string, string[]> = {
   users: [
     "users",
     "users-management",
+    "users-create",
     "users-permissions",
     "users-roles",
     "users-assignment",

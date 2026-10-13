@@ -251,6 +251,31 @@ export async function POST(req: Request) {
           }))
       : [];
 
+    // Default modules granted to newly registered companies
+    const DEFAULT_COMPANY_MODULES = [
+      "dashboard",
+      "sales",
+      "purchases",
+      "purchase",
+      "inventory",
+      "customer",
+      "master",
+      "area",
+      "compare",
+      "leads",
+      "custom-forms",
+      "financial-year",
+      "reports",
+      "mabsolcrmsync",
+      "users",
+      "settings",
+      "company",
+      "billing",
+      "fieldforce",
+      "financial_years",
+      "custom_forms",
+    ];
+
     // ── Create Primary Head Office Company ────────────────────────────────────
     const newCompany = await Company.create({
       tenantId,
@@ -268,7 +293,7 @@ export async function POST(req: Request) {
       pincode: pincode || "",
       businessType: businessType || "",
       additionalGstins: formattedAdditionalGstins,
-      enabledModules: [],
+      enabledModules: DEFAULT_COMPANY_MODULES,
       status: "Active",
       isDefault: true,
       isHeadOffice: true,
@@ -381,6 +406,7 @@ export async function POST(req: Request) {
         state: branchState,
         pincode: branch.pincode || "",
         businessType: businessType || "",
+        enabledModules: DEFAULT_COMPANY_MODULES,
         status: "Active",
         isDefault: false,
         isHeadOffice: false,

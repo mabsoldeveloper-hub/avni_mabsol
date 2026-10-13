@@ -50,6 +50,7 @@ interface Customer {
   CODEP?: string;
   PARNAM?: string;
   MAILNAM?: string;
+  EMAIL?: string;
   PHONE1?: string;
   CITY?: string;
   GSTNO?: string;

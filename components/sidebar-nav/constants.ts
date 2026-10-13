@@ -250,6 +250,8 @@ export const CORE_MODULE_IDS = [
   "migration-sync",
   "migration-settings",
   "mabsolcrmsync",
+   "master-dashboard", 
+  "master-alert-settings", 
 ];
 
 export const MODULE_KEY_MAP: Record<string, string[]> = {
@@ -423,6 +425,7 @@ export const MODULE_KEY_MAP: Record<string, string[]> = {
     "master-targets",
     "master-mr-customer",
     "master-voucher-series",
+    "master-alert-settings",
   ],
   area: [
     "area",

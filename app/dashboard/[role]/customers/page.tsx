@@ -35,6 +35,7 @@ import AddCustomerModal from "@/components/customer/AddCustomerModal";
 import { useCompany } from "@/context/CompanyContext";
 import { useFinancialYear } from "@/context/FinancialYearContext";
 
+
 import PermissionButton from "@/components/PermissionButton";
 
 
@@ -210,7 +211,7 @@ export default function CustomerPage() {
         cell: (info) => (
           <div>
             <div className="font-semibold text-slate-800">{info.getValue() || "-"}</div>
-            <div className="text-xs text-slate-500">{info.row.original.MAILNAM || "No email"}</div>
+            <div className="text-xs text-slate-500">{info.row.original.EMAIL || info.row.original.MAILNAM || "No email"}</div>
           </div>
         ),
       }),
@@ -411,7 +412,7 @@ export default function CustomerPage() {
               </option>
             ))}
           </select>
-
+          
           <select
             className="rounded-xl bg-white/70 border border-white/70 px-3 py-2.5 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#343872]/40"
             value={statusFilter}

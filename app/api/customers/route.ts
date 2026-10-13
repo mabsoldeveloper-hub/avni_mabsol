@@ -5,6 +5,7 @@ import Customer from "@/models/Customer";
 import AccountGroup from "@/models/AccountGroup";
 import Order from "@/models/Order";
 import SaleType from "@/models/SaleType";
+import Support from "@/models/Support";
 
 import { getMrTerritoryRestriction } from "@/lib/mrTerritoryHelper";
 import {
@@ -257,6 +258,40 @@ export async function GET(req: Request) {
       return allowedGroupCodes.has(scode);
     });
 
+    // Fetch customer emails from vfp_new_folder_support Start here
+      const customerOrdnos = [
+        ...new Set(
+          customers
+            .map((c: any) => clean(c.ORDNO))
+            .filter(Boolean)
+        ),
+      ];
+
+      const supportDocs: any[] = customerOrdnos.length
+        ? await Support.find(
+            {
+              LCODE: { $in: customerOrdnos },
+              SNO: { $in: [2, "2"] },
+            },
+            {
+              LCODE: 1,
+              SNO: 1,
+              REMARK: 1,
+            }
+          ).lean()
+        : [];
+
+      const supportEmailMap = new Map<string, string>();
+
+      supportDocs.forEach((doc: any) => {
+        const code = clean(doc.LCODE).toUpperCase();
+        const email = clean(doc.REMARK);
+
+        if (code && email && !supportEmailMap.has(code)) {
+          supportEmailMap.set(code, email);
+        }
+      });
+      // Fetch customer emails from vfp_new_folder_support END here
 
     const customerOrderNumbers = Array.from(
       new Set(
@@ -599,6 +634,12 @@ export async function GET(req: Request) {
       return {
         ...c,
 
+        EMAIL:
+        supportEmailMap.get(clean(c.ORDNO).toUpperCase()) ||
+        clean(c.EMAIL) ||
+        clean(c.MAILNAM) ||
+        "",
+
         STATUS: isActive,
 
         GROUPCODE: scode,
@@ -635,6 +676,7 @@ export async function GET(req: Request) {
             }
           : null,
       };
+      
     });
 
     return NextResponse.json(result);

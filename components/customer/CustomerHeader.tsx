@@ -131,7 +131,17 @@ export default function CustomerHeader({
               </a>
             )}
 
-            {customer.MAILNAM && (
+            {customer.EMAIL && (
+              <a
+                href={`mailto:${customer.EMAIL}`}
+                className="flex-1 sm:flex-initial inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold bg-sky-500/15 text-sky-700 border border-sky-500/30 hover:bg-sky-500 hover:text-white transition-all duration-200 shadow-sm"
+              >
+                <FaEnvelope size={11} />
+                <span>Email</span>
+              </a>
+            )}
+
+            {/* {customer.MAILNAM && (
               <a
                 href={`mailto:${customer.MAILNAM}`}
                 className="flex-1 sm:flex-initial inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold bg-sky-500/15 text-sky-700 border border-sky-500/30 hover:bg-sky-500 hover:text-white transition-all duration-200 shadow-sm"
@@ -139,7 +149,7 @@ export default function CustomerHeader({
                 <FaEnvelope size={11} />
                 <span>Email</span>
               </a>
-            )}
+            )} */}
 
             {onAutoAlertSettingsClick && (
               <button
@@ -179,7 +189,8 @@ export default function CustomerHeader({
         </div>
 
         {/* Highlight Quick Info Ribbon */}
-        <div className="mt-4 pt-3 border-t border-white/60 grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+        {/* <div className="mt-4 pt-3 border-t border-white/60 grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs"> */}
+        <div className="mt-4 pt-3 border-t border-white/60 grid grid-cols-2 sm:grid-cols-5 gap-3 text-xs">
           <div className="bg-white/40 backdrop-blur-md rounded-xl p-2.5 border border-white/50">
             <p className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider">Contact Person</p>
             <p className="font-bold text-slate-700 truncate mt-0.5">{customer.REF || "-"}</p>
@@ -200,6 +211,42 @@ export default function CustomerHeader({
               )}
             </div>
           </div>
+
+          <div className="bg-white/40 backdrop-blur-md rounded-xl p-2.5 border border-white/50">
+  <p className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider">
+    Email
+  </p>
+
+  <div className="flex items-center justify-between gap-2 mt-0.5">
+    {customer.EMAIL ? (
+      <a
+        href={`mailto:${customer.EMAIL}`}
+        className="font-bold text-sky-700 truncate hover:text-sky-900 hover:underline"
+        title={customer.EMAIL}
+      >
+        {customer.EMAIL}
+      </a>
+    ) : (
+      <span className="font-bold text-slate-500">-</span>
+    )}
+
+    {customer.EMAIL && (
+      <button
+        type="button"
+        onClick={() => copyToClipboard(customer.EMAIL, "email")}
+        className="flex-shrink-0 text-slate-400 hover:text-indigo-600 transition"
+        title="Copy Email"
+      >
+        {copiedField === "email" ? (
+          <FaCheck size={11} className="text-emerald-500" />
+        ) : (
+          <FaCopy size={11} />
+        )}
+      </button>
+    )}
+  </div>
+</div>
+
 
           <div className="bg-white/40 backdrop-blur-md rounded-xl p-2.5 border border-white/50">
             <p className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider">GST Number</p>

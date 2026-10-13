@@ -12,15 +12,21 @@ import { getMrTerritoryRestriction } from "@/lib/mrTerritoryHelper";
 
 export const dynamic = "force-dynamic";
 
+/* ============================================================
+   HELPERS
+============================================================ */
+
 function clean(value: any): string {
   if (value === null || value === undefined) return "";
-  return String(value).replace(/\u0000/g, "").trim();
+  return String(value)
+    .replace(/\u0000/g, "")
+    .trim();
 }
 
 function firstValue(...values: any[]): string {
   for (const value of values) {
-    const v = clean(value);
-    if (v) return v;
+    const cleaned = clean(value);
+    if (cleaned) return cleaned;
   }
   return "";
 }
@@ -36,17 +42,21 @@ function resolveSaleTypeName(
   return firstValue(saleTypeMap.get(key)?.SNAME);
 }
 
-/* ---------------------------------------------------------- */
-/* GET - Customer View                                        */
-/* ---------------------------------------------------------- */
+/* ============================================================
+   GET CUSTOMER
+============================================================ */
+
 export async function GET(
-  req: Request,
+  request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     await connectDB();
     const { id } = await params;
 
+    /* --------------------------------------------------------
+       Validate ID
+    -------------------------------------------------------- */
     if (!mongoose.Types.ObjectId.isValid(id)) {
       return NextResponse.json(
         { success: false, message: "Invalid customer id" },
@@ -54,17 +64,14 @@ export async function GET(
       );
     }
 
-    /* ------------------------------------------------------ */
-    /* Hierarchy access control                                */
-    /* ------------------------------------------------------ */
+    /* --------------------------------------------------------
+       Territory / hierarchy restriction
+    -------------------------------------------------------- */
     const restriction = await getMrTerritoryRestriction();
 
-    /*
-     * Do the authorization check before returning ANY customer data.
-     * For restricted users, an inaccessible customer is intentionally
-     * returned as 404 instead of 403 so the API does not reveal that the
-     * customer exists outside the user's hierarchy.
-     */
+    /* --------------------------------------------------------
+       CUSTOMER
+    -------------------------------------------------------- */
     const customerDoc: any = await Customer.findById(id).lean();
 
     if (!customerDoc) {
@@ -74,50 +81,51 @@ export async function GET(
       );
     }
 
-    if (restriction.isMrRestricted && !restriction.isPartyAllowed(customerDoc)) {
-      return NextResponse.json(
-        { success: false, message: "Customer not found" },
-        { status: 404 }
-      );
+    if (restriction?.isMrRestricted) {
+      const partyAllowed = restriction.isPartyAllowed(customerDoc);
+      if (!partyAllowed) {
+        return NextResponse.json(
+          { success: false, message: "Customer not found" },
+          { status: 404 }
+        );
+      }
     }
 
-    // Fetch customer email from MARG Support collection
-    const supportEmailDoc: any = await Support.findOne(
-      {
-        LCODE: clean(customerDoc.ORDNO),
-        SNO: { $in: [2, "2"] },
-      },
-      { REMARK: 1 }
-    ).lean();
-
-    const customerEmail = firstValue(
-      supportEmailDoc?.REMARK,
-      customerDoc.EMAIL
-    );
-
-    /* Account Group */
+    /* --------------------------------------------------------
+       ACCOUNT GROUP
+    -------------------------------------------------------- */
     const scode = clean(customerDoc.SCODE);
     let groupInfo: any = { GROUPCODE: scode };
 
-    if (scode) {
-      const groupDoc: any = await AccountGroup.findOne(
-        { ORDNO: scode },
-        { PARNAM: 1, GROUP: 1, GCODE: 1 }
-      ).lean();
+    const groupCode = firstValue(
+      customerDoc?.SCODE,
+      customerDoc?.GROUPCODE,
+      customerDoc?.ACGROUP
+    );
+
+    if (groupCode) {
+      const groupDoc: any = await AccountGroup.findOne({
+        $or: [
+          { ORDNO: groupCode },
+          { code: groupCode },
+          { groupCode: groupCode },
+          { SCODE: groupCode },
+        ],
+      }).lean();
 
       if (groupDoc) {
         groupInfo = {
-          GROUPCODE: scode,
-          GROUPNAME: groupDoc.PARNAM || "",
+          GROUPCODE: scode || groupCode,
+          GROUPNAME: groupDoc.PARNAM || groupDoc.groupName || groupDoc.name || "",
           MAINGROUP: groupDoc.GROUP || "",
           PARENTGROUP: groupDoc.GCODE || "",
         };
       }
     }
 
-    /* ------------------------------------------------------ */
-    /* CUSTOMER -> ORDER_K19                                   */
-    /* ------------------------------------------------------ */
+    /* --------------------------------------------------------
+       CUSTOMER ORDER CODE & LOOKUP
+    -------------------------------------------------------- */
     const customerOrdno = clean(customerDoc.ORDNO);
     const customerCodep = clean(customerDoc.CODEP);
     const orderKeys = Array.from(
@@ -175,7 +183,41 @@ export async function GET(
       order = orderMap.get(customerOrdno) || orderMap.get(customerCodep) || null;
     }
 
-    /* ORDER codes */
+    /* --------------------------------------------------------
+       MARG CUSTOMER EMAIL LOOKUP
+    -------------------------------------------------------- */
+    let customerEmail = clean(customerDoc?.MAILNAM || customerDoc?.EMAIL || "");
+
+    const supportCode = customerOrdno.toUpperCase();
+    if (supportCode && (!customerEmail || !customerEmail.includes("@"))) {
+      try {
+        const supportCollection = mongoose.connection.collection("vfp_new_folder_support");
+        const supportRow: any = await supportCollection.findOne(
+          {
+            LCODE: supportCode,
+            SNO: 2,
+            _vfpDeleted: { $ne: true },
+          },
+          {
+            projection: { LCODE: 1, SNO: 1, REMARK: 1 },
+          }
+        );
+
+        const remark = clean(supportRow?.REMARK);
+        if (remark) {
+          const emailMatch = remark.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i);
+          if (emailMatch?.[0]) {
+            customerEmail = emailMatch[0].trim().toUpperCase();
+          }
+        }
+      } catch (err) {
+        console.warn("Support email lookup error:", err);
+      }
+    }
+
+    /* --------------------------------------------------------
+       ORDER TERRITORY CODES & SALETYPE
+    -------------------------------------------------------- */
     const orderState1 = clean(order?.STATE1);
     const orderState2 = clean(order?.STATE2);
     const orderZone = clean(order?.ZONE);
@@ -184,19 +226,20 @@ export async function GET(
     const orderStation = clean(order?.STATION);
     const orderRoute = firstValue(order?.ROUTE, order?.ROUT);
 
-    /* ------------------------------------------------------ */
-    /* ORDER CODE -> SALETYPE SCODE -> SNAME                    */
-    /* ------------------------------------------------------ */
     const territoryCodes = Array.from(
-      new Set([
-        orderState1,
-        orderState2,
-        orderZone,
-        orderCity,
-        orderArea,
-        orderStation,
-        orderRoute,
-      ].map(v => clean(v).toUpperCase()).filter(Boolean))
+      new Set(
+        [
+          orderState1,
+          orderState2,
+          orderZone,
+          orderCity,
+          orderArea,
+          orderStation,
+          orderRoute,
+        ]
+          .map((v) => clean(v).toUpperCase())
+          .filter(Boolean)
+      )
     );
 
     const saleTypeQuery: any = {
@@ -214,7 +257,6 @@ export async function GET(
       { SCODE: 1, SGCODE: 1, SNAME: 1, TGCODE: 1 }
     ).lean();
 
-    /* IMPORTANT: SGCODE + SCODE is the key. SCODE alone is unsafe. */
     const saleTypeMap = new Map<string, any>();
     for (const saleType of saleTypes) {
       const code = clean(saleType.SCODE).toUpperCase();
@@ -222,7 +264,6 @@ export async function GET(
       if (code && sgcode) saleTypeMap.set(`${sgcode}:${code}`, saleType);
     }
 
-    /* GST first two digits -> SALETYPE STATE1 TGCODE */
     const gstStateMap = new Map<string, string>();
     for (const saleType of saleTypes) {
       const sgcode = clean(saleType.SGCODE).toUpperCase();
@@ -395,6 +436,8 @@ export async function GET(
       EMAIL: customerEmail,
       ...groupInfo,
       STATUS: status,
+      // EMAIL: customerEmail || customerDoc.MAILNAM || "",
+      MAILNAM: customerEmail || customerDoc.MAILNAM || "",
       state1,
       country,
       ZONE: zone,
@@ -464,9 +507,6 @@ export async function PATCH(
       );
     }
 
-    /* ------------------------------------------------------ */
-    /* Hierarchy access control                                */
-    /* ------------------------------------------------------ */
     const restriction = await getMrTerritoryRestriction();
     const existingCustomer: any = await Customer.findById(id).lean();
 
@@ -630,6 +670,27 @@ export async function PATCH(
         { success: false, message: "Customer not found" },
         { status: 404 }
       );
+    }
+
+    // Also update peer financial year records if ORDNO/GSTNO matches
+    if (existingCustomer.ORDNO || existingCustomer.GSTNO) {
+      const peerFilter: any = { _id: { $ne: id } };
+      const orList: any[] = [];
+      if (clean(existingCustomer.ORDNO)) {
+        orList.push({ ORDNO: clean(existingCustomer.ORDNO), PARNAM: clean(existingCustomer.PARNAM) });
+      }
+      if (clean(existingCustomer.GSTNO) && clean(existingCustomer.GSTNO).length >= 10) {
+        orList.push({ GSTNO: clean(existingCustomer.GSTNO) });
+      }
+      if (orList.length > 0) {
+        peerFilter.$or = orList;
+        const { BALANCE, FINAL, ...peerUpdates } = updates;
+        if (Object.keys(peerUpdates).length > 0) {
+          await Customer.updateMany(peerFilter, { $set: peerUpdates }).catch((err) =>
+            console.error("Peer customer update error:", err)
+          );
+        }
+      }
     }
 
     // Check if updated values breach credit limit and record Notification

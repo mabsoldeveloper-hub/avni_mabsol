@@ -757,6 +757,15 @@ export const DEFAULT_MENU_ITEMS: MenuItemConfig[] = [
         isVisible: true,
         order: 9,
       },
+      {
+        id: "master-alert-settings",
+        label: "Alert Settings",
+        href: "/dashboard/master/alert-settings",
+        icon: "FaBell",
+        permission: "master.view",
+        isVisible: true,
+        order: 10,
+      },
     ],
   },
   {

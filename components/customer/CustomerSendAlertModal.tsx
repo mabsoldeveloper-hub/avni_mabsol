@@ -506,46 +506,47 @@ export default function CustomerSendAlertModal({
         </div>
 
         {/* Modal Footer Actions */}
-        <div className="flex flex-col sm:flex-row items-center justify-between gap-3 p-4 border-t border-slate-100 bg-slate-50/80">
-          <div className="w-full sm:w-auto">
-            {/* Primary Direct WhatsApp Button */}
+        <div className="flex items-center justify-between gap-3 px-5 py-3 border-t border-slate-100 bg-slate-50/70">
+          {/* Left: Close Button */}
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={sending}
+            className="inline-flex items-center justify-center px-3.5 py-1.5 rounded-lg text-xs font-medium text-slate-600 hover:text-slate-800 bg-white hover:bg-slate-100 border border-slate-200 transition cursor-pointer disabled:opacity-50"
+          >
+            Close
+          </button>
+
+          {/* Right: Action Buttons */}
+          <div className="flex items-center gap-2">
+            {/* Send via WhatsApp */}
             <button
               type="button"
               onClick={handleOpenWhatsApp}
               disabled={!recipientPhone.trim()}
-              className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl text-xs font-extrabold text-white bg-gradient-to-r from-emerald-600 to-green-600 hover:from-emerald-700 hover:to-green-700 shadow-md shadow-emerald-500/25 hover:shadow-lg hover:-translate-y-0.5 transition cursor-pointer disabled:opacity-50"
+              className="inline-flex items-center justify-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-semibold text-white bg-emerald-600 hover:bg-emerald-700 shadow-2xs hover:shadow-xs transition cursor-pointer disabled:opacity-50"
             >
-              <FaWhatsapp size={16} />
-              <span>📱 Send via WhatsApp (Open Web / App)</span>
-              <FaExternalLinkAlt size={10} className="opacity-80" />
-            </button>
-          </div>
-
-          <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
-            <button
-              type="button"
-              onClick={onClose}
-              disabled={sending}
-              className="px-4 py-2.5 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-200 transition cursor-pointer"
-            >
-              Close
+              <FaWhatsapp size={13} />
+              <span>Send via WhatsApp</span>
+              <FaExternalLinkAlt size={9} className="opacity-75" />
             </button>
 
+            {/* Send via Email */}
             <button
               type="button"
               onClick={handleSendViaGateway}
               disabled={sending || (!recipientPhone.trim() && !recipientEmail.trim())}
-              className="inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl text-xs font-bold text-white bg-gradient-to-r from-indigo-600 to-rose-600 shadow-md shadow-indigo-500/20 hover:shadow-lg hover:-translate-y-0.5 transition cursor-pointer disabled:opacity-50"
+              className="inline-flex items-center justify-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-semibold text-white bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-700 hover:to-blue-700 shadow-2xs hover:shadow-xs transition cursor-pointer disabled:opacity-50"
             >
               {sending ? (
                 <>
-                  <FaSpinner className="animate-spin" size={13} />
-                  <span>Dispatching Alert...</span>
+                  <FaSpinner className="animate-spin" size={11} />
+                  <span>Sending...</span>
                 </>
               ) : (
                 <>
-                  <FaPaperPlane size={12} />
-                  <span>Send via Server (Email / Gateway)</span>
+                  <FaPaperPlane size={11} />
+                  <span>Send via Email</span>
                 </>
               )}
             </button>

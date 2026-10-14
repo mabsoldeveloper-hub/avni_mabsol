@@ -26,3 +26,860 @@
 2026-10-12T07:29:59: (node:2188179) [MONGOOSE] Warning: mongoose: the `new` option for `findOneAndUpdate()` and `findOneAndReplace()` is deprecated. Use `returnDocument: 'after'` instead.
 2026-10-12T07:34:09: [Meta WhatsApp] Missing PHONE_NUMBER_ID in .env. To enable Meta Cloud WhatsApp, set PHONE_NUMBER_ID=<your_meta_phone_number_id> in .env.
 2026-10-12T11:42:23: [Meta WhatsApp] Missing PHONE_NUMBER_ID in .env. To enable Meta Cloud WhatsApp, set PHONE_NUMBER_ID=<your_meta_phone_number_id> in .env.
+2026-10-12T11:51:18: [Meta WhatsApp] Missing PHONE_NUMBER_ID in .env. To enable Meta Cloud WhatsApp, set PHONE_NUMBER_ID=<your_meta_phone_number_id> in .env.
+2026-10-12T12:06:36: (node:2250226) [MONGOOSE] Warning: mongoose: the `new` option for `findOneAndUpdate()` and `findOneAndReplace()` is deprecated. Use `returnDocument: 'after'` instead.
+2026-10-12T12:06:36: (Use `node --trace-warnings ...` to show where the warning was created)
+2026-10-12T12:06:46: (node:2250226) [MONGOOSE] Warning: mongoose: the `new` option for `findOneAndUpdate()` and `findOneAndReplace()` is deprecated. Use `returnDocument: 'after'` instead.
+2026-10-12T12:06:59: (node:2250226) [MONGOOSE] Warning: mongoose: the `new` option for `findOneAndUpdate()` and `findOneAndReplace()` is deprecated. Use `returnDocument: 'after'` instead.
+2026-10-12T12:10:53: (node:2250226) [MONGOOSE] Warning: mongoose: the `new` option for `findOneAndUpdate()` and `findOneAndReplace()` is deprecated. Use `returnDocument: 'after'` instead.
+2026-10-12T12:13:21: Users page: failed to load users: CastError: Cast to ObjectId failed for value "{\n' +
+2026-10-12T12:13:21:   "  _id: new ObjectId('6accce7e691d74206d1ff807'),\n" +
+2026-10-12T12:13:21:   "  companyName: 'MABSOL INFOTECH PRIVATE LIMITED',\n" +
+2026-10-12T12:13:21:   "  logo: ''\n" +
+2026-10-12T12:13:21:   '}" (type string) at path "companyId" for model "User"
+2026-10-12T12:13:21:     at async x (app/api/users/route.ts:81:17)
+2026-10-12T12:13:21:     at async y (app/dashboard/[role]/users/page.tsx:11:18)
+2026-10-12T12:13:21:     at async z (app/dashboard/[role]/users/page.tsx:38:32) {
+2026-10-12T12:13:21:   stringValue: `"{\\n' +\n` +
+2026-10-12T12:13:21:     `  "  _id: new ObjectId('6accce7e691d74206d1ff807'),\\n" +\n` +
+2026-10-12T12:13:21:     `  "  companyName: 'MABSOL INFOTECH PRIVATE LIMITED',\\n" +\n` +
+2026-10-12T12:13:21:     `  "  logo: ''\\n" +\n` +
+2026-10-12T12:13:21:     `  '}"`,
+2026-10-12T12:13:21:   messageFormat: undefined,
+2026-10-12T12:13:21:   kind: 'ObjectId',
+2026-10-12T12:13:21:   value: '{\n' +
+2026-10-12T12:13:21:     "  _id: new ObjectId('6accce7e691d74206d1ff807'),\n" +
+2026-10-12T12:13:21:     "  companyName: 'MABSOL INFOTECH PRIVATE LIMITED',\n" +
+2026-10-12T12:13:21:     "  logo: ''\n" +
+2026-10-12T12:13:21:     '}',
+2026-10-12T12:13:21:   path: 'companyId',
+2026-10-12T12:13:21:   reason: BSONError: input must be a 24 character hex string, 12 byte Uint8Array, or an integer
+2026-10-12T12:13:21:       at async x (app/api/users/route.ts:81:17)
+2026-10-12T12:13:21:       at async y (app/dashboard/[role]/users/page.tsx:11:18)
+2026-10-12T12:13:21:       at async z (app/dashboard/[role]/users/page.tsx:38:32),
+2026-10-12T12:13:21:   valueType: 'string'
+2026-10-12T12:13:21: }
+2026-10-12T12:13:44: Users page: failed to load users: CastError: Cast to ObjectId failed for value "{\n' +
+2026-10-12T12:13:44:   "  _id: new ObjectId('6accce7e691d74206d1ff807'),\n" +
+2026-10-12T12:13:44:   "  companyName: 'MABSOL INFOTECH PRIVATE LIMITED',\n" +
+2026-10-12T12:13:44:   "  logo: ''\n" +
+2026-10-12T12:13:44:   '}" (type string) at path "companyId" for model "User"
+2026-10-12T12:13:44:     at async x (app/api/users/route.ts:81:17)
+2026-10-12T12:13:44:     at async y (app/dashboard/[role]/users/page.tsx:11:18)
+2026-10-12T12:13:44:     at async z (app/dashboard/[role]/users/page.tsx:38:32) {
+2026-10-12T12:13:44:   stringValue: `"{\\n' +\n` +
+2026-10-12T12:13:44:     `  "  _id: new ObjectId('6accce7e691d74206d1ff807'),\\n" +\n` +
+2026-10-12T12:13:44:     `  "  companyName: 'MABSOL INFOTECH PRIVATE LIMITED',\\n" +\n` +
+2026-10-12T12:13:44:     `  "  logo: ''\\n" +\n` +
+2026-10-12T12:13:44:     `  '}"`,
+2026-10-12T12:13:44:   messageFormat: undefined,
+2026-10-12T12:13:44:   kind: 'ObjectId',
+2026-10-12T12:13:44:   value: '{\n' +
+2026-10-12T12:13:44:     "  _id: new ObjectId('6accce7e691d74206d1ff807'),\n" +
+2026-10-12T12:13:44:     "  companyName: 'MABSOL INFOTECH PRIVATE LIMITED',\n" +
+2026-10-12T12:13:44:     "  logo: ''\n" +
+2026-10-12T12:13:44:     '}',
+2026-10-12T12:13:44:   path: 'companyId',
+2026-10-12T12:13:44:   reason: BSONError: input must be a 24 character hex string, 12 byte Uint8Array, or an integer
+2026-10-12T12:13:44:       at async x (app/api/users/route.ts:81:17)
+2026-10-12T12:13:44:       at async y (app/dashboard/[role]/users/page.tsx:11:18)
+2026-10-12T12:13:44:       at async z (app/dashboard/[role]/users/page.tsx:38:32),
+2026-10-12T12:13:44:   valueType: 'string'
+2026-10-12T12:13:44: }
+2026-10-12T12:13:56: GET /api/users error: CastError: Cast to ObjectId failed for value "{\n' +
+2026-10-12T12:13:56:   "  _id: new ObjectId('6accce7e691d74206d1ff807'),\n" +
+2026-10-12T12:13:56:   "  companyName: 'MABSOL INFOTECH PRIVATE LIMITED',\n" +
+2026-10-12T12:13:56:   "  logo: ''\n" +
+2026-10-12T12:13:56:   '}" (type string) at path "companyId" for model "User"
+2026-10-12T12:13:56:     at async x (app/api/users/route.ts:81:17)
+2026-10-12T12:13:56:     at async b (app/api/users/route.ts:137:20) {
+2026-10-12T12:13:56:   stringValue: `"{\\n' +\n` +
+2026-10-12T12:13:56:     `  "  _id: new ObjectId('6accce7e691d74206d1ff807'),\\n" +\n` +
+2026-10-12T12:13:56:     `  "  companyName: 'MABSOL INFOTECH PRIVATE LIMITED',\\n" +\n` +
+2026-10-12T12:13:56:     `  "  logo: ''\\n" +\n` +
+2026-10-12T12:13:56:     `  '}"`,
+2026-10-12T12:13:56:   messageFormat: undefined,
+2026-10-12T12:13:56:   kind: 'ObjectId',
+2026-10-12T12:13:56:   value: '{\n' +
+2026-10-12T12:13:56:     "  _id: new ObjectId('6accce7e691d74206d1ff807'),\n" +
+2026-10-12T12:13:56:     "  companyName: 'MABSOL INFOTECH PRIVATE LIMITED',\n" +
+2026-10-12T12:13:56:     "  logo: ''\n" +
+2026-10-12T12:13:56:     '}',
+2026-10-12T12:13:56:   path: 'companyId',
+2026-10-12T12:13:56:   reason: BSONError: input must be a 24 character hex string, 12 byte Uint8Array, or an integer
+2026-10-12T12:13:56:       at async x (app/api/users/route.ts:81:17)
+2026-10-12T12:13:56:       at async b (app/api/users/route.ts:137:20),
+2026-10-12T12:13:56:   valueType: 'string'
+2026-10-12T12:13:56: }
+2026-10-12T12:14:45: Users page: failed to load users: CastError: Cast to ObjectId failed for value "{\n' +
+2026-10-12T12:14:45:   "  _id: new ObjectId('6accce7e691d74206d1ff807'),\n" +
+2026-10-12T12:14:45:   "  companyName: 'MABSOL INFOTECH PRIVATE LIMITED',\n" +
+2026-10-12T12:14:45:   "  logo: ''\n" +
+2026-10-12T12:14:45:   '}" (type string) at path "companyId" for model "User"
+2026-10-12T12:14:45:     at async x (app/api/users/route.ts:81:17)
+2026-10-12T12:14:45:     at async y (app/dashboard/[role]/users/page.tsx:11:18)
+2026-10-12T12:14:45:     at async z (app/dashboard/[role]/users/page.tsx:38:32) {
+2026-10-12T12:14:45:   stringValue: `"{\\n' +\n` +
+2026-10-12T12:14:45:     `  "  _id: new ObjectId('6accce7e691d74206d1ff807'),\\n" +\n` +
+2026-10-12T12:14:45:     `  "  companyName: 'MABSOL INFOTECH PRIVATE LIMITED',\\n" +\n` +
+2026-10-12T12:14:45:     `  "  logo: ''\\n" +\n` +
+2026-10-12T12:14:45:     `  '}"`,
+2026-10-12T12:14:45:   messageFormat: undefined,
+2026-10-12T12:14:45:   kind: 'ObjectId',
+2026-10-12T12:14:45:   value: '{\n' +
+2026-10-12T12:14:45:     "  _id: new ObjectId('6accce7e691d74206d1ff807'),\n" +
+2026-10-12T12:14:45:     "  companyName: 'MABSOL INFOTECH PRIVATE LIMITED',\n" +
+2026-10-12T12:14:45:     "  logo: ''\n" +
+2026-10-12T12:14:45:     '}',
+2026-10-12T12:14:45:   path: 'companyId',
+2026-10-12T12:14:45:   reason: BSONError: input must be a 24 character hex string, 12 byte Uint8Array, or an integer
+2026-10-12T12:14:45:       at async x (app/api/users/route.ts:81:17)
+2026-10-12T12:14:45:       at async y (app/dashboard/[role]/users/page.tsx:11:18)
+2026-10-12T12:14:45:       at async z (app/dashboard/[role]/users/page.tsx:38:32),
+2026-10-12T12:14:45:   valueType: 'string'
+2026-10-12T12:14:45: }
+2026-10-12T12:15:40: Users page: failed to load users: CastError: Cast to ObjectId failed for value "{\n' +
+2026-10-12T12:15:40:   "  _id: new ObjectId('6aacee7fb0bd7e60a19365af'),\n" +
+2026-10-12T12:15:40:   "  companyName: 'abhishek Pharma',\n" +
+2026-10-12T12:15:40:   "  logo: '/uploads/company/d42d92ae-d6c3-4afe-a708-3b1655a13185.webp'\n" +
+2026-10-12T12:15:40:   '}" (type string) at path "companyId" for model "User"
+2026-10-12T12:15:40:     at async x (app/api/users/route.ts:81:17)
+2026-10-12T12:15:40:     at async y (app/dashboard/[role]/users/page.tsx:11:18)
+2026-10-12T12:15:40:     at async z (app/dashboard/[role]/users/page.tsx:38:32) {
+2026-10-12T12:15:40:   stringValue: `"{\\n' +\n` +
+2026-10-12T12:15:40:     `  "  _id: new ObjectId('6aacee7fb0bd7e60a19365af'),\\n" +\n` +
+2026-10-12T12:15:40:     `  "  companyName: 'abhishek Pharma',\\n" +\n` +
+2026-10-12T12:15:40:     `  "  logo: '/uploads/company/d42d92ae-d6c3-4afe-a708-3b1655a13185.webp'\\n" +\n` +
+2026-10-12T12:15:40:     `  '}"`,
+2026-10-12T12:15:40:   messageFormat: undefined,
+2026-10-12T12:15:40:   kind: 'ObjectId',
+2026-10-12T12:15:40:   value: '{\n' +
+2026-10-12T12:15:40:     "  _id: new ObjectId('6aacee7fb0bd7e60a19365af'),\n" +
+2026-10-12T12:15:40:     "  companyName: 'abhishek Pharma',\n" +
+2026-10-12T12:15:40:     "  logo: '/uploads/company/d42d92ae-d6c3-4afe-a708-3b1655a13185.webp'\n" +
+2026-10-12T12:15:40:     '}',
+2026-10-12T12:15:40:   path: 'companyId',
+2026-10-12T12:15:40:   reason: BSONError: input must be a 24 character hex string, 12 byte Uint8Array, or an integer
+2026-10-12T12:15:40:       at async x (app/api/users/route.ts:81:17)
+2026-10-12T12:15:40:       at async y (app/dashboard/[role]/users/page.tsx:11:18)
+2026-10-12T12:15:40:       at async z (app/dashboard/[role]/users/page.tsx:38:32),
+2026-10-12T12:15:40:   valueType: 'string'
+2026-10-12T12:15:40: }
+2026-10-12T12:17:27: Users page: failed to load users: CastError: Cast to ObjectId failed for value "{\n' +
+2026-10-12T12:17:27:   "  _id: new ObjectId('6aacee7fb0bd7e60a19365af'),\n" +
+2026-10-12T12:17:27:   "  companyName: 'abhishek Pharma',\n" +
+2026-10-12T12:17:27:   "  logo: '/uploads/company/d42d92ae-d6c3-4afe-a708-3b1655a13185.webp'\n" +
+2026-10-12T12:17:27:   '}" (type string) at path "companyId" for model "User"
+2026-10-12T12:17:27:     at async x (app/api/users/route.ts:81:17)
+2026-10-12T12:17:27:     at async y (app/dashboard/[role]/users/page.tsx:11:18)
+2026-10-12T12:17:27:     at async z (app/dashboard/[role]/users/page.tsx:38:32) {
+2026-10-12T12:17:27:   stringValue: `"{\\n' +\n` +
+2026-10-12T12:17:27:     `  "  _id: new ObjectId('6aacee7fb0bd7e60a19365af'),\\n" +\n` +
+2026-10-12T12:17:27:     `  "  companyName: 'abhishek Pharma',\\n" +\n` +
+2026-10-12T12:17:27:     `  "  logo: '/uploads/company/d42d92ae-d6c3-4afe-a708-3b1655a13185.webp'\\n" +\n` +
+2026-10-12T12:17:27:     `  '}"`,
+2026-10-12T12:17:27:   messageFormat: undefined,
+2026-10-12T12:17:27:   kind: 'ObjectId',
+2026-10-12T12:17:27:   value: '{\n' +
+2026-10-12T12:17:27:     "  _id: new ObjectId('6aacee7fb0bd7e60a19365af'),\n" +
+2026-10-12T12:17:27:     "  companyName: 'abhishek Pharma',\n" +
+2026-10-12T12:17:27:     "  logo: '/uploads/company/d42d92ae-d6c3-4afe-a708-3b1655a13185.webp'\n" +
+2026-10-12T12:17:27:     '}',
+2026-10-12T12:17:27:   path: 'companyId',
+2026-10-12T12:17:27:   reason: BSONError: input must be a 24 character hex string, 12 byte Uint8Array, or an integer
+2026-10-12T12:17:27:       at async x (app/api/users/route.ts:81:17)
+2026-10-12T12:17:27:       at async y (app/dashboard/[role]/users/page.tsx:11:18)
+2026-10-12T12:17:27:       at async z (app/dashboard/[role]/users/page.tsx:38:32),
+2026-10-12T12:17:27:   valueType: 'string'
+2026-10-12T12:17:27: }
+2026-10-12T12:18:02: Users page: failed to load users: CastError: Cast to ObjectId failed for value "{\n' +
+2026-10-12T12:18:02:   "  _id: new ObjectId('6aacee7fb0bd7e60a19365af'),\n" +
+2026-10-12T12:18:02:   "  companyName: 'abhishek Pharma',\n" +
+2026-10-12T12:18:02:   "  logo: '/uploads/company/d42d92ae-d6c3-4afe-a708-3b1655a13185.webp'\n" +
+2026-10-12T12:18:02:   '}" (type string) at path "companyId" for model "User"
+2026-10-12T12:18:02:     at async x (app/api/users/route.ts:81:17)
+2026-10-12T12:18:02:     at async y (app/dashboard/[role]/users/page.tsx:11:18)
+2026-10-12T12:18:02:     at async z (app/dashboard/[role]/users/page.tsx:38:32) {
+2026-10-12T12:18:02:   stringValue: `"{\\n' +\n` +
+2026-10-12T12:18:02:     `  "  _id: new ObjectId('6aacee7fb0bd7e60a19365af'),\\n" +\n` +
+2026-10-12T12:18:02:     `  "  companyName: 'abhishek Pharma',\\n" +\n` +
+2026-10-12T12:18:02:     `  "  logo: '/uploads/company/d42d92ae-d6c3-4afe-a708-3b1655a13185.webp'\\n" +\n` +
+2026-10-12T12:18:02:     `  '}"`,
+2026-10-12T12:18:02:   messageFormat: undefined,
+2026-10-12T12:18:02:   kind: 'ObjectId',
+2026-10-12T12:18:02:   value: '{\n' +
+2026-10-12T12:18:02:     "  _id: new ObjectId('6aacee7fb0bd7e60a19365af'),\n" +
+2026-10-12T12:18:02:     "  companyName: 'abhishek Pharma',\n" +
+2026-10-12T12:18:02:     "  logo: '/uploads/company/d42d92ae-d6c3-4afe-a708-3b1655a13185.webp'\n" +
+2026-10-12T12:18:02:     '}',
+2026-10-12T12:18:02:   path: 'companyId',
+2026-10-12T12:18:02:   reason: BSONError: input must be a 24 character hex string, 12 byte Uint8Array, or an integer
+2026-10-12T12:18:02:       at async x (app/api/users/route.ts:81:17)
+2026-10-12T12:18:02:       at async y (app/dashboard/[role]/users/page.tsx:11:18)
+2026-10-12T12:18:02:       at async z (app/dashboard/[role]/users/page.tsx:38:32),
+2026-10-12T12:18:02:   valueType: 'string'
+2026-10-12T12:18:02: }
+2026-10-12T12:18:11: Users page: failed to load users: CastError: Cast to ObjectId failed for value "{\n' +
+2026-10-12T12:18:11:   "  _id: new ObjectId('6aacee7fb0bd7e60a19365af'),\n" +
+2026-10-12T12:18:11:   "  companyName: 'abhishek Pharma',\n" +
+2026-10-12T12:18:11:   "  logo: '/uploads/company/d42d92ae-d6c3-4afe-a708-3b1655a13185.webp'\n" +
+2026-10-12T12:18:11:   '}" (type string) at path "companyId" for model "User"
+2026-10-12T12:18:11:     at async x (app/api/users/route.ts:81:17)
+2026-10-12T12:18:11:     at async y (app/dashboard/[role]/users/page.tsx:11:18)
+2026-10-12T12:18:11:     at async z (app/dashboard/[role]/users/page.tsx:38:32) {
+2026-10-12T12:18:11:   stringValue: `"{\\n' +\n` +
+2026-10-12T12:18:11:     `  "  _id: new ObjectId('6aacee7fb0bd7e60a19365af'),\\n" +\n` +
+2026-10-12T12:18:11:     `  "  companyName: 'abhishek Pharma',\\n" +\n` +
+2026-10-12T12:18:11:     `  "  logo: '/uploads/company/d42d92ae-d6c3-4afe-a708-3b1655a13185.webp'\\n" +\n` +
+2026-10-12T12:18:11:     `  '}"`,
+2026-10-12T12:18:11:   messageFormat: undefined,
+2026-10-12T12:18:11:   kind: 'ObjectId',
+2026-10-12T12:18:11:   value: '{\n' +
+2026-10-12T12:18:11:     "  _id: new ObjectId('6aacee7fb0bd7e60a19365af'),\n" +
+2026-10-12T12:18:11:     "  companyName: 'abhishek Pharma',\n" +
+2026-10-12T12:18:11:     "  logo: '/uploads/company/d42d92ae-d6c3-4afe-a708-3b1655a13185.webp'\n" +
+2026-10-12T12:18:11:     '}',
+2026-10-12T12:18:11:   path: 'companyId',
+2026-10-12T12:18:11:   reason: BSONError: input must be a 24 character hex string, 12 byte Uint8Array, or an integer
+2026-10-12T12:18:11:       at async x (app/api/users/route.ts:81:17)
+2026-10-12T12:18:11:       at async y (app/dashboard/[role]/users/page.tsx:11:18)
+2026-10-12T12:18:11:       at async z (app/dashboard/[role]/users/page.tsx:38:32),
+2026-10-12T12:18:11:   valueType: 'string'
+2026-10-12T12:18:11: }
+2026-10-12T12:18:36: Users page: failed to load users: CastError: Cast to ObjectId failed for value "{\n' +
+2026-10-12T12:18:36:   "  _id: new ObjectId('6aacee7fb0bd7e60a19365af'),\n" +
+2026-10-12T12:18:36:   "  companyName: 'abhishek Pharma',\n" +
+2026-10-12T12:18:36:   "  logo: '/uploads/company/d42d92ae-d6c3-4afe-a708-3b1655a13185.webp'\n" +
+2026-10-12T12:18:36:   '}" (type string) at path "companyId" for model "User"
+2026-10-12T12:18:36:     at async x (app/api/users/route.ts:81:17)
+2026-10-12T12:18:36:     at async y (app/dashboard/[role]/users/page.tsx:11:18)
+2026-10-12T12:18:36:     at async z (app/dashboard/[role]/users/page.tsx:38:32) {
+2026-10-12T12:18:36:   stringValue: `"{\\n' +\n` +
+2026-10-12T12:18:36:     `  "  _id: new ObjectId('6aacee7fb0bd7e60a19365af'),\\n" +\n` +
+2026-10-12T12:18:36:     `  "  companyName: 'abhishek Pharma',\\n" +\n` +
+2026-10-12T12:18:36:     `  "  logo: '/uploads/company/d42d92ae-d6c3-4afe-a708-3b1655a13185.webp'\\n" +\n` +
+2026-10-12T12:18:36:     `  '}"`,
+2026-10-12T12:18:36:   messageFormat: undefined,
+2026-10-12T12:18:36:   kind: 'ObjectId',
+2026-10-12T12:18:36:   value: '{\n' +
+2026-10-12T12:18:36:     "  _id: new ObjectId('6aacee7fb0bd7e60a19365af'),\n" +
+2026-10-12T12:18:36:     "  companyName: 'abhishek Pharma',\n" +
+2026-10-12T12:18:36:     "  logo: '/uploads/company/d42d92ae-d6c3-4afe-a708-3b1655a13185.webp'\n" +
+2026-10-12T12:18:36:     '}',
+2026-10-12T12:18:36:   path: 'companyId',
+2026-10-12T12:18:36:   reason: BSONError: input must be a 24 character hex string, 12 byte Uint8Array, or an integer
+2026-10-12T12:18:36:       at async x (app/api/users/route.ts:81:17)
+2026-10-12T12:18:36:       at async y (app/dashboard/[role]/users/page.tsx:11:18)
+2026-10-12T12:18:36:       at async z (app/dashboard/[role]/users/page.tsx:38:32),
+2026-10-12T12:18:36:   valueType: 'string'
+2026-10-12T12:18:36: }
+2026-10-12T12:18:51: Users page: failed to load users: CastError: Cast to ObjectId failed for value "{\n' +
+2026-10-12T12:18:51:   "  _id: new ObjectId('6aacee7fb0bd7e60a19365af'),\n" +
+2026-10-12T12:18:51:   "  companyName: 'abhishek Pharma',\n" +
+2026-10-12T12:18:51:   "  logo: '/uploads/company/d42d92ae-d6c3-4afe-a708-3b1655a13185.webp'\n" +
+2026-10-12T12:18:51:   '}" (type string) at path "companyId" for model "User"
+2026-10-12T12:18:51:     at async x (app/api/users/route.ts:81:17)
+2026-10-12T12:18:51:     at async y (app/dashboard/[role]/users/page.tsx:11:18)
+2026-10-12T12:18:51:     at async z (app/dashboard/[role]/users/page.tsx:38:32) {
+2026-10-12T12:18:51:   stringValue: `"{\\n' +\n` +
+2026-10-12T12:18:51:     `  "  _id: new ObjectId('6aacee7fb0bd7e60a19365af'),\\n" +\n` +
+2026-10-12T12:18:51:     `  "  companyName: 'abhishek Pharma',\\n" +\n` +
+2026-10-12T12:18:51:     `  "  logo: '/uploads/company/d42d92ae-d6c3-4afe-a708-3b1655a13185.webp'\\n" +\n` +
+2026-10-12T12:18:51:     `  '}"`,
+2026-10-12T12:18:51:   messageFormat: undefined,
+2026-10-12T12:18:51:   kind: 'ObjectId',
+2026-10-12T12:18:51:   value: '{\n' +
+2026-10-12T12:18:51:     "  _id: new ObjectId('6aacee7fb0bd7e60a19365af'),\n" +
+2026-10-12T12:18:51:     "  companyName: 'abhishek Pharma',\n" +
+2026-10-12T12:18:51:     "  logo: '/uploads/company/d42d92ae-d6c3-4afe-a708-3b1655a13185.webp'\n" +
+2026-10-12T12:18:51:     '}',
+2026-10-12T12:18:51:   path: 'companyId',
+2026-10-12T12:18:51:   reason: BSONError: input must be a 24 character hex string, 12 byte Uint8Array, or an integer
+2026-10-12T12:18:51:       at async x (app/api/users/route.ts:81:17)
+2026-10-12T12:18:51:       at async y (app/dashboard/[role]/users/page.tsx:11:18)
+2026-10-12T12:18:51:       at async z (app/dashboard/[role]/users/page.tsx:38:32),
+2026-10-12T12:18:51:   valueType: 'string'
+2026-10-12T12:18:51: }
+2026-10-12T12:49:33: (node:2250226) [MONGOOSE] Warning: mongoose: the `new` option for `findOneAndUpdate()` and `findOneAndReplace()` is deprecated. Use `returnDocument: 'after'` instead.
+2026-10-12T12:52:53: [Meta WhatsApp] Missing PHONE_NUMBER_ID in .env. To enable Meta Cloud WhatsApp, set PHONE_NUMBER_ID=<your_meta_phone_number_id> in .env.
+2026-10-13T05:07:40: Error: Failed to find Server Action "y". This request might be from an older or newer deployment.
+2026-10-13T05:07:40: Read more: https://nextjs.org/docs/messages/failed-to-find-server-action
+2026-10-13T05:07:40:     at ignore-listed frames
+2026-10-13T09:30:09: [Customer Alert Scanner] Scan already in progress, skipping overlapping tick.
+2026-10-13T09:45:09: [Customer Alert Scanner] Scan already in progress, skipping overlapping tick.
+2026-10-13T09:56:41: GET /api/users error: CastError: Cast to ObjectId failed for value "{\n' +
+2026-10-13T09:56:41:   "  _id: new ObjectId('6accce7e691d74206d1ff807'),\n" +
+2026-10-13T09:56:41:   "  companyCode: 'MABS470',\n" +
+2026-10-13T09:56:41:   "  companyName: 'MABSOL INFOTECH PRIVATE LIMITED',\n" +
+2026-10-13T09:56:41:   '  enabledModules: [\n' +
+2026-10-13T09:56:41:   "    'billing',\n" +
+2026-10-13T09:56:41:   "    'inventory',\n" +
+2026-10-13T09:56:41:   "    'purchases',\n" +
+2026-10-13T09:56:41:   "    'sales',\n" +
+2026-10-13T09:56:41:   "    'fieldforce',\n" +
+2026-10-13T09:56:41:   "    'financial_years',\n" +
+2026-10-13T09:56:41:   "    'custom_forms',\n" +
+2026-10-13T09:56:41:   "    'reports'\n" +
+2026-10-13T09:56:41:   '  ],\n' +
+2026-10-13T09:56:41:   "  logo: '',\n" +
+2026-10-13T09:56:41:   '  isHeadOffice: true,\n' +
+2026-10-13T09:56:41:   '  parentCompanyId: null,\n' +
+2026-10-13T09:56:41:   "  status: 'Active'\n" +
+2026-10-13T09:56:41:   '}" (type string) at path "companyId" for model "User"
+2026-10-13T09:56:41:     at async x (app/api/users/route.ts:81:17)
+2026-10-13T09:56:41:     at async b (app/api/users/route.ts:137:20) {
+2026-10-13T09:56:41:   stringValue: `"{\\n' +\n` +
+2026-10-13T09:56:41:     `  "  _id: new ObjectId('6accce7e691d74206d1ff807'),\\n" +\n` +
+2026-10-13T09:56:41:     `  "  companyCode: 'MABS470',\\n" +\n` +
+2026-10-13T09:56:41:     `  "  companyName: 'MABSOL INFOTECH PRIVATE LIMITED',\\n" +\n` +
+2026-10-13T09:56:41:     "  '  enabledModules: [\\n' +\n" +
+2026-10-13T09:56:41:     `  "    'billing',\\n" +\n` +
+2026-10-13T09:56:41:     `  "    'inventory',\\n" +\n` +
+2026-10-13T09:56:41:     `  "    'purchases',\\n" +\n` +
+2026-10-13T09:56:41:     `  "    'sales',\\n" +\n` +
+2026-10-13T09:56:41:     `  "    'fieldforce',\\n" +\n` +
+2026-10-13T09:56:41:     `  "    'financial_years',\\n" +\n` +
+2026-10-13T09:56:41:     `  "    'custom_forms',\\n" +\n` +
+2026-10-13T09:56:41:     `  "    'reports'\\n" +\n` +
+2026-10-13T09:56:41:     "  '  ],\\n' +\n" +
+2026-10-13T09:56:41:     `  "  logo: '',\\n" +\n` +
+2026-10-13T09:56:41:     "  '  isHeadOffice: true,\\n' +\n" +
+2026-10-13T09:56:41:     "  '  parentCompanyId: null,\\n' +\n" +
+2026-10-13T09:56:41:     `  "  status: 'Active'\\n" +\n` +
+2026-10-13T09:56:41:     `  '}"`,
+2026-10-13T09:56:41:   messageFormat: undefined,
+2026-10-13T09:56:41:   kind: 'ObjectId',
+2026-10-13T09:56:41:   value: '{\n' +
+2026-10-13T09:56:41:     "  _id: new ObjectId('6accce7e691d74206d1ff807'),\n" +
+2026-10-13T09:56:41:     "  companyCode: 'MABS470',\n" +
+2026-10-13T09:56:41:     "  companyName: 'MABSOL INFOTECH PRIVATE LIMITED',\n" +
+2026-10-13T09:56:41:     '  enabledModules: [\n' +
+2026-10-13T09:56:41:     "    'billing',\n" +
+2026-10-13T09:56:41:     "    'inventory',\n" +
+2026-10-13T09:56:41:     "    'purchases',\n" +
+2026-10-13T09:56:41:     "    'sales',\n" +
+2026-10-13T09:56:41:     "    'fieldforce',\n" +
+2026-10-13T09:56:41:     "    'financial_years',\n" +
+2026-10-13T09:56:41:     "    'custom_forms',\n" +
+2026-10-13T09:56:41:     "    'reports'\n" +
+2026-10-13T09:56:41:     '  ],\n' +
+2026-10-13T09:56:41:     "  logo: '',\n" +
+2026-10-13T09:56:41:     '  isHeadOffice: true,\n' +
+2026-10-13T09:56:41:     '  parentCompanyId: null,\n' +
+2026-10-13T09:56:41:     "  status: 'Active'\n" +
+2026-10-13T09:56:41:     '}',
+2026-10-13T09:56:41:   path: 'companyId',
+2026-10-13T09:56:41:   reason: BSONError: input must be a 24 character hex string, 12 byte Uint8Array, or an integer
+2026-10-13T09:56:41:       at async x (app/api/users/route.ts:81:17)
+2026-10-13T09:56:41:       at async b (app/api/users/route.ts:137:20),
+2026-10-13T09:56:41:   valueType: 'string'
+2026-10-13T09:56:41: }
+2026-10-13T09:56:44: Users page: failed to load users: CastError: Cast to ObjectId failed for value "{\n' +
+2026-10-13T09:56:44:   "  _id: new ObjectId('6accce7e691d74206d1ff807'),\n" +
+2026-10-13T09:56:44:   "  companyCode: 'MABS470',\n" +
+2026-10-13T09:56:44:   "  companyName: 'MABSOL INFOTECH PRIVATE LIMITED',\n" +
+2026-10-13T09:56:44:   '  enabledModules: [\n' +
+2026-10-13T09:56:44:   "    'billing',\n" +
+2026-10-13T09:56:44:   "    'inventory',\n" +
+2026-10-13T09:56:44:   "    'purchases',\n" +
+2026-10-13T09:56:44:   "    'sales',\n" +
+2026-10-13T09:56:44:   "    'fieldforce',\n" +
+2026-10-13T09:56:44:   "    'financial_years',\n" +
+2026-10-13T09:56:44:   "    'custom_forms',\n" +
+2026-10-13T09:56:44:   "    'reports'\n" +
+2026-10-13T09:56:44:   '  ],\n' +
+2026-10-13T09:56:44:   "  logo: '',\n" +
+2026-10-13T09:56:44:   '  isHeadOffice: true,\n' +
+2026-10-13T09:56:44:   '  parentCompanyId: null,\n' +
+2026-10-13T09:56:44:   "  status: 'Active'\n" +
+2026-10-13T09:56:44:   '}" (type string) at path "companyId" for model "User"
+2026-10-13T09:56:44:     at async x (app/api/users/route.ts:81:17)
+2026-10-13T09:56:44:     at async y (app/dashboard/[role]/users/page.tsx:11:18)
+2026-10-13T09:56:44:     at async z (app/dashboard/[role]/users/page.tsx:38:32) {
+2026-10-13T09:56:44:   stringValue: `"{\\n' +\n` +
+2026-10-13T09:56:44:     `  "  _id: new ObjectId('6accce7e691d74206d1ff807'),\\n" +\n` +
+2026-10-13T09:56:44:     `  "  companyCode: 'MABS470',\\n" +\n` +
+2026-10-13T09:56:44:     `  "  companyName: 'MABSOL INFOTECH PRIVATE LIMITED',\\n" +\n` +
+2026-10-13T09:56:44:     "  '  enabledModules: [\\n' +\n" +
+2026-10-13T09:56:44:     `  "    'billing',\\n" +\n` +
+2026-10-13T09:56:44:     `  "    'inventory',\\n" +\n` +
+2026-10-13T09:56:44:     `  "    'purchases',\\n" +\n` +
+2026-10-13T09:56:44:     `  "    'sales',\\n" +\n` +
+2026-10-13T09:56:44:     `  "    'fieldforce',\\n" +\n` +
+2026-10-13T09:56:44:     `  "    'financial_years',\\n" +\n` +
+2026-10-13T09:56:44:     `  "    'custom_forms',\\n" +\n` +
+2026-10-13T09:56:44:     `  "    'reports'\\n" +\n` +
+2026-10-13T09:56:44:     "  '  ],\\n' +\n" +
+2026-10-13T09:56:44:     `  "  logo: '',\\n" +\n` +
+2026-10-13T09:56:44:     "  '  isHeadOffice: true,\\n' +\n" +
+2026-10-13T09:56:44:     "  '  parentCompanyId: null,\\n' +\n" +
+2026-10-13T09:56:44:     `  "  status: 'Active'\\n" +\n` +
+2026-10-13T09:56:44:     `  '}"`,
+2026-10-13T09:56:44:   messageFormat: undefined,
+2026-10-13T09:56:44:   kind: 'ObjectId',
+2026-10-13T09:56:44:   value: '{\n' +
+2026-10-13T09:56:44:     "  _id: new ObjectId('6accce7e691d74206d1ff807'),\n" +
+2026-10-13T09:56:44:     "  companyCode: 'MABS470',\n" +
+2026-10-13T09:56:44:     "  companyName: 'MABSOL INFOTECH PRIVATE LIMITED',\n" +
+2026-10-13T09:56:44:     '  enabledModules: [\n' +
+2026-10-13T09:56:44:     "    'billing',\n" +
+2026-10-13T09:56:44:     "    'inventory',\n" +
+2026-10-13T09:56:44:     "    'purchases',\n" +
+2026-10-13T09:56:44:     "    'sales',\n" +
+2026-10-13T09:56:44:     "    'fieldforce',\n" +
+2026-10-13T09:56:44:     "    'financial_years',\n" +
+2026-10-13T09:56:44:     "    'custom_forms',\n" +
+2026-10-13T09:56:44:     "    'reports'\n" +
+2026-10-13T09:56:44:     '  ],\n' +
+2026-10-13T09:56:44:     "  logo: '',\n" +
+2026-10-13T09:56:44:     '  isHeadOffice: true,\n' +
+2026-10-13T09:56:44:     '  parentCompanyId: null,\n' +
+2026-10-13T09:56:44:     "  status: 'Active'\n" +
+2026-10-13T09:56:44:     '}',
+2026-10-13T09:56:44:   path: 'companyId',
+2026-10-13T09:56:44:   reason: BSONError: input must be a 24 character hex string, 12 byte Uint8Array, or an integer
+2026-10-13T09:56:44:       at async x (app/api/users/route.ts:81:17)
+2026-10-13T09:56:44:       at async y (app/dashboard/[role]/users/page.tsx:11:18)
+2026-10-13T09:56:44:       at async z (app/dashboard/[role]/users/page.tsx:38:32),
+2026-10-13T09:56:44:   valueType: 'string'
+2026-10-13T09:56:44: }
+2026-10-13T10:00:09: [Customer Alert Scanner] Scan already in progress, skipping overlapping tick.
+2026-10-13T10:15:09: [Customer Alert Scanner] Scan already in progress, skipping overlapping tick.
+2026-10-13T10:30:09: [Customer Alert Scanner] Scan already in progress, skipping overlapping tick.
+2026-10-13T10:39:23: Users page: failed to load users: CastError: Cast to ObjectId failed for value "{\n' +
+2026-10-13T10:39:23:   "  _id: new ObjectId('6accce7e691d74206d1ff807'),\n" +
+2026-10-13T10:39:23:   "  companyCode: 'MABS470',\n" +
+2026-10-13T10:39:23:   "  companyName: 'MABSOL INFOTECH PRIVATE LIMITED',\n" +
+2026-10-13T10:39:23:   '  enabledModules: [\n' +
+2026-10-13T10:39:23:   "    'billing',\n" +
+2026-10-13T10:39:23:   "    'inventory',\n" +
+2026-10-13T10:39:23:   "    'purchases',\n" +
+2026-10-13T10:39:23:   "    'sales',\n" +
+2026-10-13T10:39:23:   "    'fieldforce',\n" +
+2026-10-13T10:39:23:   "    'financial_years',\n" +
+2026-10-13T10:39:23:   "    'custom_forms',\n" +
+2026-10-13T10:39:23:   "    'reports'\n" +
+2026-10-13T10:39:23:   '  ],\n' +
+2026-10-13T10:39:23:   "  logo: '',\n" +
+2026-10-13T10:39:23:   '  isHeadOffice: true,\n' +
+2026-10-13T10:39:23:   '  parentCompanyId: null,\n' +
+2026-10-13T10:39:23:   "  status: 'Active'\n" +
+2026-10-13T10:39:23:   '}" (type string) at path "companyId" for model "User"
+2026-10-13T10:39:23:     at async x (app/api/users/route.ts:81:17)
+2026-10-13T10:39:23:     at async y (app/dashboard/[role]/users/page.tsx:11:18)
+2026-10-13T10:39:23:     at async z (app/dashboard/[role]/users/page.tsx:38:32) {
+2026-10-13T10:39:23:   stringValue: `"{\\n' +\n` +
+2026-10-13T10:39:23:     `  "  _id: new ObjectId('6accce7e691d74206d1ff807'),\\n" +\n` +
+2026-10-13T10:39:23:     `  "  companyCode: 'MABS470',\\n" +\n` +
+2026-10-13T10:39:23:     `  "  companyName: 'MABSOL INFOTECH PRIVATE LIMITED',\\n" +\n` +
+2026-10-13T10:39:23:     "  '  enabledModules: [\\n' +\n" +
+2026-10-13T10:39:23:     `  "    'billing',\\n" +\n` +
+2026-10-13T10:39:23:     `  "    'inventory',\\n" +\n` +
+2026-10-13T10:39:23:     `  "    'purchases',\\n" +\n` +
+2026-10-13T10:39:23:     `  "    'sales',\\n" +\n` +
+2026-10-13T10:39:23:     `  "    'fieldforce',\\n" +\n` +
+2026-10-13T10:39:23:     `  "    'financial_years',\\n" +\n` +
+2026-10-13T10:39:23:     `  "    'custom_forms',\\n" +\n` +
+2026-10-13T10:39:23:     `  "    'reports'\\n" +\n` +
+2026-10-13T10:39:23:     "  '  ],\\n' +\n" +
+2026-10-13T10:39:23:     `  "  logo: '',\\n" +\n` +
+2026-10-13T10:39:23:     "  '  isHeadOffice: true,\\n' +\n" +
+2026-10-13T10:39:23:     "  '  parentCompanyId: null,\\n' +\n" +
+2026-10-13T10:39:23:     `  "  status: 'Active'\\n" +\n` +
+2026-10-13T10:39:23:     `  '}"`,
+2026-10-13T10:39:23:   messageFormat: undefined,
+2026-10-13T10:39:23:   kind: 'ObjectId',
+2026-10-13T10:39:23:   value: '{\n' +
+2026-10-13T10:39:23:     "  _id: new ObjectId('6accce7e691d74206d1ff807'),\n" +
+2026-10-13T10:39:23:     "  companyCode: 'MABS470',\n" +
+2026-10-13T10:39:23:     "  companyName: 'MABSOL INFOTECH PRIVATE LIMITED',\n" +
+2026-10-13T10:39:23:     '  enabledModules: [\n' +
+2026-10-13T10:39:23:     "    'billing',\n" +
+2026-10-13T10:39:23:     "    'inventory',\n" +
+2026-10-13T10:39:23:     "    'purchases',\n" +
+2026-10-13T10:39:23:     "    'sales',\n" +
+2026-10-13T10:39:23:     "    'fieldforce',\n" +
+2026-10-13T10:39:23:     "    'financial_years',\n" +
+2026-10-13T10:39:23:     "    'custom_forms',\n" +
+2026-10-13T10:39:23:     "    'reports'\n" +
+2026-10-13T10:39:23:     '  ],\n' +
+2026-10-13T10:39:23:     "  logo: '',\n" +
+2026-10-13T10:39:23:     '  isHeadOffice: true,\n' +
+2026-10-13T10:39:23:     '  parentCompanyId: null,\n' +
+2026-10-13T10:39:23:     "  status: 'Active'\n" +
+2026-10-13T10:39:23:     '}',
+2026-10-13T10:39:23:   path: 'companyId',
+2026-10-13T10:39:23:   reason: BSONError: input must be a 24 character hex string, 12 byte Uint8Array, or an integer
+2026-10-13T10:39:23:       at async x (app/api/users/route.ts:81:17)
+2026-10-13T10:39:23:       at async y (app/dashboard/[role]/users/page.tsx:11:18)
+2026-10-13T10:39:23:       at async z (app/dashboard/[role]/users/page.tsx:38:32),
+2026-10-13T10:39:23:   valueType: 'string'
+2026-10-13T10:39:23: }
+2026-10-13T10:45:09: [Customer Alert Scanner] Scan already in progress, skipping overlapping tick.
+2026-10-13T11:00:09: [Customer Alert Scanner] Scan already in progress, skipping overlapping tick.
+2026-10-13T11:15:09: [Customer Alert Scanner] Scan already in progress, skipping overlapping tick.
+2026-10-13T11:30:09: [Customer Alert Scanner] Scan already in progress, skipping overlapping tick.
+2026-10-13T11:45:09: [Customer Alert Scanner] Scan already in progress, skipping overlapping tick.
+2026-10-13T12:00:09: [Customer Alert Scanner] Scan already in progress, skipping overlapping tick.
+2026-10-13T12:15:09: [Customer Alert Scanner] Scan already in progress, skipping overlapping tick.
+2026-10-13T12:30:09: [Customer Alert Scanner] Scan already in progress, skipping overlapping tick.
+2026-10-13T12:41:04: Users page: failed to load users: CastError: Cast to ObjectId failed for value "{\n' +
+2026-10-13T12:41:04:   "  _id: new ObjectId('6accce7e691d74206d1ff807'),\n" +
+2026-10-13T12:41:04:   "  companyCode: 'MABS470',\n" +
+2026-10-13T12:41:04:   "  companyName: 'MABSOL INFOTECH PRIVATE LIMITED',\n" +
+2026-10-13T12:41:04:   '  enabledModules: [\n' +
+2026-10-13T12:41:04:   "    'billing',\n" +
+2026-10-13T12:41:04:   "    'inventory',\n" +
+2026-10-13T12:41:04:   "    'purchases',\n" +
+2026-10-13T12:41:04:   "    'sales',\n" +
+2026-10-13T12:41:04:   "    'fieldforce',\n" +
+2026-10-13T12:41:04:   "    'financial_years',\n" +
+2026-10-13T12:41:04:   "    'custom_forms',\n" +
+2026-10-13T12:41:04:   "    'reports'\n" +
+2026-10-13T12:41:04:   '  ],\n' +
+2026-10-13T12:41:04:   "  logo: '',\n" +
+2026-10-13T12:41:04:   '  isHeadOffice: true,\n' +
+2026-10-13T12:41:04:   '  parentCompanyId: null,\n' +
+2026-10-13T12:41:04:   "  status: 'Active'\n" +
+2026-10-13T12:41:04:   '}" (type string) at path "companyId" for model "User"
+2026-10-13T12:41:04:     at async x (app/api/users/route.ts:81:17)
+2026-10-13T12:41:04:     at async y (app/dashboard/[role]/users/page.tsx:11:18)
+2026-10-13T12:41:04:     at async z (app/dashboard/[role]/users/page.tsx:38:32) {
+2026-10-13T12:41:04:   stringValue: `"{\\n' +\n` +
+2026-10-13T12:41:04:     `  "  _id: new ObjectId('6accce7e691d74206d1ff807'),\\n" +\n` +
+2026-10-13T12:41:04:     `  "  companyCode: 'MABS470',\\n" +\n` +
+2026-10-13T12:41:04:     `  "  companyName: 'MABSOL INFOTECH PRIVATE LIMITED',\\n" +\n` +
+2026-10-13T12:41:04:     "  '  enabledModules: [\\n' +\n" +
+2026-10-13T12:41:04:     `  "    'billing',\\n" +\n` +
+2026-10-13T12:41:04:     `  "    'inventory',\\n" +\n` +
+2026-10-13T12:41:04:     `  "    'purchases',\\n" +\n` +
+2026-10-13T12:41:04:     `  "    'sales',\\n" +\n` +
+2026-10-13T12:41:04:     `  "    'fieldforce',\\n" +\n` +
+2026-10-13T12:41:04:     `  "    'financial_years',\\n" +\n` +
+2026-10-13T12:41:04:     `  "    'custom_forms',\\n" +\n` +
+2026-10-13T12:41:04:     `  "    'reports'\\n" +\n` +
+2026-10-13T12:41:04:     "  '  ],\\n' +\n" +
+2026-10-13T12:41:04:     `  "  logo: '',\\n" +\n` +
+2026-10-13T12:41:04:     "  '  isHeadOffice: true,\\n' +\n" +
+2026-10-13T12:41:04:     "  '  parentCompanyId: null,\\n' +\n" +
+2026-10-13T12:41:04:     `  "  status: 'Active'\\n" +\n` +
+2026-10-13T12:41:04:     `  '}"`,
+2026-10-13T12:41:04:   messageFormat: undefined,
+2026-10-13T12:41:04:   kind: 'ObjectId',
+2026-10-13T12:41:04:   value: '{\n' +
+2026-10-13T12:41:04:     "  _id: new ObjectId('6accce7e691d74206d1ff807'),\n" +
+2026-10-13T12:41:04:     "  companyCode: 'MABS470',\n" +
+2026-10-13T12:41:04:     "  companyName: 'MABSOL INFOTECH PRIVATE LIMITED',\n" +
+2026-10-13T12:41:04:     '  enabledModules: [\n' +
+2026-10-13T12:41:04:     "    'billing',\n" +
+2026-10-13T12:41:04:     "    'inventory',\n" +
+2026-10-13T12:41:04:     "    'purchases',\n" +
+2026-10-13T12:41:04:     "    'sales',\n" +
+2026-10-13T12:41:04:     "    'fieldforce',\n" +
+2026-10-13T12:41:04:     "    'financial_years',\n" +
+2026-10-13T12:41:04:     "    'custom_forms',\n" +
+2026-10-13T12:41:04:     "    'reports'\n" +
+2026-10-13T12:41:04:     '  ],\n' +
+2026-10-13T12:41:04:     "  logo: '',\n" +
+2026-10-13T12:41:04:     '  isHeadOffice: true,\n' +
+2026-10-13T12:41:04:     '  parentCompanyId: null,\n' +
+2026-10-13T12:41:04:     "  status: 'Active'\n" +
+2026-10-13T12:41:04:     '}',
+2026-10-13T12:41:04:   path: 'companyId',
+2026-10-13T12:41:04:   reason: BSONError: input must be a 24 character hex string, 12 byte Uint8Array, or an integer
+2026-10-13T12:41:04:       at async x (app/api/users/route.ts:81:17)
+2026-10-13T12:41:04:       at async y (app/dashboard/[role]/users/page.tsx:11:18)
+2026-10-13T12:41:04:       at async z (app/dashboard/[role]/users/page.tsx:38:32),
+2026-10-13T12:41:04:   valueType: 'string'
+2026-10-13T12:41:04: }
+2026-10-13T12:43:21: Users page: failed to load users: CastError: Cast to ObjectId failed for value "{\n' +
+2026-10-13T12:43:21:   "  _id: new ObjectId('6accce7e691d74206d1ff807'),\n" +
+2026-10-13T12:43:21:   "  companyCode: 'MABS470',\n" +
+2026-10-13T12:43:21:   "  companyName: 'MABSOL INFOTECH PRIVATE LIMITED',\n" +
+2026-10-13T12:43:21:   '  enabledModules: [\n' +
+2026-10-13T12:43:21:   "    'billing',\n" +
+2026-10-13T12:43:21:   "    'inventory',\n" +
+2026-10-13T12:43:21:   "    'purchases',\n" +
+2026-10-13T12:43:21:   "    'sales',\n" +
+2026-10-13T12:43:21:   "    'fieldforce',\n" +
+2026-10-13T12:43:21:   "    'financial_years',\n" +
+2026-10-13T12:43:21:   "    'custom_forms',\n" +
+2026-10-13T12:43:21:   "    'reports'\n" +
+2026-10-13T12:43:21:   '  ],\n' +
+2026-10-13T12:43:21:   "  logo: '',\n" +
+2026-10-13T12:43:21:   '  isHeadOffice: true,\n' +
+2026-10-13T12:43:21:   '  parentCompanyId: null,\n' +
+2026-10-13T12:43:21:   "  status: 'Active'\n" +
+2026-10-13T12:43:21:   '}" (type string) at path "companyId" for model "User"
+2026-10-13T12:43:21:     at async x (app/api/users/route.ts:81:17)
+2026-10-13T12:43:21:     at async y (app/dashboard/[role]/users/page.tsx:11:18)
+2026-10-13T12:43:21:     at async z (app/dashboard/[role]/users/page.tsx:38:32) {
+2026-10-13T12:43:21:   stringValue: `"{\\n' +\n` +
+2026-10-13T12:43:21:     `  "  _id: new ObjectId('6accce7e691d74206d1ff807'),\\n" +\n` +
+2026-10-13T12:43:21:     `  "  companyCode: 'MABS470',\\n" +\n` +
+2026-10-13T12:43:21:     `  "  companyName: 'MABSOL INFOTECH PRIVATE LIMITED',\\n" +\n` +
+2026-10-13T12:43:21:     "  '  enabledModules: [\\n' +\n" +
+2026-10-13T12:43:21:     `  "    'billing',\\n" +\n` +
+2026-10-13T12:43:21:     `  "    'inventory',\\n" +\n` +
+2026-10-13T12:43:21:     `  "    'purchases',\\n" +\n` +
+2026-10-13T12:43:21:     `  "    'sales',\\n" +\n` +
+2026-10-13T12:43:21:     `  "    'fieldforce',\\n" +\n` +
+2026-10-13T12:43:21:     `  "    'financial_years',\\n" +\n` +
+2026-10-13T12:43:21:     `  "    'custom_forms',\\n" +\n` +
+2026-10-13T12:43:21:     `  "    'reports'\\n" +\n` +
+2026-10-13T12:43:21:     "  '  ],\\n' +\n" +
+2026-10-13T12:43:21:     `  "  logo: '',\\n" +\n` +
+2026-10-13T12:43:21:     "  '  isHeadOffice: true,\\n' +\n" +
+2026-10-13T12:43:21:     "  '  parentCompanyId: null,\\n' +\n" +
+2026-10-13T12:43:21:     `  "  status: 'Active'\\n" +\n` +
+2026-10-13T12:43:21:     `  '}"`,
+2026-10-13T12:43:21:   messageFormat: undefined,
+2026-10-13T12:43:21:   kind: 'ObjectId',
+2026-10-13T12:43:21:   value: '{\n' +
+2026-10-13T12:43:21:     "  _id: new ObjectId('6accce7e691d74206d1ff807'),\n" +
+2026-10-13T12:43:21:     "  companyCode: 'MABS470',\n" +
+2026-10-13T12:43:21:     "  companyName: 'MABSOL INFOTECH PRIVATE LIMITED',\n" +
+2026-10-13T12:43:21:     '  enabledModules: [\n' +
+2026-10-13T12:43:21:     "    'billing',\n" +
+2026-10-13T12:43:21:     "    'inventory',\n" +
+2026-10-13T12:43:21:     "    'purchases',\n" +
+2026-10-13T12:43:21:     "    'sales',\n" +
+2026-10-13T12:43:21:     "    'fieldforce',\n" +
+2026-10-13T12:43:21:     "    'financial_years',\n" +
+2026-10-13T12:43:21:     "    'custom_forms',\n" +
+2026-10-13T12:43:21:     "    'reports'\n" +
+2026-10-13T12:43:21:     '  ],\n' +
+2026-10-13T12:43:21:     "  logo: '',\n" +
+2026-10-13T12:43:21:     '  isHeadOffice: true,\n' +
+2026-10-13T12:43:21:     '  parentCompanyId: null,\n' +
+2026-10-13T12:43:21:     "  status: 'Active'\n" +
+2026-10-13T12:43:21:     '}',
+2026-10-13T12:43:21:   path: 'companyId',
+2026-10-13T12:43:21:   reason: BSONError: input must be a 24 character hex string, 12 byte Uint8Array, or an integer
+2026-10-13T12:43:21:       at async x (app/api/users/route.ts:81:17)
+2026-10-13T12:43:21:       at async y (app/dashboard/[role]/users/page.tsx:11:18)
+2026-10-13T12:43:21:       at async z (app/dashboard/[role]/users/page.tsx:38:32),
+2026-10-13T12:43:21:   valueType: 'string'
+2026-10-13T12:43:21: }
+2026-10-13T12:45:09: [Customer Alert Scanner] Scan already in progress, skipping overlapping tick.
+2026-10-13T13:00:09: [Customer Alert Scanner] Scan already in progress, skipping overlapping tick.
+2026-10-13T13:15:09: [Customer Alert Scanner] Scan already in progress, skipping overlapping tick.
+2026-10-13T13:30:09: [Customer Alert Scanner] Scan already in progress, skipping overlapping tick.
+2026-10-13T13:45:09: [Customer Alert Scanner] Scan already in progress, skipping overlapping tick.
+2026-10-13T14:00:09: [Customer Alert Scanner] Scan already in progress, skipping overlapping tick.
+2026-10-13T14:15:09: [Customer Alert Scanner] Scan already in progress, skipping overlapping tick.
+2026-10-13T14:30:09: [Customer Alert Scanner] Scan already in progress, skipping overlapping tick.
+2026-10-13T14:45:09: [Customer Alert Scanner] Scan already in progress, skipping overlapping tick.
+2026-10-13T15:00:09: [Customer Alert Scanner] Scan already in progress, skipping overlapping tick.
+2026-10-13T15:15:09: [Customer Alert Scanner] Scan already in progress, skipping overlapping tick.
+2026-10-13T18:22:56: (node:2270074) [MONGOOSE] Warning: mongoose: the `new` option for `findOneAndUpdate()` and `findOneAndReplace()` is deprecated. Use `returnDocument: 'after'` instead.
+2026-10-13T18:22:56: (Use `node --trace-warnings ...` to show where the warning was created)
+2026-10-13T18:28:37: [Meta WhatsApp] Missing PHONE_NUMBER_ID in .env. To enable Meta Cloud WhatsApp, set PHONE_NUMBER_ID=<your_meta_phone_number_id> in .env.
+2026-10-14T04:40:55: Users page: failed to load users: CastError: Cast to ObjectId failed for value "{\n' +
+2026-10-14T04:40:55:   "  _id: new ObjectId('6accce7e691d74206d1ff807'),\n" +
+2026-10-14T04:40:55:   "  companyCode: 'MABS470',\n" +
+2026-10-14T04:40:55:   "  companyName: 'MABSOL INFOTECH PRIVATE LIMITED',\n" +
+2026-10-14T04:40:55:   '  enabledModules: [\n' +
+2026-10-14T04:40:55:   "    'billing',\n" +
+2026-10-14T04:40:55:   "    'inventory',\n" +
+2026-10-14T04:40:55:   "    'purchases',\n" +
+2026-10-14T04:40:55:   "    'sales',\n" +
+2026-10-14T04:40:55:   "    'fieldforce',\n" +
+2026-10-14T04:40:55:   "    'financial_years',\n" +
+2026-10-14T04:40:55:   "    'custom_forms',\n" +
+2026-10-14T04:40:55:   "    'reports'\n" +
+2026-10-14T04:40:55:   '  ],\n' +
+2026-10-14T04:40:55:   "  logo: '',\n" +
+2026-10-14T04:40:55:   '  isHeadOffice: true,\n' +
+2026-10-14T04:40:55:   '  parentCompanyId: null,\n' +
+2026-10-14T04:40:55:   "  status: 'Active'\n" +
+2026-10-14T04:40:55:   '}" (type string) at path "companyId" for model "User"
+2026-10-14T04:40:55:     at async x (app/api/users/route.ts:81:17)
+2026-10-14T04:40:55:     at async y (app/dashboard/[role]/users/page.tsx:11:18)
+2026-10-14T04:40:55:     at async z (app/dashboard/[role]/users/page.tsx:38:32) {
+2026-10-14T04:40:55:   stringValue: `"{\\n' +\n` +
+2026-10-14T04:40:55:     `  "  _id: new ObjectId('6accce7e691d74206d1ff807'),\\n" +\n` +
+2026-10-14T04:40:55:     `  "  companyCode: 'MABS470',\\n" +\n` +
+2026-10-14T04:40:55:     `  "  companyName: 'MABSOL INFOTECH PRIVATE LIMITED',\\n" +\n` +
+2026-10-14T04:40:55:     "  '  enabledModules: [\\n' +\n" +
+2026-10-14T04:40:55:     `  "    'billing',\\n" +\n` +
+2026-10-14T04:40:55:     `  "    'inventory',\\n" +\n` +
+2026-10-14T04:40:55:     `  "    'purchases',\\n" +\n` +
+2026-10-14T04:40:55:     `  "    'sales',\\n" +\n` +
+2026-10-14T04:40:55:     `  "    'fieldforce',\\n" +\n` +
+2026-10-14T04:40:55:     `  "    'financial_years',\\n" +\n` +
+2026-10-14T04:40:55:     `  "    'custom_forms',\\n" +\n` +
+2026-10-14T04:40:55:     `  "    'reports'\\n" +\n` +
+2026-10-14T04:40:55:     "  '  ],\\n' +\n" +
+2026-10-14T04:40:55:     `  "  logo: '',\\n" +\n` +
+2026-10-14T04:40:55:     "  '  isHeadOffice: true,\\n' +\n" +
+2026-10-14T04:40:55:     "  '  parentCompanyId: null,\\n' +\n" +
+2026-10-14T04:40:55:     `  "  status: 'Active'\\n" +\n` +
+2026-10-14T04:40:55:     `  '}"`,
+2026-10-14T04:40:55:   messageFormat: undefined,
+2026-10-14T04:40:55:   kind: 'ObjectId',
+2026-10-14T04:40:55:   value: '{\n' +
+2026-10-14T04:40:55:     "  _id: new ObjectId('6accce7e691d74206d1ff807'),\n" +
+2026-10-14T04:40:55:     "  companyCode: 'MABS470',\n" +
+2026-10-14T04:40:55:     "  companyName: 'MABSOL INFOTECH PRIVATE LIMITED',\n" +
+2026-10-14T04:40:55:     '  enabledModules: [\n' +
+2026-10-14T04:40:55:     "    'billing',\n" +
+2026-10-14T04:40:55:     "    'inventory',\n" +
+2026-10-14T04:40:55:     "    'purchases',\n" +
+2026-10-14T04:40:55:     "    'sales',\n" +
+2026-10-14T04:40:55:     "    'fieldforce',\n" +
+2026-10-14T04:40:55:     "    'financial_years',\n" +
+2026-10-14T04:40:55:     "    'custom_forms',\n" +
+2026-10-14T04:40:55:     "    'reports'\n" +
+2026-10-14T04:40:55:     '  ],\n' +
+2026-10-14T04:40:55:     "  logo: '',\n" +
+2026-10-14T04:40:55:     '  isHeadOffice: true,\n' +
+2026-10-14T04:40:55:     '  parentCompanyId: null,\n' +
+2026-10-14T04:40:55:     "  status: 'Active'\n" +
+2026-10-14T04:40:55:     '}',
+2026-10-14T04:40:55:   path: 'companyId',
+2026-10-14T04:40:55:   reason: BSONError: input must be a 24 character hex string, 12 byte Uint8Array, or an integer
+2026-10-14T04:40:55:       at async x (app/api/users/route.ts:81:17)
+2026-10-14T04:40:55:       at async y (app/dashboard/[role]/users/page.tsx:11:18)
+2026-10-14T04:40:55:       at async z (app/dashboard/[role]/users/page.tsx:38:32),
+2026-10-14T04:40:55:   valueType: 'string'
+2026-10-14T04:40:55: }
+2026-10-14T07:16:24: Users page: failed to load users: CastError: Cast to ObjectId failed for value "{\n' +
+2026-10-14T07:16:24:   "  _id: new ObjectId('6accce7e691d74206d1ff807'),\n" +
+2026-10-14T07:16:24:   "  companyCode: 'MABS470',\n" +
+2026-10-14T07:16:24:   "  companyName: 'MABSOL INFOTECH PRIVATE LIMITED',\n" +
+2026-10-14T07:16:24:   '  enabledModules: [\n' +
+2026-10-14T07:16:24:   "    'billing',\n" +
+2026-10-14T07:16:24:   "    'inventory',\n" +
+2026-10-14T07:16:24:   "    'purchases',\n" +
+2026-10-14T07:16:24:   "    'sales',\n" +
+2026-10-14T07:16:24:   "    'fieldforce',\n" +
+2026-10-14T07:16:24:   "    'financial_years',\n" +
+2026-10-14T07:16:24:   "    'custom_forms',\n" +
+2026-10-14T07:16:24:   "    'reports'\n" +
+2026-10-14T07:16:24:   '  ],\n' +
+2026-10-14T07:16:24:   "  logo: '',\n" +
+2026-10-14T07:16:24:   '  isHeadOffice: true,\n' +
+2026-10-14T07:16:24:   '  parentCompanyId: null,\n' +
+2026-10-14T07:16:24:   "  status: 'Active'\n" +
+2026-10-14T07:16:24:   '}" (type string) at path "companyId" for model "User"
+2026-10-14T07:16:24:     at async x (app/api/users/route.ts:81:17)
+2026-10-14T07:16:24:     at async y (app/dashboard/[role]/users/page.tsx:11:18)
+2026-10-14T07:16:24:     at async z (app/dashboard/[role]/users/page.tsx:38:32) {
+2026-10-14T07:16:24:   stringValue: `"{\\n' +\n` +
+2026-10-14T07:16:24:     `  "  _id: new ObjectId('6accce7e691d74206d1ff807'),\\n" +\n` +
+2026-10-14T07:16:24:     `  "  companyCode: 'MABS470',\\n" +\n` +
+2026-10-14T07:16:24:     `  "  companyName: 'MABSOL INFOTECH PRIVATE LIMITED',\\n" +\n` +
+2026-10-14T07:16:24:     "  '  enabledModules: [\\n' +\n" +
+2026-10-14T07:16:24:     `  "    'billing',\\n" +\n` +
+2026-10-14T07:16:24:     `  "    'inventory',\\n" +\n` +
+2026-10-14T07:16:24:     `  "    'purchases',\\n" +\n` +
+2026-10-14T07:16:24:     `  "    'sales',\\n" +\n` +
+2026-10-14T07:16:24:     `  "    'fieldforce',\\n" +\n` +
+2026-10-14T07:16:24:     `  "    'financial_years',\\n" +\n` +
+2026-10-14T07:16:24:     `  "    'custom_forms',\\n" +\n` +
+2026-10-14T07:16:24:     `  "    'reports'\\n" +\n` +
+2026-10-14T07:16:24:     "  '  ],\\n' +\n" +
+2026-10-14T07:16:24:     `  "  logo: '',\\n" +\n` +
+2026-10-14T07:16:24:     "  '  isHeadOffice: true,\\n' +\n" +
+2026-10-14T07:16:24:     "  '  parentCompanyId: null,\\n' +\n" +
+2026-10-14T07:16:24:     `  "  status: 'Active'\\n" +\n` +
+2026-10-14T07:16:24:     `  '}"`,
+2026-10-14T07:16:24:   messageFormat: undefined,
+2026-10-14T07:16:24:   kind: 'ObjectId',
+2026-10-14T07:16:24:   value: '{\n' +
+2026-10-14T07:16:24:     "  _id: new ObjectId('6accce7e691d74206d1ff807'),\n" +
+2026-10-14T07:16:24:     "  companyCode: 'MABS470',\n" +
+2026-10-14T07:16:24:     "  companyName: 'MABSOL INFOTECH PRIVATE LIMITED',\n" +
+2026-10-14T07:16:24:     '  enabledModules: [\n' +
+2026-10-14T07:16:24:     "    'billing',\n" +
+2026-10-14T07:16:24:     "    'inventory',\n" +
+2026-10-14T07:16:24:     "    'purchases',\n" +
+2026-10-14T07:16:24:     "    'sales',\n" +
+2026-10-14T07:16:24:     "    'fieldforce',\n" +
+2026-10-14T07:16:24:     "    'financial_years',\n" +
+2026-10-14T07:16:24:     "    'custom_forms',\n" +
+2026-10-14T07:16:24:     "    'reports'\n" +
+2026-10-14T07:16:24:     '  ],\n' +
+2026-10-14T07:16:24:     "  logo: '',\n" +
+2026-10-14T07:16:24:     '  isHeadOffice: true,\n' +
+2026-10-14T07:16:24:     '  parentCompanyId: null,\n' +
+2026-10-14T07:16:24:     "  status: 'Active'\n" +
+2026-10-14T07:16:24:     '}',
+2026-10-14T07:16:24:   path: 'companyId',
+2026-10-14T07:16:24:   reason: BSONError: input must be a 24 character hex string, 12 byte Uint8Array, or an integer
+2026-10-14T07:16:24:       at async x (app/api/users/route.ts:81:17)
+2026-10-14T07:16:24:       at async y (app/dashboard/[role]/users/page.tsx:11:18)
+2026-10-14T07:16:24:       at async z (app/dashboard/[role]/users/page.tsx:38:32),
+2026-10-14T07:16:24:   valueType: 'string'
+2026-10-14T07:16:24: }
+2026-10-14T10:57:36: Users page: failed to load users: CastError: Cast to ObjectId failed for value "{\n' +
+2026-10-14T10:57:36:   "  _id: new ObjectId('6accce7e691d74206d1ff807'),\n" +
+2026-10-14T10:57:36:   "  companyCode: 'MABS470',\n" +
+2026-10-14T10:57:36:   "  companyName: 'MABSOL INFOTECH PRIVATE LIMITED',\n" +
+2026-10-14T10:57:36:   '  enabledModules: [\n' +
+2026-10-14T10:57:36:   "    'billing',\n" +
+2026-10-14T10:57:36:   "    'inventory',\n" +
+2026-10-14T10:57:36:   "    'purchases',\n" +
+2026-10-14T10:57:36:   "    'sales',\n" +
+2026-10-14T10:57:36:   "    'fieldforce',\n" +
+2026-10-14T10:57:36:   "    'financial_years',\n" +
+2026-10-14T10:57:36:   "    'custom_forms',\n" +
+2026-10-14T10:57:36:   "    'reports'\n" +
+2026-10-14T10:57:36:   '  ],\n' +
+2026-10-14T10:57:36:   "  logo: '',\n" +
+2026-10-14T10:57:36:   '  isHeadOffice: true,\n' +
+2026-10-14T10:57:36:   '  parentCompanyId: null,\n' +
+2026-10-14T10:57:36:   "  status: 'Active'\n" +
+2026-10-14T10:57:36:   '}" (type string) at path "companyId" for model "User"
+2026-10-14T10:57:36:     at async x (app/api/users/route.ts:81:17)
+2026-10-14T10:57:36:     at async y (app/dashboard/[role]/users/page.tsx:11:18)
+2026-10-14T10:57:36:     at async z (app/dashboard/[role]/users/page.tsx:38:32) {
+2026-10-14T10:57:36:   stringValue: `"{\\n' +\n` +
+2026-10-14T10:57:36:     `  "  _id: new ObjectId('6accce7e691d74206d1ff807'),\\n" +\n` +
+2026-10-14T10:57:36:     `  "  companyCode: 'MABS470',\\n" +\n` +
+2026-10-14T10:57:36:     `  "  companyName: 'MABSOL INFOTECH PRIVATE LIMITED',\\n" +\n` +
+2026-10-14T10:57:36:     "  '  enabledModules: [\\n' +\n" +
+2026-10-14T10:57:36:     `  "    'billing',\\n" +\n` +
+2026-10-14T10:57:36:     `  "    'inventory',\\n" +\n` +
+2026-10-14T10:57:36:     `  "    'purchases',\\n" +\n` +
+2026-10-14T10:57:36:     `  "    'sales',\\n" +\n` +
+2026-10-14T10:57:36:     `  "    'fieldforce',\\n" +\n` +
+2026-10-14T10:57:36:     `  "    'financial_years',\\n" +\n` +
+2026-10-14T10:57:36:     `  "    'custom_forms',\\n" +\n` +
+2026-10-14T10:57:36:     `  "    'reports'\\n" +\n` +
+2026-10-14T10:57:36:     "  '  ],\\n' +\n" +
+2026-10-14T10:57:36:     `  "  logo: '',\\n" +\n` +
+2026-10-14T10:57:36:     "  '  isHeadOffice: true,\\n' +\n" +
+2026-10-14T10:57:36:     "  '  parentCompanyId: null,\\n' +\n" +
+2026-10-14T10:57:36:     `  "  status: 'Active'\\n" +\n` +
+2026-10-14T10:57:36:     `  '}"`,
+2026-10-14T10:57:36:   messageFormat: undefined,
+2026-10-14T10:57:36:   kind: 'ObjectId',
+2026-10-14T10:57:36:   value: '{\n' +
+2026-10-14T10:57:36:     "  _id: new ObjectId('6accce7e691d74206d1ff807'),\n" +
+2026-10-14T10:57:36:     "  companyCode: 'MABS470',\n" +
+2026-10-14T10:57:36:     "  companyName: 'MABSOL INFOTECH PRIVATE LIMITED',\n" +
+2026-10-14T10:57:36:     '  enabledModules: [\n' +
+2026-10-14T10:57:36:     "    'billing',\n" +
+2026-10-14T10:57:36:     "    'inventory',\n" +
+2026-10-14T10:57:36:     "    'purchases',\n" +
+2026-10-14T10:57:36:     "    'sales',\n" +
+2026-10-14T10:57:36:     "    'fieldforce',\n" +
+2026-10-14T10:57:36:     "    'financial_years',\n" +
+2026-10-14T10:57:36:     "    'custom_forms',\n" +
+2026-10-14T10:57:36:     "    'reports'\n" +
+2026-10-14T10:57:36:     '  ],\n' +
+2026-10-14T10:57:36:     "  logo: '',\n" +
+2026-10-14T10:57:36:     '  isHeadOffice: true,\n' +
+2026-10-14T10:57:36:     '  parentCompanyId: null,\n' +
+2026-10-14T10:57:36:     "  status: 'Active'\n" +
+2026-10-14T10:57:36:     '}',
+2026-10-14T10:57:36:   path: 'companyId',
+2026-10-14T10:57:36:   reason: BSONError: input must be a 24 character hex string, 12 byte Uint8Array, or an integer
+2026-10-14T10:57:36:       at async x (app/api/users/route.ts:81:17)
+2026-10-14T10:57:36:       at async y (app/dashboard/[role]/users/page.tsx:11:18)
+2026-10-14T10:57:36:       at async z (app/dashboard/[role]/users/page.tsx:38:32),
+2026-10-14T10:57:36:   valueType: 'string'
+2026-10-14T10:57:36: }
+2026-10-14T11:25:58: [Meta WhatsApp] Missing PHONE_NUMBER_ID in .env. To enable Meta Cloud WhatsApp, set PHONE_NUMBER_ID=<your_meta_phone_number_id> in .env.

@@ -55,8 +55,12 @@ export default function CustomerSendAlertPage() {
       }
 
       setCustomer(data);
-      const phone = data.PHONE1 || data.PHONE2 || "";
-      const email = data.MAILNAM || "";
+      const email = (
+        data.EMAIL && data.EMAIL !== "NO EMAIL"
+          ? String(data.EMAIL)
+          : ""
+      ).trim();
+      const phone = String(data.PHONE1 || data.PHONE2 || "").trim();
       setRecipientPhone(phone);
       setRecipientEmail(email);
 

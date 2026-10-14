@@ -15,6 +15,7 @@ export interface ICustomerAlertConfig extends Document {
   scheduledTime?: string;
   cooldownHours: number;
   adminNotificationEmail?: string; // Admin / Manager email to receive alert copy / summary
+  lastDailyRunDate?: string; // YYYY-MM-DD in IST
   lastScanAt?: Date;
   lastScanResults?: {
     scannedCount: number;
@@ -44,6 +45,7 @@ const CustomerAlertConfigSchema = new Schema<ICustomerAlertConfig>(
     scheduledTime: { type: String, default: "09:00" },
     cooldownHours: { type: Number, default: 24 },
     adminNotificationEmail: { type: String, default: "" },
+    lastDailyRunDate: { type: String, default: "" },
     lastScanAt: { type: Date },
     lastScanResults: {
       scannedCount: { type: Number, default: 0 },

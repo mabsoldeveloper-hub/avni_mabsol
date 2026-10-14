@@ -104,7 +104,7 @@ export default function CustomerViewPage() {
       <div className="mb-3 flex items-center justify-between text-xs print:hidden">
         <div className="flex items-center gap-2 text-slate-500">
           <Link href="/dashboard/customers" className="flex items-center gap-1 hover:text-indigo-600 transition font-medium">
-            <FaUsers size={12} />
+            <FaUsers size={12} />email
             <span>Customers</span>
           </Link>
           <FaChevronRight size={10} className="text-slate-400" />

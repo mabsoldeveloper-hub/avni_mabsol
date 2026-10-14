@@ -53,7 +53,40 @@ export async function POST(
 
     const customerName = (customer.PARNAM || "Valued Customer").trim();
     const phone = body.recipientPhone || customer.PHONE1 || customer.PHONE2 || "";
-    const email = body.recipientEmail || customer.MAILNAM || "";
+    
+    // Resolve email address strictly (body.recipientEmail -> Marg support collection -> customer.EMAIL)
+    let email = "";
+    if (typeof body.recipientEmail === "string" && body.recipientEmail.includes("@")) {
+      email = body.recipientEmail.trim();
+    }
+
+    if (!email) {
+      const supportCode = String(customer.ORDNO || customer.CODEP || "").trim().toUpperCase();
+      if (supportCode) {
+        try {
+          const supportCollection = mongoose.connection.collection("vfp_new_folder_support");
+          const supportRow: any = await supportCollection.findOne({
+            LCODE: supportCode,
+            SNO: { $in: [2, "2"] },
+            _vfpDeleted: { $ne: true },
+          });
+          const remark = String(supportRow?.REMARK || "").trim();
+          const match = remark.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i);
+          if (match?.[0]) {
+            email = match[0].trim();
+          } else if (remark.includes("@")) {
+            email = remark;
+          }
+        } catch (supErr: any) {
+          console.warn("Support email lookup error in alert route:", supErr.message);
+        }
+      }
+    }
+
+    if (!email && typeof customer.EMAIL === "string" && customer.EMAIL.includes("@")) {
+      email = customer.EMAIL.trim();
+    }
+
     const balance = Number(customer.BALANCE ?? customer.FINAL ?? 0);
     const credit = Number(customer.CREDIT ?? 0);
     const dueDays = Number(customer.DUEDAYS ?? customer.DAYS ?? 0);
@@ -146,6 +179,16 @@ Thank you!`;
       : "";
 
     const dispatchResults: any[] = [];
+
+    if (channel === "email" && (!email || !email.includes("@"))) {
+      return NextResponse.json(
+        {
+          success: false,
+          message: "Please enter a valid recipient email address for this customer.",
+        },
+        { status: 400 }
+      );
+    }
 
     // 1. WhatsApp Dispatch
     if ((channel === "whatsapp" || channel === "all") && phone) {

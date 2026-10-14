@@ -76,7 +76,12 @@ export default function CustomerSendAlertModal({
   useEffect(() => {
     if (isOpen && customer) {
       setRecipientPhone(customer?.PHONE1 || customer?.PHONE2 || "");
-      setRecipientEmail(customer?.MAILNAM || "");
+      const resolvedEmail = (
+        customer?.EMAIL && customer?.EMAIL !== "NO EMAIL"
+          ? String(customer.EMAIL)
+          : ""
+      ).trim();
+      setRecipientEmail(resolvedEmail);
       setFeedback(null);
     }
   }, [isOpen, customer]);

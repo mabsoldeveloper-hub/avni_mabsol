@@ -68,7 +68,8 @@ export async function runMargDataMapper(
         const customerDoc: any = {
           ORDNO: ordNo || `CUST_${Date.now()}`,
           PARNAM: name || "Unknown Customer",
-          MAILNAM: String(doc.MAILNAM || doc.EMAIL || "").trim(),
+          MAILNAM: String(doc.MAILNAM || "").trim(),
+          EMAIL: String(doc.EMAIL || "").trim(),
           CITY: String(doc.CITY || doc.TOWN || "").trim(),
           AREA: String(doc.AREA || "").trim(),
           ROUT: String(doc.ROUT || doc.ROUTE || "").trim(),

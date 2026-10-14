@@ -1,10 +1,19 @@
 import { NextRequest, NextResponse } from "next/server";
 import connectToDatabase from "@/lib/mongodb";
 import FormTemplate from "@/models/FormTemplate";
+import { getCurrentUser } from "@/lib/auth";
+import { escapeRegex } from "@/app/api/_utils/sanitize";
+
+export const dynamic = "force-dynamic";
 
 export async function GET(req: NextRequest) {
   try {
     await connectToDatabase();
+    const user = await getCurrentUser();
+    if (!user) {
+      return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
+    }
+
     const { searchParams } = new URL(req.url);
     const category = searchParams.get("category");
     const status = searchParams.get("status");
@@ -14,10 +23,11 @@ export async function GET(req: NextRequest) {
     if (category && category !== "All") query.category = category;
     if (status) query.status = status;
     if (search) {
+      const escaped = escapeRegex(search);
       query.$or = [
-        { title: { $regex: search, $options: "i" } },
-        { description: { $regex: search, $options: "i" } },
-        { formId: { $regex: search, $options: "i" } },
+        { title: { $regex: escaped, $options: "i" } },
+        { description: { $regex: escaped, $options: "i" } },
+        { formId: { $regex: escaped, $options: "i" } },
       ];
     }
 
@@ -34,9 +44,16 @@ export async function GET(req: NextRequest) {
   }
 }
 
+const BLOCKED_TARGET_MODELS = new Set(["user", "users", "role", "roles", "session", "sessions", "otp", "otps", "vfptablemap", "vfpsyncstate"]);
+
 export async function POST(req: NextRequest) {
   try {
     await connectToDatabase();
+    const user = await getCurrentUser();
+    if (!user) {
+      return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
+    }
+
     const body = await req.json();
     const {
       title,
@@ -71,6 +88,12 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    if (autoMasterSync?.enabled && autoMasterSync?.targetModel) {
+      if (BLOCKED_TARGET_MODELS.has(String(autoMasterSync.targetModel).toLowerCase().trim())) {
+        return NextResponse.json({ success: false, error: "Target model is restricted" }, { status: 400 });
+      }
+    }
+
     // Generate unique formId slug
     const cleanTitle = title
       .toLowerCase()
@@ -79,50 +102,34 @@ export async function POST(req: NextRequest) {
       .replace(/^-|-$/g, "");
     const formId = `${cleanTitle}-${Date.now().toString(36)}`;
 
-    // Process fields
-    const processedFields = fields.map((f: any, idx: number) => ({
-      id: f.id || `field_${idx}_${Date.now().toString(36)}`,
-      key: f.key || (f.label ? f.label.toLowerCase().replace(/[^a-z0-9_]/g, "_") : `field_${idx}`),
-      label: f.label || `Field ${idx + 1}`,
-      type: f.type || "text",
-      required: !!f.required,
-      placeholder: f.placeholder || "",
-      options: Array.isArray(f.options) ? f.options : [],
-      mappedTable: f.mappedTable || "",
-      mappedField: f.mappedField || "",
-      defaultValue: f.defaultValue || "",
-      order: typeof f.order === "number" ? f.order : idx,
-      section: f.section || "General Details",
-      stepId: f.stepId || "step_1",
-      helpText: f.helpText || "",
-    }));
-
-    const newTemplate = await FormTemplate.create({
+    const template = await FormTemplate.create({
       formId,
       title: title.trim(),
-      description: description ? description.trim() : "",
-      category: category ? category.trim() : "General",
+      description: description || "",
+      category: category || "General",
+      fields: fields.map((f: any, idx: number) => ({
+        ...f,
+        order: f.order ?? idx,
+      })),
       status: status || "Active",
-      icon: icon || "FaClipboardList",
-      fields: processedFields,
+      icon: icon || "FileText",
       isMultiStep: !!isMultiStep,
-      steps: Array.isArray(steps) ? steps : [],
-      conditions: Array.isArray(conditions) ? conditions : [],
-      accessMode: ["Internal", "Public", "PasswordProtected"].includes(accessMode)
-        ? accessMode
-        : (String(accessMode || "").toLowerCase().includes("public") ? "Public" : (String(accessMode || "").toLowerCase().includes("password") ? "PasswordProtected" : "Internal")),
+      steps: steps || [],
+      conditions: conditions || [],
+      accessMode: accessMode || "Public",
       accessPin: accessPin || "",
-      approvalWorkflow: approvalWorkflow || { enabled: false, approverRole: "Admin" },
-      autoMasterSync: autoMasterSync || { enabled: false, targetModel: "" },
-      theme: theme || { accentColor: "#4f46e5", logoUrl: "", headerBanner: "" },
-      expirationConfig: expirationConfig || { expiresAt: null, maxSubmissions: 0 },
-      thankYouConfig: thankYouConfig || { title: "Thank You!", message: "Your response has been successfully recorded." },
+      approvalWorkflow: approvalWorkflow || { enabled: false },
+      autoMasterSync: autoMasterSync || { enabled: false },
+      theme: theme || { primaryColor: "#6366f1" },
+      expirationConfig: expirationConfig || {},
+      thankYouConfig: thankYouConfig || {},
+      createdBy: user.name || "Administrator",
     });
 
     return NextResponse.json({
       success: true,
       message: "Form Template created successfully",
-      template: newTemplate,
+      template,
     });
   } catch (error: any) {
     console.error("Error creating form template:", error);

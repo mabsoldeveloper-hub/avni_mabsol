@@ -124,12 +124,12 @@ export function proxy(req: NextRequest) {
       return NextResponse.next();
     }
 
-    // Case 3: URL is missing role (e.g. /dashboard/sales/invoice, /dashboard/mabsolcrmsync, /dashboard/settings, /dashboard/profile)
+    // Case 3: URL is missing role (e.g. /dashboard/sales/invoice, /dashboard/settings)
     // Automatically inject the user's role: /dashboard/${userRole}/${remainingPath}
     const remainingPath = segments.slice(1).join("/");
     const url = req.nextUrl.clone();
     url.pathname = `/dashboard/${userRole}/${remainingPath}`;
-    url.search = search; // Preserve query parameters
+    url.search = search;
     return NextResponse.redirect(url);
   }
 

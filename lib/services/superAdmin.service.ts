@@ -39,7 +39,7 @@ export async function ensureSuperAdminUser() {
   await connectDB();
 
   const email = SUPER_ADMIN_CREDENTIALS.EMAIL.toLowerCase().trim();
-  let superAdmin = await User.findOne({ email });
+  let superAdmin = await User.findOne({ email }).select("+password");
 
   const rawPassword = getConfiguredSuperAdminPassword();
   const isAlreadyBcryptHash = /^\$2[aby]\$\d{2}\$[./A-Za-z0-9]{53}$/.test(rawPassword);

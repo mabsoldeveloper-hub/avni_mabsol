@@ -1,10 +1,17 @@
 import { NextResponse } from "next/server";
-
 import connectDB from "@/lib/mongodb";
 import Permission from "@/models/Permission";
+import { getCurrentUser } from "@/lib/auth";
+import { ROLE_TYPE } from "@/lib/constants/roles.constant";
+
+export const dynamic = "force-dynamic";
 
 export async function GET() {
   await connectDB();
+  const user = await getCurrentUser();
+  if (!user || (user.roleType !== ROLE_TYPE.SUPER_ADMIN && !user.isAdmin)) {
+    return NextResponse.json({ success: false, error: "Unauthorized. Admin privileges required." }, { status: 403 });
+  }
 
   // Seed or update vfp.view permission
   await Permission.updateOne(

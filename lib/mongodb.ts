@@ -22,6 +22,8 @@ const cached: MongooseCache =
     promise: null,
   });
 
+let legacyIndexesCleaned = false;
+
 async function dbConnect() {
   if (cached.conn) {
     return cached.conn;
@@ -36,8 +38,10 @@ async function dbConnect() {
   cached.conn = await cached.promise;
 
   // Drop legacy indexes once to avoid duplicate key errors during multi-user transition
-  try {
-    const db = cached.conn.connection.db;
+  if (!legacyIndexesCleaned) {
+    legacyIndexesCleaned = true;
+    try {
+      const db = cached.conn.connection.db;
     if (db) {
       const collections = await db.listCollections().toArray();
       const colNames = collections.map(c => c.name);
@@ -136,6 +140,7 @@ async function dbConnect() {
         }
       } catch {}
     })();
+    }
   }
 
   return cached.conn;

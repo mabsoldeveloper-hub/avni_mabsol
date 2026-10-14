@@ -6,6 +6,7 @@ import SalesDis from "@/models/SalesDis";
 import { consumeNextVoucherNumber, peekNextVoucherNumber } from "@/lib/voucherSeriesHelper";
 import { getFYDateRange, buildFYDateQuery } from "@/lib/financialYearHelper";
 import { getCompanyVfpFilter, combineFilters } from "@/lib/companyVfpHelper";
+import { escapeRegex } from "@/app/api/_utils/sanitize";
 
 export const dynamic = "force-dynamic";
 
@@ -69,7 +70,7 @@ export async function GET(req: Request) {
     }
 
     if (search) {
-      const searchRegex = new RegExp(search, "i");
+      const searchRegex = new RegExp(escapeRegex(search), "i");
       query.$and = [
         ...(query.$and || []),
         {
@@ -96,7 +97,7 @@ export async function GET(req: Request) {
     );
 
     if (search) {
-      const sReg = new RegExp(search, "i");
+      const sReg = new RegExp(escapeRegex(search), "i");
       mdisOrderFilter.$or = [
         { VCN: sReg },
         { VOUCHER: sReg },

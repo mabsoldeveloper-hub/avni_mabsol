@@ -359,8 +359,8 @@ export async function POST(req: Request) {
       $or: [
         { CODEP: customerCode },
         { ORDNO: customerCode },
-        { CODEP: new RegExp(`^${customerCode}$`, "i") },
-        { ORDNO: new RegExp(`^${customerCode}$`, "i") },
+        { CODEP: new RegExp(`^${escapeRegex(customerCode)}$`, "i") },
+        { ORDNO: new RegExp(`^${escapeRegex(customerCode)}$`, "i") },
       ],
     }).lean();
 

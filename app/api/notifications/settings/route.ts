@@ -2,13 +2,21 @@ import { NextResponse } from "next/server";
 import { connectDB } from "@/lib/mongodb";
 import NotificationGatewayConfig from "@/models/NotificationGatewayConfig";
 import { NotificationGatewayService } from "@/lib/services/notificationGateway.service";
+import { getCurrentUser } from "@/lib/auth";
+
+export const dynamic = "force-dynamic";
 
 export async function GET(req: Request) {
   try {
     await connectDB();
+    const user = await getCurrentUser();
+    if (!user) {
+      return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
+    }
+
     const { searchParams } = new URL(req.url);
-    const tenantId = searchParams.get("tenantId") || "TENANT001";
-    const companyId = searchParams.get("companyId") || "";
+    const tenantId = user.tenantId || searchParams.get("tenantId") || "TENANT001";
+    const companyId = searchParams.get("companyId") || (user.companyId ? String(user.companyId) : "");
 
     let config = await NotificationGatewayConfig.findOne({
       tenantId,
@@ -31,8 +39,15 @@ export async function GET(req: Request) {
 export async function POST(req: Request) {
   try {
     await connectDB();
+    const user = await getCurrentUser();
+    if (!user) {
+      return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
+    }
+
     const body = await req.json();
-    const { tenantId = "TENANT001", companyId = "", action, testRecipient, channel, ...settings } = body;
+    const tenantId = user.tenantId || body.tenantId || "TENANT001";
+    const companyId = body.companyId || (user.companyId ? String(user.companyId) : "");
+    const { action, testRecipient, channel, ...settings } = body;
 
     // Handle Live Connection Test
     if (action === "TEST_CONNECTION") {

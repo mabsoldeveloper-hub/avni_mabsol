@@ -427,10 +427,13 @@ export default function CustomerPage() {
                   </span>
                 )}
               </div>
-              <div className="text-xs text-slate-500 mt-0.5">{c.MAILNAM || "No email"}</div>
+              <div className="text-xs text-slate-500 mt-0.5">{c.EMAIL || "No email"}</div>
             </div>
+
           );
+
         },
+
       }),
 
       ...(viewMode === "yearwise"
@@ -889,7 +892,9 @@ export default function CustomerPage() {
               <option key={f._id} value={f._id}>
                 {f.isAll ? "🏢 All Financial Years" : `📅 FY ${f.fyName.replace(/^FY\s*/i, "")}`}
               </option>
+
             ))}
+
           </select>
 
           {/* View Mode Toggle (Consolidated vs Year-wise Rows) */}

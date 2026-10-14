@@ -1,4 +1,5 @@
 import cron from "node-cron";
+import mongoose from "mongoose";
 import connectDB from "@/lib/mongodb";
 import Customer from "@/models/Customer";
 import CustomerAlertConfig from "@/models/CustomerAlertConfig";
@@ -7,14 +8,21 @@ import Pendings from "@/models/Pendings";
 import Notification from "@/models/Notification";
 import { NotificationGatewayService } from "@/lib/services/notificationGateway.service";
 
+function clean(value: any): string {
+  if (value === null || value === undefined) return "";
+  return String(value).replace(/\u0000/g, "").trim();
+}
+
 // Persistent global singleton across Next.js reloads
 declare global {
   var __customerAlertScheduler: {
     cronTask: any;
     intervalTimer: any;
+    watchdogTimer: any;
     isSchedulerRunning: boolean;
     currentCronExpression: string;
     isScanningNow: boolean;
+    lastDailyRunDate: string;
   } | undefined;
 }
 
@@ -22,9 +30,11 @@ if (!globalThis.__customerAlertScheduler) {
   globalThis.__customerAlertScheduler = {
     cronTask: null,
     intervalTimer: null,
+    watchdogTimer: null,
     isSchedulerRunning: false,
     currentCronExpression: "",
     isScanningNow: false,
+    lastDailyRunDate: "",
   };
 }
 
@@ -141,6 +151,45 @@ export async function runCustomerAlertScan(options: { forceIgnoreCooldown?: bool
       .limit(300)
       .lean();
 
+    // Pre-fetch customer email addresses from Marg ERP support collection (vfp_new_folder_support with SNO=2)
+    const supportCodes = Array.from(
+      new Set(
+        customers
+          .flatMap((c) => [clean(c.ORDNO), clean(c.CODEP)])
+          .map((code) => code.toUpperCase())
+          .filter(Boolean)
+      )
+    );
+
+    const supportEmailMap = new Map<string, string>();
+    if (supportCodes.length > 0) {
+      try {
+        const supportCollection = mongoose.connection.collection("vfp_new_folder_support");
+        const supportRows = await supportCollection
+          .find(
+            {
+              LCODE: { $in: supportCodes },
+              SNO: { $in: [2, "2"] },
+              _vfpDeleted: { $ne: true },
+            },
+            { projection: { LCODE: 1, REMARK: 1 } }
+          )
+          .toArray();
+
+        for (const row of supportRows) {
+          const remark = clean(row?.REMARK);
+          if (remark) {
+            const emailMatch = remark.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i);
+            if (emailMatch?.[0]) {
+              supportEmailMap.set(clean(row?.LCODE).toUpperCase(), emailMatch[0].trim().toUpperCase());
+            }
+          }
+        }
+      } catch (supportErr: any) {
+        console.warn("[Customer Alert Scanner] Support email lookup warning:", supportErr.message);
+      }
+    }
+
     const todayMs = Date.now();
     let scannedCount = 0;
     let alertsTriggered = 0;
@@ -151,13 +200,26 @@ export async function runCustomerAlertScan(options: { forceIgnoreCooldown?: bool
       const custId = String(cust._id);
       const custName = (cust.PARNAM || "Valued Customer").trim();
       const phone = cust.PHONE1 || cust.PHONE2 || "";
-      const email = cust.MAILNAM || "";
+      
+      let email = "";
+      const ord = clean(cust.ORDNO).toUpperCase();
+      const codep = clean(cust.CODEP).toUpperCase();
+      if (ord && supportEmailMap.has(ord)) {
+        email = supportEmailMap.get(ord)!;
+      } else if (codep && supportEmailMap.has(codep)) {
+        email = supportEmailMap.get(codep)!;
+      } else if (clean(cust.EMAIL).includes("@")) {
+        email = clean(cust.EMAIL).toUpperCase();
+      } else if (clean(cust.E_MAIL).includes("@")) {
+        email = clean(cust.E_MAIL).toUpperCase();
+      }
+
       const balance = Number(cust.BALANCE ?? cust.FINAL ?? 0);
       const credit = Number(cust.CREDIT ?? 0);
       const dueDays = Number(cust.DUEDAYS ?? cust.DAYS ?? 0);
 
       // Fetch pending invoices count & calculate days
-      const orderKeys = [String(cust.ORDNO || ""), String(cust.CODEP || "")].filter(Boolean);
+      const orderKeys = [clean(cust.ORDNO), clean(cust.CODEP)].filter(Boolean);
       let pendingBillsCount = 0;
       let minDaysRemaining = 999;
       let maxOverdueDays = 0;
@@ -221,20 +283,32 @@ export async function runCustomerAlertScan(options: { forceIgnoreCooldown?: bool
       if (triggers.length > 0) {
         alertsTriggered++;
 
-        // Cooldown Check: only apply if NOT in 15-minute testing mode and not forced
-        if (!options.forceIgnoreCooldown && !isTestingSchedule && cooldownHours > 0) {
-          const cooldownCutoff = new Date(Date.now() - cooldownHours * 60 * 60 * 1000);
-          const recentLog = await CustomerAlertDispatchLog.findOne({
-            customerId: custId,
-            createdAt: { $gte: cooldownCutoff },
-            status: "success",
-          }).lean();
+        // Cooldown Check
+        if (!options.forceIgnoreCooldown && !isTestingSchedule) {
+          let cooldownCutoff: Date;
 
-          if (recentLog) {
-            console.log(
-              `[Customer Alert Scanner] Skipped duplicate alert for ${custName} (Sent within last ${cooldownHours}h).`
-            );
-            continue;
+          if (config.scheduleFrequency === "daily") {
+            const todayIstStr = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
+            cooldownCutoff = new Date(`${todayIstStr}T00:00:00.000+05:30`);
+          } else if (cooldownHours > 0) {
+            cooldownCutoff = new Date(Date.now() - cooldownHours * 60 * 60 * 1000);
+          } else {
+            cooldownCutoff = new Date(0);
+          }
+
+          if (cooldownCutoff.getTime() > 0) {
+            const recentLog = await CustomerAlertDispatchLog.findOne({
+              customerId: custId,
+              createdAt: { $gte: cooldownCutoff },
+              status: "success",
+            }).lean();
+
+            if (recentLog) {
+              console.log(
+                `[Customer Alert Scanner] Skipped duplicate alert for ${custName} (Already dispatched on/since ${cooldownCutoff.toISOString()}).`
+              );
+              continue;
+            }
           }
         }
 
@@ -450,13 +524,24 @@ export async function startCustomerAlertScheduler() {
     // Stop existing task if any
     stopCustomerAlertScheduler();
 
-    // 1. Setup node-cron schedule
-    schedulerState.cronTask = cron.schedule(cronExpr, () => {
-      console.log(`[Customer Alert Scheduler] Cron tick triggered (${cronExpr})`);
-      runCustomerAlertScan().catch((err) => {
-        console.error("[Customer Alert Scheduler Cron Error]:", err);
-      });
-    });
+    // 1. Setup node-cron schedule strictly in Asia/Kolkata timezone
+    schedulerState.cronTask = cron.schedule(
+      cronExpr,
+      () => {
+        console.log(`[Customer Alert Scheduler] Cron tick triggered (${cronExpr}) in Asia/Kolkata`);
+        const now = new Date();
+        const istDateStr = now.toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
+        schedulerState.lastDailyRunDate = istDateStr;
+        CustomerAlertConfig.updateOne({ tenantId: "TENANT001" }, { $set: { lastDailyRunDate: istDateStr } }).catch(() => {});
+
+        runCustomerAlertScan().catch((err) => {
+          console.error("[Customer Alert Scheduler Cron Error]:", err);
+        });
+      },
+      {
+        timezone: "Asia/Kolkata",
+      }
+    );
 
     // 2. Setup interval fallback for short intervals (e.g. 15 minutes)
     if (config.scheduleFrequency === "every_15_mins") {
@@ -468,11 +553,48 @@ export async function startCustomerAlertScheduler() {
       }, 15 * 60 * 1000);
     }
 
+    // 3. Setup active Watchdog timer (every 60s) for Daily schedule catch-up
+    schedulerState.watchdogTimer = setInterval(async () => {
+      try {
+        const activeConfig = await CustomerAlertConfig.findOne({ tenantId: "TENANT001" }).lean();
+        if (!activeConfig || !activeConfig.enabled || activeConfig.schedulerEnabled === false) {
+          return;
+        }
+
+        if (activeConfig.scheduleFrequency === "daily") {
+          const now = new Date();
+          const currentIstDate = now.toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" }); // YYYY-MM-DD
+          const currentIstTime = now.toLocaleTimeString("en-GB", { timeZone: "Asia/Kolkata", hour12: false }).slice(0, 5); // HH:mm
+          const targetTime = String(activeConfig.scheduledTime || "09:00").trim();
+
+          const alreadyRanToday =
+            schedulerState.lastDailyRunDate === currentIstDate ||
+            activeConfig.lastDailyRunDate === currentIstDate;
+
+          if (!alreadyRanToday && currentIstTime >= targetTime) {
+            console.log(
+              `[Customer Alert Watchdog] Triggering scheduled daily scan for ${currentIstDate} (target: ${targetTime}, current: ${currentIstTime})`
+            );
+            schedulerState.lastDailyRunDate = currentIstDate;
+
+            await CustomerAlertConfig.updateOne(
+              { tenantId: "TENANT001" },
+              { $set: { lastDailyRunDate: currentIstDate } }
+            );
+
+            await runCustomerAlertScan();
+          }
+        }
+      } catch (watchdogErr: any) {
+        console.warn("[Customer Alert Watchdog Error]:", watchdogErr.message);
+      }
+    }, 60 * 1000);
+
     schedulerState.isSchedulerRunning = true;
     schedulerState.currentCronExpression = cronExpr;
 
     console.log(
-      `[Customer Alert Scheduler] Daemon active. Schedule: "${cronExpr}" (${config.scheduleFrequency || "every_15_mins"}).`
+      `[Customer Alert Scheduler] Daemon active in Asia/Kolkata. Schedule: "${cronExpr}" (${config.scheduleFrequency || "every_15_mins"}).`
     );
   } catch (err: any) {
     console.error("[Customer Alert Scheduler Start Error]:", err.message);
@@ -491,6 +613,10 @@ export function stopCustomerAlertScheduler() {
     clearInterval(schedulerState.intervalTimer);
     schedulerState.intervalTimer = null;
   }
+  if (schedulerState.watchdogTimer) {
+    clearInterval(schedulerState.watchdogTimer);
+    schedulerState.watchdogTimer = null;
+  }
   schedulerState.isSchedulerRunning = false;
   schedulerState.currentCronExpression = "";
   console.log("[Customer Alert Scheduler] Daemon stopped.");
@@ -508,7 +634,12 @@ export async function restartCustomerAlertScheduler() {
  * Query current scheduler daemon status
  */
 export function isCustomerAlertSchedulerActive(): boolean {
-  return schedulerState.isSchedulerRunning && (schedulerState.cronTask !== null || schedulerState.intervalTimer !== null);
+  return (
+    schedulerState.isSchedulerRunning &&
+    (schedulerState.cronTask !== null ||
+      schedulerState.intervalTimer !== null ||
+      schedulerState.watchdogTimer !== null)
+  );
 }
 
 /**
@@ -516,8 +647,13 @@ export function isCustomerAlertSchedulerActive(): boolean {
  */
 export function getCustomerAlertSchedulerStatus() {
   return {
-    isSchedulerRunning: schedulerState.isSchedulerRunning && (schedulerState.cronTask !== null || schedulerState.intervalTimer !== null),
+    isSchedulerRunning:
+      schedulerState.isSchedulerRunning &&
+      (schedulerState.cronTask !== null ||
+        schedulerState.intervalTimer !== null ||
+        schedulerState.watchdogTimer !== null),
     currentCronExpression: schedulerState.currentCronExpression,
     isScanningNow: schedulerState.isScanningNow,
+    lastDailyRunDate: schedulerState.lastDailyRunDate,
   };
 }

@@ -1094,6 +1094,8 @@ export async function GET(req: Request) {
 
       // MARG: ORDER.ORDNO === SUPPORT.LCODE and SUPPORT.SNO === 2
       const customerEmail =
+        (clean(c.EMAIL).includes("@") ? clean(c.EMAIL).toUpperCase() : "") ||
+        // (clean(c.MAILNAM).includes("@") ? clean(c.MAILNAM).toUpperCase() : "") ||
         supportEmailMap.get(customerOrdno.toUpperCase()) ||
         supportEmailMap.get(customerCodep.toUpperCase()) ||
         "";
@@ -1497,6 +1499,7 @@ export async function GET(req: Request) {
         const allIds: string[] = [];
 
         let bestMailnam = clean(primary.MAILNAM);
+        let bestEmail = clean(primary.EMAIL);
         let bestPhone1 = clean(primary.PHONE1);
         let bestPhone2 = clean(primary.PHONE2);
         let bestCredit = Number(primary.CREDIT) || 0;
@@ -1520,8 +1523,13 @@ export async function GET(req: Request) {
           });
 
           // Check if another row has a real email
+          const e = clean(r.EMAIL);
+          if (e && e.includes("@") && !bestEmail.includes("@")) {
+            bestEmail = e;
+          }
+
           const m = clean(r.MAILNAM);
-          if (m && m.includes("@") && !bestMailnam.includes("@")) {
+          if (m && !bestMailnam) {
             bestMailnam = m;
           }
 
@@ -1556,7 +1564,8 @@ export async function GET(req: Request) {
 
         mergedResult.push({
           ...primary,
-          MAILNAM: bestMailnam || primary.MAILNAM,
+          EMAIL: bestEmail || primary.EMAIL || "",
+          MAILNAM: bestMailnam || primary.MAILNAM || "",
           PHONE1: bestPhone1 || primary.PHONE1,
           PHONE2: bestPhone2 || primary.PHONE2,
           CREDIT: bestCredit,
@@ -1841,11 +1850,38 @@ export async function POST(request: Request) {
 
 
 
-    const newCustomer =
+    // Protect MAILNAM from being an email address
+    if (typeof customerData.MAILNAM === "string" && customerData.MAILNAM.includes("@")) {
+      delete customerData.MAILNAM;
+    }
 
-      await Customer.create(customerData);
+    const newCustomer = await Customer.create(customerData);
 
-
+    // If email provided, save to Marg ERP support table (vfp_new_folder_support) for SNO = 2
+    const targetEmail = clean(customerData.EMAIL || body.EMAIL).toUpperCase();
+    const targetOrdno = clean(customerData.ORDNO || customerData.CODEP).toUpperCase();
+    if (targetEmail && targetEmail.includes("@") && targetOrdno) {
+      try {
+        const supportCollection = mongoose.connection.collection("vfp_new_folder_support");
+        await supportCollection.updateOne(
+          {
+            LCODE: targetOrdno,
+            SNO: { $in: [2, "2"] },
+          },
+          {
+            $set: {
+              LCODE: targetOrdno,
+              SNO: 2,
+              REMARK: targetEmail,
+              _vfpDeleted: false,
+            },
+          },
+          { upsert: true }
+        );
+      } catch (supportErr: any) {
+        console.warn("Failed to create support record for new customer:", supportErr.message);
+      }
+    }
 
     return NextResponse.json(
 

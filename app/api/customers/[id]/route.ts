@@ -185,17 +185,18 @@ export async function GET(
 
     /* --------------------------------------------------------
        MARG CUSTOMER EMAIL LOOKUP
+       ORDER.ORDNO matches SUPPORT.LCODE and SUPPORT.SNO = 2
+       Email is stored in SUPPORT.REMARK.
     -------------------------------------------------------- */
-    let customerEmail = clean(customerDoc?.EMAIL || "NO EMAIL");
-
-    const supportCode = customerOrdno.toUpperCase();
-    if (supportCode && (!customerEmail || !customerEmail.includes("@"))) {
+    let customerEmail = "";
+    const supportCode = (customerOrdno || customerCodep).toUpperCase();
+    if (supportCode) {
       try {
         const supportCollection = mongoose.connection.collection("vfp_new_folder_support");
         const supportRow: any = await supportCollection.findOne(
           {
             LCODE: supportCode,
-            SNO: 2,
+            SNO: { $in: [2, "2"] },
             _vfpDeleted: { $ne: true },
           },
           {
@@ -208,11 +209,17 @@ export async function GET(
           const emailMatch = remark.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i);
           if (emailMatch?.[0]) {
             customerEmail = emailMatch[0].trim().toUpperCase();
+          } else if (remark.includes("@")) {
+            customerEmail = remark.trim().toUpperCase();
           }
         }
       } catch (err) {
         console.warn("Support email lookup error:", err);
       }
+    }
+
+    if (!customerEmail && clean(customerDoc?.EMAIL).includes("@")) {
+      customerEmail = clean(customerDoc?.EMAIL).toUpperCase();
     }
 
     /* --------------------------------------------------------
@@ -434,9 +441,9 @@ export async function GET(
     return NextResponse.json({
       ...customerDoc,
       EMAIL: customerEmail,
+      MAILNAM: clean(customerDoc?.MAILNAM),
       ...groupInfo,
       STATUS: status,
-      MAILNAM: customerDoc.MAILNAM,
       state1,
       country,
       ZONE: zone,
@@ -547,6 +554,7 @@ export async function PATCH(
       "PHONE1",
       "PHONE2",
       "MAILNAM",
+      "EMAIL",
       "STATUS",
       "PRICE",
       "PARADD",
@@ -651,6 +659,18 @@ export async function PATCH(
       updates.OPNING = updates.OPENING;
     }
 
+    // Save incoming EMAIL explicitly to Customer.EMAIL and Marg support collection
+    let incomingEmail: string | undefined = undefined;
+    if (Object.prototype.hasOwnProperty.call(body, "EMAIL")) {
+      incomingEmail = clean(body.EMAIL).toUpperCase();
+      updates.EMAIL = incomingEmail;
+    }
+
+    // Never overwrite or corrupt MAILNAM with an email address
+    if (updates.MAILNAM && updates.MAILNAM.includes("@")) {
+      delete updates.MAILNAM;
+    }
+
     if (!Object.keys(updates).length) {
       return NextResponse.json(
         { success: false, message: "No valid fields received to update" },
@@ -689,6 +709,31 @@ export async function PATCH(
             console.error("Peer customer update error:", err)
           );
         }
+      }
+    }
+
+    // Also update Marg ERP support table (vfp_new_folder_support) for SNO = 2
+    const targetSupportCode = clean(existingCustomer.ORDNO || existingCustomer.CODEP).toUpperCase();
+    if (targetSupportCode && incomingEmail && incomingEmail.includes("@")) {
+      try {
+        const supportCollection = mongoose.connection.collection("vfp_new_folder_support");
+        await supportCollection.updateOne(
+          {
+            LCODE: targetSupportCode,
+            SNO: { $in: [2, "2"] },
+          },
+          {
+            $set: {
+              LCODE: targetSupportCode,
+              SNO: 2,
+              REMARK: incomingEmail,
+              _vfpDeleted: false,
+            },
+          },
+          { upsert: true }
+        );
+      } catch (supportErr: any) {
+        console.warn("Failed to update support collection email:", supportErr.message);
       }
     }
 

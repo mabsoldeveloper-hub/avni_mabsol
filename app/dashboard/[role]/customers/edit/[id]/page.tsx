@@ -51,6 +51,7 @@ export default function EditCustomerPage() {
     PHONE1: "",
     PHONE2: "",
     MAILNAM: "",
+    EMAIL: "",
 
     // Address & Territory
     PARADD: "",
@@ -89,6 +90,11 @@ export default function EditCustomerPage() {
         throw new Error("Customer record not found");
       }
 
+      const resolvedEmail =
+        data.EMAIL && data.EMAIL !== "NO EMAIL"
+          ? String(data.EMAIL)
+          : "";
+
       setFormData({
         CREDIT: data.CREDIT !== undefined && data.CREDIT !== null ? String(data.CREDIT) : "0",
         DUEDAYS: data.DUEDAYS || data.DAYS ? String(data.DUEDAYS || data.DAYS) : "0",
@@ -104,6 +110,7 @@ export default function EditCustomerPage() {
         PHONE1: data.PHONE1 || "",
         PHONE2: data.PHONE2 || "",
         MAILNAM: data.MAILNAM || "",
+        EMAIL: resolvedEmail,
 
         PARADD: data.PARADD || data.ADDRESS || "",
         PARADD2: data.PARADD2 || "",
@@ -555,6 +562,20 @@ export default function EditCustomerPage() {
                 />
               </div>
 
+              <div className="space-y-1.5 sm:col-span-2">
+                <label className="text-xs font-semibold text-slate-700 block">
+                  Customer Mailing Name (MAILNAM)
+                </label>
+                <input
+                  type="text"
+                  name="MAILNAM"
+                  value={formData.MAILNAM}
+                  onChange={handleChange}
+                  placeholder="Mailing name as per Marg ledger"
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 bg-white text-xs font-semibold text-slate-800 focus:ring-2 focus:ring-indigo-500"
+                />
+              </div>
+
               <div className="space-y-1.5">
                 <label className="text-xs font-semibold text-slate-700 block">
                   Contact Person / Proprietor (REF)
@@ -596,21 +617,24 @@ export default function EditCustomerPage() {
                 />
               </div>
 
-              <div className="space-y-1.5">
+              <div className="space-y-1.5 sm:col-span-2">
                 <label className="text-xs font-bold text-indigo-900 flex items-center gap-1.5">
                   <FaEnvelope className="text-indigo-600" size={12} />
-                  <span>Customer Email Address (MAILNAM)</span>
+                  <span>Customer Email Address (Saved to Marg Support LCODE &amp; SNO: 2)</span>
                 </label>
                 <input
                   type="email"
-                  name="MAILNAM"
-                  value={formData.MAILNAM}
-                  onChange={handleChange}
+                  name="EMAIL"
+                  value={formData.EMAIL}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setFormData((prev) => ({ ...prev, EMAIL: val }));
+                  }}
                   placeholder="pharmacy@example.com"
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-indigo-300 bg-white text-xs font-semibold text-slate-800 focus:ring-2 focus:ring-indigo-500"
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-indigo-300 bg-white text-xs font-semibold text-slate-800 focus:ring-2 focus:ring-indigo-500 shadow-2xs"
                 />
-                <p className="text-[10px] text-slate-400">
-                  Background alert scanner will dispatch email notifications to this address.
+                <p className="text-[10px] text-slate-500">
+                  Matches Order Number with Support LCODE (SNO = 2, REMARK) for automated alerts and direct notices.
                 </p>
               </div>
             </div>

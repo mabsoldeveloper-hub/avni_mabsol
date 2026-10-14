@@ -191,9 +191,10 @@ export default function CustomerOverview({ customer }: Props) {
       {/* ==================== 2. CONTACT INFORMATION ==================== */}
       <Section title="Contact Details" tone="emerald" icon={<FaPhoneAlt size={13} />}>
         <Field label="Contact Person" value={show(customer.REF)} />
+        <Field label="Mailing Name" value={show(customer.MAILNAM)} />
         <Field label="Primary Mobile" value={show(customer.PHONE1)} copyable />
         <Field label="Secondary Mobile" value={show(customer.PHONE2)} copyable />
-        <Field label="Email Address" value={show(customer.MAILNAM)} copyable />
+        <Field label="Email Address" value={show(customer.EMAIL)} copyable />
       </Section>
 
       {/* ==================== 3. ADDRESS & LOCATION ==================== */}

@@ -52,6 +52,7 @@ export default function EditCustomerModal({
     PHONE1: "",
     PHONE2: "",
     MAILNAM: "",
+    EMAIL: "",
 
     // Address & Territory
     PARADD: "",
@@ -91,6 +92,7 @@ export default function EditCustomerModal({
         PHONE1: customer.PHONE1 || "",
         PHONE2: customer.PHONE2 || "",
         MAILNAM: customer.MAILNAM || "",
+        EMAIL: customer.EMAIL || "",
 
         PARADD: customer.PARADD || customer.ADDRESS || "",
         PARADD2: customer.PARADD2 || "",
@@ -458,15 +460,30 @@ export default function EditCustomerModal({
                 </div>
 
                 <div className="space-y-1.5">
-                  <label className="text-xs font-bold text-slate-700">Email Address</label>
+                  <label className="text-xs font-bold text-slate-700">Customer Mailing Name (MAILNAM)</label>
                   <input
-                    type="email"
+                    type="text"
                     name="MAILNAM"
                     value={formData.MAILNAM}
                     onChange={handleChange}
-                    placeholder="customer@domain.com"
+                    placeholder="Mailing name as per Marg ledger"
                     className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 bg-white text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500"
                   />
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold text-indigo-700">Customer Email Address</label>
+                  <input
+                    type="email"
+                    name="EMAIL"
+                    value={formData.EMAIL}
+                    onChange={handleChange}
+                    placeholder="customer@domain.com"
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-indigo-200 bg-white text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  />
+                  <p className="text-[10px] text-slate-500">
+                    Saved to Marg Support (LCODE = Customer Order No, SNO = 2, REMARK)
+                  </p>
                 </div>
               </div>
             )}

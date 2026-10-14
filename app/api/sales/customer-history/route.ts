@@ -5,6 +5,7 @@ import SalesDis from "@/models/SalesDis";
 import Pendings from "@/models/Pendings";
 import Customer from "@/models/Customer";
 import { getMrTerritoryRestriction } from "@/lib/mrTerritoryHelper";
+import { escapeRegex } from "@/app/api/_utils/sanitize";
 
 export const dynamic = "force-dynamic";
 
@@ -42,8 +43,8 @@ export async function GET(req: Request) {
       $or: [
         { CODEP: rawCode },
         { ORDNO: rawCode },
-        { CODEP: new RegExp(`^${rawCode}$`, "i") },
-        { ORDNO: new RegExp(`^${rawCode}$`, "i") },
+        { CODEP: new RegExp(`^${escapeRegex(rawCode)}$`, "i") },
+        { ORDNO: new RegExp(`^${escapeRegex(rawCode)}$`, "i") },
       ],
     }).lean();
 
@@ -79,7 +80,7 @@ export async function GET(req: Request) {
     const rawMdisInvoices = await SalesMdis.find({
       $or: [
         { CODEP: { $in: codeVariants } },
-        { CODEP: { $in: codeVariants.map((c) => new RegExp(`^${c}$`, "i")) } },
+        { CODEP: { $in: codeVariants.map((c) => new RegExp(`^${escapeRegex(c)}$`, "i")) } },
       ],
     })
       .sort({ DATE: -1 })

@@ -1,11 +1,20 @@
 import { NextResponse } from "next/server";
 import dbConnect from "@/lib/mongodb";
 import UserTheme from "@/models/UserTheme";
+import { getCurrentUser } from "@/lib/auth";
+
+export const dynamic = "force-dynamic";
 
 export async function GET() {
   try {
     await dbConnect();
-    const doc = await UserTheme.findOne({ themeKey: "mabsol_global_theme" });
+    const user = await getCurrentUser();
+    const key = user?.companyId ? `theme_${user.companyId}` : "mabsol_global_theme";
+    let doc = await UserTheme.findOne({ themeKey: key });
+    if (!doc && key !== "mabsol_global_theme") {
+      doc = await UserTheme.findOne({ themeKey: "mabsol_global_theme" });
+    }
+
     if (!doc) {
       return NextResponse.json({ success: true, theme: null });
     }
@@ -22,11 +31,17 @@ export async function GET() {
 export async function POST(req: Request) {
   try {
     await dbConnect();
+    const user = await getCurrentUser();
+    if (!user) {
+      return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
+    }
+
     const body = await req.json();
     const { selectedTheme, customColors } = body;
+    const key = user.companyId ? `theme_${user.companyId}` : "mabsol_global_theme";
 
     const updated = await UserTheme.findOneAndUpdate(
-      { themeKey: "mabsol_global_theme" },
+      { themeKey: key },
       { selectedTheme, customColors },
       { upsert: true, new: true }
     );

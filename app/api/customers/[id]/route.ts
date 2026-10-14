@@ -4,6 +4,7 @@ import Customer from "@/models/Customer";
 import AccountGroup from "@/models/AccountGroup";
 import Order from "@/models/Order";
 import SaleType from "@/models/SaleType";
+import Support from "@/models/Support";
 import Pendings from "@/models/Pendings";
 import Notification from "@/models/Notification";
 import mongoose from "mongoose";
@@ -428,11 +429,14 @@ export async function GET(
       excessBillsCount,
     };
 
+   
+
     return NextResponse.json({
       ...customerDoc,
+      EMAIL: customerEmail,
       ...groupInfo,
       STATUS: status,
-      EMAIL: customerEmail || customerDoc.MAILNAM || "",
+      // EMAIL: customerEmail || customerDoc.MAILNAM || "",
       MAILNAM: customerEmail || customerDoc.MAILNAM || "",
       state1,
       country,

@@ -527,7 +527,7 @@ export default function CustomerPage() {
         cell: (info) => (
           <div>
             <div className="font-semibold text-slate-800">{info.getValue() || "-"}</div>
-            <div className="text-xs text-slate-500">{info.row.original.MAILNAM || "No email"}</div>
+            {/* <div className="text-xs text-slate-500">{info.row.original.MAILNAM || "No email"}</div> */}
           </div>
         ),
       }),

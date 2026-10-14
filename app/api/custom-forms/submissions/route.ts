@@ -3,10 +3,21 @@ import mongoose from "mongoose";
 import connectToDatabase from "@/lib/mongodb";
 import FormSubmission from "@/models/FormSubmission";
 import FormTemplate from "@/models/FormTemplate";
+import { getCurrentUser } from "@/lib/auth";
+import { escapeRegex } from "@/app/api/_utils/sanitize";
+
+export const dynamic = "force-dynamic";
+
+const BLOCKED_TARGET_MODELS = new Set(["user", "users", "role", "roles", "session", "sessions", "otp", "otps", "vfptablemap", "vfpsyncstate"]);
 
 export async function GET(req: NextRequest) {
   try {
     await connectToDatabase();
+    const user = await getCurrentUser();
+    if (!user) {
+      return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
+    }
+
     const { searchParams } = new URL(req.url);
 
     const formId = searchParams.get("formId");
@@ -55,40 +66,57 @@ export async function GET(req: NextRequest) {
         } else if (field.type === "select" || field.type === "radio") {
           query[`data.${field.key}`] = fieldVal;
         } else {
-          query[`data.${field.key}`] = { $regex: fieldVal, $options: "i" };
+          query[`data.${field.key}`] = { $regex: escapeRegex(fieldVal), $options: "i" };
         }
       }
     });
 
     if (search) {
+      const escapedSearch = escapeRegex(search);
       const searchOrs: any[] = [
-        { "submittedBy.userName": { $regex: search, $options: "i" } },
-        { "submittedBy.userEmail": { $regex: search, $options: "i" } },
+        { "submittedBy.userName": { $regex: escapedSearch, $options: "i" } },
+        { "submittedBy.userEmail": { $regex: escapedSearch, $options: "i" } },
       ];
       template.fields.forEach((f: any) => {
         if (f.type === "text" || f.type === "textarea" || f.type === "select" || f.type === "mappedTable") {
-          searchOrs.push({ [`data.${f.key}`]: { $regex: search, $options: "i" } });
+          searchOrs.push({ [`data.${f.key}`]: { $regex: escapedSearch, $options: "i" } });
         }
       });
       query.$or = searchOrs;
     }
 
-    const skip = (page - 1) * limit;
-    const [submissions, total] = await Promise.all([
-      FormSubmission.find(query).sort({ createdAt: -1 }).skip(skip).limit(limit).lean(),
-      FormSubmission.countDocuments(query),
+    const total = await FormSubmission.countDocuments(query);
+    const submissions = await FormSubmission.find(query)
+      .sort({ createdAt: -1 })
+      .skip((page - 1) * limit)
+      .limit(limit)
+      .lean();
+
+    // Summary stats
+    const statusCounts = await FormSubmission.aggregate([
+      { $match: { formId } },
+      { $group: { _id: "$status", count: { $sum: 1 } } },
     ]);
+
+    const stats: Record<string, number> = {
+      Total: total,
+      Submitted: 0,
+      "Under Review": 0,
+      Approved: 0,
+      Rejected: 0,
+    };
+    statusCounts.forEach((sc) => {
+      if (sc._id) stats[sc._id] = sc.count;
+    });
 
     return NextResponse.json({
       success: true,
-      template,
       submissions,
-      pagination: {
-        page,
-        limit,
-        total,
-        pages: Math.ceil(total / limit),
-      },
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit),
+      stats,
     });
   } catch (error: any) {
     console.error("Error fetching form submissions:", error);
@@ -102,16 +130,9 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     const { formId, data, submittedBy, remarks, pin } = body;
 
-    if (!formId) {
+    if (!formId || !data) {
       return NextResponse.json(
-        { success: false, error: "formId is required" },
-        { status: 400 }
-      );
-    }
-
-    if (!data || typeof data !== "object") {
-      return NextResponse.json(
-        { success: false, error: "Submission data must be an object" },
+        { success: false, error: "formId and data payload are required" },
         { status: 400 }
       );
     }
@@ -176,37 +197,39 @@ export async function POST(req: NextRequest) {
 
     // Auto Master Sync Engine
     if (template.autoMasterSync?.enabled && template.autoMasterSync?.targetModel) {
-      try {
-        const targetModel = template.autoMasterSync.targetModel;
-        const mappedDoc: Record<string, any> = {};
-        
-        template.fields.forEach((f: any) => {
-          if (f.mappedField && data[f.key] !== undefined) {
-            mappedDoc[f.mappedField] = data[f.key];
-          } else {
-            mappedDoc[f.key] = data[f.key];
-          }
-        });
-
-        mappedDoc.createdAt = new Date();
-        mappedDoc.updatedAt = new Date();
-        mappedDoc.sourceFormId = formId;
-
-        const db = mongoose.connection.db;
-        if (db) {
-          const colName = targetModel.endsWith("s") ? targetModel : `${targetModel}s`;
-          const syncRes = await db.collection(colName).insertOne(mappedDoc);
+      const targetModel = String(template.autoMasterSync.targetModel).trim();
+      if (!BLOCKED_TARGET_MODELS.has(targetModel.toLowerCase())) {
+        try {
+          const mappedDoc: Record<string, any> = {};
           
-          submission.syncedToMaster = {
-            synced: true,
-            targetModel: colName,
-            syncedRecordId: String(syncRes.insertedId),
-            syncedAt: new Date(),
-          };
-          await submission.save();
+          template.fields.forEach((f: any) => {
+            if (f.mappedField && data[f.key] !== undefined) {
+              mappedDoc[f.mappedField] = data[f.key];
+            } else {
+              mappedDoc[f.key] = data[f.key];
+            }
+          });
+
+          mappedDoc.createdAt = new Date();
+          mappedDoc.updatedAt = new Date();
+          mappedDoc.sourceFormId = formId;
+
+          const db = mongoose.connection.db;
+          if (db) {
+            const colName = targetModel.endsWith("s") ? targetModel : `${targetModel}s`;
+            const syncRes = await db.collection(colName).insertOne(mappedDoc);
+            
+            submission.syncedToMaster = {
+              synced: true,
+              targetModel: colName,
+              syncedRecordId: String(syncRes.insertedId),
+              syncedAt: new Date(),
+            };
+            await submission.save();
+          }
+        } catch (syncErr) {
+          console.error("Error in AutoMasterSyncEngine:", syncErr);
         }
-      } catch (syncErr) {
-        console.error("Error in AutoMasterSyncEngine:", syncErr);
       }
     }
 
@@ -227,6 +250,11 @@ export async function POST(req: NextRequest) {
 export async function PUT(req: NextRequest) {
   try {
     await connectToDatabase();
+    const user = await getCurrentUser();
+    if (!user) {
+      return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
+    }
+
     const body = await req.json();
     const { submissionId, action, remarks, managerName } = body;
 
@@ -248,7 +276,7 @@ export async function PUT(req: NextRequest) {
     submission.status = action;
     submission.approvalHistory.push({
       action,
-      byUserName: managerName || "Manager",
+      byUserName: user.name || managerName || "Manager",
       remarks: remarks || "",
       at: new Date(),
     });

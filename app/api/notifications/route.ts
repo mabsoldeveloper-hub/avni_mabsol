@@ -143,7 +143,8 @@ export async function DELETE(request: NextRequest) {
     const clearAll = searchParams.get("clearAll") === "true";
 
     if (clearAll) {
-      const allNotifs = await Notification.find({}, { entityId: 1, type: 1 }).lean();
+      const userFilter = { $or: [{ userId: String(user._id) }, { userId: "" }, { userId: { $exists: false } }] };
+      const allNotifs = await Notification.find(userFilter, { entityId: 1, type: 1 }).lean();
       const dismissedDocs = allNotifs
         .filter((n: any) => n.entityId)
         .map((n: any) => ({
@@ -156,8 +157,8 @@ export async function DELETE(request: NextRequest) {
         await DismissedAlert.insertMany(dismissedDocs, { ordered: false }).catch(() => {});
       }
 
-      await Notification.deleteMany({});
-      return NextResponse.json({ success: true, message: "All notifications cleared permanently" });
+      await Notification.deleteMany({ userId: String(user._id) });
+      return NextResponse.json({ success: true, message: "Notifications cleared" });
     }
 
     if (notificationId) {

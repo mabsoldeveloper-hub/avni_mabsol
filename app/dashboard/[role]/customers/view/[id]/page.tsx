@@ -84,6 +84,7 @@ export default function CustomerViewPage() {
               >
                 Retry
               </button>
+              
             </div>
           </div>
         </div>

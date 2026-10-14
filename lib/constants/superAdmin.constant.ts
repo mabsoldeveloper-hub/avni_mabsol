@@ -7,7 +7,11 @@ export const SUPER_ADMIN_CREDENTIALS = {
     return (process.env.SUPER_ADMIN_EMAIL || "mabsoldeveloper@gmail.com").toLowerCase().trim();
   },
   get PASSWORD(): string {
-    return process.env.SUPER_ADMIN_PASSWORD || "Mab@5181";
+    const pwd = process.env.SUPER_ADMIN_PASSWORD;
+    if (!pwd) {
+      throw new Error("SUPER_ADMIN_PASSWORD must be configured in environment variables.");
+    }
+    return pwd;
   },
   get NAME(): string {
     return process.env.SUPER_ADMIN_NAME || "mabsolinfotech";

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import mongoose from "mongoose";
 
 import connectDB from "@/lib/mongodb";
+import { getCurrentUser } from "@/lib/auth";
 
 
 
@@ -1621,12 +1622,15 @@ export async function GET(req: Request) {
 
 
 export async function POST(request: Request) {
-
   try {
-
     await connectDB();
-
-
+    const user = await getCurrentUser();
+    if (!user) {
+      return NextResponse.json(
+        { success: false, message: "Unauthorized" },
+        { status: 401 }
+      );
+    }
 
     const body = await request.json();
 

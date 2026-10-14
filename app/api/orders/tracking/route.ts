@@ -1,11 +1,18 @@
 import { NextResponse } from "next/server";
 import OrderTracking from "@/models/OrderTracking";
-import { NotificationGatewayService } from "@/lib/services/notificationGateway.service";
 import { connectDB } from "@/lib/mongodb";
+import { getCurrentUser } from "@/lib/auth";
+
+export const dynamic = "force-dynamic";
 
 export async function GET(req: Request) {
   try {
     await connectDB();
+    const user = await getCurrentUser();
+    if (!user) {
+      return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
+    }
+
     const { searchParams } = new URL(req.url);
     const status = searchParams.get("status");
     const salespersonId = searchParams.get("salespersonId");
@@ -13,21 +20,13 @@ export async function GET(req: Request) {
     const customerCode = searchParams.get("customerCode");
 
     const query: any = {};
+    if (user.tenantId) query.tenantId = user.tenantId;
     if (status && status !== "ALL") query.currentStatus = status;
     if (salespersonId) query.salespersonId = salespersonId;
     if (areaName && areaName !== "ALL") query.areaName = areaName;
     if (customerCode) query.customerCode = customerCode;
 
-    let orders = await OrderTracking.find(query).sort({ orderDate: -1 }).limit(100).lean();
-
-    // If no tracked orders exist yet, seed a few realistic demo orders so the tracker works instantly
-    if (orders.length === 0 && (!status || status === "ALL") && !salespersonId) {
-      const demoOrders: any[] = [];
-      if (demoOrders.length > 0) {
-        await OrderTracking.insertMany(demoOrders);
-        orders = await OrderTracking.find(query).sort({ orderDate: -1 }).lean();
-      }
-    }
+    const orders = await OrderTracking.find(query).sort({ orderDate: -1 }).limit(100).lean();
 
     return NextResponse.json({ success: true, orders });
   } catch (err: any) {
@@ -38,6 +37,11 @@ export async function GET(req: Request) {
 export async function POST(req: Request) {
   try {
     await connectDB();
+    const user = await getCurrentUser();
+    if (!user) {
+      return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
+    }
+
     const body = await req.json();
     const {
       orderNumber,
@@ -52,14 +56,14 @@ export async function POST(req: Request) {
 
     const orderId = `ORD-${Date.now().toString().slice(-6)}`;
     const newOrder = await OrderTracking.create({
-      tenantId: "TENANT001",
+      tenantId: user.tenantId || "TENANT001",
       orderId,
       orderNumber: orderNumber || `PO-${Date.now().toString().slice(-5)}`,
       customerName,
       customerPhone,
       customerEmail,
       areaName,
-      salespersonName,
+      salespersonName: salespersonName || user.name || "Sales Operator",
       totalAmount,
       itemCount: items.length,
       items: items.map((it: any) => ({
@@ -71,7 +75,7 @@ export async function POST(req: Request) {
         {
           stage: "Ordered",
           timestamp: new Date(),
-          updatedBy: salespersonName || "Sales Operator",
+          updatedBy: salespersonName || user.name || "Sales Operator",
           notes: "New stock order created",
         },
       ],

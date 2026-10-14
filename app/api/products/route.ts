@@ -4,6 +4,7 @@ import Product from "@/models/Product";
 import ProductBatch from "@/models/ProductBatch";
 import SaleType from "@/models/SaleType";
 import { getMrTerritoryRestriction } from "@/lib/mrTerritoryHelper";
+import { getCurrentUser } from "@/lib/auth";
 
 import { getCompanyVfpFilter, combineFilters } from "@/lib/companyVfpHelper";
 
@@ -109,6 +110,10 @@ export async function GET(req: Request) {
 export async function POST(request: Request) {
   try {
     await connectDB();
+    const user = await getCurrentUser();
+    if (!user) {
+      return NextResponse.json({ success: false, message: "Unauthorized" }, { status: 401 });
+    }
     const body = await request.json();
 
     const productName = String(body.PRODUCT || body.NAME || "").trim();

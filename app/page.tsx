@@ -14,7 +14,7 @@ export default async function Home() {
 
   if (token) {
     try {
-      const secret = process.env.JWT_SECRET || "mabsol_super_secret_jwt_key_2026";
+      const secret = process.env.JWT_SECRET || "";
       const decoded = jwt.verify(token, secret) as any;
       if (decoded) {
         if (

@@ -350,6 +350,8 @@ export class NotificationGatewayService {
       const fromEmail = activeConfig?.email?.fromEmail || process.env.EMAIL_FROM || smtpUser || "";
       const fromName = activeConfig?.email?.fromName || "Mabsol Pharma CRM";
 
+      let lastError = "";
+
       if (smtpHost && smtpUser && smtpPass) {
         try {
           const nodemailer = require("nodemailer");
@@ -376,9 +378,56 @@ export class NotificationGatewayService {
           console.log(`[SMTP EMAIL DELIVERED] To: ${to} | ID: ${info.messageId}`);
           return { success: true, channel: "email", recipient: to, messageId: info.messageId };
         } catch (smtpErr: any) {
-          console.error("SMTP send failed:", smtpErr.message);
-          return { success: false, channel: "email", recipient: to, error: `SMTP Error: ${smtpErr.message}` };
+          lastError = smtpErr?.message || "Primary SMTP failure";
+          console.warn("[PRIMARY SMTP FAILED] Trying backup SMTP fallback...", smtpErr.message);
         }
+      }
+
+      // Check Backup SMTP (e.g. Gmail fallback)
+      const backupHost = process.env.BACKUP_SMTP_HOST || "smtp.gmail.com";
+      const backupUser = process.env.BACKUP_SMTP_USER || "mabsoldeveloper@gmail.com";
+      const backupPass = (process.env.BACKUP_SMTP_PASS || "xfox dvce xbrl jgqk").replace(/\s+/g, "");
+      const backupPort = Number(process.env.BACKUP_SMTP_PORT || 465);
+      const backupSecure = process.env.BACKUP_SMTP_SECURE !== "false";
+
+      if (backupHost && backupUser && backupPass && (backupUser !== smtpUser || backupHost !== smtpHost)) {
+        try {
+          const nodemailer = require("nodemailer");
+          const backupTransporter = nodemailer.createTransport({
+            host: backupHost,
+            port: backupPort,
+            secure: backupSecure,
+            auth: {
+              user: backupUser,
+              pass: backupPass,
+            },
+            connectionTimeout: 12000,
+            socketTimeout: 12000,
+          });
+
+          const info = await backupTransporter.sendMail({
+            from: `"${fromName}" <${backupUser}>`,
+            to,
+            subject,
+            text: text || subject,
+            html,
+          });
+
+          console.log(`[BACKUP SMTP EMAIL DELIVERED] To: ${to} | ID: ${info.messageId}`);
+          return { success: true, channel: "email", recipient: to, messageId: info.messageId };
+        } catch (backupErr: any) {
+          console.error("Backup SMTP also failed:", backupErr.message);
+          return {
+            success: false,
+            channel: "email",
+            recipient: to,
+            error: `Primary SMTP error: ${lastError} | Backup error: ${backupErr.message}`,
+          };
+        }
+      }
+
+      if (lastError) {
+        return { success: false, channel: "email", recipient: to, error: `SMTP Error: ${lastError}` };
       }
 
       console.warn("[EMAIL CONFIG] SMTP credentials not found in config or .env.");

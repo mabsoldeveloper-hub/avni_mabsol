@@ -6,6 +6,7 @@ import CustomerAlertConfig from "@/models/CustomerAlertConfig";
 import CustomerAlertDispatchLog from "@/models/CustomerAlertDispatchLog";
 import Pendings from "@/models/Pendings";
 import Notification from "@/models/Notification";
+import Company from "@/models/Company";
 import { NotificationGatewayService } from "@/lib/services/notificationGateway.service";
 
 function clean(value: any): string {
@@ -47,6 +48,8 @@ export function resolveCronExpression(config: any): string {
   const frequency = config?.scheduleFrequency || "every_15_mins";
 
   switch (frequency) {
+    case "disabled":
+      return "";
     case "every_15_mins":
       return "*/15 * * * *";
     case "hourly":
@@ -72,10 +75,23 @@ export async function sendTestEmailToAdmin(targetEmail: string) {
     return { success: false, error: "Invalid target email address" };
   }
 
+  let senderCompanyName = "";
+  try {
+    const compDoc: any =
+      (await Company.findOne({ isHeadOffice: true }).lean()) ||
+      (await Company.findOne().lean());
+    if (compDoc?.companyName) {
+      senderCompanyName = clean(compDoc.companyName);
+    }
+  } catch (e) {}
+  if (!senderCompanyName) {
+    senderCompanyName = "Mabsol Infotech Private Limited";
+  }
+
   const emailHtml = `
     <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 24px; border: 1px solid #e2e8f0; border-radius: 12px; background: #ffffff;">
       <div style="border-bottom: 2px solid #4f46e5; padding-bottom: 12px; margin-bottom: 16px;">
-        <h2 style="color: #4f46e5; margin: 0; font-size: 20px;">⚡ Mabsol CRM — Customer Alert System Test</h2>
+        <h2 style="color: #4f46e5; margin: 0; font-size: 20px;">⚡ ${senderCompanyName} — Customer Alert System Test</h2>
         <p style="color: #64748b; font-size: 12px; margin: 4px 0 0 0;">SMTP Live Delivery Verification</p>
       </div>
       <p style="font-size: 14px; color: #1e293b;">Hello,</p>
@@ -88,15 +104,15 @@ export async function sendTestEmailToAdmin(targetEmail: string) {
       </div>
       <p style="font-size: 12px; color: #64748b;">Timestamp: ${new Date().toLocaleString("en-IN")}</p>
       <hr style="border: 0; border-top: 1px solid #e2e8f0; margin: 20px 0;" />
-      <p style="color: #94a3b8; font-size: 11px; margin: 0;">Mabsol Healthcare ERP & CRM Automation Engine</p>
+      <p style="color: #94a3b8; font-size: 11px; margin: 0;">${senderCompanyName} ERP & CRM Automation Engine</p>
     </div>
   `;
 
   return await NotificationGatewayService.sendEmail({
     to: targetEmail,
-    subject: `✅ Mabsol CRM: Customer Alert System Test Email (${new Date().toLocaleTimeString("en-IN")})`,
+    subject: `✅ ${senderCompanyName}: Customer Alert System Test Email (${new Date().toLocaleTimeString("en-IN")})`,
     html: emailHtml,
-    text: "Mabsol CRM: Customer Alert System Test Email. Your SMTP is active and working properly.",
+    text: `${senderCompanyName}: Customer Alert System Test Email. Your SMTP is active and working properly.`,
   });
 }
 
@@ -132,9 +148,22 @@ export async function runCustomerAlertScan(options: { forceIgnoreCooldown?: bool
       });
     }
 
-    if (!config.enabled) {
-      console.log("[Customer Alert Scanner] Alerts are globally disabled in config.");
-      return { success: false, message: "Alerts are globally disabled" };
+    if (!config.enabled || config.schedulerEnabled === false || config.scheduleFrequency === "disabled") {
+      console.log("[Customer Alert Scanner] Alerts or scheduler are disabled in config.");
+      return { success: false, message: "Alerts or scheduler are disabled" };
+    }
+
+    let senderCompanyName = "";
+    try {
+      const compDoc: any =
+        (await Company.findOne({ isHeadOffice: true }).lean()) ||
+        (await Company.findOne().lean());
+      if (compDoc?.companyName) {
+        senderCompanyName = clean(compDoc.companyName);
+      }
+    } catch (e) {}
+    if (!senderCompanyName) {
+      senderCompanyName = "Mabsol Infotech Private Limited";
     }
 
     const daysThreshold = Number(config.daysRemainingThreshold ?? 3);
@@ -155,7 +184,7 @@ export async function runCustomerAlertScan(options: { forceIgnoreCooldown?: bool
     const supportCodes = Array.from(
       new Set(
         customers
-          .flatMap((c) => [clean(c.ORDNO), clean(c.CODEP)])
+          .flatMap((c) => [clean(c.ORDNO), clean(c.CODEP), clean(c.SCODE)])
           .map((code) => code.toUpperCase())
           .filter(Boolean)
       )
@@ -165,10 +194,11 @@ export async function runCustomerAlertScan(options: { forceIgnoreCooldown?: bool
     if (supportCodes.length > 0) {
       try {
         const supportCollection = mongoose.connection.collection("vfp_new_folder_support");
+        const supportCodesLower = supportCodes.map((c) => c.toLowerCase());
         const supportRows = await supportCollection
           .find(
             {
-              LCODE: { $in: supportCodes },
+              LCODE: { $in: [...supportCodes, ...supportCodesLower] },
               SNO: { $in: [2, "2"] },
               _vfpDeleted: { $ne: true },
             },
@@ -204,14 +234,21 @@ export async function runCustomerAlertScan(options: { forceIgnoreCooldown?: bool
       let email = "";
       const ord = clean(cust.ORDNO).toUpperCase();
       const codep = clean(cust.CODEP).toUpperCase();
+      const scode = clean(cust.SCODE).toUpperCase();
+      const adminPattern = /admin\.mabsolinfotech|support@mabsolinfotech/i;
+      const candidateEmail = clean(cust.EMAIL).toUpperCase();
+      const candidateEmail2 = clean(cust.E_MAIL).toUpperCase();
+
       if (ord && supportEmailMap.has(ord)) {
         email = supportEmailMap.get(ord)!;
       } else if (codep && supportEmailMap.has(codep)) {
         email = supportEmailMap.get(codep)!;
-      } else if (clean(cust.EMAIL).includes("@")) {
-        email = clean(cust.EMAIL).toUpperCase();
-      } else if (clean(cust.E_MAIL).includes("@")) {
-        email = clean(cust.E_MAIL).toUpperCase();
+      } else if (scode && supportEmailMap.has(scode)) {
+        email = supportEmailMap.get(scode)!;
+      } else if (candidateEmail.includes("@") && !adminPattern.test(candidateEmail)) {
+        email = candidateEmail;
+      } else if (candidateEmail2.includes("@") && !adminPattern.test(candidateEmail2)) {
+        email = candidateEmail2;
       }
 
       const balance = Number(cust.BALANCE ?? cust.FINAL ?? 0);
@@ -318,7 +355,7 @@ export async function runCustomerAlertScan(options: { forceIgnoreCooldown?: bool
         const messageText = `📢 *AUTOMATED ACCOUNT & PAYMENT ALERT*
 Dear *${custName}*,
 
-This is an automated notification from *Mabsol Healthcare*:
+This is an automated notification from *${senderCompanyName}*:
 
 • *Outstanding Balance:* ₹${balance.toLocaleString("en-IN")}
 • *Sanctioned Credit Limit:* ₹${credit.toLocaleString("en-IN")}
@@ -346,11 +383,11 @@ Thank you!`;
             try {
               const emailRes = await NotificationGatewayService.sendEmail({
                 to: recipientTo,
-                subject: `⚠️ Payment Alert: Account Notice - ${custName}`,
+                subject: `⚠️ Payment Alert: Account Notice - ${custName} (${senderCompanyName})`,
                 html: `
                   <div style="font-family: Arial, sans-serif; max-width: 620px; margin: 0 auto; padding: 24px; border: 1px solid #e2e8f0; border-radius: 12px; background: #ffffff;">
                     <div style="border-bottom: 2px solid #343872; padding-bottom: 12px; margin-bottom: 16px;">
-                      <h2 style="color: #343872; margin: 0; font-size: 20px;">Mabsol Healthcare — Payment & Account Alert</h2>
+                      <h2 style="color: #343872; margin: 0; font-size: 20px;">${senderCompanyName} — Payment & Account Alert</h2>
                       <p style="color: #64748b; font-size: 12px; margin: 4px 0 0 0;">Automated Credit Terms & Invoice Notice</p>
                     </div>
                     <p style="font-size: 14px; color: #1e293b;">Dear <strong>${custName}</strong>,</p>
@@ -371,7 +408,7 @@ Thank you!`;
                     <p style="font-size: 13px; color: #334155; line-height: 1.5;">Please arrange for payment settlement in accordance with your credit terms. For payment receipts or queries, please reply to this email or reach our accounts team.</p>
                     
                     <hr style="border: 0; border-top: 1px solid #e2e8f0; margin: 20px 0;" />
-                    <p style="color: #94a3b8; font-size: 11px; margin: 0;">This is an automated dispatch from Mabsol Healthcare CRM. Delivered to: ${recipientTo}</p>
+                    <p style="color: #94a3b8; font-size: 11px; margin: 0;">This is an automated dispatch from ${senderCompanyName} CRM. Delivered to: ${recipientTo}</p>
                   </div>
                 `,
                 text: messageText,
@@ -508,13 +545,23 @@ export async function startCustomerAlertScheduler() {
     await connectDB();
     const config = await CustomerAlertConfig.findOne({ tenantId: "TENANT001" }).lean();
 
-    if (!config || !config.enabled || config.schedulerEnabled === false) {
+    if (
+      !config ||
+      !config.enabled ||
+      config.schedulerEnabled === false ||
+      config.scheduleFrequency === "disabled"
+    ) {
       console.log("[Customer Alert Scheduler] Scheduler is disabled in configuration.");
       stopCustomerAlertScheduler();
       return;
     }
 
     const cronExpr = resolveCronExpression(config);
+    if (!cronExpr) {
+      console.log("[Customer Alert Scheduler] No valid cron expression, stopping scheduler.");
+      stopCustomerAlertScheduler();
+      return;
+    }
 
     // If already running with the exact same cron expression, keep running
     if (schedulerState.isSchedulerRunning && schedulerState.currentCronExpression === cronExpr) {
@@ -557,7 +604,12 @@ export async function startCustomerAlertScheduler() {
     schedulerState.watchdogTimer = setInterval(async () => {
       try {
         const activeConfig = await CustomerAlertConfig.findOne({ tenantId: "TENANT001" }).lean();
-        if (!activeConfig || !activeConfig.enabled || activeConfig.schedulerEnabled === false) {
+        if (
+          !activeConfig ||
+          !activeConfig.enabled ||
+          activeConfig.schedulerEnabled === false ||
+          activeConfig.scheduleFrequency === "disabled"
+        ) {
           return;
         }
 

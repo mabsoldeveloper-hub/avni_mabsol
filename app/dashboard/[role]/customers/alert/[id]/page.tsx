@@ -20,6 +20,8 @@ import {
   FaEdit,
   FaEye,
 } from "react-icons/fa";
+import { useCompany } from "@/context/CompanyContext";
+import { useUser } from "@/context/UserContext";
 
 export default function CustomerSendAlertPage() {
   const params = useParams();
@@ -38,6 +40,10 @@ export default function CustomerSendAlertPage() {
   const [recipientEmail, setRecipientEmail] = useState("");
   const [customMessage, setCustomMessage] = useState("");
 
+  const { selectedCompany } = useCompany();
+  const { user } = useUser();
+  const activeCompanyName = (selectedCompany?.companyName || user?.companyName || "Our Company").trim();
+
   const loadCustomer = useCallback(async () => {
     if (!id) return;
     setLoading(true);
@@ -55,11 +61,15 @@ export default function CustomerSendAlertPage() {
       }
 
       setCustomer(data);
-      const email = (
+      const rawEmail = (
         data.EMAIL && data.EMAIL !== "NO EMAIL"
           ? String(data.EMAIL)
           : ""
       ).trim();
+      const isAdminOrMailnam =
+        /admin\.mabsolinfotech|support@mabsolinfotech/i.test(rawEmail) ||
+        (data.MAILNAM && rawEmail.toLowerCase() === String(data.MAILNAM).trim().toLowerCase());
+      const email = !isAdminOrMailnam ? rawEmail : "";
       const phone = String(data.PHONE1 || data.PHONE2 || "").trim();
       setRecipientPhone(phone);
       setRecipientEmail(email);
@@ -83,7 +93,7 @@ export default function CustomerSendAlertPage() {
       const defaultMsg = `📢 *PAYMENT & ACCOUNT NOTICE*
 Dear *${custName}*,
 
-This is a reminder regarding your account ledger status with *Mabsol Healthcare*:
+This is a reminder regarding your account ledger status with *${activeCompanyName}*:
 
 • *Outstanding Balance:* ₹${balance.toLocaleString("en-IN")}
 • *Sanctioned Credit Limit:* ₹${credit.toLocaleString("en-IN")}
@@ -99,7 +109,7 @@ Thank you!`;
     } finally {
       setLoading(false);
     }
-  }, [id]);
+  }, [id, activeCompanyName]);
 
   useEffect(() => {
     loadCustomer();
@@ -147,6 +157,7 @@ Thank you!`;
           customMessage: customMessage.trim(),
           recipientPhone: recipientPhone.trim(),
           recipientEmail: recipientEmail.trim(),
+          companyName: activeCompanyName,
         }),
       });
 

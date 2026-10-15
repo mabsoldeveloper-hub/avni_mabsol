@@ -5,6 +5,7 @@ import {
   getCustomerAlertSchedulerStatus,
   restartCustomerAlertScheduler,
   startCustomerAlertScheduler,
+  stopCustomerAlertScheduler,
   sendTestEmailToAdmin,
 } from "@/lib/services/customerAlertScheduler";
 
@@ -32,11 +33,13 @@ export async function GET() {
       });
     }
 
-    // Ensure scheduler is active if enabled
-    if (config.enabled && config.schedulerEnabled !== false) {
+    // Ensure scheduler is active if enabled, or stopped if disabled
+    if (config.enabled && config.schedulerEnabled !== false && config.scheduleFrequency !== "disabled") {
       startCustomerAlertScheduler().catch((e) =>
         console.warn("[Alert Settings] Auto start scheduler failed:", e)
       );
+    } else {
+      stopCustomerAlertScheduler();
     }
 
     const schedulerStatus = getCustomerAlertSchedulerStatus();
@@ -57,6 +60,38 @@ export async function POST(request: Request) {
     await connectDB();
     const body = await request.json();
 
+    // Check for instant toggle scheduler action
+    if (body.action === "toggle_scheduler") {
+      const targetState = !!body.schedulerEnabled;
+      const config = await CustomerAlertConfig.findOneAndUpdate(
+        { tenantId: "TENANT001" },
+        {
+          $set: {
+            schedulerEnabled: targetState,
+            ...(targetState && { scheduleFrequency: body.scheduleFrequency || "daily" }),
+            ...(!targetState && { scheduleFrequency: "disabled" }),
+          },
+        },
+        { upsert: true, new: true }
+      ).lean();
+
+      if (targetState && config.enabled && config.scheduleFrequency !== "disabled") {
+        await restartCustomerAlertScheduler();
+      } else {
+        stopCustomerAlertScheduler();
+      }
+
+      const schedulerStatus = getCustomerAlertSchedulerStatus();
+      return NextResponse.json({
+        success: true,
+        message: targetState
+          ? "Automated background scheduler turned ON successfully!"
+          : "Automated background scheduler turned OFF / Stopped successfully!",
+        config,
+        schedulerStatus,
+      });
+    }
+
     // Check for instant test email trigger
     if (body.action === "test_email") {
       const testEmail = String(body.email || "").trim();
@@ -76,6 +111,8 @@ export async function POST(request: Request) {
       });
     }
 
+    const isSchedulerTurnedOff = body.schedulerEnabled === false || body.scheduleFrequency === "disabled";
+
     const updates = {
       enabled: body.enabled !== undefined ? !!body.enabled : true,
       daysRemainingThreshold: Number(body.daysRemainingThreshold ?? 3),
@@ -86,10 +123,10 @@ export async function POST(request: Request) {
       adminNotificationEmail: String(body.adminNotificationEmail || "").trim(),
       metaPhoneNumberId: String(body.metaPhoneNumberId || "").trim(),
       metaAccessToken: String(body.metaAccessToken || "").trim(),
-      schedulerEnabled: body.schedulerEnabled !== undefined ? !!body.schedulerEnabled : true,
-      scheduleFrequency: ["daily", "hourly", "every_6_hours", "every_15_mins"].includes(body.scheduleFrequency)
+      schedulerEnabled: !isSchedulerTurnedOff,
+      scheduleFrequency: ["daily", "hourly", "every_6_hours", "every_15_mins", "disabled"].includes(body.scheduleFrequency)
         ? body.scheduleFrequency
-        : "every_15_mins",
+        : (isSchedulerTurnedOff ? "disabled" : "every_15_mins"),
       scheduledTime: String(body.scheduledTime || "09:00").trim(),
       cooldownHours: Number(body.cooldownHours ?? 24),
     };
@@ -100,9 +137,11 @@ export async function POST(request: Request) {
       { upsert: true, new: true, runValidators: true }
     ).lean();
 
-    // Restart the background scheduler to apply the new schedule frequency and rules immediately
-    if (updates.enabled && updates.schedulerEnabled) {
+    // Restart or Stop the background scheduler immediately
+    if (updates.enabled && updates.schedulerEnabled && updates.scheduleFrequency !== "disabled") {
       await restartCustomerAlertScheduler();
+    } else {
+      stopCustomerAlertScheduler();
     }
 
     const schedulerStatus = getCustomerAlertSchedulerStatus();

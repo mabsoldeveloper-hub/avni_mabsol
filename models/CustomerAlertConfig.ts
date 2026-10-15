@@ -11,7 +11,7 @@ export interface ICustomerAlertConfig extends Document {
   metaPhoneNumberId?: string;
   metaAccessToken?: string;
   schedulerEnabled: boolean;
-  scheduleFrequency: "daily" | "hourly" | "every_6_hours" | "every_15_mins";
+  scheduleFrequency: "daily" | "hourly" | "every_6_hours" | "every_15_mins" | "disabled";
   scheduledTime?: string;
   cooldownHours: number;
   adminNotificationEmail?: string; // Admin / Manager email to receive alert copy / summary

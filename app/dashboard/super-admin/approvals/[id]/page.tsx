@@ -36,6 +36,7 @@ import {
   FaPowerOff,
   FaSave,
   FaSearch,
+  FaEdit,
 } from "react-icons/fa";
 import {
   DEFAULT_ACCESS_DAYS,
@@ -43,6 +44,7 @@ import {
   ALL_SIDEBAR_MODULE_IDS,
 } from "@/lib/constants/superAdmin.constant";
 import { SESSION_TIMEOUT_PRESETS, DEFAULT_USER_SESSION_HOURS } from "@/lib/constants/session.constant";
+import { GST_STATE_CODE } from "@/lib/constants/gstStateCodes";
 
 function getRelativeTime(dateString?: string): string {
   if (!dateString) return "Recently";
@@ -88,6 +90,16 @@ export default function TenantApprovalPage({
   const [overviewSearchText, setOverviewSearchText] = useState<string>("");
   const [saveSuccessMessage, setSaveSuccessMessage] = useState<string | null>(null);
 
+  // User Profile Editing State (Only Name, Company Name, and Address allowed)
+  const [isEditingUser, setIsEditingUser] = useState(false);
+  const [updatingUser, setUpdatingUser] = useState(false);
+  const [editName, setEditName] = useState("");
+  const [editCompanyName, setEditCompanyName] = useState("");
+  const [editAddress, setEditAddress] = useState("");
+  const [editCity, setEditCity] = useState("");
+  const [editState, setEditState] = useState("");
+  const [editPincode, setEditPincode] = useState("");
+
   // Track initial saved values to enable Save button only on actual changes
   const [initialSessionHours, setInitialSessionHours] = useState<number>(DEFAULT_USER_SESSION_HOURS);
 
@@ -98,9 +110,7 @@ export default function TenantApprovalPage({
   const [adjustmentInput, setAdjustmentInput] = useState<string>("30");
   const [modalSubmitting, setModalSubmitting] = useState(false);
 
-  // Sub-branch full dossier & actions state
-  const [selectedSubBranch, setSelectedSubBranch] = useState<any | null>(null);
-  const [selectedSubBranchModules, setSelectedSubBranchModules] = useState<string[]>([]);
+  // Sub-branch actions state
   const [branchActionLoading, setBranchActionLoading] = useState<string | null>(null);
   const [batchBranchLoading, setBatchBranchLoading] = useState(false);
 
@@ -114,6 +124,19 @@ export default function TenantApprovalPage({
       const data = await res.json();
       if (res.ok && data.user) {
         setUser(data.user);
+        setEditName(data.user.name || "");
+        setEditCompanyName(data.user.companyId?.companyName || data.user.name || "");
+        setEditAddress(data.user.companyId?.address || data.user.address || "");
+        setEditCity(data.user.companyId?.city || data.user.city || "");
+        const resolvedState =
+          data.user.companyId?.state ||
+          data.user.state ||
+          (data.user.companyId?.gstNo && data.user.companyId.gstNo.length >= 2
+            ? GST_STATE_CODE[data.user.companyId.gstNo.slice(0, 2)]
+            : "") ||
+          "";
+        setEditState(resolvedState);
+        setEditPincode(data.user.companyId?.pincode || data.user.pincode || "");
         const sess = data.user.sessionTimeoutHours || DEFAULT_USER_SESSION_HOURS;
         setSelectedSessionHours(sess);
         setCustomSessionHours("");
@@ -139,6 +162,65 @@ export default function TenantApprovalPage({
   useEffect(() => {
     fetchUser();
   }, [fetchUser]);
+
+  const handleCancelEditUser = () => {
+    if (user) {
+      setEditName(user.name || "");
+      setEditCompanyName(user.companyId?.companyName || user.name || "");
+      setEditAddress(user.companyId?.address || user.address || "");
+      setEditCity(user.companyId?.city || user.city || "");
+      const resolvedState =
+        user.companyId?.state ||
+        user.state ||
+        (user.companyId?.gstNo && user.companyId.gstNo.length >= 2
+          ? GST_STATE_CODE[user.companyId.gstNo.slice(0, 2)]
+          : "") ||
+        "";
+      setEditState(resolvedState);
+      setEditPincode(user.companyId?.pincode || user.pincode || "");
+    }
+    setIsEditingUser(false);
+  };
+
+  const handleSaveUserInfo = async () => {
+    if (!editName.trim()) {
+      alert("Please enter a valid full name.");
+      return;
+    }
+    if (!editCompanyName.trim()) {
+      alert("Please enter a valid company name.");
+      return;
+    }
+    setUpdatingUser(true);
+    try {
+      const res = await fetch(`/api/super-admin/users/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "update_user_info",
+          name: editName.trim(),
+          companyName: editCompanyName.trim(),
+          address: editAddress.trim(),
+          city: editCity.trim(),
+          state: editState.trim(),
+          pincode: editPincode.trim(),
+        }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        await fetchUser();
+        setIsEditingUser(false);
+        setSaveSuccessMessage("Full name, company name, and commercial address updated successfully!");
+        setTimeout(() => setSaveSuccessMessage(null), 5000);
+      } else {
+        alert(data.message || "Failed to update details");
+      }
+    } catch (err: any) {
+      alert(err?.message || "Failed to update details");
+    } finally {
+      setUpdatingUser(false);
+    }
+  };
 
   const toggleModule = (modId: string) => {
     setEnabledModules((prev) =>
@@ -422,9 +504,6 @@ export default function TenantApprovalPage({
       if (res.ok) {
         alert(data.message || `Branch status updated to ${newStatus}.`);
         await fetchUser();
-        if (selectedSubBranch && selectedSubBranch._id === branch._id) {
-          setSelectedSubBranch((prev: any) => ({ ...prev, status: newStatus }));
-        }
       } else {
         alert(data.message || "Failed to update branch status");
       }
@@ -503,45 +582,7 @@ export default function TenantApprovalPage({
     }
   };
 
-  // Open Sub-Branch Full Dossier Modal
-  const openSubBranchDossier = (branch: any) => {
-    setSelectedSubBranch(branch);
-    const branchMods = Array.isArray(branch.enabledModules) ? branch.enabledModules : enabledModules;
-    setSelectedSubBranchModules(branchMods);
-  };
 
-  const toggleSubBranchModule = (modId: string) => {
-    setSelectedSubBranchModules((prev) =>
-      prev.includes(modId) ? prev.filter((m) => m !== modId) : [...prev, modId]
-    );
-  };
-
-  const handleSaveSubBranchModules = async () => {
-    if (!selectedSubBranch) return;
-    setBranchActionLoading(selectedSubBranch._id);
-    try {
-      const res = await fetch(`/api/super-admin/branches`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          companyId: selectedSubBranch._id,
-          enabledModules: selectedSubBranchModules,
-        }),
-      });
-      const data = await res.json();
-      if (res.ok) {
-        alert(`Branch modules saved successfully for "${selectedSubBranch.companyName}".`);
-        await fetchUser();
-        setSelectedSubBranch((prev: any) => ({ ...prev, enabledModules: selectedSubBranchModules }));
-      } else {
-        alert(data.message || "Failed to update branch modules");
-      }
-    } catch (err: any) {
-      alert(err?.message || "Failed to update branch modules");
-    } finally {
-      setBranchActionLoading(null);
-    }
-  };
 
   if (loading) {
     return (
@@ -583,11 +624,15 @@ export default function TenantApprovalPage({
   const gstin = company.gstNo || "N/A";
   const drugLicense = company.drugLicenseNo || "N/A";
   const pan = company.panNo || "N/A";
-  const address = company.address || "";
-  const city = company.city || "";
-  const state = company.state || "";
-  const country = company.country || "India";
-  const pincode = company.pincode || "";
+  const address = company.address || user.address || "";
+  const city = company.city || user.city || "";
+  const state =
+    company.state ||
+    user.state ||
+    (gstin && gstin !== "N/A" && gstin.length >= 2 ? GST_STATE_CODE[gstin.slice(0, 2)] : "") ||
+    "";
+  const country = company.country || user.country || "India";
+  const pincode = company.pincode || user.pincode || "";
   const fullAddress = [address, city, state, pincode].filter((p) => p && p !== "N/A").join(", ") || "Address not provided";
   const isSuspended = user.status === "Suspended";
   const isHeadOffice = !company.parentCompanyId || company.isHeadOffice === true;
@@ -840,6 +885,15 @@ export default function TenantApprovalPage({
                     </span>
                   </>
                 ) : null}
+                {(city || state) && (
+                  <>
+                    <span>•</span>
+                    <span className="text-slate-600 font-medium inline-flex items-center gap-1">
+                      <FaMapMarkerAlt className="text-rose-500 text-[10px]" />
+                      {[city, state].filter(Boolean).join(", ")}
+                    </span>
+                  </>
+                )}
               </div>
             </div>
           </div>
@@ -1275,14 +1329,14 @@ export default function TenantApprovalPage({
             </div>
           </div>
 
-          {/* Row 2: Admin Account Details (Left) + Beautiful Module Access Control Clips with IN-CARD SAVE OPTION (Right) */}
+          {/* Row 2: Admin Account Details (Left) + Module Access Control (Right) */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            {/* Card 3: Admin Account Details */}
+            {/* Card 3: Admin Account Details with Edit Capabilities */}
             <div className="bg-gradient-to-br from-white via-slate-50/60 to-purple-50/20 rounded-2xl border border-slate-200/80 p-4 sm:p-5 shadow-2xs space-y-3.5">
-              <div className="flex items-center justify-between pb-2 border-b border-slate-100">
+              <div className="flex items-center justify-between pb-2 border-b border-slate-100 flex-wrap gap-2">
                 <div className="flex items-center gap-2">
                   <FaIdCard className="text-purple-600 text-xs" />
-                  <h3 className="text-sm font-bold text-slate-900">Admin Account Details</h3>
+                  <h3 className="text-sm font-bold text-slate-900">Admin & Organization Details</h3>
                   <span
                     className={`text-[9.5px] font-bold px-2 py-0.5 rounded-full border ${
                       user.status === "Active"
@@ -1293,73 +1347,258 @@ export default function TenantApprovalPage({
                     {user.status || "Active"}
                   </span>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => copyToClipboard(`${user.name} | ${user.email} | ${user.mobile || ""}`)}
-                  className="text-xs font-bold text-blue-600 hover:text-blue-700 flex items-center gap-1 cursor-pointer"
-                >
-                  <FaCopy size={11} /> Copy Details
-                </button>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-y-3 gap-x-4 text-xs">
-                <div>
-                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">ADMIN FULL NAME</span>
-                  <span className="font-bold text-slate-900 text-xs mt-1 block">{user.name}</span>
-                </div>
-
-                <div>
-                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">LOGIN EMAIL</span>
-                  <span className="font-mono text-slate-800 font-semibold text-xs mt-1 block">{user.email}</span>
-                </div>
-
-                <div>
-                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">CONTACT MOBILE</span>
-                  <span className="font-mono text-slate-800 font-semibold text-xs mt-1 block">
-                    {user.mobile || company.mobile || "N/A"}
-                    {user.mobileVerified && (
-                      <span className="text-[9px] font-bold text-emerald-600 bg-emerald-50 border border-emerald-200 px-1.5 py-0.2 rounded ml-1.5">
-                        OTP Verified
-                      </span>
-                    )}
-                  </span>
-                </div>
-
-                <div>
-                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">DESIGNATION & ROLE</span>
-                  <span className="text-[10px] font-bold text-blue-700 bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 px-2 py-0.5 rounded-md uppercase mt-1 inline-block">
-                    {user.designation || user.roleType || user.role || "COMPANY ADMIN"}
-                  </span>
-                </div>
-
-                <div>
-                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">EMPLOYEE / CRM CODE</span>
-                  <span className="font-mono font-bold text-slate-800 text-xs mt-1 block">
-                    {user.employeeCode || `EMP-${user._id?.slice(-5)?.toUpperCase() || "N/A"}`}
-                  </span>
-                </div>
-
-                <div>
-                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">APPROVAL STATUS</span>
-                  <span className="font-semibold text-slate-800 text-xs mt-1 block">
-                    {user.isApproved ? (
-                      <span className="text-emerald-700 font-bold flex items-center gap-1">
-                        <FaCheckCircle size={11} /> Approved by {user.approvedBy?.name || "Super Administrator"}
-                      </span>
-                    ) : (
-                      <span className="text-amber-700 font-bold flex items-center gap-1">
-                        <FaClock size={11} /> Pending Super Admin Clearance
-                      </span>
-                    )}
-                  </span>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (isEditingUser) {
+                        handleCancelEditUser();
+                      } else {
+                        setIsEditingUser(true);
+                      }
+                    }}
+                    className={`text-xs font-bold flex items-center gap-1 cursor-pointer px-2.5 py-1 rounded-lg border transition-all ${
+                      isEditingUser
+                        ? "bg-slate-100 text-slate-700 border-slate-300 hover:bg-slate-200"
+                        : "bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100"
+                    }`}
+                  >
+                    <FaEdit size={11} /> {isEditingUser ? "Cancel Edit" : "Edit Info"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => copyToClipboard(`${user.name} | ${company.companyName || companyName} | ${user.email} | ${user.mobile || ""} | ${fullAddress}`)}
+                    className="text-xs font-bold text-blue-600 hover:text-blue-700 flex items-center gap-1 cursor-pointer"
+                  >
+                    <FaCopy size={11} /> Copy Details
+                  </button>
                 </div>
               </div>
+
+              {isEditingUser ? (
+                <div className="space-y-3 pt-1 text-xs animate-in fade-in duration-150">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="text-[10px] font-bold text-slate-600 uppercase tracking-wider block mb-1">
+                        Admin Full Name <span className="text-red-500">*</span>
+                      </label>
+                      <input
+                        type="text"
+                        value={editName}
+                        onChange={(e) => setEditName(e.target.value)}
+                        placeholder="e.g. Rahul Sharma"
+                        className="w-full px-2.5 py-1.5 rounded-lg border border-slate-300 bg-white text-slate-900 font-semibold focus:outline-none focus:ring-1 focus:ring-blue-500 text-xs"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="text-[10px] font-bold text-slate-600 uppercase tracking-wider block mb-1">
+                        Company Name <span className="text-red-500">*</span>
+                      </label>
+                      <input
+                        type="text"
+                        value={editCompanyName}
+                        onChange={(e) => setEditCompanyName(e.target.value)}
+                        placeholder="e.g. Mabsol Healthcare Ltd"
+                        className="w-full px-2.5 py-1.5 rounded-lg border border-slate-300 bg-white text-slate-900 font-semibold focus:outline-none focus:ring-1 focus:ring-blue-500 text-xs"
+                      />
+                    </div>
+
+                    <div className="sm:col-span-2">
+                      <label className="text-[10px] font-bold text-slate-600 uppercase tracking-wider block mb-1">
+                        Registered Street Address
+                      </label>
+                      <input
+                        type="text"
+                        value={editAddress}
+                        onChange={(e) => setEditAddress(e.target.value)}
+                        placeholder="e.g. Plot No. 42, Industrial Area Phase 1"
+                        className="w-full px-2.5 py-1.5 rounded-lg border border-slate-300 bg-white text-slate-900 focus:outline-none focus:ring-1 focus:ring-blue-500 text-xs"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="text-[10px] font-bold text-slate-600 uppercase tracking-wider block mb-1">
+                        City
+                      </label>
+                      <input
+                        type="text"
+                        value={editCity}
+                        onChange={(e) => setEditCity(e.target.value)}
+                        placeholder="e.g. Chandigarh"
+                        className="w-full px-2.5 py-1.5 rounded-lg border border-slate-300 bg-white text-slate-900 focus:outline-none focus:ring-1 focus:ring-blue-500 text-xs"
+                      />
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <label className="text-[10px] font-bold text-slate-600 uppercase tracking-wider block mb-1">
+                          State
+                        </label>
+                        <input
+                          type="text"
+                          value={editState}
+                          onChange={(e) => setEditState(e.target.value)}
+                          placeholder="e.g. Punjab"
+                          className="w-full px-2.5 py-1.5 rounded-lg border border-slate-300 bg-white text-slate-900 focus:outline-none focus:ring-1 focus:ring-blue-500 text-xs"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[10px] font-bold text-slate-600 uppercase tracking-wider block mb-1">
+                          Pincode
+                        </label>
+                        <input
+                          type="text"
+                          value={editPincode}
+                          onChange={(e) => setEditPincode(e.target.value)}
+                          placeholder="e.g. 160002"
+                          className="w-full px-2.5 py-1.5 rounded-lg border border-slate-300 bg-white text-slate-900 font-mono focus:outline-none focus:ring-1 focus:ring-blue-500 text-xs"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Read-Only Non-Editable System Details Notice */}
+                  <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-200 grid grid-cols-1 sm:grid-cols-3 gap-2 text-[11px] text-slate-600">
+                    <div>
+                      <span className="text-[9.5px] font-bold text-slate-400 uppercase tracking-wider block">LOGIN EMAIL (LOCKED)</span>
+                      <span className="font-mono text-slate-800 font-medium block truncate" title={user.email}>{user.email}</span>
+                    </div>
+                    <div>
+                      <span className="text-[9.5px] font-bold text-slate-400 uppercase tracking-wider block">ROLE (LOCKED)</span>
+                      <span className="font-semibold text-slate-800 block truncate">{user.designation || user.roleType || user.role || "COMPANY ADMIN"}</span>
+                    </div>
+                    <div>
+                      <span className="text-[9.5px] font-bold text-slate-400 uppercase tracking-wider block">CRM CODE (LOCKED)</span>
+                      <span className="font-mono text-slate-800 font-semibold block">{user.employeeCode || `EMP-${user._id?.slice(-5)?.toUpperCase() || "N/A"}`}</span>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-200">
+                    <button
+                      type="button"
+                      disabled={updatingUser}
+                      onClick={handleCancelEditUser}
+                      className="px-3 py-1.5 rounded-xl text-xs font-semibold text-slate-600 hover:text-slate-800 bg-slate-100 hover:bg-slate-200 transition-colors cursor-pointer"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      disabled={updatingUser}
+                      onClick={handleSaveUserInfo}
+                      className="px-4 py-1.5 rounded-xl text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 active:bg-blue-800 shadow-md shadow-blue-500/25 transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                      style={{ backgroundColor: '#2563eb', color: '#ffffff' }}
+                    >
+                      {updatingUser ? (
+                        <>
+                          <FaSync className="animate-spin text-xs" /> Saving...
+                        </>
+                      ) : (
+                        <>
+                          <FaSave size={11} /> Save Changes
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-y-3 gap-x-4 text-xs">
+                  <div>
+                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">ADMIN FULL NAME</span>
+                    <span className="font-bold text-slate-900 text-xs mt-1 block">{user.name}</span>
+                  </div>
+
+                  <div>
+                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">COMPANY NAME</span>
+                    <span className="font-bold text-blue-700 text-xs mt-1 block truncate" title={company.companyName || companyName}>
+                      {company.companyName || companyName}
+                    </span>
+                  </div>
+
+                  <div>
+                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">LOGIN EMAIL</span>
+                    <span className="font-mono text-slate-800 font-semibold text-xs mt-1 block">{user.email}</span>
+                  </div>
+
+                  <div>
+                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">CONTACT MOBILE</span>
+                    <span className="font-mono text-slate-800 font-semibold text-xs mt-1 block">
+                      {user.mobile || company.mobile || "N/A"}
+                      {user.mobileVerified && (
+                        <span className="text-[9px] font-bold text-emerald-600 bg-emerald-50 border border-emerald-200 px-1.5 py-0.2 rounded ml-1.5">
+                          OTP Verified
+                        </span>
+                      )}
+                    </span>
+                  </div>
+
+                  <div>
+                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">DESIGNATION & ROLE</span>
+                    <span className="text-[10px] font-bold text-blue-700 bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 px-2 py-0.5 rounded-md uppercase mt-1 inline-block">
+                      {user.designation || user.roleType || user.role || "COMPANY ADMIN"}
+                    </span>
+                  </div>
+
+                  <div>
+                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">EMPLOYEE / CRM CODE</span>
+                    <span className="font-mono font-bold text-slate-800 text-xs mt-1 block">
+                      {user.employeeCode || `EMP-${user._id?.slice(-5)?.toUpperCase() || "N/A"}`}
+                    </span>
+                  </div>
+
+                  <div className="sm:col-span-2 pt-2 border-t border-slate-100">
+                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">REGISTERED COMMERCIAL ADDRESS</span>
+                    <span className="font-medium text-slate-800 text-xs mt-1 block leading-relaxed">
+                      {address || "Address unassigned"}
+                    </span>
+                  </div>
+
+                  <div className="sm:col-span-2 grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1">
+                    <div>
+                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">CITY</span>
+                      <span className="font-semibold text-slate-800 text-xs mt-1 block">
+                        {city || "N/A"}
+                      </span>
+                    </div>
+
+                    <div>
+                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">STATE</span>
+                      <span className="font-semibold text-slate-800 text-xs mt-1 block">
+                        {state || "N/A"}
+                      </span>
+                    </div>
+
+                    <div>
+                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">PINCODE</span>
+                      <span className="font-semibold font-mono text-slate-800 text-xs mt-1 block">
+                        {pincode || "N/A"}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="sm:col-span-2 pt-2 border-t border-slate-100">
+                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">APPROVAL STATUS</span>
+                    <span className="font-semibold text-slate-800 text-xs mt-1 block">
+                      {user.isApproved ? (
+                        <span className="text-emerald-700 font-bold flex items-center gap-1">
+                          <FaCheckCircle size={11} /> Approved by {user.approvedBy?.name || "Super Administrator"}
+                        </span>
+                      ) : (
+                        <span className="text-amber-700 font-bold flex items-center gap-1">
+                          <FaClock size={11} /> Pending Super Admin Clearance
+                        </span>
+                      )}
+                    </span>
+                  </div>
+                </div>
+              )}
             </div>
 
-            {/* Card 4: MODULE ACCESS CONTROL CLIPS WITH DEDICATED IN-CARD SAVE OPTION */}
+            {/* Card 4: MODULE ACCESS CONTROL CLIPS (Save managed via Floating Sticky Bar) */}
             <div className="bg-gradient-to-br from-white via-emerald-50/25 to-teal-50/20 rounded-2xl border border-slate-200/90 p-4 sm:p-5 shadow-2xs space-y-3.5 flex flex-col justify-between">
               <div>
-                {/* Header with Title, Counter Badge, and Immediate In-Header Save Button */}
+                {/* Header with Title, Counter Badge, and Configure Link */}
                 <div className="flex items-center justify-between pb-2.5 border-b border-slate-100 flex-wrap gap-2">
                   <div className="flex items-center gap-2">
                     <div className="w-7 h-7 rounded-lg bg-emerald-100/70 text-emerald-800 flex items-center justify-center text-xs">
@@ -1377,20 +1616,6 @@ export default function TenantApprovalPage({
                     <span className="text-[10.5px] font-bold px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-300">
                       {enabledModules.length} / {SUPER_ADMIN_SIDEBAR_MODULES.length} Granted
                     </span>
-
-                    {/* ONLY show Save button when changes exist */}
-                    {modulesChanged && (
-                      <button
-                        type="button"
-                        disabled={actionLoading}
-                        onClick={handleSaveModulePermissions}
-                        className="px-3 py-1 rounded-xl text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 active:bg-blue-800 active:scale-95 shadow-sm shadow-blue-500/30 transition-all flex items-center gap-1.5 cursor-pointer animate-pulse"
-                        style={{ backgroundColor: '#2563eb', color: '#ffffff' }}
-                      >
-                        <FaSave size={11} />
-                        <span>{actionLoading ? "Saving..." : `Save Changes (${Math.abs(enabledModules.length - userModules.length)})`}</span>
-                      </button>
-                    )}
 
                     <button
                       type="button"
@@ -1454,14 +1679,14 @@ export default function TenantApprovalPage({
                       </button>
                     </div>
 
-                    {/* Batch Actions: Grant All, Stop All + In-toolbar Save */}
+                    {/* Batch Actions: Grant All, Stop All */}
                     <div className="flex items-center gap-1.5 self-end sm:self-auto">
                       <button
                         type="button"
                         onClick={() => setEnabledModules([...ALL_SIDEBAR_MODULE_IDS])}
                         className="px-2.5 py-1 rounded-lg text-[10.5px] font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-300 transition-all cursor-pointer shadow-2xs"
                       >
-                        Grant All (26)
+                        Grant All ({SUPER_ADMIN_SIDEBAR_MODULES.length})
                       </button>
                       <button
                         type="button"
@@ -1470,18 +1695,6 @@ export default function TenantApprovalPage({
                       >
                         Stop All
                       </button>
-                      {modulesChanged && (
-                        <button
-                          type="button"
-                          disabled={actionLoading}
-                          onClick={handleSaveModulePermissions}
-                          className="px-3 py-1 rounded-lg text-[10.5px] font-bold text-white bg-blue-600 hover:bg-blue-700 transition-all cursor-pointer shadow-sm flex items-center gap-1"
-                          style={{ backgroundColor: '#2563eb', color: '#ffffff' }}
-                        >
-                          <FaSave size={10} />
-                          <span>Save Now</span>
-                        </button>
-                      )}
                     </div>
                   </div>
 
@@ -1551,13 +1764,13 @@ export default function TenantApprovalPage({
                 </div>
               </div>
 
-              {/* DEDICATED IN-CARD STATUS & SAVE FOOTER (Only shows save options when changes exist) */}
-              <div className="pt-3 border-t border-slate-200/80 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 mt-2">
+              {/* DEDICATED IN-CARD STATUS FOOTER (Informational only; save is via sticky bar) */}
+              <div className="pt-3 border-t border-slate-200/80 flex items-center justify-between gap-2.5 mt-2">
                 <div className="flex items-center gap-2">
                   {modulesChanged ? (
                     <span className="inline-flex items-center gap-1.5 text-xs font-bold text-amber-800 bg-amber-50 border border-amber-300 px-2.5 py-1 rounded-lg">
                       <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
-                      <span>Unsaved Changes: {Math.abs(enabledModules.length - userModules.length)} modified</span>
+                      <span>Unsaved Changes: {Math.abs(enabledModules.length - userModules.length)} modified (use floating bar below to save)</span>
                     </span>
                   ) : (
                     <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-emerald-800 bg-emerald-50 border border-emerald-300 px-2.5 py-1 rounded-lg">
@@ -1566,38 +1779,6 @@ export default function TenantApprovalPage({
                     </span>
                   )}
                 </div>
-
-                {/* ONLY show Save and Discard buttons when changes exist! */}
-                {modulesChanged && (
-                  <div className="flex items-center gap-2 self-end sm:self-auto animate-in fade-in duration-150">
-                    <button
-                      type="button"
-                      onClick={handleDiscardModuleChanges}
-                      disabled={actionLoading}
-                      className="px-3 py-1.5 rounded-xl text-xs font-semibold text-slate-700 hover:text-slate-900 bg-white hover:bg-slate-100 active:bg-slate-200 border border-slate-200 transition-all cursor-pointer active:scale-95"
-                    >
-                      Discard
-                    </button>
-
-                    <button
-                      type="button"
-                      disabled={actionLoading}
-                      onClick={handleSaveModulePermissions}
-                      className="px-4 py-1.5 rounded-xl text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 active:bg-blue-800 shadow-md shadow-blue-500/30 transition-all flex items-center gap-1.5 cursor-pointer active:scale-95 animate-pulse"
-                      style={{ backgroundColor: '#2563eb', color: '#ffffff' }}
-                    >
-                      {actionLoading ? (
-                        <>
-                          <FaSync className="animate-spin text-xs" /> Saving...
-                        </>
-                      ) : (
-                        <>
-                          <FaSave size={12} /> Save & Apply Permissions
-                        </>
-                      )}
-                    </button>
-                  </div>
-                )}
               </div>
             </div>
           </div>
@@ -1654,12 +1835,7 @@ export default function TenantApprovalPage({
                 <span className="font-mono font-bold text-slate-900 mt-0.5 block">{pan}</span>
               </div>
 
-              <div>
-                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">ENTITY TYPE</span>
-                <span className="font-bold text-slate-900 mt-0.5 block">
-                  {(company.businessType || "Pharma Distribution").toUpperCase().replace(/_/g, " ")}
-                </span>
-              </div>
+
 
               <div className="col-span-2">
                 <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">REGISTERED COMMERCIAL ADDRESS</span>
@@ -1779,41 +1955,16 @@ export default function TenantApprovalPage({
                               <span>{isBranchActive ? "Suspend" : "Activate"}</span>
                             </button>
 
-                            {/* 2. Quick Dossier Modal: small and remains visible */}
-                            <button
-                              type="button"
-                              onClick={() => openSubBranchDossier(cb)}
-                              className="text-[10px] font-bold text-slate-700 bg-white hover:bg-slate-50 active:bg-slate-100 border border-slate-200 px-2 py-0.5 rounded-md transition-all cursor-pointer flex items-center gap-1 shadow-2xs active:scale-95"
-                              style={{ backgroundColor: '#ffffff', color: '#334155', borderColor: '#cbd5e1' }}
-                              title="Quick branch permissions and hierarchy dossier"
+                            {/* 2. VIEW Button: Replaces modal; opens dedicated Sub-Branch Dossier page with back navigation */}
+                            <Link
+                              href={`/dashboard/super-admin/branches/${cb._id}?fromApproval=${user._id}`}
+                              className="text-[10px] font-bold px-2.5 py-0.5 rounded-md border transition-all inline-flex items-center gap-1 shadow-2xs active:scale-95 bg-blue-600 hover:bg-blue-700 text-white border-blue-600 duration-200"
+                              style={{ backgroundColor: '#2563eb', color: '#ffffff', borderColor: '#2563eb' }}
+                              title={`View full details & controls for ${cb.companyName} (same controls as Head Branch)`}
                             >
-                              <FaSlidersH size={8} />
-                              <span>Dossier</span>
-                            </button>
-
-                            {/* 3. VIEW Button: Replaces Checkout; revealed smoothly on card hover */}
-                            {viewHref ? (
-                              <Link
-                                href={viewHref}
-                                className="text-[10px] font-bold px-2.5 py-0.5 rounded-md border transition-all inline-flex items-center gap-1 shadow-2xs active:scale-95 bg-blue-600 hover:bg-blue-700 text-white border-blue-600 sm:opacity-0 sm:pointer-events-none group-hover:sm:opacity-100 group-hover:sm:pointer-events-auto sm:translate-x-1 group-hover:sm:translate-x-0 duration-200"
-                                style={{ backgroundColor: '#2563eb', color: '#ffffff', borderColor: '#2563eb' }}
-                                title={`Open full admin details page for ${cb.companyName} (same controls as Head Branch)`}
-                              >
-                                <FaEye size={9} />
-                                <span>View</span>
-                              </Link>
-                            ) : (
-                              <button
-                                type="button"
-                                onClick={() => openSubBranchDossier(cb)}
-                                className="text-[10px] font-bold px-2.5 py-0.5 rounded-md border transition-all inline-flex items-center gap-1 shadow-2xs active:scale-95 bg-blue-600 hover:bg-blue-700 text-white border-blue-600 sm:opacity-0 sm:pointer-events-none group-hover:sm:opacity-100 group-hover:sm:pointer-events-auto duration-200"
-                                style={{ backgroundColor: '#2563eb', color: '#ffffff', borderColor: '#2563eb' }}
-                                title={`View full details & controls for ${cb.companyName}`}
-                              >
-                                <FaEye size={9} />
-                                <span>View</span>
-                              </button>
-                            )}
+                              <FaEye size={9} />
+                              <span>View</span>
+                            </Link>
                           </div>
                         </div>
 
@@ -1870,13 +2021,12 @@ export default function TenantApprovalPage({
                           <div className="pt-2 border-t border-dashed border-slate-200 space-y-1.5">
                             <div className="text-[9.5px] font-bold text-slate-500 uppercase tracking-wider flex items-center justify-between">
                               <span>Active Modules on {cb.companyCode || "Branch"} ({branchModules.length})</span>
-                              <button
-                                type="button"
-                                onClick={() => openSubBranchDossier(cb)}
+                              <Link
+                                href={`/dashboard/super-admin/branches/${cb._id}?fromApproval=${user._id}`}
                                 className="text-[9.5px] text-blue-600 hover:underline font-bold"
                               >
                                 Manage Privileges →
-                              </button>
+                              </Link>
                             </div>
                             <div className="flex flex-wrap gap-1">
                               {SUPER_ADMIN_SIDEBAR_MODULES.filter((m) => branchModules.includes(m.id)).map((m) => (
@@ -1929,7 +2079,7 @@ export default function TenantApprovalPage({
                 onClick={() => setEnabledModules([...ALL_SIDEBAR_MODULE_IDS])}
                 className="px-3 py-1.5 rounded-xl text-xs font-bold text-emerald-700 bg-gradient-to-r from-emerald-50 to-teal-50 hover:from-emerald-100 hover:to-teal-100 border border-emerald-200 transition-colors cursor-pointer"
               >
-                Grant All
+                Grant All ({SUPER_ADMIN_SIDEBAR_MODULES.length})
               </button>
               <button
                 type="button"
@@ -1938,27 +2088,6 @@ export default function TenantApprovalPage({
               >
                 Stop All
               </button>
-              {modulesChanged && (
-                <button
-                  type="button"
-                  onClick={handleDiscardModuleChanges}
-                  className="px-3 py-1.5 rounded-xl text-xs font-semibold text-slate-600 hover:text-slate-900 bg-white border border-slate-200 cursor-pointer"
-                >
-                  Discard
-                </button>
-              )}
-              {modulesChanged && (
-                <button
-                  type="button"
-                  disabled={actionLoading}
-                  onClick={handleSaveModulePermissions}
-                  className="px-4 py-1.5 rounded-xl text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 active:bg-blue-800 shadow-md shadow-blue-500/25 transition-all flex items-center gap-1.5 cursor-pointer active:scale-95 animate-pulse"
-                  style={{ backgroundColor: '#2563eb', color: '#ffffff' }}
-                >
-                  <FaSave size={11} />
-                  <span>{actionLoading ? "Saving..." : "Save Permissions"}</span>
-                </button>
-              )}
             </div>
           </div>
 
@@ -2052,27 +2181,28 @@ export default function TenantApprovalPage({
                   </div>
 
                   <div className="flex items-center justify-between pt-1.5 border-t border-slate-200/50 text-[10px] text-slate-400">
-                    <span className="font-medium text-slate-500">{mod.categoryLabel} • {mod.subModulesCount} routes</span>
-                    {mod.subModules.length > 1 && (
-                      <button
-                        type="button"
-                        onClick={() => setExpandedApprovalModId(isExpanded ? null : mod.id)}
-                        className="text-blue-600 hover:underline font-bold cursor-pointer"
-                      >
-                        {isExpanded ? "Hide routes" : "View routes"}
-                      </button>
-                    )}
+                    <span className="font-medium text-slate-500">{mod.categoryLabel}</span>
+                    <span className="font-bold text-slate-600 bg-slate-100 px-1.5 py-0.2 rounded border border-slate-200">
+                      {mod.subModulesCount} {mod.subModulesCount === 1 ? "route" : "routes"}
+                    </span>
                   </div>
 
-                  {isExpanded && mod.subModules.length > 1 && (
-                    <div className="pt-1.5 border-t border-dashed border-slate-200 flex flex-wrap gap-1">
+                  {/* ALL SUB-MODULES SHOWN FOR SUPER ADMIN */}
+                  <div className="pt-2 border-t border-dashed border-slate-200/80 space-y-1">
+                    <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block">
+                      Sub-Modules & Features:
+                    </span>
+                    <div className="flex flex-wrap gap-1">
                       {mod.subModules.map((sub, i) => (
-                        <span key={i} className="text-[9.5px] px-1.5 py-0.5 rounded bg-white border border-slate-200 text-slate-600">
-                          {sub}
+                        <span
+                          key={i}
+                          className="text-[9.5px] px-1.5 py-0.5 rounded bg-white border border-slate-200 text-slate-700 font-medium shadow-2xs"
+                        >
+                          • {sub}
                         </span>
                       ))}
                     </div>
-                  )}
+                  </div>
                 </div>
               );
             })}
@@ -2131,22 +2261,26 @@ export default function TenantApprovalPage({
             </div>
 
             {childBranches.length > 0 && (
-              <div className="flex items-center gap-1.5">
+              <div className="flex items-center gap-1.5 shrink-0">
                 <button
                   type="button"
                   disabled={batchBranchLoading}
                   onClick={() => handleBatchSuspendAllBranches(childBranches)}
-                  className="px-3 py-1 rounded-lg text-xs font-bold text-rose-700 bg-gradient-to-r from-rose-50 to-red-50 hover:from-rose-100 hover:to-red-100 border border-rose-300 transition-all cursor-pointer flex items-center gap-1.5 disabled:opacity-50 shadow-2xs"
+                  className="px-2.5 py-1 rounded-lg text-[10.5px] font-bold text-rose-800 bg-rose-50 hover:bg-rose-100 active:bg-rose-200 border border-rose-300 transition-all cursor-pointer flex items-center gap-1 disabled:opacity-50 shadow-2xs active:scale-95"
+                  title="Suspend all connected sub-branches at once"
+                  style={{ backgroundColor: '#fff1f2', color: '#9f1239', borderColor: '#fca5a5' }}
                 >
-                  <FaPowerOff size={10} /> Suspend All Branches
+                  <FaPowerOff size={8} /> Suspend All Branches
                 </button>
                 <button
                   type="button"
                   disabled={batchBranchLoading}
                   onClick={() => handleBatchActivateAllBranches(childBranches)}
-                  className="px-3 py-1 rounded-lg text-xs font-bold text-emerald-700 bg-gradient-to-r from-emerald-50 to-teal-50 hover:from-emerald-100 hover:to-teal-100 border border-emerald-300 transition-all cursor-pointer flex items-center gap-1.5 disabled:opacity-50 shadow-2xs"
+                  className="px-2.5 py-1 rounded-lg text-[10.5px] font-bold text-emerald-800 bg-emerald-50 hover:bg-emerald-100 active:bg-emerald-200 border border-emerald-300 transition-all cursor-pointer flex items-center gap-1 disabled:opacity-50 shadow-2xs active:scale-95"
+                  title="Reactivate all connected sub-branches"
+                  style={{ backgroundColor: '#f0fdf4', color: '#065f46', borderColor: '#86efac' }}
                 >
-                  <FaCheckCircle size={10} /> Activate All Branches
+                  <FaCheckCircle size={8} /> Activate All Branches
                 </button>
               </div>
             )}
@@ -2157,132 +2291,156 @@ export default function TenantApprovalPage({
               This account does not have any connected sub-branches or branch locations.
             </div>
           ) : (
-            <div className="grid grid-cols-1 gap-3">
+            /* 1:1 SECTION DIVISION: Side-by-side on desktop/full-screen */
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-3.5">
               {childBranches.map((cb: any) => {
                 const branchAdmin = cb.adminUser;
                 const branchModules = Array.isArray(cb.enabledModules) ? cb.enabledModules : enabledModules;
                 const isBranchExpanded = expandedBranchId === cb._id;
                 const isBranchActive = cb.status === "Active";
                 const isBranchUpdating = branchActionLoading === cb._id;
+                const viewHref = branchAdmin?._id ? `/dashboard/super-admin/approvals/${branchAdmin._id}` : null;
 
                 return (
                   <div
                     key={cb._id}
-                    className="p-3.5 rounded-xl bg-gradient-to-br from-white via-slate-50/80 to-blue-50/20 border border-slate-200/90 hover:from-white hover:to-indigo-50/30 hover:border-blue-300 transition-all space-y-2.5"
+                    className="group relative p-3.5 rounded-2xl bg-gradient-to-br from-white via-slate-50/70 to-blue-50/20 border border-slate-200/90 hover:border-blue-400 hover:shadow-md transition-all duration-200 flex flex-col justify-between space-y-2.5"
                   >
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                      <div className="flex items-center flex-wrap gap-2">
-                        <span className="font-bold text-slate-900 text-sm">
-                          {cb.companyName}
-                        </span>
-                        <span className="font-mono text-[10px] font-bold text-teal-800 bg-gradient-to-r from-teal-50 to-emerald-50 border border-teal-200 px-2 py-0.5 rounded">
-                          {cb.companyCode || "BRANCH"}
-                        </span>
-                        <span className="text-xs text-slate-500 font-mono">
+                    {/* Top Header: Name, Code, Status & Small Action Buttons */}
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <span className="font-bold text-slate-900 text-xs sm:text-sm tracking-tight truncate max-w-[210px]" title={cb.companyName}>
+                            {cb.companyName}
+                          </span>
+                          <span className="font-mono text-[9px] font-bold text-teal-800 bg-teal-50 border border-teal-200/80 px-1.5 py-0.2 rounded">
+                            {cb.companyCode || "BRANCH"}
+                          </span>
+                          <span
+                            className={`text-[9px] font-bold px-1.5 py-0.2 rounded-full border ${
+                              isBranchActive
+                                ? "bg-emerald-50 text-emerald-800 border-emerald-200"
+                                : "bg-rose-50 text-rose-800 border-rose-200"
+                            }`}
+                            style={
+                              isBranchActive
+                                ? { backgroundColor: '#f0fdf4', color: '#065f46', borderColor: '#86efac' }
+                                : { backgroundColor: '#fff1f2', color: '#9f1239', borderColor: '#fca5a5' }
+                            }
+                          >
+                            ● {cb.status || "Active"}
+                          </span>
+                        </div>
+                        <div className="text-[10px] text-slate-500 font-mono mt-0.5 truncate">
                           GST: {cb.gstNo || "N/A"} • PAN: {cb.panNo || pan} {cb.drugLicenseNo && `• DL: ${cb.drugLicenseNo}`}
-                        </span>
+                        </div>
                       </div>
 
-                      <div className="flex items-center gap-1.5 shrink-0 flex-wrap">
-                        <span
-                          className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
-                            isBranchActive
-                              ? "bg-gradient-to-r from-emerald-50 to-teal-50 text-emerald-700 border-emerald-200"
-                              : "bg-gradient-to-r from-rose-50 to-red-50 text-rose-700 border-rose-200"
-                          }`}
-                        >
-                          ● {cb.status || "Active"}
-                        </span>
-
+                      {/* Action Buttons: Small & Compact; View revealed smoothly on hover */}
+                      <div className="flex items-center gap-1 shrink-0 flex-wrap justify-end">
+                        {/* 1. Suspend / Activate: small and remains visible */}
                         <button
                           type="button"
                           disabled={isBranchUpdating}
                           onClick={() => handleToggleBranchStatus(cb)}
-                          className={`text-[10.5px] font-bold px-2.5 py-1 rounded-lg border transition-all cursor-pointer flex items-center gap-1 shadow-2xs ${
+                          className={`text-[10px] font-bold px-2 py-0.5 rounded-md border transition-all cursor-pointer flex items-center gap-1 shadow-2xs active:scale-95 ${
                             isBranchActive
-                              ? "bg-gradient-to-r from-rose-50 to-amber-50 hover:from-rose-100 hover:to-amber-100 text-rose-800 border-rose-200"
-                              : "bg-gradient-to-r from-emerald-50 to-teal-50 hover:from-emerald-100 hover:to-teal-100 text-emerald-800 border-emerald-300"
+                              ? "bg-rose-50 hover:bg-rose-100 active:bg-rose-200 text-rose-800 border-rose-200"
+                              : "bg-emerald-50 hover:bg-emerald-100 active:bg-emerald-200 text-emerald-800 border-emerald-300"
                           }`}
+                          style={
+                            isBranchActive
+                              ? { backgroundColor: '#fff1f2', color: '#9f1239', borderColor: '#fca5a5' }
+                              : { backgroundColor: '#f0fdf4', color: '#065f46', borderColor: '#86efac' }
+                          }
+                          title={isBranchActive ? `Suspend branch "${cb.companyName}"` : `Activate branch "${cb.companyName}"`}
                         >
                           {isBranchUpdating ? (
-                            <FaSync className="animate-spin text-[10px]" />
+                            <FaSync className="animate-spin text-[8px]" />
                           ) : (
-                            <FaPowerOff size={9} />
+                            <FaPowerOff size={8} />
                           )}
-                          <span>{isBranchActive ? "Suspend Branch" : "Activate Branch"}</span>
+                          <span>{isBranchActive ? "Suspend" : "Activate"}</span>
                         </button>
 
-                        <button
-                          type="button"
-                          onClick={() => openSubBranchDossier(cb)}
-                          className="text-[10.5px] font-bold text-blue-700 bg-gradient-to-r from-blue-50 to-indigo-50 hover:from-blue-100 hover:to-indigo-100 border border-blue-200 px-2.5 py-1 rounded-lg transition-all cursor-pointer flex items-center gap-1 shadow-2xs"
+                        {/* 2. VIEW Button: Replaces modal; opens dedicated Sub-Branch Dossier page with back navigation */}
+                        <Link
+                          href={`/dashboard/super-admin/branches/${cb._id}?fromApproval=${user._id}`}
+                          className="text-[10px] font-bold px-2.5 py-0.5 rounded-md border transition-all inline-flex items-center gap-1 shadow-2xs active:scale-95 bg-blue-600 hover:bg-blue-700 text-white border-blue-600 duration-200"
+                          style={{ backgroundColor: '#2563eb', color: '#ffffff', borderColor: '#2563eb' }}
+                          title={`View full details & controls for ${cb.companyName} (same controls as Head Branch)`}
                         >
-                          <FaEye size={10} /> Full Details Dossier
-                        </button>
-
-                        {branchAdmin?._id && (
-                          <Link
-                            href={`/dashboard/super-admin/approvals/${branchAdmin._id}`}
-                            className="text-[10.5px] font-bold text-slate-700 bg-white hover:bg-slate-100 border border-slate-200 px-2 py-1 rounded-lg transition-colors inline-flex items-center gap-1"
-                          >
-                            <FaExternalLinkAlt size={8} /> Checkout
-                          </Link>
-                        )}
-
-                        <button
-                          type="button"
-                          onClick={() => setExpandedBranchId(isBranchExpanded ? null : cb._id)}
-                          className="text-xs font-bold text-slate-700 hover:text-blue-700 bg-white border border-slate-200 hover:border-blue-300 px-2.5 py-1 rounded-lg transition-colors cursor-pointer"
-                        >
-                          {isBranchExpanded ? "Hide Clips" : `${branchModules.length} Modules`}
-                        </button>
+                          <FaEye size={9} />
+                          <span>View</span>
+                        </Link>
                       </div>
                     </div>
 
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs pt-2 border-t border-slate-200/50 text-slate-600">
+                    {/* Middle Details: Address & Branch Admin in 2 Balanced Columns */}
+                    <div className="grid grid-cols-2 gap-2 text-xs pt-2 border-t border-slate-100 text-slate-600">
                       <div>
-                        <span className="text-slate-400 font-medium block text-[10px]">Location & Address:</span>
-                        <span className="font-medium text-slate-800">
-                          {[cb.address, cb.city, cb.state, cb.pincode].filter(Boolean).join(", ") || "Location unassigned"}
+                        <span className="text-slate-400 font-bold block text-[9.5px] uppercase tracking-wider">
+                          Address:
+                        </span>
+                        <span className="font-medium text-slate-800 text-[10.5px] block truncate" title={[cb.address, cb.city, cb.state, cb.pincode].filter(Boolean).join(", ")}>
+                          {[cb.address, cb.city, cb.state].filter(Boolean).join(", ") || "Location unassigned"}
                         </span>
                       </div>
 
                       <div>
-                        <span className="text-slate-400 font-medium block text-[10px]">Branch Contact / Admin:</span>
-                        <span className="font-medium text-slate-800">
+                        <span className="text-slate-400 font-bold block text-[9.5px] uppercase tracking-wider">
+                          Branch Contact:
+                        </span>
+                        <span className="font-medium text-slate-800 text-[10.5px] block truncate" title={branchAdmin ? `${branchAdmin.name} (${branchAdmin.email} • ${branchAdmin.mobile || "No phone"})` : cb.email || "No contact"}>
                           {branchAdmin ? (
                             <span>
-                              {branchAdmin.name} ({branchAdmin.email} • {branchAdmin.mobile || "No phone"})
+                              {branchAdmin.name}
                               {branchAdmin.employeeCode && (
-                                <span className="font-mono text-[9px] bg-slate-100 border border-slate-200 px-1 py-0.2 rounded ml-1">
+                                <span className="font-mono text-[8.5px] bg-slate-100 border border-slate-200 px-1 py-0.2 rounded ml-1">
                                   {branchAdmin.employeeCode}
                                 </span>
                               )}
                             </span>
                           ) : (
-                            <span>{cb.email || user.email} • {cb.mobile || user.mobile || "N/A"}</span>
+                            <span>{cb.email || "Unassigned"}</span>
                           )}
                         </span>
                       </div>
                     </div>
 
+                    {/* Bottom Row: Active Module Count & Expandable Toggle */}
+                    <div className="pt-1.5 border-t border-slate-100 flex items-center justify-between text-xs">
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-800 border border-emerald-200 inline-flex items-center gap-1">
+                        <FaCheck size={7} />
+                        <span>{branchModules.length} Modules Active</span>
+                      </span>
+
+                      <button
+                        type="button"
+                        onClick={() => setExpandedBranchId(isBranchExpanded ? null : cb._id)}
+                        className="text-[10px] font-bold text-blue-600 hover:text-blue-800 hover:underline cursor-pointer flex items-center gap-1"
+                      >
+                        <span>{isBranchExpanded ? "Hide Clips ↑" : "Inspect Modules ↓"}</span>
+                      </button>
+                    </div>
+
+                    {/* Expandable Module Clips for this sub-branch */}
                     {isBranchExpanded && (
                       <div className="pt-2 border-t border-dashed border-slate-200 space-y-1.5">
-                        <div className="text-[10px] font-bold text-slate-500 uppercase tracking-wider flex items-center justify-between">
-                          <span>Active CRM Modules on {cb.companyCode || "Branch"} ({branchModules.length})</span>
-                          <button
-                            type="button"
-                            onClick={() => openSubBranchDossier(cb)}
-                            className="text-[10px] text-blue-600 hover:underline font-bold"
+                        <div className="text-[9.5px] font-bold text-slate-500 uppercase tracking-wider flex items-center justify-between">
+                          <span>Active Modules on {cb.companyCode || "Branch"} ({branchModules.length})</span>
+                          <Link
+                            href={`/dashboard/super-admin/branches/${cb._id}?fromApproval=${user._id}`}
+                            className="text-[9.5px] text-blue-600 hover:underline font-bold"
                           >
-                            Manage Permissions →
-                          </button>
+                            Manage Privileges →
+                          </Link>
                         </div>
                         <div className="flex flex-wrap gap-1">
                           {SUPER_ADMIN_SIDEBAR_MODULES.filter((m) => branchModules.includes(m.id)).map((m) => (
                             <span
                               key={m.id}
-                              className="text-[10px] font-semibold px-2 py-0.5 rounded-md bg-gradient-to-r from-emerald-50 to-teal-50 border border-emerald-200 text-emerald-800"
+                              className="text-[9.5px] font-semibold px-1.5 py-0.2 rounded bg-emerald-50 border border-emerald-200 text-emerald-800"
                             >
                               ✓ {m.name}
                             </span>
@@ -2462,313 +2620,7 @@ export default function TenantApprovalPage({
         </div>
       )}
 
-      {/* 7. MODAL: FULL SUB-BRANCH DETAILS DOSSIER */}
-      {selectedSubBranch && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-5 bg-slate-900/50 backdrop-blur-xs animate-in fade-in duration-150 overflow-y-auto">
-          <div className="bg-gradient-to-b from-white via-slate-50/80 to-blue-50/20 rounded-2xl border border-slate-200 shadow-2xl max-w-2xl sm:max-w-3xl w-full p-5 space-y-4 animate-in zoom-in-95 duration-150 max-h-[92vh] overflow-y-auto my-auto text-slate-800">
-            <div className="flex items-start justify-between pb-3 border-b border-slate-200/80">
-              <div className="flex items-center gap-3">
-                <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-teal-50 to-emerald-100 text-teal-800 border border-teal-200 flex items-center justify-center text-base font-black shadow-2xs">
-                  {selectedSubBranch.companyCode ? selectedSubBranch.companyCode.slice(0, 3) : "BR"}
-                </div>
-                <div>
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <h2 className="text-base font-bold text-slate-900">
-                      {selectedSubBranch.companyName}
-                    </h2>
-                    <span className="font-mono text-[10px] font-bold text-teal-800 bg-gradient-to-r from-teal-50 to-emerald-50 border border-teal-200 px-2 py-0.5 rounded">
-                      {selectedSubBranch.companyCode || "BRANCH"}
-                    </span>
-                    <span
-                      className={`text-[9.5px] font-bold px-2 py-0.5 rounded-full border ${
-                        selectedSubBranch.status === "Active"
-                          ? "bg-gradient-to-r from-emerald-50 to-teal-50 text-emerald-700 border-emerald-200"
-                          : "bg-gradient-to-r from-rose-50 to-red-50 text-rose-700 border-rose-200"
-                      }`}
-                    >
-                      ● {selectedSubBranch.status || "Active"}
-                    </span>
-                  </div>
-                  <p className="text-xs text-slate-500 mt-0.5">
-                    Sub-Branch node of <strong>{companyName}</strong> • Inherits parent subscription tenure
-                  </p>
-                </div>
-              </div>
 
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => handleToggleBranchStatus(selectedSubBranch)}
-                  disabled={branchActionLoading === selectedSubBranch._id}
-                  className={`text-xs font-bold px-3 py-1.5 rounded-xl border transition-all cursor-pointer flex items-center gap-1.5 shadow-2xs ${
-                    selectedSubBranch.status === "Active"
-                      ? "bg-gradient-to-r from-rose-50 to-amber-50 hover:from-rose-100 hover:to-amber-100 text-rose-800 border-rose-200"
-                      : "bg-gradient-to-r from-emerald-50 to-teal-50 hover:from-emerald-100 hover:to-teal-100 text-emerald-800 border-emerald-300"
-                  }`}
-                >
-                  <FaPowerOff size={10} />
-                  <span>{selectedSubBranch.status === "Active" ? "Suspend Branch" : "Activate Branch"}</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setSelectedSubBranch(null)}
-                  className="w-8 h-8 rounded-xl flex items-center justify-center text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors cursor-pointer"
-                  aria-label="Close modal"
-                >
-                  <FaTimes size={13} />
-                </button>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
-              <div className="p-3.5 rounded-xl bg-white border border-slate-200/80 shadow-2xs space-y-2">
-                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
-                  Branch Node & Hierarchy
-                </span>
-                <div className="space-y-1.5 text-xs">
-                  <div className="flex justify-between">
-                    <span className="text-slate-500">Classification:</span>
-                    <span className="font-bold text-slate-900">Connected Satellite Branch</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-slate-500">Branch Code:</span>
-                    <span className="font-mono font-bold text-slate-900">{selectedSubBranch.companyCode || "BRANCH"}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-slate-500">Parent Head Office:</span>
-                    <span className="font-bold text-blue-700">{companyName}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-slate-500">Status:</span>
-                    <span className={selectedSubBranch.status === "Active" ? "text-emerald-700 font-bold" : "text-rose-700 font-bold"}>
-                      {selectedSubBranch.status || "Active"}
-                    </span>
-                  </div>
-                </div>
-              </div>
-
-              <div className="p-3.5 rounded-xl bg-white border border-slate-200/80 shadow-2xs space-y-2">
-                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
-                  Tax & Licensing Credentials
-                </span>
-                <div className="space-y-1.5 text-xs">
-                  <div className="flex justify-between">
-                    <span className="text-slate-500">GSTIN:</span>
-                    <span className="font-mono font-bold text-slate-900">{selectedSubBranch.gstNo || gstin}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-slate-500">PAN:</span>
-                    <span className="font-mono font-bold text-slate-900">{selectedSubBranch.panNo || pan}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-slate-500">Drug License:</span>
-                    <span className="font-mono font-bold text-slate-900">{selectedSubBranch.drugLicenseNo || drugLicense}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-slate-500">Commercial Address:</span>
-                    <span className="font-medium text-slate-800 text-right truncate max-w-[180px]">
-                      {[selectedSubBranch.address, selectedSubBranch.city, selectedSubBranch.state].filter(Boolean).join(", ") || fullAddress}
-                    </span>
-                  </div>
-                </div>
-              </div>
-
-              <div className="p-3.5 rounded-xl bg-white border border-slate-200/80 shadow-2xs space-y-2 sm:col-span-2">
-                <div className="flex items-center justify-between">
-                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
-                    Branch Admin Contact Profile
-                  </span>
-                  {selectedSubBranch.adminUser?._id && (
-                    <Link
-                      href={`/dashboard/super-admin/approvals/${selectedSubBranch.adminUser._id}`}
-                      target="_blank"
-                      className="text-[10.5px] font-bold text-blue-600 hover:underline inline-flex items-center gap-1"
-                    >
-                      <FaExternalLinkAlt size={8} /> Open Direct Admin User Approval Page
-                    </Link>
-                  )}
-                </div>
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs">
-                  <div>
-                    <span className="text-slate-400 text-[10px] block">Full Name</span>
-                    <span className="font-bold text-slate-900">
-                      {selectedSubBranch.adminUser?.name || "Branch Manager"}
-                    </span>
-                  </div>
-                  <div>
-                    <span className="text-slate-400 text-[10px] block">Email Address</span>
-                    <a
-                      href={`mailto:${selectedSubBranch.adminUser?.email || selectedSubBranch.email}`}
-                      className="font-medium text-blue-600 hover:underline"
-                    >
-                      {selectedSubBranch.adminUser?.email || selectedSubBranch.email || "N/A"}
-                    </a>
-                  </div>
-                  <div>
-                    <span className="text-slate-400 text-[10px] block">Phone Number</span>
-                    <a
-                      href={`tel:${selectedSubBranch.adminUser?.mobile || selectedSubBranch.mobile}`}
-                      className="font-medium text-blue-600 hover:underline"
-                    >
-                      {selectedSubBranch.adminUser?.mobile || selectedSubBranch.mobile || "N/A"}
-                    </a>
-                  </div>
-                </div>
-              </div>
-
-              {/* Branch Subscription Validity & Tenure Controls (Exact same controls as Head Office) */}
-              <div className="p-3.5 rounded-xl bg-gradient-to-r from-blue-50/60 via-indigo-50/40 to-slate-50 border border-blue-200/80 shadow-2xs space-y-2 sm:col-span-2">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <FaCalendarAlt className="text-blue-600 text-xs" />
-                      <span className="text-[11px] font-bold text-slate-900 uppercase tracking-wider">
-                        Subscription Validity & Tenure Controls
-                      </span>
-                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-300">
-                        ● {degradation.status}
-                      </span>
-                    </div>
-                    <p className="text-[10.5px] text-slate-500 mt-0.5">
-                      Sub-branch inherits enterprise tenure: <strong>{degradation.remainingDays} days remaining</strong> (Valid until {degradation.expiryFormatted})
-                    </p>
-                  </div>
-
-                  {/* Same Controls as Head Branch: + Give Days, - Remove Days, View Full Page */}
-                  <div className="flex items-center gap-1.5 shrink-0">
-                    <button
-                      type="button"
-                      onClick={() => openDaysModal("add")}
-                      className="px-2.5 py-1 rounded-lg text-[10.5px] font-bold text-emerald-800 bg-emerald-50 hover:bg-emerald-100 border border-emerald-300 transition-all cursor-pointer flex items-center gap-1 shadow-2xs active:scale-95"
-                      style={{ backgroundColor: '#f0fdf4', color: '#065f46', borderColor: '#86efac' }}
-                      title="Add bonus validity days to enterprise subscription"
-                    >
-                      <FaPlus size={8} /> Give Days
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => openDaysModal("remove")}
-                      className="px-2.5 py-1 rounded-lg text-[10.5px] font-bold text-rose-800 bg-rose-50 hover:bg-rose-100 border border-rose-300 transition-all cursor-pointer flex items-center gap-1 shadow-2xs active:scale-95"
-                      style={{ backgroundColor: '#fff1f2', color: '#9f1239', borderColor: '#fca5a5' }}
-                      title="Deduct validity days from enterprise subscription"
-                    >
-                      <FaMinus size={8} /> Remove Days
-                    </button>
-                    {selectedSubBranch.adminUser?._id && (
-                      <Link
-                        href={`/dashboard/super-admin/approvals/${selectedSubBranch.adminUser._id}`}
-                        className="px-2.5 py-1 rounded-lg text-[10.5px] font-bold text-white bg-blue-600 hover:bg-blue-700 transition-all cursor-pointer inline-flex items-center gap-1 shadow-2xs active:scale-95"
-                        style={{ backgroundColor: '#2563eb', color: '#ffffff' }}
-                        title="Open dedicated branch approval page"
-                      >
-                        <FaEye size={9} /> View Full Page
-                      </Link>
-                    )}
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Sub-Branch Module Access Control */}
-            <div className="p-4 rounded-xl bg-white border border-slate-200/80 shadow-2xs space-y-3">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                <div>
-                  <div className="flex items-center gap-2">
-                    <h3 className="text-xs font-bold text-slate-900">
-                      Active Modules on {selectedSubBranch.companyCode || "Branch"}
-                    </h3>
-                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-gradient-to-r from-emerald-50 to-teal-50 text-emerald-800 border border-emerald-300">
-                      {selectedSubBranchModules.length} / {SUPER_ADMIN_SIDEBAR_MODULES.length} Granted
-                    </span>
-                  </div>
-                  <p className="text-[10.5px] text-slate-400">
-                    Click any clip to grant or revoke specific module privileges for this sub-branch
-                  </p>
-                </div>
-
-                <div className="flex items-center gap-1.5">
-                  <button
-                    type="button"
-                    onClick={() => setSelectedSubBranchModules([...ALL_SIDEBAR_MODULE_IDS])}
-                    className="px-2 py-0.5 rounded text-[10px] font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 cursor-pointer"
-                  >
-                    Grant All
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setSelectedSubBranchModules([])}
-                    className="px-2 py-0.5 rounded text-[10px] font-bold text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 cursor-pointer"
-                  >
-                    Stop All
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setSelectedSubBranchModules([...enabledModules])}
-                    className="px-2 py-0.5 rounded text-[10px] font-bold text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 cursor-pointer"
-                    title="Copy module settings from Head Office"
-                  >
-                    Sync with Head Office
-                  </button>
-                </div>
-              </div>
-
-              <div className="flex flex-wrap gap-1.5 max-h-[180px] overflow-y-auto pt-1 pr-1">
-                {SUPER_ADMIN_SIDEBAR_MODULES.map((m) => {
-                  const isGranted = selectedSubBranchModules.includes(m.id);
-                  return (
-                    <button
-                      key={m.id}
-                      type="button"
-                      onClick={() => toggleSubBranchModule(m.id)}
-                      className={`text-[10.5px] font-semibold px-2.5 py-1 rounded-lg border transition-all cursor-pointer inline-flex items-center gap-1.5 shadow-2xs ${
-                        isGranted
-                          ? "bg-gradient-to-r from-emerald-50 to-teal-50 text-emerald-900 border-emerald-300 hover:from-emerald-100 hover:to-teal-100"
-                          : "bg-gradient-to-r from-slate-50 to-gray-50 text-slate-500 border-slate-200 hover:from-slate-100 hover:to-gray-100 hover:text-slate-800"
-                      }`}
-                    >
-                      <span
-                        className={`w-3.5 h-3.5 rounded-full flex items-center justify-center text-[8px] font-bold shrink-0 ${
-                          isGranted ? "bg-emerald-600 text-white" : "bg-slate-200 text-slate-500"
-                        }`}
-                      >
-                        {isGranted ? <FaCheck size={7} /> : "+"}
-                      </span>
-                      <span>{m.name}</span>
-                    </button>
-                  );
-                })}
-              </div>
-
-              <div className="flex justify-end pt-1">
-                <button
-                  type="button"
-                  disabled={branchActionLoading === selectedSubBranch._id}
-                  onClick={handleSaveSubBranchModules}
-                  className="px-4 py-1.5 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white text-xs font-bold transition-all shadow-2xs cursor-pointer flex items-center gap-1.5 disabled:opacity-50"
-                >
-                  {branchActionLoading === selectedSubBranch._id ? (
-                    <>
-                      <FaSync className="animate-spin text-xs" /> Saving Branch Modules...
-                    </>
-                  ) : (
-                    "Save Branch Module Privileges"
-                  )}
-                </button>
-              </div>
-            </div>
-
-            <div className="flex items-center justify-end pt-2 border-t border-slate-200/80">
-              <button
-                type="button"
-                onClick={() => setSelectedSubBranch(null)}
-                className="px-4 py-1.5 rounded-xl text-xs font-bold text-slate-700 bg-white border border-slate-200 hover:bg-slate-50 transition-colors cursor-pointer"
-              >
-                Close Dossier
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* 8. FLOATING STICKY ACTION BAR FOR UNSAVED PERMISSIONS */}
       {modulesChanged && (

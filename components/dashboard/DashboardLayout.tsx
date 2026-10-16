@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import Sidebar from "@/components/Sidebar";
 import Topbar from "@/components/Topbar";
+import ModuleAccessGuard from "./ModuleAccessGuard";
 
 export default function DashboardLayout({
   children,
@@ -85,7 +86,7 @@ export default function DashboardLayout({
 />
 
         <main className="w-full px-2.5 sm:px-4 py-2.5 min-h-[calc(100vh-68px)]">
-          {children}
+          <ModuleAccessGuard>{children}</ModuleAccessGuard>
         </main>
       </div>
     </>

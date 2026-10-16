@@ -205,6 +205,12 @@ export async function PATCH(req: NextRequest) {
           { $set: { status: userStatus, isApproved } }
         );
       }
+      if (enabledModules !== undefined) {
+        await User.updateMany(
+          { companyId: { $in: companyIds }, isSuperAdmin: { $ne: true } },
+          { $set: { enabledModules } }
+        );
+      }
       return NextResponse.json({
         success: true,
         message: `${companyIds.length} branches updated successfully.`,
@@ -216,6 +222,14 @@ export async function PATCH(req: NextRequest) {
       return NextResponse.json(
         { success: false, message: "Branch or company not found" },
         { status: 404 }
+      );
+    }
+
+    // Sync enabledModules to users
+    if (enabledModules !== undefined) {
+      await User.updateMany(
+        { companyId, isSuperAdmin: { $ne: true } },
+        { $set: { enabledModules } }
       );
     }
 

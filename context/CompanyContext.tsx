@@ -70,7 +70,10 @@ export function CompanyProvider({ children }: { children: React.ReactNode }) {
   const fetchCompanies = useCallback(async () => {
     try {
       const res = await fetch("/api/company-master");
-      if (!res.ok) return;
+      if (!res.ok) {
+        setLoading(false);
+        return;
+      }
       const data: CompanyType[] = await res.json();
       setCompanies(data || []);
 

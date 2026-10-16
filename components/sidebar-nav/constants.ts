@@ -434,6 +434,14 @@ export const MODULE_KEY_MAP: Record<string, string[]> = {
     "master-voucher-series",
     "master-alert-settings",
   ],
+  "master-dashboard": [
+    "master-dashboard",
+    "master",
+  ],
+  "master-alert-settings": [
+    "master-alert-settings",
+    "master",
+  ],
   area: [
     "area",
     "master-area",

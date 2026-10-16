@@ -34,6 +34,8 @@ import {
   FaCopy,
   FaEye,
   FaPowerOff,
+  FaSave,
+  FaSearch,
 } from "react-icons/fa";
 import {
   DEFAULT_ACCESS_DAYS,
@@ -81,8 +83,10 @@ export default function TenantApprovalPage({
   const [expandedApprovalModId, setExpandedApprovalModId] = useState<string | null>(null);
   const [expandedBranchId, setExpandedBranchId] = useState<string | null>(null);
 
-  // Overview Module clips filter state
+  // Overview Module clips filter & search state
   const [overviewModuleClipFilter, setOverviewModuleClipFilter] = useState<"all" | "granted" | "stopped">("all");
+  const [overviewSearchText, setOverviewSearchText] = useState<string>("");
+  const [saveSuccessMessage, setSaveSuccessMessage] = useState<string | null>(null);
 
   // Track initial saved values to enable Save button only on actual changes
   const [initialSessionHours, setInitialSessionHours] = useState<number>(DEFAULT_USER_SESSION_HOURS);
@@ -151,7 +155,7 @@ export default function TenantApprovalPage({
   const currentEffectiveHours = customSessionHours && !isNaN(Number(customSessionHours))
     ? Math.max(1, Number(customSessionHours))
     : selectedSessionHours;
-  const userModules = Array.isArray(user?.enabledModules)
+  const userModules: string[] = Array.isArray(user?.enabledModules)
     ? user.enabledModules
     : Array.isArray(user?.companyId?.enabledModules)
     ? user.companyId.enabledModules
@@ -191,15 +195,20 @@ export default function TenantApprovalPage({
       const data = await res.json();
       if (res.ok) {
         await fetchUser();
-        alert(
+        if (typeof window !== "undefined") {
+          window.dispatchEvent(new Event("mabsol-permissions-updated"));
+          window.dispatchEvent(new Event("menu-settings-changed"));
+        }
+        setSaveSuccessMessage(
           action === "approve"
-            ? "Tenant account successfully approved and clearance granted!"
+            ? "Tenant account clearance granted! All settings and module access activated."
             : action === "reject"
             ? "Account registration rejected."
             : action === "suspend"
             ? "Account suspended. Active sessions revoked."
-            : "Settings saved successfully."
+            : `Settings saved successfully! ${enabledModules.length} modules active.`
         );
+        setTimeout(() => setSaveSuccessMessage(null), 5000);
       } else {
         alert(data.message || "Failed to perform action");
       }
@@ -209,6 +218,57 @@ export default function TenantApprovalPage({
     } finally {
       setActionLoading(false);
     }
+  };
+
+  // Direct dedicated Save for Module Permissions (reflected immediately on user)
+  const handleSaveModulePermissions = async () => {
+    setActionLoading(true);
+    try {
+      const res = await fetch(`/api/super-admin/users/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "update_settings",
+          enabledModules,
+        }),
+      });
+
+      const data = await res.json();
+      if (res.ok) {
+        await fetchUser();
+        if (typeof window !== "undefined") {
+          window.dispatchEvent(new Event("mabsol-permissions-updated"));
+          window.dispatchEvent(new Event("menu-settings-changed"));
+          localStorage.setItem("mabsol_permissions_version", String(Date.now()));
+          try {
+            const storedComp = localStorage.getItem("mabsol_selected_company");
+            if (storedComp) {
+              const parsed = JSON.parse(storedComp);
+              const targetCompId = user?.companyId?._id || user?.companyId;
+              if (String(parsed._id) === String(targetCompId)) {
+                parsed.enabledModules = enabledModules;
+                localStorage.setItem("mabsol_selected_company", JSON.stringify(parsed));
+                window.dispatchEvent(new CustomEvent("company-changed", { detail: parsed }));
+              }
+            }
+          } catch {}
+        }
+        setSaveSuccessMessage(
+          `Module permissions successfully saved! ${enabledModules.length} of ${SUPER_ADMIN_SIDEBAR_MODULES.length} modules are active and immediately reflected for this tenant.`
+        );
+        setTimeout(() => setSaveSuccessMessage(null), 5000);
+      } else {
+        alert(data.message || "Failed to save module permissions");
+      }
+    } catch (err: any) {
+      alert(err?.message || "Failed to save module permissions");
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleDiscardModuleChanges = () => {
+    setEnabledModules([...userModules]);
   };
 
   const handleDelete = async () => {
@@ -314,11 +374,12 @@ export default function TenantApprovalPage({
       if (res.ok) {
         await fetchUser();
         setShowDaysModal(false);
-        alert(
+        setSaveSuccessMessage(
           adjustmentAction === "add"
             ? `Successfully given +${days} days to subscription!`
             : `Successfully removed -${days} days from subscription!`
         );
+        setTimeout(() => setSaveSuccessMessage(null), 5000);
       } else {
         alert(data.message || "Failed to update subscription days");
       }
@@ -442,21 +503,19 @@ export default function TenantApprovalPage({
     }
   };
 
-  // Open Sub-Branch Full Dossier Modal (matches Head Office Checkout View)
+  // Open Sub-Branch Full Dossier Modal
   const openSubBranchDossier = (branch: any) => {
     setSelectedSubBranch(branch);
     const branchMods = Array.isArray(branch.enabledModules) ? branch.enabledModules : enabledModules;
     setSelectedSubBranchModules(branchMods);
   };
 
-  // Toggle module on selected sub-branch
   const toggleSubBranchModule = (modId: string) => {
     setSelectedSubBranchModules((prev) =>
       prev.includes(modId) ? prev.filter((m) => m !== modId) : [...prev, modId]
     );
   };
 
-  // Save modules specifically for sub-branch
   const handleSaveSubBranchModules = async () => {
     if (!selectedSubBranch) return;
     setBranchActionLoading(selectedSubBranch._id);
@@ -629,16 +688,44 @@ export default function TenantApprovalPage({
     });
   };
 
-  // Filtered overview clips
+  // Filtered overview clips with search
   const filteredOverviewModules = SUPER_ADMIN_SIDEBAR_MODULES.filter((m) => {
     const isGranted = enabledModules.includes(m.id);
-    if (overviewModuleClipFilter === "granted") return isGranted;
-    if (overviewModuleClipFilter === "stopped") return !isGranted;
+    if (overviewModuleClipFilter === "granted" && !isGranted) return false;
+    if (overviewModuleClipFilter === "stopped" && isGranted) return false;
+    if (overviewSearchText.trim()) {
+      const q = overviewSearchText.toLowerCase();
+      return (
+        m.name.toLowerCase().includes(q) ||
+        m.id.toLowerCase().includes(q) ||
+        m.category.toLowerCase().includes(q) ||
+        m.desc.toLowerCase().includes(q)
+      );
+    }
     return true;
   });
 
   return (
-    <div className="w-full max-w-[1600px] mx-auto space-y-4 pb-12 pt-1 text-slate-800">
+    <div className="w-full max-w-[1600px] mx-auto space-y-4 pb-16 pt-1 text-slate-800">
+      {/* SUCCESS NOTIFICATION TOAST BANNER */}
+      {saveSuccessMessage && (
+        <div className="bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-600 text-white rounded-2xl p-3.5 shadow-lg flex items-center justify-between gap-3 animate-in fade-in slide-in-from-top duration-200">
+          <div className="flex items-center gap-2.5 text-xs font-bold">
+            <span className="w-6 h-6 rounded-full bg-white/20 flex items-center justify-center">
+              <FaCheck size={11} />
+            </span>
+            <span>{saveSuccessMessage}</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setSaveSuccessMessage(null)}
+            className="text-white/80 hover:text-white cursor-pointer text-xs"
+          >
+            <FaTimes size={13} />
+          </button>
+        </div>
+      )}
+
       {/* DELETED ACCOUNT ALERT BANNER */}
       {user.isDeleted && (
         <div className="bg-gradient-to-r from-rose-50 via-red-50 to-rose-50 border-2 border-red-200 rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-red-900 shadow-xs">
@@ -681,16 +768,14 @@ export default function TenantApprovalPage({
         </div>
       )}
 
-      {/* 1. TOP HEADER BAR (Light Gradient Background Only - Elegant & Clean) */}
+      {/* 1. TOP HEADER BAR */}
       <div className="bg-gradient-to-r from-white via-slate-50/90 to-blue-50/30 rounded-2xl border border-slate-200/90 p-4 sm:p-5 shadow-2xs">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div className="flex items-center gap-3.5">
-            {/* Clean Light Avatar */}
             <div className="w-13 h-13 rounded-2xl bg-gradient-to-br from-blue-50 to-indigo-100/60 text-blue-700 border border-blue-200/90 flex items-center justify-center text-lg font-black tracking-tight shrink-0 shadow-2xs">
               {initials}
             </div>
 
-            {/* Title & Badges */}
             <div>
               <div className="flex items-center flex-wrap gap-2">
                 <h1 className="text-lg sm:text-xl font-bold text-slate-900 tracking-tight leading-tight">
@@ -724,7 +809,6 @@ export default function TenantApprovalPage({
                 </span>
               </div>
 
-              {/* Identifiers & Details Ribbon */}
               <div className="flex items-center flex-wrap gap-2 text-xs text-slate-500 font-mono mt-1">
                 {companyCode ? (
                   <span className="font-bold text-slate-800 bg-gradient-to-r from-slate-100 to-gray-100 border border-slate-200/90 px-1.5 py-0.2 rounded text-[11px]">
@@ -760,7 +844,7 @@ export default function TenantApprovalPage({
             </div>
           </div>
 
-          {/* Action Buttons (Light Gradient Theme, Minimal Padding) */}
+          {/* Action Buttons with High-Contrast Styles */}
           <div className="flex items-center gap-2 flex-wrap justify-end">
             <Link
               href="/dashboard/super-admin"
@@ -833,30 +917,31 @@ export default function TenantApprovalPage({
                   <FaTrash size={10} /> Delete
                 </button>
 
-                <button
-                  type="button"
-                  onClick={() => handleAction(user.isApproved ? "update_settings" : "approve")}
-                  disabled={actionLoading || (user.isApproved && !isDirty)}
-                  className={`px-4 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer shadow-2xs ${
-                    user.isApproved && !isDirty
-                      ? "bg-slate-100 text-slate-400 cursor-not-allowed border border-slate-200"
-                      : "bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white shadow-blue-600/20"
-                  }`}
-                >
-                  {actionLoading
-                    ? "Saving..."
-                    : !user.isApproved
-                    ? "Confirm Approval"
-                    : isDirty
-                    ? "Save Changes"
-                    : "Saved"}
-                </button>
+                {/* Main Header Save Button: ONLY show when changes exist or pending approval */}
+                {(!user.isApproved || isDirty) && (
+                  <button
+                    type="button"
+                    onClick={() => handleAction(user.isApproved ? "update_settings" : "approve")}
+                    disabled={actionLoading}
+                    className="px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer shadow-sm flex items-center gap-1.5 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white active:scale-95 animate-pulse"
+                    style={{ backgroundColor: '#2563eb', color: '#ffffff' }}
+                  >
+                    <FaSave size={11} />
+                    <span>
+                      {actionLoading
+                        ? "Saving..."
+                        : !user.isApproved
+                        ? "Confirm Approval"
+                        : "Save Changes"}
+                    </span>
+                  </button>
+                )}
               </>
             )}
           </div>
         </div>
 
-        {/* Contact Ribbon with Icons */}
+        {/* Contact Ribbon */}
         <div className="mt-3 pt-3 border-t border-slate-200/60 flex items-center flex-wrap gap-x-5 gap-y-1.5 text-xs text-slate-600">
           <a
             href={`mailto:${user.email}`}
@@ -886,7 +971,7 @@ export default function TenantApprovalPage({
         </div>
       </div>
 
-      {/* 2. FLAT UNDERLINE NAVIGATION TABS */}
+      {/* 2. NAVIGATION TABS */}
       <div className="border-b border-slate-200/90 pt-1">
         <div className="flex items-center gap-6 overflow-x-auto text-xs font-semibold">
           <button
@@ -944,12 +1029,12 @@ export default function TenantApprovalPage({
         </div>
       </div>
 
-      {/* 3. MAIN CONTENT: OVERVIEW (Light Gradients Only, Modern Module Clips, Direct Days Control) */}
+      {/* 3. MAIN CONTENT: OVERVIEW */}
       {(activeTab === "overview" || activeTab === "all") && (
         <div className="space-y-4">
-          {/* Row 1: Approval Information (Left) + Subscription Details with Give & Remove Days Controls (Right) */}
+          {/* Row 1: Approval Information (Left) + Subscription Details (Right) */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            {/* Card 1: Approval Information (Light Gradient Background) */}
+            {/* Card 1: Approval Information */}
             <div className="bg-gradient-to-br from-white via-slate-50/60 to-blue-50/20 rounded-2xl border border-slate-200/80 p-4 sm:p-5 shadow-2xs space-y-3.5">
               <div className="flex items-center justify-between pb-2 border-b border-slate-100">
                 <h3 className="text-sm font-bold text-slate-900 flex items-center gap-1.5">
@@ -1023,7 +1108,7 @@ export default function TenantApprovalPage({
               </div>
             </div>
 
-            {/* Card 2: Subscription Details with Direct Give Days & Remove Days Buttons (Light Gradient Background) */}
+            {/* Card 2: Subscription Details with High-Contrast Give Days & Remove Days Buttons */}
             <div className="bg-gradient-to-br from-white via-sky-50/20 to-indigo-50/20 rounded-2xl border border-slate-200/80 p-4 sm:p-5 shadow-2xs space-y-3.5">
               <div className="flex items-center justify-between pb-2 border-b border-slate-100 flex-wrap gap-2">
                 <div className="flex items-center gap-1.5">
@@ -1031,12 +1116,13 @@ export default function TenantApprovalPage({
                   <h3 className="text-sm font-bold text-slate-900">Subscription Details</h3>
                 </div>
 
-                {/* Direct Action Controls: Give Days and Remove Days */}
+                {/* High Contrast Direct Action Buttons with Minimal Light Styling */}
                 <div className="flex items-center gap-1.5">
                   <button
                     type="button"
                     onClick={() => openDaysModal("add")}
-                    className="px-2.5 py-1 rounded-lg bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white text-[11px] font-bold transition-all shadow-2xs cursor-pointer flex items-center gap-1"
+                    className="px-2.5 py-1 rounded-lg bg-emerald-50 hover:bg-emerald-100 active:bg-emerald-200 text-emerald-800 border border-emerald-300 text-xs font-bold transition-all cursor-pointer flex items-center gap-1 shadow-2xs active:scale-95"
+                    style={{ backgroundColor: '#f0fdf4', color: '#065f46', borderColor: '#86efac' }}
                     title="Give extra access days to this tenant"
                   >
                     <FaPlus size={8} /> Give Days
@@ -1044,7 +1130,8 @@ export default function TenantApprovalPage({
                   <button
                     type="button"
                     onClick={() => openDaysModal("remove")}
-                    className="px-2.5 py-1 rounded-lg bg-gradient-to-r from-rose-500 to-red-600 hover:from-rose-600 hover:to-red-700 text-white text-[11px] font-bold transition-all shadow-2xs cursor-pointer flex items-center gap-1"
+                    className="px-2.5 py-1 rounded-lg bg-rose-50 hover:bg-rose-100 active:bg-rose-200 text-rose-800 border border-rose-300 text-xs font-bold transition-all cursor-pointer flex items-center gap-1 shadow-2xs active:scale-95"
+                    style={{ backgroundColor: '#fff1f2', color: '#9f1239', borderColor: '#fca5a5' }}
                     title="Deduct access days from this tenant"
                   >
                     <FaMinus size={8} /> Remove Days
@@ -1052,9 +1139,10 @@ export default function TenantApprovalPage({
                   <button
                     type="button"
                     onClick={() => openDaysModal("add")}
-                    className="px-2.5 py-1 rounded-lg bg-gradient-to-r from-slate-100 to-gray-100 hover:from-slate-200 hover:to-gray-200 text-slate-700 text-[11px] font-bold transition-all border border-slate-200 cursor-pointer flex items-center gap-1"
+                    className="px-2.5 py-1 rounded-lg bg-slate-50 hover:bg-slate-100 active:bg-slate-200 text-slate-700 border border-slate-200 text-xs font-bold transition-all cursor-pointer flex items-center gap-1 active:scale-95"
+                    style={{ backgroundColor: '#f8fafc', color: '#334155', borderColor: '#e2e8f0' }}
                   >
-                    <FaSlidersH size={9} /> Manage
+                    <FaSlidersH size={8} /> Manage
                   </button>
                 </div>
               </div>
@@ -1107,7 +1195,7 @@ export default function TenantApprovalPage({
                 </div>
               </div>
 
-              {/* Subscription Validity Progress Bar */}
+              {/* Progress Bar */}
               <div className="pt-2 border-t border-slate-100">
                 <div className="flex items-center justify-between text-xs font-semibold mb-1">
                   <span className="text-slate-600">Subscription Validity</span>
@@ -1138,7 +1226,6 @@ export default function TenantApprovalPage({
                   </span>
                 </div>
 
-                {/* Compact Session Presets */}
                 <div className="grid grid-cols-3 sm:grid-cols-6 gap-1.5">
                   {SESSION_TIMEOUT_PRESETS.map((preset) => {
                     const isSelected = selectedSessionHours === preset.hours && !customSessionHours;
@@ -1150,11 +1237,16 @@ export default function TenantApprovalPage({
                           setSelectedSessionHours(preset.hours);
                           setCustomSessionHours("");
                         }}
-                        className={`py-1 px-1.5 rounded-lg text-xs font-bold border transition-all cursor-pointer text-center ${
+                        className={`py-1 px-1.5 rounded-lg text-xs font-bold border transition-all cursor-pointer text-center active:scale-95 ${
                           isSelected
-                            ? "bg-gradient-to-r from-blue-600 to-indigo-600 text-white border-blue-600 shadow-2xs"
-                            : "bg-gradient-to-r from-slate-50 to-gray-50 hover:from-slate-100 hover:to-gray-100 text-slate-700 border-slate-200"
+                            ? "bg-blue-50 text-blue-800 border-blue-400 ring-1 ring-blue-400/40 font-extrabold shadow-2xs"
+                            : "bg-white hover:bg-slate-50 active:bg-slate-100 text-slate-700 border-slate-200"
                         }`}
+                        style={
+                          isSelected
+                            ? { backgroundColor: '#eff6ff', color: '#1e40af', borderColor: '#60a5fa' }
+                            : { backgroundColor: '#ffffff', color: '#334155', borderColor: '#e2e8f0' }
+                        }
                       >
                         {preset.hours}h
                       </button>
@@ -1162,7 +1254,6 @@ export default function TenantApprovalPage({
                   })}
                 </div>
 
-                {/* Custom Hours Input */}
                 <div className="flex items-center gap-2 pt-0.5">
                   <span className="text-[11px] text-slate-400 font-medium">Or custom:</span>
                   <div className="relative flex-1">
@@ -1184,9 +1275,9 @@ export default function TenantApprovalPage({
             </div>
           </div>
 
-          {/* Row 2: Admin Account Details (Left) + Module Access Control Clips (Right) */}
+          {/* Row 2: Admin Account Details (Left) + Beautiful Module Access Control Clips with IN-CARD SAVE OPTION (Right) */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            {/* Card 3: Admin Account Details (Light Gradient Background) */}
+            {/* Card 3: Admin Account Details */}
             <div className="bg-gradient-to-br from-white via-slate-50/60 to-purple-50/20 rounded-2xl border border-slate-200/80 p-4 sm:p-5 shadow-2xs space-y-3.5">
               <div className="flex items-center justify-between pb-2 border-b border-slate-100">
                 <div className="flex items-center gap-2">
@@ -1265,117 +1356,248 @@ export default function TenantApprovalPage({
               </div>
             </div>
 
-            {/* Card 4: Module Access Control Clips (Modern Pill Tags, Light Gradient, Selected & Hover States, NO Strikethrough) */}
-            <div className="bg-gradient-to-br from-white via-emerald-50/20 to-teal-50/20 rounded-2xl border border-slate-200/80 p-4 sm:p-5 shadow-2xs space-y-3">
-              <div className="flex items-center justify-between pb-2 border-b border-slate-100 flex-wrap gap-2">
-                <div className="flex items-center gap-2">
-                  <FaLayerGroup className="text-emerald-600 text-xs" />
-                  <h3 className="text-sm font-bold text-slate-900">Module Access Control</h3>
-                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-gradient-to-r from-emerald-50 to-teal-50 text-emerald-800 border border-emerald-300">
-                    {enabledModules.length} / {SUPER_ADMIN_SIDEBAR_MODULES.length} Granted
-                  </span>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setActiveTab("modules")}
-                  className="text-xs font-bold text-blue-600 hover:text-blue-700 cursor-pointer flex items-center gap-1"
-                >
-                  Configure All (26) →
-                </button>
-              </div>
+            {/* Card 4: MODULE ACCESS CONTROL CLIPS WITH DEDICATED IN-CARD SAVE OPTION */}
+            <div className="bg-gradient-to-br from-white via-emerald-50/25 to-teal-50/20 rounded-2xl border border-slate-200/90 p-4 sm:p-5 shadow-2xs space-y-3.5 flex flex-col justify-between">
+              <div>
+                {/* Header with Title, Counter Badge, and Immediate In-Header Save Button */}
+                <div className="flex items-center justify-between pb-2.5 border-b border-slate-100 flex-wrap gap-2">
+                  <div className="flex items-center gap-2">
+                    <div className="w-7 h-7 rounded-lg bg-emerald-100/70 text-emerald-800 flex items-center justify-center text-xs">
+                      <FaLayerGroup />
+                    </div>
+                    <div>
+                      <h3 className="text-sm font-bold text-slate-900 leading-tight">Module Access Control</h3>
+                      <p className="text-[10.5px] text-slate-500">
+                        Click chips to grant or stop features for this user
+                      </p>
+                    </div>
+                  </div>
 
-              {/* Sub-header with Quick Actions & View Filters */}
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
-                {/* Filter chips: All, Granted, Stopped */}
-                <div className="flex items-center gap-1">
-                  <button
-                    type="button"
-                    onClick={() => setOverviewModuleClipFilter("all")}
-                    className={`px-2 py-0.5 rounded-md text-[10.5px] font-bold transition-all cursor-pointer ${
-                      overviewModuleClipFilter === "all"
-                        ? "bg-slate-800 text-white shadow-2xs"
-                        : "bg-slate-100 text-slate-600 hover:bg-slate-200"
-                    }`}
-                  >
-                    All ({SUPER_ADMIN_SIDEBAR_MODULES.length})
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setOverviewModuleClipFilter("granted")}
-                    className={`px-2 py-0.5 rounded-md text-[10.5px] font-bold transition-all cursor-pointer ${
-                      overviewModuleClipFilter === "granted"
-                        ? "bg-emerald-600 text-white shadow-2xs"
-                        : "bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200"
-                    }`}
-                  >
-                    Granted ({enabledModules.length})
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setOverviewModuleClipFilter("stopped")}
-                    className={`px-2 py-0.5 rounded-md text-[10.5px] font-bold transition-all cursor-pointer ${
-                      overviewModuleClipFilter === "stopped"
-                        ? "bg-slate-600 text-white shadow-2xs"
-                        : "bg-slate-100 text-slate-600 hover:bg-slate-200"
-                    }`}
-                  >
-                    Stopped ({SUPER_ADMIN_SIDEBAR_MODULES.length - enabledModules.length})
-                  </button>
-                </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10.5px] font-bold px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-300">
+                      {enabledModules.length} / {SUPER_ADMIN_SIDEBAR_MODULES.length} Granted
+                    </span>
 
-                {/* Batch buttons: Grant All, Stop All */}
-                <div className="flex items-center gap-1.5 self-end sm:self-auto">
-                  <button
-                    type="button"
-                    onClick={() => setEnabledModules([...ALL_SIDEBAR_MODULE_IDS])}
-                    className="px-2.5 py-0.5 rounded-md text-[10.5px] font-bold text-emerald-700 bg-gradient-to-r from-emerald-50 to-teal-50 hover:from-emerald-100 hover:to-teal-100 border border-emerald-300 transition-all cursor-pointer shadow-2xs"
-                  >
-                    Grant All
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setEnabledModules([])}
-                    className="px-2.5 py-0.5 rounded-md text-[10.5px] font-bold text-rose-700 bg-gradient-to-r from-rose-50 to-red-50 hover:from-rose-100 hover:to-red-100 border border-rose-300 transition-all cursor-pointer shadow-2xs"
-                  >
-                    Stop All
-                  </button>
-                </div>
-              </div>
+                    {/* ONLY show Save button when changes exist */}
+                    {modulesChanged && (
+                      <button
+                        type="button"
+                        disabled={actionLoading}
+                        onClick={handleSaveModulePermissions}
+                        className="px-3 py-1 rounded-xl text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 active:bg-blue-800 active:scale-95 shadow-sm shadow-blue-500/30 transition-all flex items-center gap-1.5 cursor-pointer animate-pulse"
+                        style={{ backgroundColor: '#2563eb', color: '#ffffff' }}
+                      >
+                        <FaSave size={11} />
+                        <span>{actionLoading ? "Saving..." : `Save Changes (${Math.abs(enabledModules.length - userModules.length)})`}</span>
+                      </button>
+                    )}
 
-              {/* MODERN MODULE CLIPS / PILL TAGS CONTAINER */}
-              <div className="flex flex-wrap gap-1.5 max-h-[220px] overflow-y-auto pt-1 pr-1">
-                {filteredOverviewModules.map((m) => {
-                  const isGranted = enabledModules.includes(m.id);
-                  return (
                     <button
-                      key={m.id}
                       type="button"
-                      onClick={() => toggleModule(m.id)}
-                      className={`text-[11px] font-semibold px-2.5 py-1 rounded-lg border transition-all duration-150 cursor-pointer inline-flex items-center gap-1.5 shadow-2xs hover:-translate-y-0.5 active:translate-y-0 ${
-                        isGranted
-                          ? "bg-gradient-to-r from-emerald-50 via-teal-50/70 to-emerald-50 text-emerald-900 border-emerald-300/90 hover:from-emerald-100 hover:to-teal-100 hover:border-emerald-400 hover:shadow-xs"
-                          : "bg-gradient-to-r from-slate-50 via-gray-50 to-slate-100/70 text-slate-600 border-slate-200/90 hover:from-slate-100 hover:to-blue-50/40 hover:text-slate-900 hover:border-blue-300 hover:shadow-2xs"
-                      }`}
-                      title={
-                        isGranted
-                          ? `Granted: Click to revoke "${m.name}"`
-                          : `Stopped: Click to grant "${m.name}"`
-                      }
+                      onClick={() => setActiveTab("modules")}
+                      className="text-xs font-bold text-blue-600 hover:text-blue-700 cursor-pointer ml-1"
                     >
-                      {/* Clean Status Dot / Icon Indicator */}
-                      <span
-                        className={`w-3.5 h-3.5 rounded-full flex items-center justify-center text-[8px] font-bold shrink-0 transition-colors ${
-                          isGranted
-                            ? "bg-emerald-600 text-white"
-                            : "bg-slate-200 text-slate-500"
+                      Configure Grid →
+                    </button>
+                  </div>
+                </div>
+
+                {/* Sub-header Toolbar: Search + Category Filters + Batch Grant/Stop Buttons */}
+                <div className="pt-1.5 space-y-2">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
+                    {/* Live Search input */}
+                    <div className="relative flex-1 max-w-xs">
+                      <FaSearch className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 text-[10px]" />
+                      <input
+                        type="text"
+                        placeholder="Search modules (e.g. Sales, Billing, AI)..."
+                        value={overviewSearchText}
+                        onChange={(e) => setOverviewSearchText(e.target.value)}
+                        className="w-full pl-7 pr-3 py-1 rounded-lg text-xs bg-white border border-slate-200 text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                      />
+                    </div>
+
+                    {/* Filter buttons: All, Granted, Stopped */}
+                    <div className="flex items-center gap-1">
+                      <button
+                        type="button"
+                        onClick={() => setOverviewModuleClipFilter("all")}
+                        className={`px-2 py-0.5 rounded-md text-[10.5px] font-bold transition-all cursor-pointer ${
+                          overviewModuleClipFilter === "all"
+                            ? "bg-slate-800 text-white shadow-2xs"
+                            : "bg-slate-100 text-slate-600 hover:bg-slate-200"
                         }`}
                       >
-                        {isGranted ? <FaCheck size={7} /> : "+"}
-                      </span>
-                      <span className="font-bold tracking-tight">{m.name}</span>
+                        All ({SUPER_ADMIN_SIDEBAR_MODULES.length})
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setOverviewModuleClipFilter("granted")}
+                        className={`px-2 py-0.5 rounded-md text-[10.5px] font-bold transition-all cursor-pointer ${
+                          overviewModuleClipFilter === "granted"
+                            ? "bg-emerald-600 text-white shadow-2xs"
+                            : "bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200"
+                        }`}
+                      >
+                        Granted ({enabledModules.length})
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setOverviewModuleClipFilter("stopped")}
+                        className={`px-2 py-0.5 rounded-md text-[10.5px] font-bold transition-all cursor-pointer ${
+                          overviewModuleClipFilter === "stopped"
+                            ? "bg-slate-600 text-white shadow-2xs"
+                            : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                        }`}
+                      >
+                        Stopped ({SUPER_ADMIN_SIDEBAR_MODULES.length - enabledModules.length})
+                      </button>
+                    </div>
+
+                    {/* Batch Actions: Grant All, Stop All + In-toolbar Save */}
+                    <div className="flex items-center gap-1.5 self-end sm:self-auto">
+                      <button
+                        type="button"
+                        onClick={() => setEnabledModules([...ALL_SIDEBAR_MODULE_IDS])}
+                        className="px-2.5 py-1 rounded-lg text-[10.5px] font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-300 transition-all cursor-pointer shadow-2xs"
+                      >
+                        Grant All (26)
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setEnabledModules([])}
+                        className="px-2.5 py-1 rounded-lg text-[10.5px] font-bold text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-300 transition-all cursor-pointer shadow-2xs"
+                      >
+                        Stop All
+                      </button>
+                      {modulesChanged && (
+                        <button
+                          type="button"
+                          disabled={actionLoading}
+                          onClick={handleSaveModulePermissions}
+                          className="px-3 py-1 rounded-lg text-[10.5px] font-bold text-white bg-blue-600 hover:bg-blue-700 transition-all cursor-pointer shadow-sm flex items-center gap-1"
+                          style={{ backgroundColor: '#2563eb', color: '#ffffff' }}
+                        >
+                          <FaSave size={10} />
+                          <span>Save Now</span>
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* MODERN PROFESSIONAL MODULE CLIPS */}
+                  <div className="flex flex-wrap gap-2 max-h-[300px] overflow-y-auto pt-2 pb-1 pr-1">
+                    {filteredOverviewModules.map((m) => {
+                      const isGranted = enabledModules.includes(m.id);
+                      const catColor =
+                        m.category === "DASHBOARD"
+                          ? { text: "text-blue-700", bg: "bg-blue-50/90", border: "border-blue-200/80", short: "DASH" }
+                          : m.category === "OPERATIONS"
+                          ? { text: "text-indigo-700", bg: "bg-indigo-50/90", border: "border-indigo-200/80", short: "OPS" }
+                          : m.category === "LEADS"
+                          ? { text: "text-purple-700", bg: "bg-purple-50/90", border: "border-purple-200/80", short: "MKTG" }
+                          : m.category === "MASTERS"
+                          ? { text: "text-teal-700", bg: "bg-teal-50/90", border: "border-teal-200/80", short: "MSTR" }
+                          : { text: "text-amber-700", bg: "bg-amber-50/90", border: "border-amber-200/80", short: "SYS" };
+
+                      return (
+                        <button
+                          key={m.id}
+                          type="button"
+                          onClick={() => toggleModule(m.id)}
+                          className={`group relative text-xs font-semibold px-3 py-1.5 rounded-xl border transition-all duration-150 cursor-pointer inline-flex items-center gap-2 shadow-2xs hover:-translate-y-0.5 active:scale-[0.98] select-none ${
+                            isGranted
+                              ? "bg-emerald-50 text-emerald-950 border-emerald-300 hover:border-emerald-400 hover:bg-emerald-100/90 ring-1 ring-emerald-400/25"
+                              : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50 hover:text-slate-900 hover:border-slate-300"
+                          }`}
+                          style={
+                            isGranted
+                              ? { backgroundColor: '#f0fdf4', borderColor: '#86efac' }
+                              : { backgroundColor: '#ffffff', borderColor: '#e2e8f0' }
+                          }
+                          title={
+                            isGranted
+                              ? `Granted: Click to revoke "${m.name}"`
+                              : `Stopped: Click to grant "${m.name}"`
+                          }
+                        >
+                          {/* Circular Status Icon */}
+                          <span
+                            className={`w-4 h-4 rounded-full flex items-center justify-center text-[9px] font-black shrink-0 transition-transform group-hover:scale-110 ${
+                              isGranted
+                                ? "bg-emerald-600 text-white shadow-2xs"
+                                : "bg-slate-100 text-slate-400 group-hover:bg-blue-100 group-hover:text-blue-600"
+                            }`}
+                            style={isGranted ? { backgroundColor: '#059669', color: '#ffffff' } : {}}
+                          >
+                            {isGranted ? <FaCheck size={7} /> : "+"}
+                          </span>
+
+                          {/* Module Name */}
+                          <span className={`tracking-tight ${isGranted ? "font-bold text-slate-950" : "font-medium text-slate-700 group-hover:text-black"}`}>
+                            {m.name}
+                          </span>
+
+                          {/* Category Tag */}
+                          <span
+                            className={`text-[8.5px] uppercase px-1.5 py-0.5 rounded font-mono font-bold tracking-wider shrink-0 border ${catColor.text} ${catColor.bg} ${catColor.border}`}
+                          >
+                            {catColor.short}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+
+              {/* DEDICATED IN-CARD STATUS & SAVE FOOTER (Only shows save options when changes exist) */}
+              <div className="pt-3 border-t border-slate-200/80 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 mt-2">
+                <div className="flex items-center gap-2">
+                  {modulesChanged ? (
+                    <span className="inline-flex items-center gap-1.5 text-xs font-bold text-amber-800 bg-amber-50 border border-amber-300 px-2.5 py-1 rounded-lg">
+                      <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
+                      <span>Unsaved Changes: {Math.abs(enabledModules.length - userModules.length)} modified</span>
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-emerald-800 bg-emerald-50 border border-emerald-300 px-2.5 py-1 rounded-lg">
+                      <FaCheckCircle className="text-emerald-600" size={12} />
+                      <span>All {enabledModules.length} permissions active</span>
+                    </span>
+                  )}
+                </div>
+
+                {/* ONLY show Save and Discard buttons when changes exist! */}
+                {modulesChanged && (
+                  <div className="flex items-center gap-2 self-end sm:self-auto animate-in fade-in duration-150">
+                    <button
+                      type="button"
+                      onClick={handleDiscardModuleChanges}
+                      disabled={actionLoading}
+                      className="px-3 py-1.5 rounded-xl text-xs font-semibold text-slate-700 hover:text-slate-900 bg-white hover:bg-slate-100 active:bg-slate-200 border border-slate-200 transition-all cursor-pointer active:scale-95"
+                    >
+                      Discard
                     </button>
-                  );
-                })}
+
+                    <button
+                      type="button"
+                      disabled={actionLoading}
+                      onClick={handleSaveModulePermissions}
+                      className="px-4 py-1.5 rounded-xl text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 active:bg-blue-800 shadow-md shadow-blue-500/30 transition-all flex items-center gap-1.5 cursor-pointer active:scale-95 animate-pulse"
+                      style={{ backgroundColor: '#2563eb', color: '#ffffff' }}
+                    >
+                      {actionLoading ? (
+                        <>
+                          <FaSync className="animate-spin text-xs" /> Saving...
+                        </>
+                      ) : (
+                        <>
+                          <FaSave size={12} /> Save & Apply Permissions
+                        </>
+                      )}
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
           </div>
@@ -1447,7 +1669,7 @@ export default function TenantApprovalPage({
               </div>
             </div>
 
-            {/* Connected Sub-Branches & Locations Section (Full Controls: Suspend All, Suspend Branch, Checkout Dossier) */}
+            {/* Connected Sub-Branches & Locations Section */}
             {isHeadOffice && childBranches.length > 0 && (
               <div className="pt-3 border-t border-slate-100 space-y-3">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
@@ -1461,173 +1683,210 @@ export default function TenantApprovalPage({
                     </span>
                   </div>
 
-                  {/* Batch Actions for Branches */}
                   <div className="flex items-center gap-1.5">
                     <button
                       type="button"
                       disabled={batchBranchLoading}
                       onClick={() => handleBatchSuspendAllBranches(childBranches)}
-                      className="px-2.5 py-1 rounded-lg text-[10.5px] font-bold text-rose-700 bg-gradient-to-r from-rose-50 to-red-50 hover:from-rose-100 hover:to-red-100 border border-rose-300 transition-all cursor-pointer flex items-center gap-1 disabled:opacity-50 shadow-2xs"
+                      className="px-2.5 py-1 rounded-lg text-[10.5px] font-bold text-rose-800 bg-rose-50 hover:bg-rose-100 active:bg-rose-200 border border-rose-300 transition-all cursor-pointer flex items-center gap-1 disabled:opacity-50 shadow-2xs active:scale-95"
                       title="Suspend all connected sub-branches at once"
+                      style={{ backgroundColor: '#fff1f2', color: '#9f1239', borderColor: '#fca5a5' }}
                     >
-                      <FaPowerOff size={9} /> Suspend All Branches
+                      <FaPowerOff size={8} /> Suspend All Branches
                     </button>
                     <button
                       type="button"
                       disabled={batchBranchLoading}
                       onClick={() => handleBatchActivateAllBranches(childBranches)}
-                      className="px-2.5 py-1 rounded-lg text-[10.5px] font-bold text-emerald-700 bg-gradient-to-r from-emerald-50 to-teal-50 hover:from-emerald-100 hover:to-teal-100 border border-emerald-300 transition-all cursor-pointer flex items-center gap-1 disabled:opacity-50 shadow-2xs"
+                      className="px-2.5 py-1 rounded-lg text-[10.5px] font-bold text-emerald-800 bg-emerald-50 hover:bg-emerald-100 active:bg-emerald-200 border border-emerald-300 transition-all cursor-pointer flex items-center gap-1 disabled:opacity-50 shadow-2xs active:scale-95"
                       title="Reactivate all connected sub-branches"
+                      style={{ backgroundColor: '#f0fdf4', color: '#065f46', borderColor: '#86efac' }}
                     >
-                      <FaCheckCircle size={9} /> Activate All
+                      <FaCheckCircle size={8} /> Activate All Branches
                     </button>
                   </div>
                 </div>
 
-                {/* Sub-Branch List Cards (Rich Details, Suspend/Activate Toggle, Full Dossier Modal) */}
-                <div className="grid grid-cols-1 gap-2.5">
+                {/* 1:1 SECTION DIVISION: Side-by-side on desktop/full-screen */}
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-3.5">
                   {childBranches.map((cb: any) => {
                     const branchAdmin = cb.adminUser;
                     const branchModules = Array.isArray(cb.enabledModules) ? cb.enabledModules : enabledModules;
                     const isBranchExpanded = expandedBranchId === cb._id;
                     const isBranchActive = cb.status === "Active";
                     const isBranchUpdating = branchActionLoading === cb._id;
+                    const viewHref = branchAdmin?._id ? `/dashboard/super-admin/approvals/${branchAdmin._id}` : null;
 
                     return (
                       <div
                         key={cb._id}
-                        className="p-3.5 rounded-xl bg-gradient-to-br from-white via-slate-50/80 to-blue-50/20 border border-slate-200/90 hover:from-white hover:to-indigo-50/30 hover:border-blue-300 hover:shadow-xs transition-all space-y-2.5"
+                        className="group relative p-3.5 rounded-2xl bg-gradient-to-br from-white via-slate-50/70 to-blue-50/20 border border-slate-200/90 hover:border-blue-400 hover:shadow-md transition-all duration-200 flex flex-col justify-between space-y-2.5"
                       >
-                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                          <div className="flex items-center flex-wrap gap-2">
-                            <span className="font-bold text-slate-900 text-sm">
-                              {cb.companyName}
-                            </span>
-                            <span className="font-mono text-[10px] font-bold text-teal-800 bg-gradient-to-r from-teal-50 to-emerald-50 border border-teal-200 px-2 py-0.5 rounded">
-                              {cb.companyCode || "BRANCH"}
-                            </span>
-                            <span className="text-[11px] text-slate-500 font-mono">
+                        {/* Top Header: Name, Code, Status & Small Action Buttons */}
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <span className="font-bold text-slate-900 text-xs sm:text-sm tracking-tight truncate max-w-[210px]" title={cb.companyName}>
+                                {cb.companyName}
+                              </span>
+                              <span className="font-mono text-[9px] font-bold text-teal-800 bg-teal-50 border border-teal-200/80 px-1.5 py-0.2 rounded">
+                                {cb.companyCode || "BRANCH"}
+                              </span>
+                              <span
+                                className={`text-[9px] font-bold px-1.5 py-0.2 rounded-full border ${
+                                  isBranchActive
+                                    ? "bg-emerald-50 text-emerald-800 border-emerald-200"
+                                    : "bg-rose-50 text-rose-800 border-rose-200"
+                                }`}
+                                style={
+                                  isBranchActive
+                                    ? { backgroundColor: '#f0fdf4', color: '#065f46', borderColor: '#86efac' }
+                                    : { backgroundColor: '#fff1f2', color: '#9f1239', borderColor: '#fca5a5' }
+                                }
+                              >
+                                ● {cb.status || "Active"}
+                              </span>
+                            </div>
+                            <div className="text-[10px] text-slate-500 font-mono mt-0.5 truncate">
                               GST: {cb.gstNo || "N/A"} • PAN: {cb.panNo || pan} {cb.drugLicenseNo && `• DL: ${cb.drugLicenseNo}`}
-                            </span>
+                            </div>
                           </div>
 
-                          {/* Branch Actions Ribbon */}
-                          <div className="flex items-center gap-1.5 shrink-0 flex-wrap">
-                            {/* Status Badge */}
-                            <span
-                              className={`text-[9.5px] font-bold px-2 py-0.5 rounded-full border ${
-                                isBranchActive
-                                  ? "bg-gradient-to-r from-emerald-50 to-teal-50 text-emerald-700 border-emerald-200"
-                                  : "bg-gradient-to-r from-rose-50 to-red-50 text-rose-700 border-rose-200"
-                              }`}
-                            >
-                              ● {cb.status || "Active"}
-                            </span>
-
-                            {/* Suspend / Activate Branch Button */}
+                          {/* Action Buttons: Small & Compact; View revealed smoothly on hover */}
+                          <div className="flex items-center gap-1 shrink-0 flex-wrap justify-end">
+                            {/* 1. Suspend / Activate: small and remains visible */}
                             <button
                               type="button"
                               disabled={isBranchUpdating}
                               onClick={() => handleToggleBranchStatus(cb)}
-                              className={`text-[10.5px] font-bold px-2.5 py-1 rounded-lg border transition-all cursor-pointer flex items-center gap-1 shadow-2xs ${
+                              className={`text-[10px] font-bold px-2 py-0.5 rounded-md border transition-all cursor-pointer flex items-center gap-1 shadow-2xs active:scale-95 ${
                                 isBranchActive
-                                  ? "bg-gradient-to-r from-rose-50 to-amber-50 hover:from-rose-100 hover:to-amber-100 text-rose-800 border-rose-200"
-                                  : "bg-gradient-to-r from-emerald-50 to-teal-50 hover:from-emerald-100 hover:to-teal-100 text-emerald-800 border-emerald-300"
+                                  ? "bg-rose-50 hover:bg-rose-100 active:bg-rose-200 text-rose-800 border-rose-200"
+                                  : "bg-emerald-50 hover:bg-emerald-100 active:bg-emerald-200 text-emerald-800 border-emerald-300"
                               }`}
+                              style={
+                                isBranchActive
+                                  ? { backgroundColor: '#fff1f2', color: '#9f1239', borderColor: '#fca5a5' }
+                                  : { backgroundColor: '#f0fdf4', color: '#065f46', borderColor: '#86efac' }
+                              }
+                              title={isBranchActive ? `Suspend branch "${cb.companyName}"` : `Activate branch "${cb.companyName}"`}
                             >
                               {isBranchUpdating ? (
-                                <FaSync className="animate-spin text-[10px]" />
+                                <FaSync className="animate-spin text-[8px]" />
                               ) : (
-                                <FaPowerOff size={9} />
+                                <FaPowerOff size={8} />
                               )}
-                              <span>{isBranchActive ? "Suspend Branch" : "Activate Branch"}</span>
+                              <span>{isBranchActive ? "Suspend" : "Activate"}</span>
                             </button>
 
-                            {/* View Full Dossier / Checkout Modal Button */}
+                            {/* 2. Quick Dossier Modal: small and remains visible */}
                             <button
                               type="button"
                               onClick={() => openSubBranchDossier(cb)}
-                              className="text-[10.5px] font-bold text-blue-700 bg-gradient-to-r from-blue-50 to-indigo-50 hover:from-blue-100 hover:to-indigo-100 border border-blue-200 px-2.5 py-1 rounded-lg transition-all cursor-pointer flex items-center gap-1 shadow-2xs"
-                              title="Inspect full details, credentials & permissions for this sub-branch"
+                              className="text-[10px] font-bold text-slate-700 bg-white hover:bg-slate-50 active:bg-slate-100 border border-slate-200 px-2 py-0.5 rounded-md transition-all cursor-pointer flex items-center gap-1 shadow-2xs active:scale-95"
+                              style={{ backgroundColor: '#ffffff', color: '#334155', borderColor: '#cbd5e1' }}
+                              title="Quick branch permissions and hierarchy dossier"
                             >
-                              <FaEye size={10} /> Full Details Dossier
+                              <FaSlidersH size={8} />
+                              <span>Dossier</span>
                             </button>
 
-                            {/* Direct Checkout Link (Opens admin user page if exists) */}
-                            {branchAdmin?._id && (
+                            {/* 3. VIEW Button: Replaces Checkout; revealed smoothly on card hover */}
+                            {viewHref ? (
                               <Link
-                                href={`/dashboard/super-admin/approvals/${branchAdmin._id}`}
-                                className="text-[10.5px] font-bold text-slate-700 bg-white hover:bg-slate-100 border border-slate-200 px-2 py-1 rounded-lg transition-colors inline-flex items-center gap-1"
-                                title="Checkout sub-branch admin user approval record"
+                                href={viewHref}
+                                className="text-[10px] font-bold px-2.5 py-0.5 rounded-md border transition-all inline-flex items-center gap-1 shadow-2xs active:scale-95 bg-blue-600 hover:bg-blue-700 text-white border-blue-600 sm:opacity-0 sm:pointer-events-none group-hover:sm:opacity-100 group-hover:sm:pointer-events-auto sm:translate-x-1 group-hover:sm:translate-x-0 duration-200"
+                                style={{ backgroundColor: '#2563eb', color: '#ffffff', borderColor: '#2563eb' }}
+                                title={`Open full admin details page for ${cb.companyName} (same controls as Head Branch)`}
                               >
-                                <FaExternalLinkAlt size={8} /> Checkout
+                                <FaEye size={9} />
+                                <span>View</span>
                               </Link>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => openSubBranchDossier(cb)}
+                                className="text-[10px] font-bold px-2.5 py-0.5 rounded-md border transition-all inline-flex items-center gap-1 shadow-2xs active:scale-95 bg-blue-600 hover:bg-blue-700 text-white border-blue-600 sm:opacity-0 sm:pointer-events-none group-hover:sm:opacity-100 group-hover:sm:pointer-events-auto duration-200"
+                                style={{ backgroundColor: '#2563eb', color: '#ffffff', borderColor: '#2563eb' }}
+                                title={`View full details & controls for ${cb.companyName}`}
+                              >
+                                <FaEye size={9} />
+                                <span>View</span>
+                              </button>
                             )}
-
-                            {/* Module Count Toggle */}
-                            <button
-                              type="button"
-                              onClick={() => setExpandedBranchId(isBranchExpanded ? null : cb._id)}
-                              className="text-[10.5px] font-bold text-slate-700 hover:text-blue-700 bg-white border border-slate-200 hover:border-blue-300 px-2.5 py-1 rounded-lg transition-colors cursor-pointer"
-                            >
-                              {isBranchExpanded ? "Hide Clips" : `${branchModules.length} Modules`}
-                            </button>
                           </div>
                         </div>
 
-                        {/* Branch Details Row: Address & Branch Admin user info */}
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs pt-1.5 border-t border-slate-200/50 text-slate-600">
+                        {/* Middle Details: Address & Branch Admin in 2 Balanced Columns */}
+                        <div className="grid grid-cols-2 gap-2 text-xs pt-2 border-t border-slate-100 text-slate-600">
                           <div>
-                            <span className="text-slate-400 font-medium block text-[10px]">Location & Address:</span>
-                            <span className="font-medium text-slate-800 text-[11px]">
-                              {[cb.address, cb.city, cb.state, cb.pincode].filter(Boolean).join(", ") || "Location unassigned"}
+                            <span className="text-slate-400 font-bold block text-[9.5px] uppercase tracking-wider">
+                              Address:
+                            </span>
+                            <span className="font-medium text-slate-800 text-[10.5px] block truncate" title={[cb.address, cb.city, cb.state, cb.pincode].filter(Boolean).join(", ")}>
+                              {[cb.address, cb.city, cb.state].filter(Boolean).join(", ") || "Location unassigned"}
                             </span>
                           </div>
 
                           <div>
-                            <span className="text-slate-400 font-medium block text-[10px]">Branch Contact / Admin:</span>
-                            <span className="font-medium text-slate-800 text-[11px]">
+                            <span className="text-slate-400 font-bold block text-[9.5px] uppercase tracking-wider">
+                              Branch Contact:
+                            </span>
+                            <span className="font-medium text-slate-800 text-[10.5px] block truncate" title={branchAdmin ? `${branchAdmin.name} (${branchAdmin.email} • ${branchAdmin.mobile || "No phone"})` : cb.email || "No contact"}>
                               {branchAdmin ? (
                                 <span>
-                                  {branchAdmin.name} ({branchAdmin.email} • {branchAdmin.mobile || "No phone"})
+                                  {branchAdmin.name}
                                   {branchAdmin.employeeCode && (
-                                    <span className="font-mono text-[9px] bg-slate-100 border border-slate-200 px-1 py-0.2 rounded ml-1">
+                                    <span className="font-mono text-[8.5px] bg-slate-100 border border-slate-200 px-1 py-0.2 rounded ml-1">
                                       {branchAdmin.employeeCode}
                                     </span>
                                   )}
                                 </span>
                               ) : (
-                                <span>{cb.email || user.email} • {cb.mobile || user.mobile || "N/A"}</span>
+                                <span>{cb.email || "Unassigned"}</span>
                               )}
                             </span>
                           </div>
                         </div>
 
-                        {/* Expandable Module Clips for this Branch */}
+                        {/* Bottom Row: Active Module Count & Expandable Toggle */}
+                        <div className="pt-1.5 border-t border-slate-100 flex items-center justify-between text-xs">
+                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-800 border border-emerald-200 inline-flex items-center gap-1">
+                            <FaCheck size={7} />
+                            <span>{branchModules.length} Modules Active</span>
+                          </span>
+
+                          <button
+                            type="button"
+                            onClick={() => setExpandedBranchId(isBranchExpanded ? null : cb._id)}
+                            className="text-[10px] font-bold text-blue-600 hover:text-blue-800 hover:underline cursor-pointer flex items-center gap-1"
+                          >
+                            <span>{isBranchExpanded ? "Hide Clips ↑" : "Inspect Modules ↓"}</span>
+                          </button>
+                        </div>
+
+                        {/* Expandable Module Clips for this sub-branch */}
                         {isBranchExpanded && (
                           <div className="pt-2 border-t border-dashed border-slate-200 space-y-1.5">
-                            <div className="text-[10px] font-bold text-slate-500 uppercase tracking-wider flex items-center justify-between">
-                              <span>Active CRM Modules on {cb.companyCode || "Branch"} ({branchModules.length})</span>
+                            <div className="text-[9.5px] font-bold text-slate-500 uppercase tracking-wider flex items-center justify-between">
+                              <span>Active Modules on {cb.companyCode || "Branch"} ({branchModules.length})</span>
                               <button
                                 type="button"
                                 onClick={() => openSubBranchDossier(cb)}
-                                className="text-[10px] text-blue-600 hover:underline font-bold"
+                                className="text-[9.5px] text-blue-600 hover:underline font-bold"
                               >
-                                Manage Permissions →
+                                Manage Privileges →
                               </button>
                             </div>
                             <div className="flex flex-wrap gap-1">
                               {SUPER_ADMIN_SIDEBAR_MODULES.filter((m) => branchModules.includes(m.id)).map((m) => (
                                 <span
                                   key={m.id}
-                                  className="text-[10px] font-semibold px-2 py-0.5 rounded-md bg-gradient-to-r from-emerald-50 to-teal-50 border border-emerald-200 text-emerald-800"
+                                  className="text-[9.5px] font-semibold px-1.5 py-0.2 rounded bg-emerald-50 border border-emerald-200 text-emerald-800"
                                 >
                                   ✓ {m.name}
                                 </span>
                               ))}
-                              {branchModules.length === 0 && (
-                                <span className="text-[11px] text-rose-600 italic">No modules enabled on this branch</span>
-                              )}
                             </div>
                           </div>
                         )}
@@ -1641,10 +1900,10 @@ export default function TenantApprovalPage({
         </div>
       )}
 
-      {/* 4. DEDICATED VIEW: MODULE PERMISSIONS (Full 3-Column Grid) */}
+      {/* 4. DEDICATED VIEW: MODULE PERMISSIONS WITH DEDICATED SAVE BUTTON */}
       {(activeTab === "modules" || activeTab === "all") && (
-        <div className={`bg-gradient-to-br from-white via-slate-50/60 to-blue-50/20 rounded-2xl border border-slate-200/80 p-4 sm:p-5 shadow-2xs space-y-3.5 ${activeTab === "all" ? "mt-4" : ""}`}>
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2.5 border-b border-slate-100">
+        <div className={`bg-gradient-to-br from-white via-slate-50/60 to-blue-50/20 rounded-2xl border border-slate-200/80 p-4 sm:p-5 shadow-2xs space-y-4 ${activeTab === "all" ? "mt-4" : ""}`}>
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-100">
             <div>
               <div className="flex items-center gap-2">
                 <FaBoxes className="text-blue-600 text-xs" />
@@ -1664,21 +1923,42 @@ export default function TenantApprovalPage({
               </p>
             </div>
 
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
               <button
                 type="button"
                 onClick={() => setEnabledModules([...ALL_SIDEBAR_MODULE_IDS])}
-                className="px-3 py-1 rounded-lg text-xs font-bold text-emerald-700 bg-gradient-to-r from-emerald-50 to-teal-50 hover:from-emerald-100 hover:to-teal-100 border border-emerald-200 transition-colors cursor-pointer"
+                className="px-3 py-1.5 rounded-xl text-xs font-bold text-emerald-700 bg-gradient-to-r from-emerald-50 to-teal-50 hover:from-emerald-100 hover:to-teal-100 border border-emerald-200 transition-colors cursor-pointer"
               >
                 Grant All
               </button>
               <button
                 type="button"
                 onClick={() => setEnabledModules([])}
-                className="px-3 py-1 rounded-lg text-xs font-bold text-rose-700 bg-gradient-to-r from-rose-50 to-red-50 hover:from-rose-100 hover:to-red-100 border border-rose-200 transition-colors cursor-pointer"
+                className="px-3 py-1.5 rounded-xl text-xs font-bold text-rose-700 bg-gradient-to-r from-rose-50 to-red-50 hover:from-rose-100 hover:to-red-100 border border-rose-200 transition-colors cursor-pointer"
               >
                 Stop All
               </button>
+              {modulesChanged && (
+                <button
+                  type="button"
+                  onClick={handleDiscardModuleChanges}
+                  className="px-3 py-1.5 rounded-xl text-xs font-semibold text-slate-600 hover:text-slate-900 bg-white border border-slate-200 cursor-pointer"
+                >
+                  Discard
+                </button>
+              )}
+              {modulesChanged && (
+                <button
+                  type="button"
+                  disabled={actionLoading}
+                  onClick={handleSaveModulePermissions}
+                  className="px-4 py-1.5 rounded-xl text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 active:bg-blue-800 shadow-md shadow-blue-500/25 transition-all flex items-center gap-1.5 cursor-pointer active:scale-95 animate-pulse"
+                  style={{ backgroundColor: '#2563eb', color: '#ffffff' }}
+                >
+                  <FaSave size={11} />
+                  <span>{actionLoading ? "Saving..." : "Save Permissions"}</span>
+                </button>
+              )}
             </div>
           </div>
 
@@ -1691,7 +1971,6 @@ export default function TenantApprovalPage({
               onChange={(e) => setApprovalModuleSearch(e.target.value)}
               className="sm:w-72 px-3 py-1.5 rounded-xl text-xs bg-white border border-slate-200 text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-blue-500"
             />
-            {/* Flex-Wrap Category Pills */}
             <div className="flex flex-wrap items-center gap-1.5 text-xs">
               {[
                 { key: "ALL", label: "All (26)" },
@@ -1738,20 +2017,20 @@ export default function TenantApprovalPage({
               return (
                 <div
                   key={mod.id}
-                  className={`p-2.5 rounded-xl border transition-all flex flex-col justify-between gap-1.5 ${
+                  className={`p-3 rounded-xl border transition-all flex flex-col justify-between gap-2 ${
                     isSelected
-                      ? "bg-gradient-to-br from-blue-50/50 to-indigo-50/30 border-blue-200 ring-1 ring-blue-500/10"
+                      ? "bg-gradient-to-br from-emerald-50/40 via-teal-50/25 to-blue-50/20 border-emerald-300 ring-1 ring-emerald-400/20 shadow-2xs"
                       : "bg-gradient-to-br from-slate-50/70 to-gray-50/50 border-slate-200 opacity-80"
                   }`}
                 >
                   <div className="flex items-start justify-between gap-2">
-                    <div className="min-w-0 flex items-start gap-2">
+                    <div className="min-w-0 flex items-start gap-2.5">
                       <div
-                        className={`w-4 h-4 rounded-full flex items-center justify-center text-[9px] mt-0.5 shrink-0 border transition-all ${
-                          isSelected ? "bg-emerald-600 border-emerald-600 text-white" : "border-slate-300 bg-white"
+                        className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] mt-0.5 shrink-0 border transition-all ${
+                          isSelected ? "bg-emerald-600 border-emerald-600 text-white shadow-2xs" : "border-slate-300 bg-white"
                         }`}
                       >
-                        {isSelected && <FaCheck />}
+                        {isSelected ? <FaCheck size={8} /> : "+"}
                       </div>
                       <div className="min-w-0">
                         <div className="text-xs font-bold text-slate-900 truncate leading-tight">{mod.name}</div>
@@ -1762,7 +2041,7 @@ export default function TenantApprovalPage({
                     <button
                       type="button"
                       onClick={() => toggleModule(mod.id)}
-                      className={`px-2 py-0.5 rounded text-[10px] font-bold shrink-0 transition-all cursor-pointer ${
+                      className={`px-2.5 py-1 rounded-lg text-[10px] font-bold shrink-0 transition-all cursor-pointer ${
                         isSelected
                           ? "bg-gradient-to-r from-emerald-600 to-teal-600 text-white hover:from-emerald-700 hover:to-teal-700 shadow-2xs"
                           : "bg-gradient-to-r from-rose-50 to-red-50 text-rose-700 hover:from-rose-100 hover:to-red-100 border border-rose-200"
@@ -1772,13 +2051,13 @@ export default function TenantApprovalPage({
                     </button>
                   </div>
 
-                  <div className="flex items-center justify-between pt-1 border-t border-slate-200/50 text-[10px] text-slate-400">
-                    <span>{mod.categoryLabel} • {mod.subModulesCount} routes</span>
+                  <div className="flex items-center justify-between pt-1.5 border-t border-slate-200/50 text-[10px] text-slate-400">
+                    <span className="font-medium text-slate-500">{mod.categoryLabel} • {mod.subModulesCount} routes</span>
                     {mod.subModules.length > 1 && (
                       <button
                         type="button"
                         onClick={() => setExpandedApprovalModId(isExpanded ? null : mod.id)}
-                        className="text-blue-600 hover:underline font-medium cursor-pointer"
+                        className="text-blue-600 hover:underline font-bold cursor-pointer"
                       >
                         {isExpanded ? "Hide routes" : "View routes"}
                       </button>
@@ -1797,6 +2076,37 @@ export default function TenantApprovalPage({
                 </div>
               );
             })}
+          </div>
+
+          {/* Bottom Grid Save Bar */}
+          <div className="pt-3 border-t border-slate-200/80 flex items-center justify-between flex-wrap gap-2">
+            <span className="text-xs text-slate-500">
+              Changes saved here immediately apply to the tenant account and active user sessions.
+            </span>
+            <div className="flex items-center gap-2">
+              {modulesChanged && (
+                <button
+                  type="button"
+                  onClick={handleDiscardModuleChanges}
+                  className="px-3.5 py-1.5 rounded-xl text-xs font-semibold text-slate-600 hover:text-slate-900 bg-white border border-slate-200 cursor-pointer"
+                >
+                  Discard Changes
+                </button>
+              )}
+              <button
+                type="button"
+                disabled={actionLoading || !modulesChanged}
+                onClick={handleSaveModulePermissions}
+                className={`px-5 py-2 rounded-xl text-xs font-bold text-white transition-all shadow-md flex items-center gap-2 cursor-pointer ${
+                  modulesChanged
+                    ? "bg-gradient-to-r from-blue-600 via-indigo-600 to-blue-700 hover:from-blue-700 hover:to-indigo-800 shadow-blue-500/25"
+                    : "bg-slate-200 text-slate-400 cursor-not-allowed shadow-none"
+                }`}
+              >
+                <FaSave size={12} />
+                <span>{actionLoading ? "Saving Permissions..." : "Save & Apply Permissions"}</span>
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -1820,7 +2130,6 @@ export default function TenantApprovalPage({
               </p>
             </div>
 
-            {/* Batch Branch Action Buttons */}
             {childBranches.length > 0 && (
               <div className="flex items-center gap-1.5">
                 <button
@@ -1885,7 +2194,6 @@ export default function TenantApprovalPage({
                           ● {cb.status || "Active"}
                         </span>
 
-                        {/* Suspend / Activate Branch Button */}
                         <button
                           type="button"
                           disabled={isBranchUpdating}
@@ -1904,7 +2212,6 @@ export default function TenantApprovalPage({
                           <span>{isBranchActive ? "Suspend Branch" : "Activate Branch"}</span>
                         </button>
 
-                        {/* View Full Dossier / Checkout Modal Button */}
                         <button
                           type="button"
                           onClick={() => openSubBranchDossier(cb)}
@@ -1991,11 +2298,10 @@ export default function TenantApprovalPage({
         </div>
       )}
 
-      {/* 6. MODAL: GIVE DAYS / REMOVE DAYS SUBSCRIPTION CONTROL (Light Gradient Background Only) */}
+      {/* 6. MODAL: GIVE DAYS / REMOVE DAYS SUBSCRIPTION CONTROL */}
       {showDaysModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-900/40 backdrop-blur-xs animate-in fade-in duration-150 overflow-y-auto">
           <div className="bg-gradient-to-b from-white via-slate-50/80 to-blue-50/20 rounded-2xl border border-slate-200/90 shadow-xl max-w-sm sm:max-w-md w-full p-4 sm:p-5 space-y-3.5 animate-in zoom-in-95 duration-150 max-h-[90vh] overflow-y-auto my-auto">
-            {/* Modal Header */}
             <div className="flex items-center justify-between pb-2 border-b border-slate-100">
               <div>
                 <h3 className="text-sm font-bold text-slate-900 tracking-tight">
@@ -2015,7 +2321,6 @@ export default function TenantApprovalPage({
               </button>
             </div>
 
-            {/* Section 1: ACTION SELECTOR TABS (Give Days vs Remove Days) */}
             <div>
               <label className="text-[10.5px] font-bold text-slate-500 uppercase tracking-wider block mb-1.5">
                 Subscription Action
@@ -2048,7 +2353,6 @@ export default function TenantApprovalPage({
               </div>
             </div>
 
-            {/* Section 2: QUICK CHIPS (Add or Remove) */}
             <div>
               <label className="text-[10.5px] font-bold text-slate-500 uppercase tracking-wider block mb-1.5">
                 {adjustmentAction === "add" ? "Quick Preset (Give Days)" : "Quick Preset (Remove Days)"}
@@ -2079,7 +2383,6 @@ export default function TenantApprovalPage({
                 })}
               </div>
 
-              {/* Input Box with + or — prefix */}
               <div className="relative border border-slate-200 rounded-xl bg-white focus-within:border-blue-500 focus-within:ring-1 focus-within:ring-blue-500/20">
                 <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-500">
                   {adjustmentAction === "add" ? "+" : "—"}
@@ -2103,7 +2406,6 @@ export default function TenantApprovalPage({
               </div>
             </div>
 
-            {/* LIVE PROJECTED EXPIRY FEEDBACK CARD (Light Gradient Background) */}
             <div className="p-3 rounded-xl bg-gradient-to-r from-slate-50 via-blue-50/40 to-indigo-50/30 border border-blue-100/80 space-y-1">
               <div className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
                 Live Projected Expiry Date
@@ -2127,7 +2429,6 @@ export default function TenantApprovalPage({
               </div>
             </div>
 
-            {/* Action Buttons */}
             <div className="flex flex-col-reverse sm:flex-row items-center justify-end gap-2 pt-1.5">
               <button
                 type="button"
@@ -2161,11 +2462,10 @@ export default function TenantApprovalPage({
         </div>
       )}
 
-      {/* 7. MODAL: FULL SUB-BRANCH DETAILS DOSSIER (Same comprehensive view as Head Office Checkout) */}
+      {/* 7. MODAL: FULL SUB-BRANCH DETAILS DOSSIER */}
       {selectedSubBranch && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-5 bg-slate-900/50 backdrop-blur-xs animate-in fade-in duration-150 overflow-y-auto">
           <div className="bg-gradient-to-b from-white via-slate-50/80 to-blue-50/20 rounded-2xl border border-slate-200 shadow-2xl max-w-2xl sm:max-w-3xl w-full p-5 space-y-4 animate-in zoom-in-95 duration-150 max-h-[92vh] overflow-y-auto my-auto text-slate-800">
-            {/* Modal Header */}
             <div className="flex items-start justify-between pb-3 border-b border-slate-200/80">
               <div className="flex items-center gap-3">
                 <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-teal-50 to-emerald-100 text-teal-800 border border-teal-200 flex items-center justify-center text-base font-black shadow-2xs">
@@ -2220,9 +2520,7 @@ export default function TenantApprovalPage({
               </div>
             </div>
 
-            {/* Grid of Sub-Branch Details Cards */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
-              {/* Card A: Branch Node Information */}
               <div className="p-3.5 rounded-xl bg-white border border-slate-200/80 shadow-2xs space-y-2">
                 <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
                   Branch Node & Hierarchy
@@ -2249,7 +2547,6 @@ export default function TenantApprovalPage({
                 </div>
               </div>
 
-              {/* Card B: Legal & Tax Identifiers */}
               <div className="p-3.5 rounded-xl bg-white border border-slate-200/80 shadow-2xs space-y-2">
                 <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
                   Tax & Licensing Credentials
@@ -2276,7 +2573,6 @@ export default function TenantApprovalPage({
                 </div>
               </div>
 
-              {/* Card C: Branch Contact / Admin */}
               <div className="p-3.5 rounded-xl bg-white border border-slate-200/80 shadow-2xs space-y-2 sm:col-span-2">
                 <div className="flex items-center justify-between">
                   <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
@@ -2319,9 +2615,61 @@ export default function TenantApprovalPage({
                   </div>
                 </div>
               </div>
+
+              {/* Branch Subscription Validity & Tenure Controls (Exact same controls as Head Office) */}
+              <div className="p-3.5 rounded-xl bg-gradient-to-r from-blue-50/60 via-indigo-50/40 to-slate-50 border border-blue-200/80 shadow-2xs space-y-2 sm:col-span-2">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <FaCalendarAlt className="text-blue-600 text-xs" />
+                      <span className="text-[11px] font-bold text-slate-900 uppercase tracking-wider">
+                        Subscription Validity & Tenure Controls
+                      </span>
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-300">
+                        ● {degradation.status}
+                      </span>
+                    </div>
+                    <p className="text-[10.5px] text-slate-500 mt-0.5">
+                      Sub-branch inherits enterprise tenure: <strong>{degradation.remainingDays} days remaining</strong> (Valid until {degradation.expiryFormatted})
+                    </p>
+                  </div>
+
+                  {/* Same Controls as Head Branch: + Give Days, - Remove Days, View Full Page */}
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => openDaysModal("add")}
+                      className="px-2.5 py-1 rounded-lg text-[10.5px] font-bold text-emerald-800 bg-emerald-50 hover:bg-emerald-100 border border-emerald-300 transition-all cursor-pointer flex items-center gap-1 shadow-2xs active:scale-95"
+                      style={{ backgroundColor: '#f0fdf4', color: '#065f46', borderColor: '#86efac' }}
+                      title="Add bonus validity days to enterprise subscription"
+                    >
+                      <FaPlus size={8} /> Give Days
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => openDaysModal("remove")}
+                      className="px-2.5 py-1 rounded-lg text-[10.5px] font-bold text-rose-800 bg-rose-50 hover:bg-rose-100 border border-rose-300 transition-all cursor-pointer flex items-center gap-1 shadow-2xs active:scale-95"
+                      style={{ backgroundColor: '#fff1f2', color: '#9f1239', borderColor: '#fca5a5' }}
+                      title="Deduct validity days from enterprise subscription"
+                    >
+                      <FaMinus size={8} /> Remove Days
+                    </button>
+                    {selectedSubBranch.adminUser?._id && (
+                      <Link
+                        href={`/dashboard/super-admin/approvals/${selectedSubBranch.adminUser._id}`}
+                        className="px-2.5 py-1 rounded-lg text-[10.5px] font-bold text-white bg-blue-600 hover:bg-blue-700 transition-all cursor-pointer inline-flex items-center gap-1 shadow-2xs active:scale-95"
+                        style={{ backgroundColor: '#2563eb', color: '#ffffff' }}
+                        title="Open dedicated branch approval page"
+                      >
+                        <FaEye size={9} /> View Full Page
+                      </Link>
+                    )}
+                  </div>
+                </div>
+              </div>
             </div>
 
-            {/* Sub-Branch Module Access Control (Clips with Individual Toggle & Head Office Sync) */}
+            {/* Sub-Branch Module Access Control */}
             <div className="p-4 rounded-xl bg-white border border-slate-200/80 shadow-2xs space-y-3">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                 <div>
@@ -2364,7 +2712,6 @@ export default function TenantApprovalPage({
                 </div>
               </div>
 
-              {/* Clips for Sub-Branch Modules */}
               <div className="flex flex-wrap gap-1.5 max-h-[180px] overflow-y-auto pt-1 pr-1">
                 {SUPER_ADMIN_SIDEBAR_MODULES.map((m) => {
                   const isGranted = selectedSubBranchModules.includes(m.id);
@@ -2392,7 +2739,6 @@ export default function TenantApprovalPage({
                 })}
               </div>
 
-              {/* Save Branch Modules Button */}
               <div className="flex justify-end pt-1">
                 <button
                   type="button"
@@ -2411,7 +2757,6 @@ export default function TenantApprovalPage({
               </div>
             </div>
 
-            {/* Modal Footer */}
             <div className="flex items-center justify-end pt-2 border-t border-slate-200/80">
               <button
                 type="button"
@@ -2421,6 +2766,50 @@ export default function TenantApprovalPage({
                 Close Dossier
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* 8. FLOATING STICKY ACTION BAR FOR UNSAVED PERMISSIONS */}
+      {modulesChanged && (
+        <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-40 w-11/12 max-w-2xl bg-white/95 backdrop-blur-md border-2 border-blue-500/80 shadow-2xl rounded-2xl p-3 px-4 flex items-center justify-between gap-3 animate-in slide-in-from-bottom-4 duration-200">
+          <div className="flex items-center gap-2.5">
+            <span className="w-2.5 h-2.5 rounded-full bg-amber-500 animate-pulse" />
+            <div className="text-xs">
+              <span className="font-bold text-slate-900 block">
+                Unsaved Permission Changes Pending
+              </span>
+              <span className="text-[11px] text-slate-500">
+                {enabledModules.length} modules selected ({Math.abs(enabledModules.length - userModules.length)} modified)
+              </span>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={handleDiscardModuleChanges}
+              className="px-3 py-1.5 rounded-xl text-xs font-semibold text-slate-600 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 transition-colors cursor-pointer"
+            >
+              Discard
+            </button>
+            <button
+              type="button"
+              disabled={actionLoading}
+              onClick={handleSaveModulePermissions}
+              className="px-4 py-1.5 rounded-xl text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 shadow-md shadow-blue-500/30 transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+              style={{ backgroundColor: '#2563eb', color: '#ffffff' }}
+            >
+              {actionLoading ? (
+                <>
+                  <FaSync className="animate-spin text-xs" /> Saving...
+                </>
+              ) : (
+                <>
+                  <FaSave size={12} /> Save Permissions Now
+                </>
+              )}
+            </button>
           </div>
         </div>
       )}

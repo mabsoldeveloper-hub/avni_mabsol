@@ -6,6 +6,12 @@ export default function LogoutButton() {
   const router = useRouter();
 
   const logout = async () => {
+    if (typeof window !== "undefined") {
+      try {
+        localStorage.removeItem("mabsol_selected_company");
+        document.cookie = "mabsol_selected_company_id=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT";
+      } catch {}
+    }
     await fetch("/api/auth/logout", {
       method: "POST",
     });

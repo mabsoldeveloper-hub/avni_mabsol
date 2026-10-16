@@ -88,38 +88,27 @@ export function CompanyProvider({ children }: { children: React.ReactNode }) {
 
       let chosen: CompanyType | null = null;
 
-      // 1. If user is assigned to a specific company (and not SuperAdmin), their assigned company takes precedence!
-      const currentAssignedId = userCompIdRef.current;
-      const isSuper = Boolean(
-        user?.isSuperAdmin ||
-        user?.roleType === "SuperAdmin" ||
-        user?.role === "SuperAdmin" ||
-        user?.email?.toLowerCase() === "mabsoldeveloper@gmail.com"
-      );
-
-      if (currentAssignedId && !isSuper) {
-        const userMatch = data.find((c) => String(c._id) === String(currentAssignedId));
-        if (userMatch) chosen = userMatch;
-      }
-
-      // 2. Check localStorage for saved company selection (SuperAdmin or Head Office switching)
-      if (!chosen && savedStr) {
+      // 1. If user previously chose a company in localStorage (and it is in accessible companies), preserve that selection!
+      if (savedStr) {
         try {
           const parsed = JSON.parse(savedStr);
-          const match = data.find((c) => c._id === parsed._id || c.companyCode === parsed.companyCode);
+          const match = data.find(
+            (c) => String(c._id) === String(parsed._id) || c.companyCode === parsed.companyCode
+          );
           if (match) {
             chosen = match;
           }
         } catch {}
       }
 
-      // 3. Fallback to assigned company if not yet chosen
+      // 2. Fallback to assigned company if no saved selection
+      const currentAssignedId = userCompIdRef.current;
       if (!chosen && currentAssignedId) {
         const userMatch = data.find((c) => String(c._id) === String(currentAssignedId));
         if (userMatch) chosen = userMatch;
       }
 
-      // 4. Fallback to default company or first
+      // 3. Fallback to default company or first available
       if (!chosen) {
         chosen =
           data.find((c) => c.isDefault) ||
@@ -131,7 +120,7 @@ export function CompanyProvider({ children }: { children: React.ReactNode }) {
         setSelectedCompanyState((prev: any) => {
           const isIdentical =
             prev &&
-            prev._id === chosen?._id &&
+            String(prev._id) === String(chosen?._id) &&
             JSON.stringify(prev.enabledModules) === JSON.stringify(chosen?.enabledModules) &&
             prev.status === chosen?.status &&
             prev.companyName === chosen?.companyName;
@@ -141,6 +130,7 @@ export function CompanyProvider({ children }: { children: React.ReactNode }) {
           if (typeof window !== "undefined") {
             try {
               localStorage.setItem("mabsol_selected_company", JSON.stringify(chosen));
+              document.cookie = `mabsol_selected_company_id=${chosen._id}; path=/; max-age=31536000; SameSite=Lax`;
             } catch {}
           }
           return chosen;
@@ -157,10 +147,30 @@ export function CompanyProvider({ children }: { children: React.ReactNode }) {
     fetchCompanies();
   }, [fetchCompanies, userCompId]);
 
+  useEffect(() => {
+    const handlePermissionsUpdated = () => {
+      fetchCompanies();
+    };
+    const handleStorage = (e: StorageEvent) => {
+      if (e.key === "mabsol_permissions_version" || e.key === "mabsol_user") {
+        fetchCompanies();
+      }
+    };
+    window.addEventListener("mabsol-permissions-updated", handlePermissionsUpdated);
+    window.addEventListener("storage", handleStorage);
+    return () => {
+      window.removeEventListener("mabsol-permissions-updated", handlePermissionsUpdated);
+      window.removeEventListener("storage", handleStorage);
+    };
+  }, [fetchCompanies]);
+
   const changeSelectedCompany = useCallback((company: CompanyType) => {
     setSelectedCompanyState(company);
     if (typeof window !== "undefined") {
-      localStorage.setItem("mabsol_selected_company", JSON.stringify(company));
+      try {
+        localStorage.setItem("mabsol_selected_company", JSON.stringify(company));
+        document.cookie = `mabsol_selected_company_id=${company._id}; path=/; max-age=31536000; SameSite=Lax`;
+      } catch {}
       window.dispatchEvent(new CustomEvent("company-changed", { detail: company }));
     }
   }, []);

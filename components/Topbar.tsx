@@ -339,14 +339,15 @@ export default function Topbar({
         )}
 
         {/* SUPER ADMIN BADGE OR COMPANY & FY SELECTORS */}
-        {checkIsSuperAdmin(user) ? (
-          <div className="flex items-center gap-2">
-            <div className="w-8.5 h-8.5 rounded-xl bg-amber-50 border border-amber-200/80 text-amber-700 flex items-center justify-center shrink-0 shadow-2xs">
-              <Building2 size={15} />
+        <div className="flex items-center gap-1.5 sm:gap-2 min-w-0">
+          {checkIsSuperAdmin(user) && (
+            <div
+              className="w-8 h-8 rounded-xl bg-amber-50 border border-amber-200/80 text-amber-700 flex items-center justify-center shrink-0 shadow-2xs"
+              title="Super Administrator / System Owner Console"
+            >
+              <Building2 size={14} />
             </div>
-          </div>
-        ) : (
-          <div className="flex items-center gap-1.5 sm:gap-2 min-w-0">
+          )}
             {/* COMPANY CUSTOM DROPDOWN SWITCHER */}
             <div className="relative inline-block" ref={companyMenuRef}>
               <button
@@ -458,7 +459,9 @@ export default function Topbar({
                         );
                       })
                       .map((c) => {
-                        const isSelected = selectedCompany?._id === c._id;
+                        const isSelected =
+                          selectedCompany?._id === c._id ||
+                          String(selectedCompany?._id) === String(c._id);
                         return (
                           <button
                             key={c._id}
@@ -664,8 +667,7 @@ export default function Topbar({
               )}
             </div>
           </div>
-        )}
-      </div>
+        </div>
 
       {/* CENTER GLOBAL SEARCH INPUT (Desktop / Tablet) */}
       <div

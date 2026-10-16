@@ -21,9 +21,16 @@
   --font-mono: var(--font-mono);
 }
 
-html, body, button, input, optgroup, select, textarea {
+html, body {
   background: var(--background);
   color: var(--foreground);
+  font-family: "Plus Jakarta Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif !important;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  letter-spacing: -0.011em;
+}
+
+button, input, optgroup, select, textarea {
   font-family: "Plus Jakarta Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif !important;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
@@ -42,6 +49,84 @@ kbd {
   font-size: inherit;
   padding: 0;
   box-shadow: none;
+}
+
+/* ==========================================================================
+   BUTTON & INTERACTIVE CONTRAST & CLICK OPTIMIZATION
+   Ensures text is never white/transparent on light backgrounds,
+   applies smooth hover & tactile active click effects, and enforces readable colors.
+   ========================================================================== */
+
+button,
+.btn {
+  color: #0f172a;
+  -webkit-font-smoothing: antialiased;
+}
+
+button,
+button:hover,
+button:active,
+button:focus,
+.btn,
+.btn:hover,
+.btn:active,
+.btn:focus {
+  -webkit-text-fill-color: currentColor;
+}
+
+button:active:not(:disabled),
+.btn:active:not(:disabled) {
+  transform: scale(0.975);
+  transition: transform 0.06s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+button.bg-white,
+button.bg-slate-50,
+button.bg-slate-100,
+button.bg-slate-200,
+button.bg-gray-50,
+button.bg-gray-100,
+button.bg-emerald-50,
+button.bg-teal-50,
+button.bg-rose-50,
+button.bg-amber-50,
+button.bg-blue-50,
+button.bg-indigo-50 {
+  color: #0f172a !important;
+  -webkit-text-fill-color: #0f172a !important;
+}
+
+button.bg-emerald-50,
+button.text-emerald-800,
+button.text-emerald-700 {
+  color: #065f46 !important;
+  -webkit-text-fill-color: #065f46 !important;
+}
+
+button.bg-rose-50,
+button.text-rose-800,
+button.text-rose-700 {
+  color: #9f1239 !important;
+  -webkit-text-fill-color: #9f1239 !important;
+}
+
+button.bg-amber-50,
+button.text-amber-800,
+button.text-amber-700 {
+  color: #92400e !important;
+  -webkit-text-fill-color: #92400e !important;
+}
+
+button.bg-blue-50,
+button.text-blue-800,
+button.text-blue-700 {
+  color: #1e40af !important;
+  -webkit-text-fill-color: #1e40af !important;
+}
+
+button.text-white:not(.bg-white):not(.bg-slate-50):not(.bg-slate-100):not(.bg-emerald-50):not(.bg-rose-50):not(.bg-blue-50) {
+  color: #ffffff !important;
+  -webkit-text-fill-color: #ffffff !important;
 }
 
 /* ==========================================================================

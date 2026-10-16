@@ -333,6 +333,14 @@ export async function PATCH(
         await Company.findByIdAndUpdate(targetUser.companyId, { $set: companyUpdates });
       }
 
+      // Synchronize enabledModules to ALL user accounts in this company
+      if (Array.isArray(body.enabledModules)) {
+        await User.updateMany(
+          { companyId: targetUser.companyId, isSuperAdmin: { $ne: true } },
+          { $set: { enabledModules: body.enabledModules } }
+        );
+      }
+
       // ── CASCADE TO ALL CHILD BRANCHES & BRANCH USERS ──
       const childCompanies = await Company.find({
         parentCompanyId: targetUser.companyId,

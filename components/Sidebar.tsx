@@ -204,8 +204,18 @@ export default function Sidebar({ collapsed, setCollapsed, mobile }: SidebarProp
     };
 
     window.addEventListener("menu-settings-changed", handleMenuChanged);
+    window.addEventListener("mabsol-permissions-updated", handleMenuChanged);
+    const handleStorage = (e: StorageEvent) => {
+      if (e.key === "mabsol_permissions_version" || e.key === "mabsol_user") {
+        loadMenuAdjustments();
+      }
+    };
+    window.addEventListener("storage", handleStorage);
+
     return () => {
       window.removeEventListener("menu-settings-changed", handleMenuChanged);
+      window.removeEventListener("mabsol-permissions-updated", handleMenuChanged);
+      window.removeEventListener("storage", handleStorage);
     };
   }, [loadMenuAdjustments]);
 

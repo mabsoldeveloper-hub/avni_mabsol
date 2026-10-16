@@ -651,7 +651,7 @@ export async function GET(req: Request) {
     const supportCodes = Array.from(
       new Set(
         customers
-          .map((c: any) => clean(c?.ORDNO))
+          .flatMap((c: any) => [clean(c?.ORDNO), clean(c?.CODEP), clean(c?.SCODE)])
           .filter(Boolean)
           .map((code: string) => code.toUpperCase())
       )
@@ -664,11 +664,12 @@ export async function GET(req: Request) {
      */
     const supportCollection = mongoose.connection.collection("vfp_new_folder_support");
 
+    const supportCodesLower = supportCodes.map((c) => c.toLowerCase());
     const supportRows: any[] = supportCodes.length
       ? await supportCollection
           .find(
             {
-              LCODE: { $in: supportCodes },
+              LCODE: { $in: [...supportCodes, ...supportCodesLower] },
               SNO: { $in: [2, "2"] },
               _vfpDeleted: { $ne: true },
             },
@@ -1092,13 +1093,20 @@ export async function GET(req: Request) {
 
       const customerCodep = clean(c.CODEP);
 
-      // MARG: ORDER.ORDNO === SUPPORT.LCODE and SUPPORT.SNO === 2
+      // MARG: ORDER.ORDNO / CODEP / SCODE === SUPPORT.LCODE and SUPPORT.SNO === 2
+      const adminPattern = /admin\.mabsolinfotech|support@mabsolinfotech/i;
+      const candidateEmail = clean(c.EMAIL).toUpperCase();
+      const mailName = clean(c.MAILNAM).toUpperCase();
+      const fallbackEmail =
+        candidateEmail.includes("@") && !adminPattern.test(candidateEmail) && candidateEmail !== mailName
+          ? candidateEmail
+          : "";
+
       const customerEmail =
-        (clean(c.EMAIL).includes("@") ? clean(c.EMAIL).toUpperCase() : "") ||
-        // (clean(c.MAILNAM).includes("@") ? clean(c.MAILNAM).toUpperCase() : "") ||
         supportEmailMap.get(customerOrdno.toUpperCase()) ||
         supportEmailMap.get(customerCodep.toUpperCase()) ||
-        "";
+        supportEmailMap.get(clean(c.SCODE).toUpperCase()) ||
+        fallbackEmail;
 
 
 

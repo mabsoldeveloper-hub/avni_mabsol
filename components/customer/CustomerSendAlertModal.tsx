@@ -18,6 +18,8 @@ import {
   FaPhoneAlt,
   FaCog,
 } from "react-icons/fa";
+import { useCompany } from "@/context/CompanyContext";
+import { useUser } from "@/context/UserContext";
 
 interface Props {
   isOpen: boolean;
@@ -41,6 +43,10 @@ export default function CustomerSendAlertModal({
   const [copied, setCopied] = useState(false);
   const [feedback, setFeedback] = useState<{ type: "success" | "error" | "info"; message: string } | null>(null);
   const [directWhatsAppUrl, setDirectWhatsAppUrl] = useState("");
+
+  const { selectedCompany } = useCompany();
+  const { user } = useUser();
+  const activeCompanyName = (selectedCompany?.companyName || user?.companyName || "Our Company").trim();
 
   const balance = Number(customer?.BALANCE ?? customer?.FINAL ?? 0);
   const credit = Number(customer?.CREDIT ?? 0);
@@ -76,11 +82,15 @@ export default function CustomerSendAlertModal({
   useEffect(() => {
     if (isOpen && customer) {
       setRecipientPhone(customer?.PHONE1 || customer?.PHONE2 || "");
-      const resolvedEmail = (
+      const rawEmail = (
         customer?.EMAIL && customer?.EMAIL !== "NO EMAIL"
           ? String(customer.EMAIL)
           : ""
       ).trim();
+      const isAdminOrMailnam =
+        /admin\.mabsolinfotech|support@mabsolinfotech/i.test(rawEmail) ||
+        (customer?.MAILNAM && rawEmail.toLowerCase() === String(customer.MAILNAM).trim().toLowerCase());
+      const resolvedEmail = !isAdminOrMailnam ? rawEmail : "";
       setRecipientEmail(resolvedEmail);
       setFeedback(null);
     }
@@ -107,18 +117,18 @@ export default function CustomerSendAlertModal({
 
     if (alertType === "credit_limit") {
       setCustomMessage(
-        `📢 *URGENT: CREDIT LIMIT EXCEEDED ALERT*\nDear *${customerName}*,\n\nThis is an important update regarding your account with *Mabsol Healthcare*:\n\n• *Current Outstanding Balance:* ₹${balance.toLocaleString("en-IN")}\n• *Sanctioned Credit Limit:* ₹${credit.toLocaleString("en-IN")}\n${excess > 0 ? `• *Excess Amount Over Limit:* ₹${excess.toLocaleString("en-IN")} ⚠️\n` : ""}• *Credit Days Term:* ${dueDays} Days\n\n⚠️ *Notice:* Your account balance has exceeded the sanctioned credit limit. Please arrange for prompt payment clearance to avoid order dispatch delays or account holds.\n\nFor payment confirmations or bank account details, please contact our accounts department.\nThank you!`
+        `📢 *URGENT: CREDIT LIMIT EXCEEDED ALERT*\nDear *${customerName}*,\n\nThis is an important update regarding your account with *${activeCompanyName}*:\n\n• *Current Outstanding Balance:* ₹${balance.toLocaleString("en-IN")}\n• *Sanctioned Credit Limit:* ₹${credit.toLocaleString("en-IN")}\n${excess > 0 ? `• *Excess Amount Over Limit:* ₹${excess.toLocaleString("en-IN")} ⚠️\n` : ""}• *Credit Days Term:* ${dueDays} Days\n\n⚠️ *Notice:* Your account balance has exceeded the sanctioned credit limit. Please arrange for prompt payment clearance to avoid order dispatch delays or account holds.\n\nFor payment confirmations or bank account details, please contact our accounts department.\nThank you!`
       );
     } else if (alertType === "bill_limit") {
       setCustomMessage(
-        `📑 *ALERT: INVOICE COUNT LIMIT EXCEEDED*\nDear *${customerName}*,\n\nGreetings from *Mabsol Healthcare*.\n\n• *Current Pending Invoices:* ${totalPendingBills || "Multiple"} Bills\n• *Allowed Bill Limit:* ${billLimit || "Sanctioned"} Bills\n• *Total Outstanding Balance:* ₹${balance.toLocaleString("en-IN")}\n\n⚠️ *Notice:* The number of pending invoices in your account has exceeded the allowed credit limit. Please settle prior outstanding bills to enable processing of new orders.\n\nThank you!`
+        `📑 *ALERT: INVOICE COUNT LIMIT EXCEEDED*\nDear *${customerName}*,\n\nGreetings from *${activeCompanyName}*.\n\n• *Current Pending Invoices:* ${totalPendingBills || "Multiple"} Bills\n• *Allowed Bill Limit:* ${billLimit || "Sanctioned"} Bills\n• *Total Outstanding Balance:* ₹${balance.toLocaleString("en-IN")}\n\n⚠️ *Notice:* The number of pending invoices in your account has exceeded the allowed credit limit. Please settle prior outstanding bills to enable processing of new orders.\n\nThank you!`
       );
     } else {
       setCustomMessage(
-        `⏰ *PAYMENT REMINDER - CREDIT TERM EXPIRING SOON*\nDear *${customerName}*,\n\nGreetings from *Mabsol Healthcare*.\n\n• *Credit Days Term:* ${dueDays} Days\n• *Days Remaining:* ${minDaysRemaining > 0 ? `${minDaysRemaining} Days Remaining` : "Due Date Passed"}\n• *Pending Outstanding Balance:* ₹${balance.toLocaleString("en-IN")}\n\n⚠️ *Notice:* The credit term for your outstanding invoices is expiring shortly. Please ensure timely payment clearance for uninterrupted order supplies and a healthy credit ledger.\n\nThank you!`
+        `⏰ *PAYMENT REMINDER - CREDIT TERM EXPIRING SOON*\nDear *${customerName}*,\n\nGreetings from *${activeCompanyName}*.\n\n• *Credit Days Term:* ${dueDays} Days\n• *Days Remaining:* ${minDaysRemaining > 0 ? `${minDaysRemaining} Days Remaining` : "Due Date Passed"}\n• *Pending Outstanding Balance:* ₹${balance.toLocaleString("en-IN")}\n\n⚠️ *Notice:* The credit term for your outstanding invoices is expiring shortly. Please ensure timely payment clearance for uninterrupted order supplies and a healthy credit ledger.\n\nThank you!`
       );
     }
-  }, [alertType, isOpen, customerName, balance, credit, excess, dueDays, billLimit, totalPendingBills, minDaysRemaining]);
+  }, [alertType, isOpen, customerName, balance, credit, excess, dueDays, billLimit, totalPendingBills, minDaysRemaining, activeCompanyName]);
 
   // Build live WhatsApp direct web/app URL whenever phone or message changes
   useEffect(() => {
@@ -173,6 +183,7 @@ export default function CustomerSendAlertModal({
           customMessage,
           recipientPhone: recipientPhone.trim(),
           recipientEmail: recipientEmail.trim(),
+          companyName: activeCompanyName,
         }),
       });
 

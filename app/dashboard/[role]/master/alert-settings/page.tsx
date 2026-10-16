@@ -11,6 +11,8 @@ import {
   FaEnvelope,
   FaWhatsapp,
   FaPlay,
+  FaPause,
+  FaPowerOff,
   FaSave,
   FaSpinner,
   FaCheckCircle,
@@ -127,6 +129,52 @@ export default function MasterAlertSettingsPage() {
         type: "error",
         message: err.message || "Error saving alert settings",
       });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleQuickToggleScheduler = async (turnOn: boolean) => {
+    setSaving(true);
+    setFeedback(null);
+    try {
+      const targetFrequency = turnOn
+        ? (form.scheduleFrequency === "disabled" ? "daily" : form.scheduleFrequency)
+        : "disabled";
+
+      const res = await fetch("/api/customers/alert-settings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "toggle_scheduler",
+          schedulerEnabled: turnOn,
+          scheduleFrequency: targetFrequency,
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.message || "Failed to update scheduler state");
+      }
+
+      setForm((prev) => ({
+        ...prev,
+        schedulerEnabled: turnOn,
+        scheduleFrequency: targetFrequency,
+      }));
+
+      setFeedback({
+        type: "success",
+        message: turnOn
+          ? "✅ Background Scheduler turned ON! Automated daily/interval notices are active."
+          : "⏸️ Background Scheduler STOPPED / OFF! Automated notices are paused.",
+      });
+
+      if (data.schedulerStatus) {
+        setSchedulerStatus(data.schedulerStatus);
+      }
+    } catch (err: any) {
+      setFeedback({ type: "error", message: err.message || "Failed to toggle scheduler" });
     } finally {
       setSaving(false);
     }
@@ -455,95 +503,194 @@ export default function MasterAlertSettingsPage() {
         </div>
 
         {/* 3. AUTOMATED BACKGROUND SCHEDULER (DAEMON) */}
-        <div className="p-5 rounded-2xl border border-indigo-200 bg-indigo-50/40 shadow-xs space-y-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2 text-indigo-900 font-bold text-xs sm:text-sm">
-              <FaCalendarAlt size={16} className="text-indigo-600" />
-              <span>Automated Background Scheduler Daemon</span>
-            </div>
-            <label className="relative inline-flex items-center cursor-pointer">
-              <input
-                type="checkbox"
-                checked={form.schedulerEnabled}
-                onChange={(e) => setForm({ ...form, schedulerEnabled: e.target.checked })}
-                className="sr-only peer"
-              />
-              <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600" />
-            </label>
-          </div>
+        {(() => {
+          const isSchedulerActive = form.schedulerEnabled && form.scheduleFrequency !== "disabled";
+          return (
+            <div
+              className={`p-5 rounded-2xl border transition-all shadow-xs space-y-4 ${
+                isSchedulerActive
+                  ? "border-indigo-200 bg-indigo-50/40"
+                  : "border-slate-200 bg-slate-50/90"
+              }`}
+            >
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="flex items-center gap-2.5">
+                  <div
+                    className={`p-2 rounded-xl shrink-0 ${
+                      isSchedulerActive
+                        ? "bg-indigo-600 text-white shadow-xs"
+                        : "bg-slate-300 text-slate-600"
+                    }`}
+                  >
+                    <FaCalendarAlt size={16} />
+                  </div>
+                  <div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="text-slate-900 font-bold text-xs sm:text-sm">
+                        Automated Background Scheduler
+                      </span>
+                      {isSchedulerActive ? (
+                        <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-emerald-100 text-emerald-800 border border-emerald-300 shadow-2xs">
+                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                          ACTIVE (RUNNING)
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-rose-100 text-rose-800 border border-rose-300 shadow-2xs">
+                          <span className="w-1.5 h-1.5 rounded-full bg-rose-500" />
+                          STOPPED (OFF)
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-[11px] text-slate-500 mt-0.5">
+                      {isSchedulerActive
+                        ? `Auto-evaluates customer ledger rules (Current: ${
+                            form.scheduleFrequency === "daily"
+                              ? `Daily at ${form.scheduledTime || "09:00 AM"}`
+                              : form.scheduleFrequency.replace(/_/g, " ")
+                          })`
+                        : "Scheduler is paused. No automated notices will run until you turn it back ON."}
+                    </p>
+                  </div>
+                </div>
 
-          <p className="text-xs text-slate-600 leading-relaxed">
-            The daemon runs in the background on your schedule, automatically evaluates all accounts, and dispatches notices to matching customers.
-          </p>
+                <div className="flex items-center gap-2.5 self-end sm:self-auto shrink-0">
+                  {isSchedulerActive ? (
+                    <button
+                      type="button"
+                      disabled={saving}
+                      onClick={() => handleQuickToggleScheduler(false)}
+                      className="px-3 py-1.5 text-xs font-bold text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-300 rounded-xl transition-all shadow-2xs flex items-center gap-1.5 active:scale-95 disabled:opacity-50"
+                      title="Pause / Turn OFF Background Scheduler"
+                    >
+                      <FaPause size={10} />
+                      <span>Turn OFF</span>
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      disabled={saving}
+                      onClick={() => handleQuickToggleScheduler(true)}
+                      className="px-3 py-1.5 text-xs font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-300 rounded-xl transition-all shadow-2xs flex items-center gap-1.5 active:scale-95 disabled:opacity-50"
+                      title="Start / Turn ON Background Scheduler"
+                    >
+                      <FaPlay size={10} />
+                      <span>Turn ON (09:00 AM)</span>
+                    </button>
+                  )}
 
-          {form.schedulerEnabled && (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2 border-t border-indigo-100">
-              {/* Frequency Selector */}
-              <div className="space-y-1.5">
-                <label className="text-xs font-bold text-slate-700 block">
-                  Execution Schedule:
-                </label>
-                <select
-                  value={form.scheduleFrequency}
-                  onChange={(e) => setForm({ ...form, scheduleFrequency: e.target.value })}
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-indigo-300 bg-white text-xs font-semibold text-slate-800 focus:ring-2 focus:ring-indigo-500"
-                >
-                  <option value="every_15_mins">Every 15 Minutes (Testing / Real-time)</option>
-                  <option value="hourly">Every 1 Hour</option>
-                  <option value="every_6_hours">Every 6 Hours</option>
-                  <option value="daily">Daily at Scheduled Time (09:00 AM - Recommended for Production)</option>
-                </select>
+                  <label className="relative inline-flex items-center cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={isSchedulerActive}
+                      onChange={(e) => {
+                        const nextChecked = e.target.checked;
+                        handleQuickToggleScheduler(nextChecked);
+                      }}
+                      className="sr-only peer"
+                    />
+                    <div className="w-11 h-6 bg-slate-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600 shadow-inner" />
+                  </label>
+                </div>
               </div>
 
-              {/* Dynamic Option based on Frequency */}
-              {form.scheduleFrequency === "every_15_mins" ? (
-                <div className="space-y-1.5">
-                  <label className="text-xs font-bold text-emerald-800 block">
-                    Real-Time Testing Mode:
-                  </label>
-                  <div className="p-2.5 rounded-xl bg-emerald-100/80 border border-emerald-300 text-emerald-900 text-xs">
-                    <p className="font-bold flex items-center gap-1.5">
-                      <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                      15-Minute Scan Active
+              {!isSchedulerActive ? (
+                <div className="p-4 rounded-xl bg-amber-50/90 border border-amber-200 text-amber-950 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 animate-in fade-in">
+                  <div className="space-y-0.5">
+                    <p className="text-xs font-bold flex items-center gap-1.5 text-amber-900">
+                      <FaShieldAlt className="text-amber-600" />
+                      Background Scheduler is currently STOPPED / OFF
                     </p>
-                    <p className="text-[11px] text-emerald-700 mt-0.5">
-                      24h spam cooldown is automatically bypassed so you can observe live alert delivery immediately.
+                    <p className="text-[11px] text-amber-800">
+                      Scheduled automated scans (such as 9:00 AM daily or interval scans) are stopped. No automated notices will be dispatched until you turn it back ON.
                     </p>
                   </div>
-                </div>
-              ) : form.scheduleFrequency === "daily" ? (
-                <div className="space-y-1.5">
-                  <label className="text-xs font-bold text-slate-700 block">
-                    Daily Run Time:
-                  </label>
-                  <input
-                    type="time"
-                    value={form.scheduledTime}
-                    onChange={(e) => setForm({ ...form, scheduledTime: e.target.value })}
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-indigo-300 bg-white text-xs font-bold text-slate-800 focus:ring-2 focus:ring-indigo-500"
-                  />
+                  <button
+                    type="button"
+                    disabled={saving}
+                    onClick={() => handleQuickToggleScheduler(true)}
+                    className="px-3.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-xs flex items-center gap-1.5 shrink-0 transition-colors"
+                  >
+                    <FaPlay size={10} /> Turn ON Scheduler
+                  </button>
                 </div>
               ) : (
-                <div className="space-y-1.5">
-                  <label className="text-xs font-bold text-slate-700 block">
-                    Spam Cooldown Window:
-                  </label>
-                  <div className="flex items-center gap-2">
-                    <input
-                      type="number"
-                      min="1"
-                      max="72"
-                      value={form.cooldownHours}
-                      onChange={(e) => setForm({ ...form, cooldownHours: Number(e.target.value || 24) })}
-                      className="w-24 px-3 py-2.5 rounded-xl border border-indigo-300 bg-white text-xs font-bold text-center"
-                    />
-                    <span className="text-xs text-slate-600">Hours per customer</span>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-3 border-t border-indigo-100 animate-in fade-in">
+                  {/* Frequency Selector */}
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-bold text-slate-700 block">
+                      Execution Schedule:
+                    </label>
+                    <select
+                      value={form.scheduleFrequency}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        if (val === "disabled") {
+                          handleQuickToggleScheduler(false);
+                        } else {
+                          setForm({ ...form, schedulerEnabled: true, scheduleFrequency: val });
+                        }
+                      }}
+                      className="w-full px-3.5 py-2.5 rounded-xl border border-indigo-300 bg-white text-xs font-semibold text-slate-800 focus:ring-2 focus:ring-indigo-500 shadow-2xs"
+                    >
+                      <option value="daily">Daily at Scheduled Time (09:00 AM - Recommended for Production)</option>
+                      <option value="every_15_mins">Every 15 Minutes (Testing / Real-time)</option>
+                      <option value="hourly">Every 1 Hour</option>
+                      <option value="every_6_hours">Every 6 Hours</option>
+                      <option value="disabled">⛔ Turn OFF / Disable Background Scheduler</option>
+                    </select>
                   </div>
+
+                  {/* Dynamic Option based on Frequency */}
+                  {form.scheduleFrequency === "every_15_mins" ? (
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-bold text-emerald-800 block">
+                        Real-Time Testing Mode:
+                      </label>
+                      <div className="p-2.5 rounded-xl bg-emerald-100/80 border border-emerald-300 text-emerald-900 text-xs">
+                        <p className="font-bold flex items-center gap-1.5">
+                          <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                          15-Minute Scan Active
+                        </p>
+                        <p className="text-[11px] text-emerald-700 mt-0.5">
+                          24h spam cooldown is automatically bypassed so you can observe live alert delivery immediately.
+                        </p>
+                      </div>
+                    </div>
+                  ) : form.scheduleFrequency === "daily" ? (
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-bold text-slate-700 block">
+                        Daily Run Time:
+                      </label>
+                      <input
+                        type="time"
+                        value={form.scheduledTime}
+                        onChange={(e) => setForm({ ...form, scheduledTime: e.target.value })}
+                        className="w-full px-3.5 py-2.5 rounded-xl border border-indigo-300 bg-white text-xs font-bold text-slate-800 focus:ring-2 focus:ring-indigo-500 shadow-2xs"
+                      />
+                    </div>
+                  ) : (
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-bold text-slate-700 block">
+                        Spam Cooldown Window:
+                      </label>
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="number"
+                          min="1"
+                          max="72"
+                          value={form.cooldownHours}
+                          onChange={(e) => setForm({ ...form, cooldownHours: Number(e.target.value || 24) })}
+                          className="w-24 px-3 py-2.5 rounded-xl border border-indigo-300 bg-white text-xs font-bold text-center"
+                        />
+                        <span className="text-xs text-slate-600">Hours per customer</span>
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
-          )}
-        </div>
+          );
+        })()}
 
         {/* 4. ADMIN / NOTIFICATION RECIPIENT EMAIL */}
         <div className="p-5 rounded-2xl border border-blue-200 bg-blue-50/50 shadow-xs space-y-3">

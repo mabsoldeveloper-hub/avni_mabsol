@@ -185,32 +185,72 @@ export async function GET(
 
     /* --------------------------------------------------------
        MARG CUSTOMER EMAIL LOOKUP
-       ORDER.ORDNO matches SUPPORT.LCODE and SUPPORT.SNO = 2
+       ORDER.ORDNO / CODEP / SCODE matches SUPPORT.LCODE and SUPPORT.SNO = 2
        Email is stored in SUPPORT.REMARK.
     -------------------------------------------------------- */
     let customerEmail = "";
-    const supportCode = (customerOrdno || customerCodep).toUpperCase();
-    if (supportCode) {
+    const possibleCodes = Array.from(
+      new Set(
+        [
+          customerOrdno,
+          customerCodep,
+          clean(customerDoc.SCODE),
+          clean(order?.ORDNO),
+          clean(order?.CODEP),
+        ]
+          .map((c) => c.toUpperCase())
+          .filter(Boolean)
+      )
+    );
+
+    if (possibleCodes.length > 0) {
       try {
         const supportCollection = mongoose.connection.collection("vfp_new_folder_support");
-        const supportRow: any = await supportCollection.findOne(
-          {
-            LCODE: supportCode,
-            SNO: { $in: [2, "2"] },
-            _vfpDeleted: { $ne: true },
-          },
-          {
-            projection: { LCODE: 1, SNO: 1, REMARK: 1 },
-          }
+        const regexList = possibleCodes.map(
+          (c) => new RegExp(`^\\s*${c.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\s*$`, "i")
         );
 
-        const remark = clean(supportRow?.REMARK);
-        if (remark) {
-          const emailMatch = remark.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i);
-          if (emailMatch?.[0]) {
-            customerEmail = emailMatch[0].trim().toUpperCase();
-          } else if (remark.includes("@")) {
-            customerEmail = remark.trim().toUpperCase();
+        const supportRows: any[] = await supportCollection
+          .find({
+            $or: [
+              { LCODE: { $in: possibleCodes } },
+              { LCODE: { $in: possibleCodes.map((c) => c.toLowerCase()) } },
+              { LCODE: { $in: regexList } },
+            ],
+            SNO: { $in: [2, "2"] },
+            _vfpDeleted: { $ne: true },
+          })
+          .toArray();
+
+        for (const row of supportRows) {
+          const remark = clean(row?.REMARK);
+          if (remark) {
+            const emailMatch = remark.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i);
+            if (emailMatch?.[0]) {
+              customerEmail = emailMatch[0].trim().toUpperCase();
+              break;
+            } else if (remark.includes("@")) {
+              customerEmail = remark.trim().toUpperCase();
+              break;
+            }
+          }
+        }
+
+        // Fallback: If not found in SNO=2, check any row with @ for these LCODEs
+        if (!customerEmail) {
+          const anySupportRow: any = await supportCollection.findOne({
+            $or: [
+              { LCODE: { $in: possibleCodes } },
+              { LCODE: { $in: regexList } },
+            ],
+            REMARK: { $regex: /@/ },
+            _vfpDeleted: { $ne: true },
+          });
+          if (anySupportRow?.REMARK) {
+            const emailMatch = clean(anySupportRow.REMARK).match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i);
+            if (emailMatch?.[0]) {
+              customerEmail = emailMatch[0].trim().toUpperCase();
+            }
           }
         }
       } catch (err) {
@@ -218,8 +258,14 @@ export async function GET(
       }
     }
 
+    // Fallback: Only use Customer.EMAIL if not an admin/support email or MAILNAM
+    const adminEmailPattern = /admin\.mabsolinfotech|support@mabsolinfotech/i;
     if (!customerEmail && clean(customerDoc?.EMAIL).includes("@")) {
-      customerEmail = clean(customerDoc?.EMAIL).toUpperCase();
+      const candidate = clean(customerDoc?.EMAIL).toUpperCase();
+      const mailName = clean(customerDoc?.MAILNAM).toUpperCase();
+      if (!adminEmailPattern.test(candidate) && candidate !== mailName) {
+        customerEmail = candidate;
+      }
     }
 
     /* --------------------------------------------------------
@@ -713,25 +759,38 @@ export async function PATCH(
     }
 
     // Also update Marg ERP support table (vfp_new_folder_support) for SNO = 2
-    const targetSupportCode = clean(existingCustomer.ORDNO || existingCustomer.CODEP).toUpperCase();
-    if (targetSupportCode && incomingEmail && incomingEmail.includes("@")) {
+    const targetSupportCodes = Array.from(
+      new Set(
+        [
+          clean(existingCustomer.ORDNO),
+          clean(existingCustomer.CODEP),
+          clean(existingCustomer.SCODE),
+        ]
+          .map((c) => c.toUpperCase())
+          .filter(Boolean)
+      )
+    );
+
+    if (targetSupportCodes.length > 0 && incomingEmail && incomingEmail.includes("@")) {
       try {
         const supportCollection = mongoose.connection.collection("vfp_new_folder_support");
-        await supportCollection.updateOne(
-          {
-            LCODE: targetSupportCode,
-            SNO: { $in: [2, "2"] },
-          },
-          {
-            $set: {
-              LCODE: targetSupportCode,
-              SNO: 2,
-              REMARK: incomingEmail,
-              _vfpDeleted: false,
+        for (const code of targetSupportCodes) {
+          await supportCollection.updateOne(
+            {
+              LCODE: code,
+              SNO: { $in: [2, "2"] },
             },
-          },
-          { upsert: true }
-        );
+            {
+              $set: {
+                LCODE: code,
+                SNO: 2,
+                REMARK: incomingEmail,
+                _vfpDeleted: false,
+              },
+            },
+            { upsert: true }
+          );
+        }
       } catch (supportErr: any) {
         console.warn("Failed to update support collection email:", supportErr.message);
       }

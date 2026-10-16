@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import connectDB from "@/lib/mongodb";
 import Customer from "@/models/Customer";
+import Company from "@/models/Company";
 import Notification from "@/models/Notification";
 import Pendings from "@/models/Pendings";
 import mongoose from "mongoose";
@@ -54,36 +55,74 @@ export async function POST(
     const customerName = (customer.PARNAM || "Valued Customer").trim();
     const phone = body.recipientPhone || customer.PHONE1 || customer.PHONE2 || "";
     
-    // Resolve email address strictly (body.recipientEmail -> Marg support collection -> customer.EMAIL)
-    let email = "";
-    if (typeof body.recipientEmail === "string" && body.recipientEmail.includes("@")) {
-      email = body.recipientEmail.trim();
-    }
+    // First, lookup Marg ERP support collection email (SNO=2, REMARK)
+    let supportEmail = "";
+    const possibleCodes = Array.from(
+      new Set(
+        [
+          String(customer.ORDNO || ""),
+          String(customer.CODEP || ""),
+          String(customer.SCODE || ""),
+        ]
+          .map((c) => c.trim().toUpperCase())
+          .filter(Boolean)
+      )
+    );
 
-    if (!email) {
-      const supportCode = String(customer.ORDNO || customer.CODEP || "").trim().toUpperCase();
-      if (supportCode) {
-        try {
-          const supportCollection = mongoose.connection.collection("vfp_new_folder_support");
-          const supportRow: any = await supportCollection.findOne({
-            LCODE: supportCode,
+    if (possibleCodes.length > 0) {
+      try {
+        const supportCollection = mongoose.connection.collection("vfp_new_folder_support");
+        const regexList = possibleCodes.map(
+          (c) => new RegExp(`^\\s*${c.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\s*$`, "i")
+        );
+
+        const supportRows: any[] = await supportCollection
+          .find({
+            $or: [
+              { LCODE: { $in: possibleCodes } },
+              { LCODE: { $in: possibleCodes.map((c) => c.toLowerCase()) } },
+              { LCODE: { $in: regexList } },
+            ],
             SNO: { $in: [2, "2"] },
             _vfpDeleted: { $ne: true },
-          });
-          const remark = String(supportRow?.REMARK || "").trim();
-          const match = remark.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i);
-          if (match?.[0]) {
-            email = match[0].trim();
-          } else if (remark.includes("@")) {
-            email = remark;
+          })
+          .toArray();
+
+        for (const row of supportRows) {
+          const remark = String(row?.REMARK || "").trim();
+          if (remark) {
+            const match = remark.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i);
+            if (match?.[0]) {
+              supportEmail = match[0].trim();
+              break;
+            } else if (remark.includes("@")) {
+              supportEmail = remark;
+              break;
+            }
           }
-        } catch (supErr: any) {
-          console.warn("Support email lookup error in alert route:", supErr.message);
         }
+      } catch (supErr: any) {
+        console.warn("Support email lookup error in alert route:", supErr.message);
       }
     }
 
-    if (!email && typeof customer.EMAIL === "string" && customer.EMAIL.includes("@")) {
+    // Determine final recipient email: supportEmail > clean custom body.recipientEmail > customer.EMAIL
+    let email = "";
+    const adminPattern = /admin\.mabsolinfotech|support@mabsolinfotech/i;
+
+    if (
+      typeof body.recipientEmail === "string" &&
+      body.recipientEmail.includes("@") &&
+      !adminPattern.test(body.recipientEmail)
+    ) {
+      email = body.recipientEmail.trim();
+    } else if (supportEmail) {
+      email = supportEmail;
+    } else if (
+      typeof customer.EMAIL === "string" &&
+      customer.EMAIL.includes("@") &&
+      !adminPattern.test(customer.EMAIL)
+    ) {
       email = customer.EMAIL.trim();
     }
 
@@ -109,6 +148,22 @@ export async function POST(
       console.warn("Could not fetch pending bills count:", e);
     }
 
+    // Resolve sender company name (from request body or Company collection)
+    let senderCompanyName = (typeof body.companyName === "string" ? body.companyName : "").trim();
+    if (!senderCompanyName) {
+      try {
+        const compDoc: any =
+          (await Company.findOne({ isHeadOffice: true }).lean()) ||
+          (await Company.findOne().lean());
+        if (compDoc?.companyName) {
+          senderCompanyName = String(compDoc.companyName).trim();
+        }
+      } catch (e) {}
+    }
+    if (!senderCompanyName) {
+      senderCompanyName = "Mabsol Infotech Private Limited";
+    }
+
     // Build standard alert message if customMessage is not supplied
     let messageText = customMessage;
     if (!messageText) {
@@ -116,7 +171,7 @@ export async function POST(
         messageText = `📢 *URGENT: CREDIT LIMIT EXCEEDED ALERT*
 Dear *${customerName}*,
 
-This is an important update regarding your account with *Mabsol Healthcare*:
+This is an important update regarding your account with *${senderCompanyName}*:
 
 • *Current Outstanding Balance:* ₹${balance.toLocaleString("en-IN")}
 • *Sanctioned Credit Limit:* ₹${credit.toLocaleString("en-IN")}
@@ -130,7 +185,7 @@ Thank you!`;
         messageText = `📑 *ALERT: NUMBER OF BILLS LIMIT EXCEEDED*
 Dear *${customerName}*,
 
-Greetings from *Mabsol Healthcare*.
+Greetings from *${senderCompanyName}*.
 
 • *Current Pending Invoices:* ${totalPendingBills || "Multiple"} Bills
 • *Allowed Bill Limit:* ${billLimit || "Sanctioned"} Bills
@@ -143,7 +198,7 @@ Thank you!`;
         messageText = `⏰ *PAYMENT REMINDER - CREDIT TERM EXPIRING SOON*
 Dear *${customerName}*,
 
-Greetings from *Mabsol Healthcare*.
+Greetings from *${senderCompanyName}*.
 
 • *Credit Term Allowed:* ${dueDays} Days
 • *Pending Outstanding Balance:* ₹${balance.toLocaleString("en-IN")}
@@ -155,7 +210,7 @@ Thank you!`;
         messageText = `📋 *ACCOUNT STATEMENT & PAYMENT UPDATE*
 Dear *${customerName}*,
 
-Here is your current account balance summary with *Mabsol Healthcare*:
+Here is your current account balance summary with *${senderCompanyName}*:
 
 • *Total Outstanding Balance:* ₹${balance.toLocaleString("en-IN")}
 • *Sanctioned Credit Limit:* ₹${credit.toLocaleString("en-IN")}
@@ -229,7 +284,7 @@ Thank you!`;
       try {
         const emailHtml = `
           <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e2e8f0; border-radius: 12px;">
-            <h2 style="color: #343872; margin-top: 0;">Account & Payment Alert</h2>
+            <h2 style="color: #343872; margin-top: 0;">${senderCompanyName} — Account & Payment Alert</h2>
             <p>Dear <strong>${customerName}</strong>,</p>
             <div style="background-color: #f8fafc; border-left: 4px solid #f43f5e; padding: 15px; margin: 20px 0;">
               <p style="margin: 5px 0;"><strong>Outstanding Balance:</strong> ₹${balance.toLocaleString("en-IN")}</p>
@@ -240,13 +295,13 @@ Thank you!`;
             </div>
             <p style="white-space: pre-line;">${messageText}</p>
             <hr style="border: 0; border-top: 1px solid #e2e8f0; margin: 20px 0;" />
-            <p style="color: #64748b; font-size: 12px;">This is an automated communication from Mabsol Healthcare ERP & CRM system.</p>
+            <p style="color: #64748b; font-size: 12px;">This is an automated communication from ${senderCompanyName} ERP & CRM system.</p>
           </div>
         `;
 
         const emailRes = await NotificationGatewayService.sendEmail({
           to: email,
-          subject: `⚠️ Account Alert: Payment & Credit Terms Notice - ${customerName}`,
+          subject: `⚠️ Account Alert: Payment & Credit Terms Notice - ${customerName} (${senderCompanyName})`,
           html: emailHtml,
           text: messageText,
         });

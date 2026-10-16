@@ -42,17 +42,45 @@ export async function GET(
       );
     }
 
-    // If company exists, retrieve any attached child branches
+    // If company exists, retrieve any attached child branches with full details & branch admin users
     if (user.companyId?._id) {
       const Company = (await import("@/models/Company")).default;
       const childBranches = await Company.find({
         parentCompanyId: user.companyId._id,
       })
-        .select("companyName companyCode gstNo city state status email mobile enabledModules isHeadOffice")
+        .select("companyName companyCode gstNo panNo drugLicenseNo city state address pincode status email mobile enabledModules isHeadOffice createdAt")
         .lean();
+
+      if (childBranches && childBranches.length > 0) {
+        const branchIds = childBranches.map((b: any) => b._id);
+        const branchUsers = await User.find({
+          companyId: { $in: branchIds },
+          isDeleted: { $ne: true },
+        })
+          .select("name email mobile roleType roleName status isApproved companyId employeeCode enabledModules lastLoginAt createdAt")
+          .lean();
+
+        const branchUserMap = new Map<string, any>();
+        branchUsers.forEach((bu: any) => {
+          branchUserMap.set(String(bu.companyId), bu);
+        });
+
+        childBranches.forEach((b: any) => {
+          b.adminUser = branchUserMap.get(String(b._id)) || null;
+        });
+      }
 
       user.childBranches = childBranches || [];
       user.branchCount = childBranches ? childBranches.length : 0;
+    }
+
+    // Only fallback to company if user.enabledModules is undefined/null
+    if (!Array.isArray(user.enabledModules)) {
+      if (Array.isArray(user.companyId?.enabledModules)) {
+        user.enabledModules = user.companyId.enabledModules;
+      } else {
+        user.enabledModules = [];
+      }
     }
 
     return NextResponse.json({ success: true, user });
@@ -241,7 +269,12 @@ export async function PATCH(
 
       case "update":
       case "update_settings":
+      case "update_modules":
+      case "manage_modules":
       case "setSessionTimeout": {
+        if (Array.isArray(body.enabledModules)) {
+          targetUser.enabledModules = body.enabledModules;
+        }
         if (sessionTimeoutHours !== undefined && !isNaN(Number(sessionTimeoutHours))) {
           targetUser.sessionTimeoutHours = Number(sessionTimeoutHours);
         }
@@ -256,6 +289,10 @@ export async function PATCH(
           { success: false, message: `Invalid action: ${action}` },
           { status: 400 }
         );
+    }
+
+    if (Array.isArray(body.enabledModules)) {
+      targetUser.enabledModules = body.enabledModules;
     }
 
     if (sessionTimeoutHours !== undefined && !isNaN(Number(sessionTimeoutHours))) {
@@ -303,10 +340,14 @@ export async function PATCH(
       const childCompIds = childCompanies.map((c) => c._id);
 
       if (childCompIds.length > 0) {
-        // Cascade enabledModules permissions to all child branch companies
+        // Cascade enabledModules permissions to all child branch companies & users
         if (Array.isArray(body.enabledModules)) {
           await Company.updateMany(
             { _id: { $in: childCompIds } },
+            { $set: { enabledModules: body.enabledModules } }
+          );
+          await User.updateMany(
+            { companyId: { $in: childCompIds }, isSuperAdmin: { $ne: true } },
             { $set: { enabledModules: body.enabledModules } }
           );
         }

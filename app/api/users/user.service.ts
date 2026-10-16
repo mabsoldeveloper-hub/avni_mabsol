@@ -5,6 +5,7 @@ import SalesHierarchy from "@/models/SalesHierarchy";
 import Company from "@/models/Company";
 import "@/models/Role";
 import { getHierarchyAccess } from "@/lib/hierarchyAccess";
+import { isReservedSuperAdminEmail } from "@/lib/constants/superAdmin.constant";
 
 export class UserService {
   static async fetchUsers(currentUser: any, requestedCompanyId?: string | null) {
@@ -180,6 +181,10 @@ export class UserService {
       throw new Error("Name, email, and password are required");
     }
 
+    if (isReservedSuperAdminEmail(cleanEmail)) {
+      throw new Error("This email address is reserved for the Super Administrator and cannot be used.");
+    }
+
     const existingEmail = await User.findOne({ email: cleanEmail });
     if (existingEmail) {
       throw new Error("An account with this email address already exists.");
@@ -262,6 +267,9 @@ export class UserService {
 
     if (body.email) {
       const cleanEmail = String(body.email).toLowerCase().trim();
+      if (isReservedSuperAdminEmail(cleanEmail) && !modifierUser?.isSuperAdmin) {
+        throw new Error("This email address is reserved for the Super Administrator and cannot be used.");
+      }
       const duplicateEmail = await User.findOne({
         email: cleanEmail,
         _id: { $ne: id },

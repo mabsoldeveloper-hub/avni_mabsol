@@ -23,6 +23,7 @@ function ApproveAdminsContent() {
     handleDelete,
     handleRestore,
     handlePermanentDelete,
+    handleAction,
     refetch,
   } = useSuperAdminData("pending");
 
@@ -100,6 +101,7 @@ function ApproveAdminsContent() {
           onDelete={handleDelete}
           onRestore={handleRestore}
           onPermanentDelete={handlePermanentDelete}
+          onSaveAccess={handleAction}
         />
       </div>
     </div>

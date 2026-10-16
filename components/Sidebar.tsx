@@ -307,24 +307,48 @@ export default function Sidebar({ collapsed, setCollapsed, mobile }: SidebarProp
   const iconOnly = collapsed && !mobile;
 
   // Filter items by visibility, company enabled modules, and user permissions
+  // Filter items by visibility, company enabled modules, and user permissions
   const visibleMenuItems = useMemo(() => {
-    const rawEnabled = (selectedCompany as any)?.enabledModules;
+    // SuperAdmin always sees all items
+    if (isSuperAdmin) {
+      return menuItems;
+    }
+
+    // 1. Determine raw enabled modules array from User or Company.
+    // Prioritize user's own enabledModules, then company's enabledModules.
+    let rawEnabled: string[] | null = null;
+    if (Array.isArray(currentUser?.enabledModules)) {
+      rawEnabled = currentUser.enabledModules;
+    } else if (Array.isArray(currentUser?.companyId?.enabledModules)) {
+      rawEnabled = currentUser.companyId.enabledModules;
+    } else if (Array.isArray((selectedCompany as any)?.enabledModules)) {
+      rawEnabled = (selectedCompany as any).enabledModules;
+    }
+
+    // Module restrictions strictly apply to all non-SuperAdmin users.
+    // If Super Admin has not granted any modules yet or revoked access, treat as empty []
+    const hasModuleRestrictions = !isSuperAdmin;
+    const effectiveEnabled = Array.isArray(rawEnabled) ? rawEnabled : [];
+
     const isChildBranch = Boolean(
       selectedCompany &&
       ((selectedCompany as any).isHeadOffice === false || (selectedCompany as any).parentCompanyId)
     );
 
-    // Normalize enabled modules array if defined and non-empty.
-    // If enabledModules is empty or undefined, NO module restrictions apply (all standard modules visible).
-    const hasModuleRestrictions =
-      Array.isArray(rawEnabled) && rawEnabled.length > 0 && !isSuperAdmin;
     const enabledSet = new Set<string>();
     if (hasModuleRestrictions) {
-      for (const m of rawEnabled) {
+      for (const m of effectiveEnabled) {
         if (!m) continue;
         const lower = String(m).toLowerCase().trim();
         enabledSet.add(lower);
-        // Add aliases
+
+        // Populate module aliases and sub-route mappings
+        const mappedSubIds = MODULE_KEY_MAP[lower] || [];
+        for (const subId of mappedSubIds) {
+          enabledSet.add(subId.toLowerCase());
+        }
+
+        // Add exact single-module route aliases (without bundling other distinct modules)
         if (lower === "purchases" || lower === "purchase") {
           enabledSet.add("purchase");
           enabledSet.add("purchases");
@@ -337,22 +361,13 @@ export default function Sidebar({ collapsed, setCollapsed, mobile }: SidebarProp
           enabledSet.add("custom-forms");
           enabledSet.add("custom_forms");
         }
+        if (lower === "migration" || lower === "mabsolcrmsync") {
+          enabledSet.add("migration");
+          enabledSet.add("mabsolcrmsync");
+        }
         if (lower === "fieldforce" || lower === "mr") {
           enabledSet.add("fieldforce");
           enabledSet.add("mr");
-        }
-        if (lower === "billing") {
-          enabledSet.add("billing");
-          enabledSet.add("sales");
-          enabledSet.add("purchase");
-          enabledSet.add("customer");
-          enabledSet.add("inventory");
-        }
-        if (lower === "leads") {
-          enabledSet.add("leads");
-          enabledSet.add("email-campaign");
-          enabledSet.add("whatsapp-campaign");
-          enabledSet.add("broadcast-hub");
         }
       }
     }
@@ -360,14 +375,15 @@ export default function Sidebar({ collapsed, setCollapsed, mobile }: SidebarProp
     const isSubItemAllowed = (sub: SubMenuItemConfig, parentGroupId?: string): boolean => {
       if (sub.isVisible === false) return false;
       if (!hasModuleRestrictions) return true;
-      if (CORE_MODULE_IDS.includes(sub.id)) return true;
-      if (parentGroupId && CORE_MODULE_IDS.includes(parentGroupId)) return true;
 
-      // If parent group itself is enabled (e.g. parent "sales" and "sales" is in enabledSet)
-      if (parentGroupId && enabledSet.has(parentGroupId.toLowerCase())) return true;
+      const subIdLower = sub.id.toLowerCase();
+      const parentIdLower = parentGroupId ? parentGroupId.toLowerCase() : "";
 
-      // Direct ID check
-      if (enabledSet.has(sub.id.toLowerCase())) return true;
+      // Direct ID check in enabledSet
+      if (enabledSet.has(subIdLower)) return true;
+
+      // If parent group itself is enabled, allow all child subItems
+      if (parentIdLower && enabledSet.has(parentIdLower)) return true;
 
       // Check if sub.id is permitted by any enabled module
       for (const modKey of Array.from(enabledSet)) {
@@ -401,38 +417,37 @@ export default function Sidebar({ collapsed, setCollapsed, mobile }: SidebarProp
       .filter((item) => {
         if (item.isVisible === false) return false;
 
-        // Module-level company permission check: strictly respect company's enabledModules
+        // Module-level company permission check: strictly respect enabledModules
         if (hasModuleRestrictions) {
-          const isCore = CORE_MODULE_IDS.includes(item.id);
-          if (!isCore) {
-            if (item.subItems && item.subItems.length > 0) {
-              // Group has remaining permitted subItems, allow it
-            } else if (item.isGroup) {
-              // Group has 0 permitted subItems remaining, hide it
-              return false;
-            } else {
-              // Standalone item: check if item itself is mapped to an enabled module
-              if (enabledSet.has(item.id.toLowerCase())) return true;
-              let isEnabled = false;
-              for (const modKey of Array.from(enabledSet)) {
-                if (item.id === modKey) {
-                  isEnabled = true;
-                  break;
-                }
-                const mapped = MODULE_KEY_MAP[modKey] || [];
-                if (mapped.includes(item.id)) {
-                  isEnabled = true;
-                  break;
-                }
-                const itemHref = item.href || "";
-                if (itemHref === `/dashboard/${modKey}` || itemHref.startsWith(`/dashboard/${modKey}/`)) {
-                  isEnabled = true;
-                  break;
-                }
-              }
-              if (!isEnabled) return false;
+          const itemIdLower = item.id.toLowerCase();
+
+          if (item.isGroup) {
+            // Group is permitted if parent ID is explicitly in enabledSet OR has allowed subItems
+            if (enabledSet.has(itemIdLower)) return true;
+            if (item.subItems && item.subItems.length > 0) return true;
+            return false;
+          }
+
+          // Standalone item: check if item itself is in enabledSet
+          if (enabledSet.has(itemIdLower)) return true;
+          let isEnabled = false;
+          for (const modKey of Array.from(enabledSet)) {
+            if (item.id === modKey) {
+              isEnabled = true;
+              break;
+            }
+            const mapped = MODULE_KEY_MAP[modKey] || [];
+            if (mapped.includes(item.id)) {
+              isEnabled = true;
+              break;
+            }
+            const itemHref = item.href || "";
+            if (itemHref === `/dashboard/${modKey}` || itemHref.startsWith(`/dashboard/${modKey}/`)) {
+              isEnabled = true;
+              break;
             }
           }
+          if (!isEnabled) return false;
         }
 
         // User role permission check for main item
@@ -449,7 +464,7 @@ export default function Sidebar({ collapsed, setCollapsed, mobile }: SidebarProp
 
         return true;
       });
-  }, [menuItems, can, selectedCompany, isSuperAdmin]);
+  }, [menuItems, can, selectedCompany, isSuperAdmin, currentUser]);
 
   // Group visible items into logical sections defined in SIDEBAR_SECTIONS
   const groupedSections = useMemo(() => {
@@ -691,6 +706,18 @@ export default function Sidebar({ collapsed, setCollapsed, mobile }: SidebarProp
                     </li>
                   </ul>
                 </div>
+              </div>
+            ) : groupedSections.length === 0 ? (
+              <div className="py-8 px-3 text-center">
+                {!iconOnly && (
+                  <div className="p-3.5 rounded-xl bg-amber-50/90 border border-amber-200/90 text-amber-900 text-xs shadow-2xs">
+                    <FaShieldAlt className="mx-auto mb-1.5 text-amber-600 text-base" />
+                    <div className="font-bold">No Active Modules</div>
+                    <div className="text-[11px] text-amber-800/80 mt-1 leading-snug">
+                      Your account does not have any granted CRM modules yet. Please contact your Super Administrator.
+                    </div>
+                  </div>
+                )}
               </div>
             ) : (
               <div className="flex flex-col gap-1.5">

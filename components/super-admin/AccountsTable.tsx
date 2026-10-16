@@ -1,6 +1,6 @@
 "use client";
 
-import React from "react";
+import React, { useState } from "react";
 import Link from "next/link";
 import {
   FaEye,
@@ -18,9 +18,11 @@ import {
   FaTimes,
   FaBan,
   FaChevronDown,
+  FaBoxes,
 } from "react-icons/fa";
 import { SuperAdminUserItem } from "./types";
 import { DEFAULT_ACCESS_DAYS } from "@/lib/constants/superAdmin.constant";
+import UserAccessModal from "./UserAccessModal";
 
 interface AccountsTableProps {
   users: SuperAdminUserItem[];
@@ -31,6 +33,14 @@ interface AccountsTableProps {
   onDelete?: (userId: string, reason?: string) => void;
   onRestore?: (userId: string) => void;
   onPermanentDelete?: (userId: string) => void;
+  onSaveAccess?: (
+    userId: string,
+    action: any,
+    durationDays?: number,
+    notes?: string,
+    sessionTimeoutHours?: number,
+    enabledModules?: string[]
+  ) => Promise<void>;
   onSelectUser?: (u: SuperAdminUserItem) => void;
   className?: string;
 }
@@ -115,13 +125,58 @@ export default function AccountsTable({
   onDelete,
   onRestore,
   onPermanentDelete,
+  onSaveAccess,
   onSelectUser,
   className = "",
 }: AccountsTableProps) {
   const [expandedBranches, setExpandedBranches] = React.useState<Record<string, boolean>>({});
+  const [modalUser, setModalUser] = React.useState<SuperAdminUserItem | null>(null);
+  const [modalTab, setModalTab] = React.useState<"access" | "modules">("modules");
+  const [localSaving, setLocalSaving] = React.useState(false);
 
   const toggleExpand = (userId: string) => {
     setExpandedBranches((prev) => ({ ...prev, [userId]: !prev[userId] }));
+  };
+
+  const handleModalSave = async (
+    userId: string,
+    action: any,
+    durationDays?: number,
+    notes?: string,
+    sessionTimeoutHours?: number,
+    enabledModules?: string[]
+  ) => {
+    if (onSaveAccess) {
+      await onSaveAccess(userId, action, durationDays, notes, sessionTimeoutHours, enabledModules);
+      setModalUser(null);
+      return;
+    }
+
+    setLocalSaving(true);
+    try {
+      const res = await fetch(`/api/super-admin/users/${userId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action,
+          durationDays,
+          notes,
+          sessionTimeoutHours,
+          enabledModules,
+        }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setModalUser(null);
+        window.location.reload();
+      } else {
+        alert(data.message || "Failed to update account");
+      }
+    } catch {
+      alert("Error saving account changes");
+    } finally {
+      setLocalSaving(false);
+    }
   };
 
   return (
@@ -221,6 +276,33 @@ export default function AccountsTable({
                               <span className="truncate">{[city, state].filter(Boolean).join(", ")}</span>
                             </div>
                           )}
+
+                          {/* Active Modules Badge */}
+                          <div className="mt-1.5">
+                            {(() => {
+                              const userMods = u.enabledModules;
+                              const compMods = u.companyId?.enabledModules;
+                              const modCount = Array.isArray(userMods)
+                                ? userMods.length
+                                : Array.isArray(compMods)
+                                ? compMods.length
+                                : 0;
+                              return (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setModalUser(u);
+                                    setModalTab("modules");
+                                  }}
+                                  className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-lg text-[10.5px] font-bold bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200/80 transition-all cursor-pointer shadow-2xs"
+                                  title="Click to view, give, or stop sidebar modules access for this user"
+                                >
+                                  <FaBoxes size={10} className="text-indigo-600" />
+                                  <span>{modCount} / 26 Modules Active</span>
+                                </button>
+                              );
+                            })()}
+                          </div>
                         </div>
                       </div>
                     </td>
@@ -388,6 +470,19 @@ export default function AccountsTable({
                           <span>Review</span>
                         </Link>
 
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setModalUser(u);
+                            setModalTab("modules");
+                          }}
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold text-emerald-700 bg-emerald-50/90 hover:bg-emerald-600 hover:text-white border border-emerald-200/90 transition-all duration-150 shadow-2xs hover:shadow-xs cursor-pointer"
+                          title="Give or stop access to sidebar modules for this user"
+                        >
+                          <FaBoxes size={11} />
+                          <span>Modules</span>
+                        </button>
+
                         {u.isDeleted ? (
                           <>
                             {onRestore && (
@@ -519,11 +614,21 @@ export default function AccountsTable({
                                   >
                                     {br.status || "Active"}
                                   </span>
+                                  <div className="text-[11px] text-slate-600 space-y-0.5">
+                                    <div className="truncate">
+                                      <span className="text-slate-400">Address:</span> {br.address ? `${br.address}, ` : ""}{br.city ? `${br.city}, ${br.state || ""}` : "Location unassigned"}
+                                    </div>
+                                    {(br.adminUser || br.email || br.mobile) && (
+                                      <div className="truncate text-[10.5px] text-slate-500">
+                                        <span className="text-slate-400">Contact:</span> {br.adminUser ? `${br.adminUser.name} (${br.adminUser.email})` : `${br.email || ""} ${br.mobile || ""}`}
+                                      </div>
+                                    )}
+                                  </div>
                                 </div>
                                 <div className="flex items-center justify-between text-[10.5px] text-slate-500 border-t border-slate-200/70 pt-1.5 mt-0.5 font-medium">
-                                  <span>{br.city ? `${br.city}, ${br.state || ""}` : "Location unassigned"}</span>
+                                  <span>{br.city ? `${br.city}, ${br.state || ""}` : "Branch"}</span>
                                   <span className="text-teal-700 font-semibold font-mono bg-teal-50 px-1.5 py-0.5 rounded border border-teal-100">
-                                    {br.enabledModules?.length || 0} Modules
+                                    {br.enabledModules?.length || 0} Modules Active
                                   </span>
                                 </div>
                               </div>
@@ -534,11 +639,21 @@ export default function AccountsTable({
                     </tr>
                   )}
                 </React.Fragment>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    )}
+
+    {modalUser && (
+        <UserAccessModal
+          user={modalUser}
+          onClose={() => setModalUser(null)}
+          onSave={handleModalSave}
+          actionLoading={localSaving || actionLoading === modalUser._id}
+          initialTab={modalTab}
+        />
       )}
     </div>
   );

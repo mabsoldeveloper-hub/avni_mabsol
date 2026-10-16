@@ -180,11 +180,11 @@ export async function PATCH(req: NextRequest) {
     }
 
     const body = await req.json();
-    const { companyId, status, enabledModules, isHeadOffice } = body;
+    const { companyId, companyIds, status, enabledModules, isHeadOffice } = body;
 
-    if (!companyId) {
+    if (!companyId && (!Array.isArray(companyIds) || companyIds.length === 0)) {
       return NextResponse.json(
-        { success: false, message: "companyId is required" },
+        { success: false, message: "companyId or companyIds array is required" },
         { status: 400 }
       );
     }
@@ -193,6 +193,23 @@ export async function PATCH(req: NextRequest) {
     if (status !== undefined) updates.status = status;
     if (enabledModules !== undefined) updates.enabledModules = enabledModules;
     if (isHeadOffice !== undefined) updates.isHeadOffice = Boolean(isHeadOffice);
+
+    // Batch update multiple branches (e.g. Suspend All / Activate All)
+    if (Array.isArray(companyIds) && companyIds.length > 0) {
+      await Company.updateMany({ _id: { $in: companyIds } }, { $set: updates });
+      if (status) {
+        const userStatus = status === "Active" ? "Active" : status === "Suspended" ? "Suspended" : "Pending";
+        const isApproved = status === "Active";
+        await User.updateMany(
+          { companyId: { $in: companyIds } },
+          { $set: { status: userStatus, isApproved } }
+        );
+      }
+      return NextResponse.json({
+        success: true,
+        message: `${companyIds.length} branches updated successfully.`,
+      });
+    }
 
     const updatedCompany = await Company.findByIdAndUpdate(companyId, { $set: updates }, { new: true });
     if (!updatedCompany) {

@@ -23,6 +23,7 @@ function ApproveAdminsContent() {
     handleDelete,
     handleRestore,
     handlePermanentDelete,
+    handleAction,
     refetch,
   } = useSuperAdminData("pending");
 
@@ -100,6 +101,7 @@ function ApproveAdminsContent() {
           onDelete={handleDelete}
           onRestore={handleRestore}
           onPermanentDelete={handlePermanentDelete}
+          onSaveAccess={handleAction}
         />
       </div>
     </div>
@@ -112,7 +114,7 @@ export default function SuperAdminApprovePage() {
       fallback={
         <div className="min-h-[400px] flex items-center justify-center">
           <div className="flex items-center gap-2 text-slate-500 text-sm font-semibold">
-            <FaSync className="animate-spin text-blue-600" />
+            <FaSync className="animate-spin text-indigo-600" />
             Loading super admin approvals...
           </div>
         </div>

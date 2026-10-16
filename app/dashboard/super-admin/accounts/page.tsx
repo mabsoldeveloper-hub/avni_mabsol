@@ -23,6 +23,7 @@ function AllAccountsContent() {
     handleDelete,
     handleRestore,
     handlePermanentDelete,
+    handleAction,
     refetch,
   } = useSuperAdminData("all");
 
@@ -100,6 +101,7 @@ function AllAccountsContent() {
           onDelete={handleDelete}
           onRestore={handleRestore}
           onPermanentDelete={handlePermanentDelete}
+          onSaveAccess={handleAction}
         />
       </div>
     </div>

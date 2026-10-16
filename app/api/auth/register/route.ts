@@ -14,7 +14,11 @@ import {
   validatePassword,
 } from "@/lib/constants/validation.constant";
 import { ROLE_TYPE } from "@/lib/constants/roles.constant";
-import { USER_APPROVAL_STATUS, DEFAULT_ACCESS_DAYS } from "@/lib/constants/superAdmin.constant";
+import {
+  USER_APPROVAL_STATUS,
+  DEFAULT_ACCESS_DAYS,
+  isReservedSuperAdminEmail,
+} from "@/lib/constants/superAdmin.constant";
 
 /**
  * Generate a unique tenant ID for multi-tenant data isolation.
@@ -102,6 +106,14 @@ export async function POST(req: Request) {
     const cleanEmail = email.toLowerCase().trim();
     const cleanMobile = mobile.replace(/\D/g, "");
 
+    // ── Super Admin Email Protection ─────────────────────────────────────────
+    if (isReservedSuperAdminEmail(cleanEmail)) {
+      return NextResponse.json({
+        success: false,
+        message: "This email address is reserved for the Super Administrator and cannot be used to register an account.",
+      }, { status: 403 });
+    }
+
     // ── Duplicate Checks for Head Office ──────────────────────────────────────
     const emailExists = await User.findOne({ email: cleanEmail });
     if (emailExists) {
@@ -141,6 +153,14 @@ export async function POST(req: Request) {
             success: false,
             message: `Please enter a valid email address for Branch #${i + 1}.`,
           }, { status: 400 });
+        }
+
+        // Must not be Super Admin reserved email
+        if (isReservedSuperAdminEmail(brEmail)) {
+          return NextResponse.json({
+            success: false,
+            message: `Branch #${i + 1} email (${brEmail}) is reserved for the Super Administrator and cannot be used.`,
+          }, { status: 403 });
         }
 
         // Must not match Head Office email

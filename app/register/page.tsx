@@ -7,6 +7,7 @@ import { Plus_Jakarta_Sans, Inter, IBM_Plex_Mono } from "next/font/google";
 import { useToast } from "@/context/ToastContext";
 import "./register.css";
 import { API } from "@/lib/api";
+import { isReservedSuperAdminEmail } from "@/lib/constants/superAdmin.constant";
 
 const displayFont = Plus_Jakarta_Sans({
   subsets: ["latin"],
@@ -266,6 +267,11 @@ export default function RegisterPage() {
     const cleanBrEmail = br.email.trim().toLowerCase();
     if (!cleanBrEmail.includes("@")) return;
 
+    if (isReservedSuperAdminEmail(cleanBrEmail)) {
+      showToast(`Branch #${idx + 1} email is reserved for the Super Administrator and cannot be used.`, "error");
+      return;
+    }
+
     // Check against Head Office Email
     const cleanHoEmail = email.trim().toLowerCase();
     if (cleanBrEmail === cleanHoEmail) {
@@ -304,6 +310,11 @@ export default function RegisterPage() {
     const cleanBrEmail = (br.email || "").trim().toLowerCase();
     if (!cleanBrEmail || !cleanBrEmail.includes("@")) {
       showToast("Please enter a valid email address for this branch", "error");
+      return;
+    }
+
+    if (isReservedSuperAdminEmail(cleanBrEmail)) {
+      showToast(`Branch #${idx + 1} email is reserved for the Super Administrator and cannot be used.`, "error");
       return;
     }
 
@@ -630,6 +641,11 @@ export default function RegisterPage() {
     const cleanEmail = email.trim().toLowerCase();
     if (!cleanEmail.includes("@")) return;
 
+    if (isReservedSuperAdminEmail(cleanEmail)) {
+      showToast("This email address is reserved for the Super Administrator and cannot be used.", "error");
+      return;
+    }
+
     try {
       const res = await fetch(API.CHECK_EXISTS, {
         method: "POST",
@@ -673,6 +689,11 @@ export default function RegisterPage() {
     const cleanEmail = email.trim().toLowerCase();
     if (!cleanEmail || !cleanEmail.includes("@")) {
       showToast("Please enter a valid email address", "error");
+      return;
+    }
+
+    if (isReservedSuperAdminEmail(cleanEmail)) {
+      showToast("This email address is reserved for the Super Administrator and cannot be used.", "error");
       return;
     }
 
@@ -964,10 +985,31 @@ export default function RegisterPage() {
     setErrorBanner(null);
 
     try {
+      const cleanHoEmail = email.trim().toLowerCase();
+      if (isReservedSuperAdminEmail(cleanHoEmail)) {
+        const msg = "This email address is reserved for the Super Administrator and cannot be used.";
+        setErrorBanner(msg);
+        showToast(msg, "error");
+        setLoading(false);
+        return;
+      }
+
+      for (let i = 0; i < branchCount; i++) {
+        const br = additionalGsts[i];
+        const cleanBr = (br?.email || "").trim().toLowerCase();
+        if (isReservedSuperAdminEmail(cleanBr)) {
+          const msg = `Branch #${i + 1} email is reserved for the Super Administrator and cannot be used.`;
+          setErrorBanner(msg);
+          showToast(msg, "error");
+          setLoading(false);
+          return;
+        }
+      }
+
       const adminName = name.trim() || companyName.trim();
       const payload = {
         name: adminName,
-        email: email.trim().toLowerCase(),
+        email: cleanHoEmail,
         mobile: mobile.replace(/\D/g, ""),
         password,
         role: "Admin",

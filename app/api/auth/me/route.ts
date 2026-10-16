@@ -104,6 +104,15 @@ export async function GET() {
         if (vfp) userObj.companyName = vfp.companyName || "";
       }
     }
+
+    // Populate and normalize enabledModules for client sidebar & route protection
+    if (!Array.isArray(userObj.enabledModules)) {
+      if (Array.isArray(userObj.companyId?.enabledModules)) {
+        userObj.enabledModules = userObj.companyId.enabledModules;
+      } else {
+        userObj.enabledModules = isSuperAdmin ? undefined : [];
+      }
+    }
   } catch {}
 
   const response = NextResponse.json(

@@ -127,20 +127,26 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
 
   const loadUser = useCallback(async () => {
     try {
-      const res = await fetch("/api/auth/me", {
+      const res = await fetch(`/api/auth/me?_t=${Date.now()}`, {
         credentials: "include",
         cache: "no-store",
+        headers: {
+          "Cache-Control": "no-cache, no-store, must-revalidate",
+        },
       });
       if (!res.ok) {
         setUser(null);
         return;
       }
       const data = await res.json();
-      console.log("me api",data);
       
       if (data.success && data.user) {
         setUser(data.user);
-        localStorage.setItem("mabsol_user", JSON.stringify(data.user));
+        if (typeof window !== "undefined") {
+          try {
+            localStorage.setItem("mabsol_user", JSON.stringify(data.user));
+          } catch {}
+        }
       } else {
         setUser(null);
       }
@@ -152,12 +158,19 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
-
-
   useEffect(() => {
-    // if (loadStarted.current) return;
-    // loadStarted.current = true;
     loadUser();
+
+    // Automatically revalidate user permissions when tab gains focus
+    const handleFocus = () => {
+      loadUser();
+    };
+    window.addEventListener("focus", handleFocus);
+    window.addEventListener("mabsol-permissions-updated", handleFocus);
+    return () => {
+      window.removeEventListener("focus", handleFocus);
+      window.removeEventListener("mabsol-permissions-updated", handleFocus);
+    };
   }, [loadUser]);
 
   return (

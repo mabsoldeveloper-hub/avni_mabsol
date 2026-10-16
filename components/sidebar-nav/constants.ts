@@ -226,33 +226,9 @@ export const COLOR_MAP: Record<ColorKey, ColorStyleConfig> = {
   },
 };
 
-// Core system items that are always accessible independent of subscription business modules
+// Core system items that default to accessible unless restricted by Super Admin
 export const CORE_MODULE_IDS = [
   "standard-dashboard",
-  "global-search",
-  "executive-ai",
-  "ai-notifications",
-  "company",
-  "company-create",
-  "company-list",
-  "users",
-  "users-management",
-  "users-create",
-  "users-permissions",
-  "users-roles",
-  "users-assignment",
-  "settings",
-  "settings-company",
-  "settings-menu-adjustments",
-  "settings-voice",
-  "settings-notifications",
-  "settings-backup-restore",
-  "migration",
-  "migration-sync",
-  "migration-settings",
-  "mabsolcrmsync",
-   "master-dashboard", 
-  "master-alert-settings", 
 ];
 
 export const MODULE_KEY_MAP: Record<string, string[]> = {
@@ -503,6 +479,62 @@ export const MODULE_KEY_MAP: Record<string, string[]> = {
     "settings-notifications",
     "settings-backup-restore",
     "backup",
+  ],
+  migration: [
+    "migration",
+    "migration-sync",
+    "migration-settings",
+    "mabsolcrmsync",
+  ],
+  "standard-dashboard": [
+    "standard-dashboard",
+    "dashboard",
+  ],
+  "executive-ai": [
+    "executive-ai",
+  ],
+  "ai-notifications": [
+    "ai-notifications",
+  ],
+  "global-search": [
+    "global-search",
+    "search",
+  ],
+  doctor: [
+    "doctor",
+    "doctor-list",
+    "doctor-create",
+    "master-mr-customer",
+  ],
+  chemist: [
+    "chemist",
+    "chemist-list",
+    "chemist-create",
+    "master-mr-customer",
+  ],
+  stockist: [
+    "stockist",
+    "stockist-list",
+    "stockist-create",
+    "master-customer",
+  ],
+  dcr: [
+    "dcr",
+    "dcr-entry",
+    "dcr-history",
+    "mr",
+  ],
+  "tour-plan": [
+    "tour-plan",
+    "tour-plan-create",
+    "tour-plan-list",
+    "mr",
+  ],
+  "sample-tracking": [
+    "sample-tracking",
+    "sample-issue",
+    "sample-stock",
+    "mr",
   ],
   company: [
     "company",

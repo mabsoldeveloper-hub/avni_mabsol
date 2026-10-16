@@ -64,6 +64,7 @@ export interface SuperAdminUserItem {
   deletedBy?: { name?: string; email?: string } | null;
   deletedReason?: string;
   createdAt: string;
+  enabledModules?: string[];
   companyId?: SuperAdminCompanyDetails | null;
 }
 

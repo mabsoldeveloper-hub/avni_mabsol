@@ -56,6 +56,13 @@ const UserSchema = new mongoose.Schema(
       default: false,
     },
 
+    // Super Admin controlled sidebar modules for this user
+    enabledModules: [
+      {
+        type: String,
+      },
+    ],
+
     // Original Customer record for MR / Field Staff mapping
     mrCustomerId: {
       type: mongoose.Schema.Types.ObjectId,

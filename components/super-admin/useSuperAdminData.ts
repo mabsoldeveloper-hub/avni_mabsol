@@ -90,20 +90,22 @@ export function useSuperAdminData(initialStatusFilter?: string) {
     return Array.from(map.values()).sort((a, b) => a.companyName.localeCompare(b.companyName));
   }, [users]);
 
-  // Execute admin action (approve, extend, suspend, activate, reject)
+  // Execute admin action (approve, extend, suspend, activate, reject, update_modules)
   const handleAction = useCallback(
     async (
       userId: string,
-      action: "approve" | "extend" | "reject" | "suspend" | "activate" | "delete" | "restore" | "permanent_delete",
+      action: "approve" | "extend" | "reject" | "suspend" | "activate" | "delete" | "restore" | "permanent_delete" | "update_modules",
       durationDays?: number,
       notes?: string,
-      sessionTimeoutHours?: number
+      sessionTimeoutHours?: number,
+      enabledModules?: string[]
     ) => {
       setActionLoading(userId);
       try {
         const body: any = { action, notes };
         if (durationDays !== undefined) body.durationDays = durationDays;
         if (sessionTimeoutHours !== undefined) body.sessionTimeoutHours = sessionTimeoutHours;
+        if (enabledModules !== undefined) body.enabledModules = enabledModules;
 
         const res = await fetch(`/api/super-admin/users/${userId}`, {
           method: "PATCH",
@@ -126,6 +128,14 @@ export function useSuperAdminData(initialStatusFilter?: string) {
       }
     },
     [fetchUsers]
+  );
+
+  // Directly update allowed/stopped modules for a user
+  const handleUpdateModules = useCallback(
+    async (userId: string, modules: string[], notes?: string) => {
+      await handleAction(userId, "update_modules", undefined, notes, undefined, modules);
+    },
+    [handleAction]
   );
 
   // Reject an application/account
@@ -299,6 +309,7 @@ export function useSuperAdminData(initialStatusFilter?: string) {
     selectedUserForModal,
     setSelectedUserForModal,
     handleAction,
+    handleUpdateModules,
     handleToggleActive,
     handleReject,
     handleDelete,

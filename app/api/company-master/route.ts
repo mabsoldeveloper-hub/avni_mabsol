@@ -6,6 +6,7 @@ import User from "@/models/User";
 import Role from "@/models/Role";
 import { getCurrentUser } from "@/lib/auth";
 import { ROLE_TYPE } from "@/lib/constants/roles.constant";
+import { isReservedSuperAdminEmail } from "@/lib/constants/superAdmin.constant";
 
 export const dynamic = "force-dynamic";
 
@@ -216,6 +217,14 @@ export async function POST(req: Request) {
     // Inherit approval and subscription validity from Head Office
     if (data.email) {
       const cleanEmail = String(data.email).toLowerCase().trim();
+
+      if (isReservedSuperAdminEmail(cleanEmail)) {
+        return NextResponse.json({
+          success: false,
+          error: "This email address is reserved for the Super Administrator and cannot be used for a company/branch.",
+        }, { status: 403 });
+      }
+
       let companyUser = await User.findOne({ email: cleanEmail });
       const hashedPassword = data.password ? await bcrypt.hash(data.password, 10) : "";
 

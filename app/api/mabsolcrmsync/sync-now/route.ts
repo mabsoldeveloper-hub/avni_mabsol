@@ -10,6 +10,8 @@ import fs from "fs";
 import path from "path";
 import jwt from "jsonwebtoken";
 import User from "@/models/User";
+import Company from "@/models/Company";
+import ExeSyncLog from "@/models/ExeSyncLog";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -81,6 +83,57 @@ export async function POST(request: NextRequest) {
 
     const targetCompanyCode = bodyCompanyCode || (config as any)?.companyCode || "DEFAULT";
     const targetCompanyName = bodyCompanyName || (config as any)?.companyName || (user.companyId as any)?.companyName || targetCompanyCode;
+
+    // Check if this user's EXE sync access has been suspended by Super Admin
+    if (user.exeAccessSuspended) {
+      let isHeadOffice = true;
+      let parentCompanyId = null;
+      let parentCompanyName = "";
+
+      try {
+        const uComp = user.companyId ? await Company.findById(user.companyId) : null;
+        if (uComp) {
+          if (uComp.isHeadOffice === false || uComp.parentCompanyId) {
+            isHeadOffice = false;
+            parentCompanyId = uComp.parentCompanyId || null;
+            if (parentCompanyId) {
+              const pComp = await Company.findById(parentCompanyId);
+              parentCompanyName = pComp?.companyName || "";
+            }
+          }
+        }
+      } catch {}
+
+      await ExeSyncLog.create({
+        runId: `rej-${Date.now()}`,
+        companyId: user.companyId || null,
+        companyName: targetCompanyName,
+        companyCode: targetCompanyCode,
+        isHeadOffice,
+        parentCompanyId,
+        parentCompanyName,
+        userId: user._id,
+        userName: user.name || userName,
+        userEmail: user.email,
+        licenseKey: license || "",
+        syncType: "portal_triggered",
+        status: "rejected_suspended",
+        tablesSynced: [],
+        totalRecords: 0,
+        durationSeconds: 0,
+        ipAddress,
+        error: `Desktop Agent (.EXE) sync access has been suspended for ${user.name || user.email} by Super Administrator.${user.exeSuspendedReason ? ` Reason: ${user.exeSuspendedReason}` : ""}`,
+      });
+
+      return NextResponse.json(
+        {
+          success: false,
+          exeSuspended: true,
+          error: `Desktop Agent (.EXE) sync access has been suspended for ${user.name || user.email} by Super Administrator.${user.exeSuspendedReason ? ` Reason: ${user.exeSuspendedReason}` : ""}`,
+        },
+        { status: 403 }
+      );
+    }
 
     await VfpSettingLog.create({
       email: user.email,

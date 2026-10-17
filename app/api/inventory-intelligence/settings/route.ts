@@ -9,6 +9,7 @@ import {
   getInventorySettings,
   sendInventoryAlertEmail,
 } from "@/lib/inventoryIntelligence";
+import { ensureWatchdogRunning } from "@/lib/services/customerAlertScheduler";
 
 export const dynamic = "force-dynamic";
 
@@ -140,16 +141,19 @@ export async function GET(req: Request) {
     }
 
     const tenantId = tenantOf(user);
+    const adminEmail = String(user?.email || "").trim().toLowerCase();
 
     const settings =
       await getInventorySettings(
         tenantId,
-        companyId
+        companyId,
+        adminEmail
       );
 
     return NextResponse.json({
       success: true,
       settings,
+      adminEmail,
     });
   } catch (error: any) {
     console.error(
@@ -322,6 +326,11 @@ export async function POST(req: Request) {
           ),
         ]
       : [];
+
+    const adminEmail = String(user?.email || "").trim().toLowerCase();
+    if (data.recipients.length === 0 && adminEmail) {
+      data.recipients = [adminEmail];
+    }
 
     /* =====================================================
        NEAR EXPIRY
@@ -496,6 +505,9 @@ export async function POST(req: Request) {
           setDefaultsOnInsert: true,
         }
       ).lean();
+
+    // Ensure persistent watchdog is actively checking schedules
+    ensureWatchdogRunning();
 
     return NextResponse.json({
       success: true,

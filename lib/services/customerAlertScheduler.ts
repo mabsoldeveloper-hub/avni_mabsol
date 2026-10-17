@@ -538,11 +538,79 @@ Thank you!`;
 }
 
 /**
+ * Ensures the persistent 60s Watchdog timer is running in the background
+ */
+export function ensureWatchdogRunning() {
+  if (schedulerState.watchdogTimer) {
+    return;
+  }
+
+  schedulerState.watchdogTimer = setInterval(async () => {
+    // A. Customer Alert Scheduled Check
+    try {
+      const activeConfig = await CustomerAlertConfig.findOne({ tenantId: "TENANT001" }).lean();
+      if (
+        activeConfig &&
+        activeConfig.enabled &&
+        activeConfig.schedulerEnabled !== false &&
+        activeConfig.scheduleFrequency !== "disabled" &&
+        activeConfig.scheduleFrequency === "daily"
+      ) {
+        const now = new Date();
+        const currentIstDate = now.toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" }); // YYYY-MM-DD
+        const currentIstTime = now.toLocaleTimeString("en-GB", { timeZone: "Asia/Kolkata", hour12: false }).slice(0, 5); // HH:mm
+        const targetTime = String(activeConfig.scheduledTime || "09:00").trim();
+
+        const alreadyRanToday =
+          schedulerState.lastDailyRunDate === currentIstDate ||
+          activeConfig.lastDailyRunDate === currentIstDate;
+
+        if (!alreadyRanToday && currentIstTime >= targetTime) {
+          console.log(
+            `[Customer Alert Watchdog] Triggering scheduled daily scan for ${currentIstDate} (target: ${targetTime}, current: ${currentIstTime})`
+          );
+          schedulerState.lastDailyRunDate = currentIstDate;
+
+          await CustomerAlertConfig.updateOne(
+            { tenantId: "TENANT001" },
+            { $set: { lastDailyRunDate: currentIstDate } }
+          );
+
+          await runCustomerAlertScan();
+        }
+      }
+    } catch (watchdogErr: any) {
+      console.warn("[Customer Alert Watchdog Error]:", watchdogErr.message);
+    }
+
+    // B. Inventory Intelligence Scheduled Alerts Check (Runs independently for each configured company)
+    try {
+      const InventoryAlertSetting = (await import("@/models/InventoryAlertSetting")).default;
+      const { getInventorySettings, sendInventoryAlertEmail, shouldRunNow } = await import("@/lib/inventoryIntelligence");
+      const invDocs = await InventoryAlertSetting.find({ enabled: true, "email.enabled": true }).lean();
+      for (const d of invDocs) {
+        const s = await getInventorySettings(String(d.tenantId || "TENANT001"), String(d.companyId));
+        if (shouldRunNow(s)) {
+          console.log(`[Inventory Alert Watchdog] Triggering scheduled inventory intelligence alert for company ${d.companyId}...`);
+          await sendInventoryAlertEmail(s);
+        }
+      }
+    } catch (invErr: any) {
+      console.warn("[Inventory Intelligence Watchdog Warning]:", invErr.message);
+    }
+  }, 60 * 1000);
+}
+
+/**
  * Initializes and starts the background Customer Alert Scheduler daemon (singleton)
  */
 export async function startCustomerAlertScheduler() {
   try {
     await connectDB();
+
+    // Always ensure the unified 60s watchdog timer is running
+    ensureWatchdogRunning();
+
     const config = await CustomerAlertConfig.findOne({ tenantId: "TENANT001" }).lean();
 
     if (
@@ -551,15 +619,21 @@ export async function startCustomerAlertScheduler() {
       config.schedulerEnabled === false ||
       config.scheduleFrequency === "disabled"
     ) {
-      console.log("[Customer Alert Scheduler] Scheduler is disabled in configuration.");
-      stopCustomerAlertScheduler();
+      console.log("[Customer Alert Scheduler] Customer Alert cron is disabled in configuration.");
+      if (schedulerState.cronTask) {
+        schedulerState.cronTask.stop();
+        schedulerState.cronTask = null;
+      }
+      if (schedulerState.intervalTimer) {
+        clearInterval(schedulerState.intervalTimer);
+        schedulerState.intervalTimer = null;
+      }
       return;
     }
 
     const cronExpr = resolveCronExpression(config);
     if (!cronExpr) {
-      console.log("[Customer Alert Scheduler] No valid cron expression, stopping scheduler.");
-      stopCustomerAlertScheduler();
+      console.log("[Customer Alert Scheduler] No valid cron expression for customer alerts.");
       return;
     }
 
@@ -568,8 +642,15 @@ export async function startCustomerAlertScheduler() {
       return;
     }
 
-    // Stop existing task if any
-    stopCustomerAlertScheduler();
+    // Stop existing customer alert cron task if any
+    if (schedulerState.cronTask) {
+      schedulerState.cronTask.stop();
+      schedulerState.cronTask = null;
+    }
+    if (schedulerState.intervalTimer) {
+      clearInterval(schedulerState.intervalTimer);
+      schedulerState.intervalTimer = null;
+    }
 
     // 1. Setup node-cron schedule strictly in Asia/Kolkata timezone
     schedulerState.cronTask = cron.schedule(
@@ -599,48 +680,6 @@ export async function startCustomerAlertScheduler() {
         });
       }, 15 * 60 * 1000);
     }
-
-    // 3. Setup active Watchdog timer (every 60s) for Daily schedule catch-up
-    schedulerState.watchdogTimer = setInterval(async () => {
-      try {
-        const activeConfig = await CustomerAlertConfig.findOne({ tenantId: "TENANT001" }).lean();
-        if (
-          !activeConfig ||
-          !activeConfig.enabled ||
-          activeConfig.schedulerEnabled === false ||
-          activeConfig.scheduleFrequency === "disabled"
-        ) {
-          return;
-        }
-
-        if (activeConfig.scheduleFrequency === "daily") {
-          const now = new Date();
-          const currentIstDate = now.toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" }); // YYYY-MM-DD
-          const currentIstTime = now.toLocaleTimeString("en-GB", { timeZone: "Asia/Kolkata", hour12: false }).slice(0, 5); // HH:mm
-          const targetTime = String(activeConfig.scheduledTime || "09:00").trim();
-
-          const alreadyRanToday =
-            schedulerState.lastDailyRunDate === currentIstDate ||
-            activeConfig.lastDailyRunDate === currentIstDate;
-
-          if (!alreadyRanToday && currentIstTime >= targetTime) {
-            console.log(
-              `[Customer Alert Watchdog] Triggering scheduled daily scan for ${currentIstDate} (target: ${targetTime}, current: ${currentIstTime})`
-            );
-            schedulerState.lastDailyRunDate = currentIstDate;
-
-            await CustomerAlertConfig.updateOne(
-              { tenantId: "TENANT001" },
-              { $set: { lastDailyRunDate: currentIstDate } }
-            );
-
-            await runCustomerAlertScan();
-          }
-        }
-      } catch (watchdogErr: any) {
-        console.warn("[Customer Alert Watchdog Error]:", watchdogErr.message);
-      }
-    }, 60 * 1000);
 
     schedulerState.isSchedulerRunning = true;
     schedulerState.currentCronExpression = cronExpr;

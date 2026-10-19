@@ -275,7 +275,9 @@ export default function BackupPage() {
       setSendLoading(true);
       const matchedFy = financialYears.find((f) => f._id === selectedFyId);
 
-      const payload: any = {};
+      const payload: any = {
+        receiverEmail: receiverEmail.trim(),
+      };
       if (selectedFyId === "ALL") {
         payload.isAll = true;
       } else if (selectedFyId === "CUSTOM") {

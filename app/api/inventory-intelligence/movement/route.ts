@@ -33,6 +33,11 @@ export async function GET(req: Request) {
     const minSalesQty = minSalesQtyParam ? Number(minSalesQtyParam) : undefined;
     const type = (sp.get("type") || "ALL").toUpperCase() as any;
     const fyId = sp.get("fyId") || undefined;
+    const companyCode = sp.get("companyCode") || undefined;
+    const divisionCode = sp.get("divisionCode") || undefined;
+    const subDivisionCode = sp.get("subDivisionCode") || undefined;
+    const categoryCode = sp.get("categoryCode") || undefined;
+    const productCode = sp.get("productCode") || undefined;
 
     const result = await getMovementData(s, {
       q,
@@ -42,6 +47,11 @@ export async function GET(req: Request) {
       minSalesQty,
       type,
       fyId,
+      companyCode,
+      divisionCode,
+      subDivisionCode,
+      categoryCode,
+      productCode,
     });
 
     return NextResponse.json({

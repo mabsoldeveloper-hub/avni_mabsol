@@ -27,11 +27,21 @@ export async function GET(req: Request) {
     const days = sp.get("days") ? Number(sp.get("days")) : undefined;
     const noMovementDays = sp.get("noMovementDays") ? Number(sp.get("noMovementDays")) : undefined;
     const analysisDays = sp.get("analysisDays") ? Number(sp.get("analysisDays")) : undefined;
+    const companyCode = sp.get("companyCode") || undefined;
+    const divisionCode = sp.get("divisionCode") || undefined;
+    const subDivisionCode = sp.get("subDivisionCode") || undefined;
+    const categoryCode = sp.get("categoryCode") || undefined;
+    const productCode = sp.get("productCode") || undefined;
 
     const r = await buildInventoryReport(s, {
       days,
       noMovementDays,
       analysisDays,
+      companyCode,
+      divisionCode,
+      subDivisionCode,
+      categoryCode,
+      productCode,
     });
 
     return NextResponse.json({

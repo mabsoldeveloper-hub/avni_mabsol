@@ -5,6 +5,9 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useCompany } from "@/context/CompanyContext";
 import { useUser } from "@/context/UserContext";
+import InventoryHierarchyFilter, {
+  HierarchyFilterValues,
+} from "@/components/inventory/InventoryHierarchyFilter";
 import {
   FaExclamationTriangle,
   FaSkull,
@@ -19,6 +22,9 @@ import {
   FaBoxes,
   FaClock,
   FaUserCheck,
+  FaBuilding,
+  FaSitemap,
+  FaTags,
 } from "react-icons/fa";
 
 export default function InventoryIntelligencePage() {
@@ -35,6 +41,15 @@ export default function InventoryIntelligencePage() {
   const [expiryDaysInput, setExpiryDaysInput] = useState<number>(90);
   const [deadStockDaysInput, setDeadStockDaysInput] = useState<number>(180);
   const [analysisDaysInput, setAnalysisDaysInput] = useState<number>(30);
+
+  // 5-Tier Product Hierarchy Filters
+  const [hierarchyFilters, setHierarchyFilters] = useState<HierarchyFilterValues>({
+    companyCode: "",
+    divisionCode: "",
+    subDivisionCode: "",
+    categoryCode: "",
+    productCode: "",
+  });
 
   // Tabbed preview selection
   const [activeTab, setActiveTab] = useState<
@@ -65,6 +80,7 @@ export default function InventoryIntelligencePage() {
     customExpiryDays?: number,
     customDeadDays?: number,
     customAnalysisDays?: number,
+    customHierarchy?: HierarchyFilterValues,
   ) => {
     setLoading(true);
     setError("");
@@ -75,10 +91,17 @@ export default function InventoryIntelligencePage() {
       const daysVal = customExpiryDays ?? expiryDaysInput;
       const deadVal = customDeadDays ?? deadStockDaysInput;
       const analysisVal = customAnalysisDays ?? analysisDaysInput;
+      const h = customHierarchy ?? hierarchyFilters;
 
       if (daysVal) sp.set("days", String(daysVal));
       if (deadVal) sp.set("noMovementDays", String(deadVal));
       if (analysisVal) sp.set("analysisDays", String(analysisVal));
+
+      if (h.companyCode) sp.set("companyCode", h.companyCode);
+      if (h.divisionCode) sp.set("divisionCode", h.divisionCode);
+      if (h.subDivisionCode) sp.set("subDivisionCode", h.subDivisionCode);
+      if (h.categoryCode) sp.set("categoryCode", h.categoryCode);
+      if (h.productCode) sp.set("productCode", h.productCode);
 
       const res = await fetch(
         `/api/inventory-intelligence/dashboard?${sp.toString()}`,
@@ -202,6 +225,17 @@ export default function InventoryIntelligencePage() {
   const settings = data?.settings;
   const preview = data?.preview || {};
 
+  const hierarchyQueryString = useMemo(() => {
+    const sp = new URLSearchParams();
+    if (hierarchyFilters.companyCode) sp.set("companyCode", hierarchyFilters.companyCode);
+    if (hierarchyFilters.divisionCode) sp.set("divisionCode", hierarchyFilters.divisionCode);
+    if (hierarchyFilters.subDivisionCode) sp.set("subDivisionCode", hierarchyFilters.subDivisionCode);
+    if (hierarchyFilters.categoryCode) sp.set("categoryCode", hierarchyFilters.categoryCode);
+    if (hierarchyFilters.productCode) sp.set("productCode", hierarchyFilters.productCode);
+    const str = sp.toString();
+    return str ? `&${str}` : "";
+  }, [hierarchyFilters]);
+
   // Filter preview items by search box
   const activePreviewItems = useMemo(() => {
     const rawList: any[] = preview[activeTab] || [];
@@ -270,7 +304,39 @@ export default function InventoryIntelligencePage() {
         </div>
       </div>
 
-      {/* 2. Interactive Threshold Rules Filter Bar */}
+      {/* 2. 5-Tier Cascading Product Hierarchy Filter */}
+      <InventoryHierarchyFilter
+        initialValues={hierarchyFilters}
+        onChange={(newFilters) => {
+          setHierarchyFilters(newFilters);
+          loadDashboard(
+            expiryDaysInput,
+            deadStockDaysInput,
+            analysisDaysInput,
+            newFilters,
+          );
+        }}
+        onReset={() => {
+          const empty = {
+            companyCode: "",
+            divisionCode: "",
+            subDivisionCode: "",
+            categoryCode: "",
+            productCode: "",
+          };
+          setHierarchyFilters(empty);
+          loadDashboard(
+            expiryDaysInput,
+            deadStockDaysInput,
+            analysisDaysInput,
+            empty,
+          );
+        }}
+        title="5-Tier Product Hierarchy Search (Company → Division → Sub-Division → Category → Product)"
+        subtitle="Drill down from Company to Division, Sub-Division, Category, down to exact Product Name"
+      />
+
+      {/* 3. Interactive Threshold Rules Filter Bar */}
       <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-4 md:p-5 shadow-sm space-y-3">
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
           <div className="flex items-center gap-2">
@@ -379,7 +445,7 @@ export default function InventoryIntelligencePage() {
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
         {/* Near Expiry Card */}
         <Link
-          href={`/dashboard/${role}/inventory-intelligence/near-expiry?days=${expiryDaysInput}`}
+          href={`/dashboard/${role}/inventory-intelligence/near-expiry?days=${expiryDaysInput}${hierarchyQueryString}`}
           className="group relative isolate overflow-hidden rounded-2xl border border-amber-200/80 dark:border-amber-900/50 bg-gradient-to-br from-white to-amber-50/40 dark:from-slate-900 dark:to-amber-950/20 p-5 shadow-sm hover:shadow-xl transition-all duration-300 hover:-translate-y-1"
         >
           <div className="flex items-center justify-between">
@@ -417,7 +483,7 @@ export default function InventoryIntelligencePage() {
 
         {/* Dead / Dump Stock Card */}
         <Link
-          href={`/dashboard/${role}/inventory-intelligence/dead-stock?days=${deadStockDaysInput}`}
+          href={`/dashboard/${role}/inventory-intelligence/dead-stock?days=${deadStockDaysInput}${hierarchyQueryString}`}
           className="group relative isolate overflow-hidden rounded-2xl border border-rose-200/80 dark:border-rose-900/50 bg-gradient-to-br from-white to-rose-50/40 dark:from-slate-900 dark:to-rose-950/20 p-5 shadow-sm hover:shadow-xl transition-all duration-300 hover:-translate-y-1"
         >
           <div className="flex items-center justify-between">
@@ -455,7 +521,7 @@ export default function InventoryIntelligencePage() {
 
         {/* Fast Moving Card */}
         <Link
-          href={`/dashboard/${role}/inventory-intelligence/movement?type=FAST`}
+          href={`/dashboard/${role}/inventory-intelligence/movement?type=FAST${hierarchyQueryString}`}
           className="group relative isolate overflow-hidden rounded-2xl border border-emerald-200/80 dark:border-emerald-900/50 bg-gradient-to-br from-white to-emerald-50/40 dark:from-slate-900 dark:to-emerald-950/20 p-5 shadow-sm hover:shadow-xl transition-all duration-300 hover:-translate-y-1"
         >
           <div className="flex items-center justify-between">
@@ -488,7 +554,7 @@ export default function InventoryIntelligencePage() {
 
         {/* Slow Moving Card */}
         <Link
-          href={`/dashboard/${role}/inventory-intelligence/movement?type=SLOW`}
+          href={`/dashboard/${role}/inventory-intelligence/movement?type=SLOW${hierarchyQueryString}`}
           className="group relative isolate overflow-hidden rounded-2xl border border-indigo-200/80 dark:border-indigo-900/50 bg-gradient-to-br from-white to-indigo-50/40 dark:from-slate-900 dark:to-indigo-950/20 p-5 shadow-sm hover:shadow-xl transition-all duration-300 hover:-translate-y-1"
         >
           <div className="flex items-center justify-between">
@@ -579,10 +645,10 @@ export default function InventoryIntelligencePage() {
             <Link
               href={
                 activeTab === "nearExpiry"
-                  ? `/dashboard/${role}/inventory-intelligence/near-expiry?days=${expiryDaysInput}`
+                  ? `/dashboard/${role}/inventory-intelligence/near-expiry?days=${expiryDaysInput}${hierarchyQueryString}`
                   : activeTab === "deadStock"
-                    ? `/dashboard/${role}/inventory-intelligence/dead-stock?days=${deadStockDaysInput}`
-                    : `/dashboard/${role}/inventory-intelligence/movement?type=${activeTab === "fastMoving" ? "FAST" : "SLOW"}`
+                    ? `/dashboard/${role}/inventory-intelligence/dead-stock?days=${deadStockDaysInput}${hierarchyQueryString}`
+                    : `/dashboard/${role}/inventory-intelligence/movement?type=${activeTab === "fastMoving" ? "FAST" : "SLOW"}${hierarchyQueryString}`
               }
               className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-xs font-bold transition shrink-0"
             >
@@ -678,7 +744,7 @@ export default function InventoryIntelligencePage() {
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                 {activePreviewItems.map((item: any, idx: number) => (
                   <tr
-                    key={item.id || idx}
+                    key={`${item.id || item.code || ""}_${item.batchNo || ""}_${idx}`}
                     className="hover:bg-slate-50/80 dark:hover:bg-slate-800/40 transition"
                   >
                     <td className="p-3.5 font-bold text-slate-400">
@@ -691,6 +757,28 @@ export default function InventoryIntelligencePage() {
                       {item.code && (
                         <div className="text-[10px] text-slate-400 font-mono">
                           Code: {item.code}
+                        </div>
+                      )}
+                      {(item.company || item.division || item.category) && (
+                        <div className="flex flex-wrap items-center gap-1.5 mt-1">
+                          {item.company && (
+                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-blue-50 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300">
+                              <FaBuilding size={8} />
+                              <span>{item.company}</span>
+                            </span>
+                          )}
+                          {item.division && (
+                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300">
+                              <FaSitemap size={8} />
+                              <span>{item.division}</span>
+                            </span>
+                          )}
+                          {item.category && (
+                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300">
+                              <FaTags size={8} />
+                              <span>{item.category}</span>
+                            </span>
+                          )}
                         </div>
                       )}
                     </td>

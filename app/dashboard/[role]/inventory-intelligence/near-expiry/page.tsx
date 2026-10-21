@@ -5,6 +5,9 @@ import Link from "next/link";
 import { useParams, useSearchParams } from "next/navigation";
 import { useCompany } from "@/context/CompanyContext";
 import { useUser } from "@/context/UserContext";
+import InventoryHierarchyFilter, {
+  HierarchyFilterValues,
+} from "@/components/inventory/InventoryHierarchyFilter";
 import {
   FaExclamationTriangle,
   FaSearch,
@@ -45,10 +48,18 @@ export default function NearExpiryPage() {
   // Filter States
   const [daysInput, setDaysInput] = useState<number>(initialDays);
   const [minStockInput, setMinStockInput] = useState<number>(1);
-  const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState<
     "ALL" | "CRITICAL" | "WARNING" | "ATTENTION" | "EXPIRED"
   >("ALL");
+
+  // 5-Tier Product Hierarchy Filters
+  const [hierarchyFilters, setHierarchyFilters] = useState<HierarchyFilterValues>({
+    companyCode: "",
+    divisionCode: "",
+    subDivisionCode: "",
+    categoryCode: "",
+    productCode: "",
+  });
 
   // Email Alert Modal State
   const [isEmailModalOpen, setIsEmailModalOpen] = useState(false);
@@ -70,7 +81,11 @@ export default function NearExpiryPage() {
   const pageSize = 50;
 
   const loadData = useCallback(
-    async (customDays?: number, customMinStock?: number) => {
+    async (
+      customDays?: number,
+      customMinStock?: number,
+      customHierarchy?: HierarchyFilterValues
+    ) => {
       setLoading(true);
       setError("");
       try {
@@ -79,10 +94,16 @@ export default function NearExpiryPage() {
 
         const d = customDays ?? daysInput;
         const ms = customMinStock ?? minStockInput;
+        const h = customHierarchy ?? hierarchyFilters;
 
         if (d) sp.set("days", String(d));
         if (ms) sp.set("minStock", String(ms));
-        if (searchTerm.trim()) sp.set("q", searchTerm.trim());
+
+        if (h.companyCode) sp.set("companyCode", h.companyCode);
+        if (h.divisionCode) sp.set("divisionCode", h.divisionCode);
+        if (h.subDivisionCode) sp.set("subDivisionCode", h.subDivisionCode);
+        if (h.categoryCode) sp.set("categoryCode", h.categoryCode);
+        if (h.productCode) sp.set("productCode", h.productCode);
 
         const res = await fetch(
           `/api/inventory-intelligence/near-expiry?${sp.toString()}`,
@@ -103,12 +124,31 @@ export default function NearExpiryPage() {
         setLoading(false);
       }
     },
-    [selectedCompany?._id, daysInput, minStockInput, searchTerm],
+    [selectedCompany?._id, daysInput, minStockInput, hierarchyFilters],
   );
 
   useEffect(() => {
     loadData();
   }, [loadData]);
+
+  const handleHierarchyChange = (values: HierarchyFilterValues) => {
+    setHierarchyFilters(values);
+    setCurrentPage(1);
+    loadData(daysInput, minStockInput, values);
+  };
+
+  const handleHierarchyReset = () => {
+    const emptyValues: HierarchyFilterValues = {
+      companyCode: "",
+      divisionCode: "",
+      subDivisionCode: "",
+      categoryCode: "",
+      productCode: "",
+    };
+    setHierarchyFilters(emptyValues);
+    setCurrentPage(1);
+    loadData(daysInput, minStockInput, emptyValues);
+  };
 
   const handleApplyFilter = (e?: React.FormEvent) => {
     if (e) e.preventDefault();
@@ -147,6 +187,10 @@ export default function NearExpiryPage() {
   const handleExportCsv = () => {
     if (!filteredItems.length) return;
     const headers = [
+      "Company",
+      "Division",
+      "Sub-Division",
+      "Category",
       "Product Name",
       "Product Code",
       "Batch No",
@@ -158,6 +202,10 @@ export default function NearExpiryPage() {
       "Status",
     ];
     const rows = filteredItems.map((item) => [
+      `"${String(item.company || "").replace(/"/g, '""')}"`,
+      `"${String(item.division || "").replace(/"/g, '""')}"`,
+      `"${String(item.subDivision || "").replace(/"/g, '""')}"`,
+      `"${String(item.category || "").replace(/"/g, '""')}"`,
       `"${String(item.product).replace(/"/g, '""')}"`,
       `"${item.code || ""}"`,
       `"${item.batchNo || ""}"`,
@@ -222,7 +270,7 @@ export default function NearExpiryPage() {
 
       setAlertFeedback({
         type: "success",
-        message: json.message || "Near expiry alert email sent successfully!",
+        message: json.message || "Near expiry alert email sent successfully",
       });
       setTimeout(() => {
         setIsEmailModalOpen(false);
@@ -343,13 +391,22 @@ export default function NearExpiryPage() {
         </div>
       </div>
 
+      {/* 5-Tier Product Hierarchy Search: Company → Division → Sub-Division → Category → Product */}
+      <InventoryHierarchyFilter
+        initialValues={hierarchyFilters}
+        onChange={handleHierarchyChange}
+        onReset={handleHierarchyReset}
+        title="1. Product Filtration (Company → Division → Sub-Division → Category → Product)"
+        subtitle="Select exact hierarchy to filter batches. Current items will immediately narrow down."
+      />
+
       {/* Dynamic Expiry Filter Control Bar */}
       <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-4 md:p-5 shadow-xs space-y-3">
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
           <div className="flex items-center gap-2">
             <FaCalendarAlt className="text-amber-500" />
             <h3 className="text-xs font-bold text-slate-800 dark:text-white uppercase tracking-wider">
-              Set Days Window To Show Expiry:
+              2. Expiry Window & Threshold Parameters:
             </h3>
           </div>
 
@@ -380,27 +437,11 @@ export default function NearExpiryPage() {
 
         <form
           onSubmit={handleApplyFilter}
-          className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 pt-1"
+          className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1"
         >
-          <div className="lg:col-span-2 relative">
-            <label className="block text-[11px] font-bold text-slate-600 dark:text-slate-300 mb-1">
-              Search Product / Batch:
-            </label>
-            <div className="relative">
-              <FaSearch className="absolute left-3 top-3 text-slate-400 text-xs" />
-              <input
-                type="text"
-                placeholder="Product name, batch number, code..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full pl-8 pr-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-xs text-slate-900 dark:text-white bg-slate-50 dark:bg-slate-800 outline-none focus:ring-2 focus:ring-amber-500/20"
-              />
-            </div>
-          </div>
-
           <div>
             <label className="block text-[11px] font-bold text-slate-600 dark:text-slate-300 mb-1">
-              Expiry Within (Days):
+              Expiry Within (Days Window):
             </label>
             <input
               type="number"
@@ -416,7 +457,7 @@ export default function NearExpiryPage() {
 
           <div>
             <label className="block text-[11px] font-bold text-slate-600 dark:text-slate-300 mb-1">
-              Minimum Stock:
+              Minimum Stock (Units):
             </label>
             <input
               type="number"
@@ -436,7 +477,7 @@ export default function NearExpiryPage() {
               className="w-full py-2 px-4 rounded-xl bg-slate-900 dark:bg-indigo-600 hover:bg-slate-800 text-white font-bold text-xs shadow-xs transition disabled:opacity-50 flex items-center justify-center gap-2"
             >
               <FaSyncAlt className={loading ? "animate-spin" : ""} />
-              <span>{loading ? "Filtering..." : "Apply Filter"}</span>
+              <span>{loading ? "Refreshing..." : "Apply Threshold Window"}</span>
             </button>
           </div>
         </form>
@@ -534,7 +575,7 @@ export default function NearExpiryPage() {
                   const globalIdx = (currentPage - 1) * pageSize + idx + 1;
                   return (
                     <tr
-                      key={item.id || idx}
+                      key={`${item.id || item.code || ""}_${item.batchNo || ""}_${idx}`}
                       className="hover:bg-amber-50/20 dark:hover:bg-slate-800/40 transition"
                     >
                       <td className="p-3.5 text-center font-bold text-slate-400">
@@ -544,11 +585,33 @@ export default function NearExpiryPage() {
                         <div className="font-bold text-slate-900 dark:text-white">
                           {item.product}
                         </div>
-                        {item.code && (
-                          <div className="text-[10px] text-slate-400 font-mono">
-                            Code: {item.code}
-                          </div>
-                        )}
+                        <div className="flex flex-wrap items-center gap-1.5 mt-1 text-[10px]">
+                          {item.code && (
+                            <span className="font-mono text-slate-400 bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded">
+                              Code: {item.code}
+                            </span>
+                          )}
+                          {item.company && item.company !== "-" && (
+                            <span className="font-bold text-blue-700 dark:text-blue-300 bg-blue-50 dark:bg-blue-900/30 border border-blue-200 dark:border-blue-800/50 px-1.5 py-0.5 rounded">
+                              {item.company}
+                            </span>
+                          )}
+                          {item.division && item.division !== "-" && (
+                            <span className="font-bold text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-900/30 border border-emerald-200 dark:border-emerald-800/50 px-1.5 py-0.5 rounded">
+                              {item.division}
+                            </span>
+                          )}
+                          {item.subDivision && item.subDivision !== "-" && (
+                            <span className="font-bold text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-900/30 border border-amber-200 dark:border-amber-800/50 px-1.5 py-0.5 rounded">
+                              {item.subDivision}
+                            </span>
+                          )}
+                          {item.category && item.category !== "-" && (
+                            <span className="font-bold text-purple-700 dark:text-purple-300 bg-purple-50 dark:bg-purple-900/30 border border-purple-200 dark:border-purple-800/50 px-1.5 py-0.5 rounded">
+                              {item.category}
+                            </span>
+                          )}
+                        </div>
                       </td>
                       <td className="p-3.5 text-center font-mono font-semibold text-slate-700 dark:text-slate-300">
                         {item.batchNo}

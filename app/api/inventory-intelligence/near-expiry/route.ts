@@ -29,6 +29,11 @@ export async function GET(req: Request) {
     const minStock = minStockParam ? Number(minStockParam) : undefined;
     const includeExpired = sp.get("includeExpired") !== "false";
     const fyId = sp.get("fyId") || undefined;
+    const companyCode = sp.get("companyCode") || undefined;
+    const divisionCode = sp.get("divisionCode") || undefined;
+    const subDivisionCode = sp.get("subDivisionCode") || undefined;
+    const categoryCode = sp.get("categoryCode") || undefined;
+    const productCode = sp.get("productCode") || undefined;
 
     const result = await getNearExpiryData(s, {
       q,
@@ -36,6 +41,11 @@ export async function GET(req: Request) {
       minStock,
       includeExpired,
       fyId,
+      companyCode,
+      divisionCode,
+      subDivisionCode,
+      categoryCode,
+      productCode,
     });
 
     return NextResponse.json({

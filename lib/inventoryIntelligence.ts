@@ -144,6 +144,67 @@ export async function getInventorySettings(
   return JSON.parse(JSON.stringify(merged));
 }
 
+function buildProductHierarchyClauses(options: {
+  companyCode?: string;
+  divisionCode?: string;
+  subDivisionCode?: string;
+  categoryCode?: string;
+  productCode?: string;
+}) {
+  const clauses: any[] = [];
+
+  if (options.companyCode) {
+    clauses.push({
+      $or: [
+        { COMPANY: new RegExp(`^${options.companyCode}$`, "i") },
+        { GCODE: new RegExp(`^${options.companyCode}$`, "i") },
+        { companyCode: options.companyCode },
+      ],
+    });
+  }
+
+  if (options.divisionCode) {
+    clauses.push({
+      $or: [
+        { DIV: new RegExp(`^${options.divisionCode}$`, "i") },
+        { DIVISION: new RegExp(`^${options.divisionCode}$`, "i") },
+        { divisionCode: options.divisionCode },
+      ],
+    });
+  }
+
+  if (options.subDivisionCode) {
+    clauses.push({
+      $or: [
+        { SUBDIV: new RegExp(`^${options.subDivisionCode}$`, "i") },
+        { SUB_DIV: new RegExp(`^${options.subDivisionCode}$`, "i") },
+        { subDivisionCode: options.subDivisionCode },
+      ],
+    });
+  }
+
+  if (options.categoryCode) {
+    clauses.push({
+      $or: [
+        { CAT: new RegExp(`^${options.categoryCode}$`, "i") },
+        { CATEGORY: new RegExp(`^${options.categoryCode}$`, "i") },
+        { categoryCode: options.categoryCode },
+      ],
+    });
+  }
+
+  if (options.productCode) {
+    clauses.push({
+      $or: [
+        { CODE: options.productCode },
+        { CODE: Number(options.productCode) || 0 },
+      ],
+    });
+  }
+
+  return clauses;
+}
+
 /**
  * 1. NEAR EXPIRY DATA
  * Fetches batches expiring within windowDays (or custom days parameter)
@@ -156,6 +217,11 @@ export async function getNearExpiryData(
     minStock?: number;
     includeExpired?: boolean;
     fyId?: string;
+    companyCode?: string;
+    divisionCode?: string;
+    subDivisionCode?: string;
+    categoryCode?: string;
+    productCode?: string;
   } = {}
 ) {
   await dbConnect();
@@ -191,10 +257,93 @@ export async function getNearExpiryData(
     });
   }
 
+  // Exact Product Code matching
+  if (options.productCode) {
+    f.$and.push({
+      $or: [
+        { CODE: options.productCode },
+        { CODE: Number(options.productCode) || 0 },
+      ],
+    });
+  }
+
+  // Hierarchy filter matching via Product master (Company, Division, SubDivision, Category)
+  const hierarchyClauses = buildProductHierarchyClauses({
+    companyCode: options.companyCode,
+    divisionCode: options.divisionCode,
+    subDivisionCode: options.subDivisionCode,
+    categoryCode: options.categoryCode,
+  });
+
+  let matchingCodes: any[] | null = null;
+  const productMetaMap = new Map<string, any>();
+
+  if (hierarchyClauses.length > 0) {
+    const matchingProducts = await Product.find({ $and: hierarchyClauses })
+      .select("CODE PRODUCT BILLNAME COMPANY GCODE DIV DIVISION SUBDIV CAT CATEGORY")
+      .lean();
+
+    matchingCodes = matchingProducts.map((p: any) => p.CODE);
+
+    for (const p of matchingProducts as any[]) {
+      const codeStr = String(p.CODE || "").trim();
+      if (codeStr) {
+        productMetaMap.set(codeStr, {
+          company: p.COMPANY || p.GCODE || "",
+          division: p.DIVISION || p.DIV || "",
+          subDivision: p.SUBDIV || "",
+          category: p.CATEGORY || p.CAT || "",
+          productName: p.PRODUCT || p.BILLNAME || "",
+        });
+      }
+    }
+
+    const codeVariants = Array.from(
+      new Set([
+        ...matchingCodes,
+        ...matchingCodes.map((c) => String(c)),
+        ...matchingCodes.map((c) => Number(c)).filter(Number.isFinite),
+      ])
+    );
+
+    f.$and.push({
+      CODE: { $in: codeVariants },
+    });
+  }
+
   const rows = await ProductBatch.find(f)
     .sort({ EXP: 1, PRODUCT: 1 })
     .limit(1000)
     .lean();
+
+  // If product metadata wasn't loaded from hierarchy, load it for the returned batch codes
+  if (productMetaMap.size === 0 && rows.length > 0) {
+    const batchCodes = Array.from(new Set(rows.map((r: any) => r.CODE).filter(Boolean)));
+    const proDocs = await Product.find({
+      CODE: {
+        $in: [
+          ...batchCodes,
+          ...batchCodes.map((c) => String(c)),
+          ...batchCodes.map((c) => Number(c)).filter(Number.isFinite),
+        ],
+      },
+    })
+      .select("CODE PRODUCT BILLNAME COMPANY GCODE DIV DIVISION SUBDIV CAT CATEGORY")
+      .lean();
+
+    for (const p of proDocs as any[]) {
+      const codeStr = String(p.CODE || "").trim();
+      if (codeStr) {
+        productMetaMap.set(codeStr, {
+          company: p.COMPANY || p.GCODE || "",
+          division: p.DIVISION || p.DIV || "",
+          subDivision: p.SUBDIV || "",
+          category: p.CATEGORY || p.CAT || "",
+          productName: p.PRODUCT || p.BILLNAME || "",
+        });
+      }
+    }
+  }
 
   const items = rows.map((r: any) => {
     const expStr = date(r.EXP);
@@ -210,10 +359,12 @@ export async function getNearExpiryData(
     else if (days <= 90) status = "WARNING";
     else if (days <= 180) status = "ATTENTION";
 
+    const meta = productMetaMap.get(String(r.CODE || "").trim());
+
     return {
       id: String(r._id),
       code: r.CODE,
-      product: r.PRODUCT || r.BILLNAME || "Unknown Product",
+      product: r.PRODUCT || meta?.productName || r.BILLNAME || "Unknown Product",
       batchNo: r.BATCHNO || "N/A",
       expiry: expStr,
       daysToExpiry: days,
@@ -222,6 +373,10 @@ export async function getNearExpiryData(
       stock,
       mrp,
       totalValue,
+      company: meta?.company || r.COMPANY || r.GCODE || "-",
+      division: meta?.division || r.DIV || "-",
+      subDivision: meta?.subDivision || r.SUBDIV || "-",
+      category: meta?.category || r.CAT || "-",
     };
   });
 
@@ -255,6 +410,11 @@ export async function getDeadStockData(
     days?: number;
     minStock?: number;
     fyId?: string;
+    companyCode?: string;
+    divisionCode?: string;
+    subDivisionCode?: string;
+    categoryCode?: string;
+    productCode?: string;
   } = {}
 ) {
   await dbConnect();
@@ -264,9 +424,23 @@ export async function getDeadStockData(
 
   const companyMatch = await cf(s.companyId, options.fyId);
 
-  const ps: any[] = await Product.find({
-    $and: [{ BALANCE: { $gte: minStock } }, companyMatch],
-  }).lean();
+  const productHierarchyClauses = buildProductHierarchyClauses({
+    companyCode: options.companyCode,
+    divisionCode: options.divisionCode,
+    subDivisionCode: options.subDivisionCode,
+    categoryCode: options.categoryCode,
+    productCode: options.productCode,
+  });
+
+  const psQuery: any = {
+    $and: [
+      { BALANCE: { $gte: minStock } },
+      companyMatch,
+      ...productHierarchyClauses,
+    ],
+  };
+
+  const ps: any[] = await Product.find(psQuery).lean();
 
   const codes = ps.map((p) => Number(p.CODE)).filter(Number.isFinite);
 
@@ -303,6 +477,10 @@ export async function getDeadStockData(
         totalValue,
         lastSale: last,
         noMovementDays: daysIdle,
+        company: p.COMPANY || p.GCODE || "-",
+        division: p.DIVISION || p.DIV || "-",
+        subDivision: p.SUBDIV || "-",
+        category: p.CATEGORY || p.CAT || "-",
       };
     })
     .filter((r) => r.noMovementDays >= noMovementDays)
@@ -344,6 +522,11 @@ export async function getMovementData(
     minSalesQty?: number;
     type?: "ALL" | "FAST" | "SLOW" | "NORMAL";
     fyId?: string;
+    companyCode?: string;
+    divisionCode?: string;
+    subDivisionCode?: string;
+    categoryCode?: string;
+    productCode?: string;
   } = {}
 ) {
   await dbConnect();
@@ -358,8 +541,20 @@ export async function getMovementData(
   const from = addDays(t, -analysisDays);
   const companyMatch = await cf(s.companyId, options.fyId);
 
+  const productHierarchyClauses = buildProductHierarchyClauses({
+    companyCode: options.companyCode,
+    divisionCode: options.divisionCode,
+    subDivisionCode: options.subDivisionCode,
+    categoryCode: options.categoryCode,
+    productCode: options.productCode,
+  });
+
   const ps: any[] = await Product.find({
-    $and: [{ BALANCE: { $gt: 0 } }, companyMatch],
+    $and: [
+      { BALANCE: { $gt: 0 } },
+      companyMatch,
+      ...productHierarchyClauses,
+    ],
   }).lean();
 
   const codes = ps.map((p) => Number(p.CODE)).filter(Number.isFinite);
@@ -418,6 +613,10 @@ export async function getMovementData(
         stockCoverDays: Number.isFinite(cover) ? Number(cover.toFixed(1)) : null,
         movement,
         lastSale: date(x?.lastSale),
+        company: p.COMPANY || p.GCODE || "-",
+        division: p.DIVISION || p.DIV || "-",
+        subDivision: p.SUBDIV || "-",
+        category: p.CATEGORY || p.CAT || "-",
       };
     })
     .filter(
@@ -459,17 +658,43 @@ export async function buildInventoryReport(
     days?: number;
     noMovementDays?: number;
     analysisDays?: number;
+    companyCode?: string;
+    divisionCode?: string;
+    subDivisionCode?: string;
+    categoryCode?: string;
+    productCode?: string;
   } = {}
 ) {
   const [nearExpRes, deadStockRes, movementRes] = await Promise.all([
     s.nearExpiry.enabled
-      ? getNearExpiryData(s, { days: options.days })
+      ? getNearExpiryData(s, {
+          days: options.days,
+          companyCode: options.companyCode,
+          divisionCode: options.divisionCode,
+          subDivisionCode: options.subDivisionCode,
+          categoryCode: options.categoryCode,
+          productCode: options.productCode,
+        })
       : Promise.resolve({ items: [], summary: { totalBatches: 0, totalStock: 0, totalValue: 0, criticalCount: 0, expiredCount: 0, windowDays: s.nearExpiry.windowDays } }),
     s.deadStock.enabled
-      ? getDeadStockData(s, { days: options.noMovementDays })
+      ? getDeadStockData(s, {
+          days: options.noMovementDays,
+          companyCode: options.companyCode,
+          divisionCode: options.divisionCode,
+          subDivisionCode: options.subDivisionCode,
+          categoryCode: options.categoryCode,
+          productCode: options.productCode,
+        })
       : Promise.resolve({ items: [], summary: { totalProducts: 0, totalStock: 0, totalValue: 0, thresholdDays: s.deadStock.noMovementDays } }),
     s.movement.enabled
-      ? getMovementData(s, { analysisDays: options.analysisDays })
+      ? getMovementData(s, {
+          analysisDays: options.analysisDays,
+          companyCode: options.companyCode,
+          divisionCode: options.divisionCode,
+          subDivisionCode: options.subDivisionCode,
+          categoryCode: options.categoryCode,
+          productCode: options.productCode,
+        })
       : Promise.resolve({ items: [], summary: { totalAnalyzed: 0, fastCount: 0, slowCount: 0, normalCount: 0, analysisDays: s.movement.analysisDays }, fastMoving: [], slowMoving: [] }),
   ]);
 

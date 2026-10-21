@@ -28,12 +28,22 @@ export async function GET(req: Request) {
     const minStockParam = sp.get("minStock");
     const minStock = minStockParam ? Number(minStockParam) : undefined;
     const fyId = sp.get("fyId") || undefined;
+    const companyCode = sp.get("companyCode") || undefined;
+    const divisionCode = sp.get("divisionCode") || undefined;
+    const subDivisionCode = sp.get("subDivisionCode") || undefined;
+    const categoryCode = sp.get("categoryCode") || undefined;
+    const productCode = sp.get("productCode") || undefined;
 
     const result = await getDeadStockData(s, {
       q,
       days,
       minStock,
       fyId,
+      companyCode,
+      divisionCode,
+      subDivisionCode,
+      categoryCode,
+      productCode,
     });
 
     return NextResponse.json({

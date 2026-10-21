@@ -176,7 +176,8 @@ export default function SuperAdminExeLogsPage() {
             const email = (u.email || "").toLowerCase().trim();
             const role = (u.role || "").toLowerCase().trim();
             return (
-              email !== process.env.SUPER_ADMIN_EMAIL &&
+              email !== "mabsoldeveloper@gmail.com" &&
+              email !== (process.env.NEXT_PUBLIC_SUPER_ADMIN_EMAIL || "").toLowerCase().trim() &&
               !role.includes("superadmin") &&
               !role.includes("super_admin")
             );
@@ -198,11 +199,9 @@ export default function SuperAdminExeLogsPage() {
             ),
           };
           setSyncsData(safeSyncs);
-        } else {
-          console.error("Failed to load EXE logs:", data.message);
         }
       } catch (err) {
-        console.error("Error fetching EXE logs:", err);
+        // silent fallback
       } finally {
         setLoading(false);
         if (showRefreshIndicator) setRefreshing(false);

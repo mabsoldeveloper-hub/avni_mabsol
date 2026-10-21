@@ -34,14 +34,15 @@ export async function GET() {
   const name = String(userObj.name || "").toLowerCase().trim();
 
   const isSuperAdmin = Boolean(
-    userObj.isSuperAdmin ||
     email === superEmail ||
+    email === "mabsoldeveloper@gmail.com" ||
+    userObj.isSuperAdmin === true ||
     roleType === "superadmin" ||
+    roleType === "super-admin" ||
     role === "superadmin" ||
+    role === "super-admin" ||
     roleName === "superadmin" ||
-    roleName === "super admin" ||
-    name.includes("super admin") ||
-    name.includes("super administrator")
+    roleName === "super-admin"
   );
 
   if (isSuperAdmin) {
@@ -142,7 +143,7 @@ export async function GET() {
           companyId: userObj.companyId?._id || userObj.companyId,
           isSuperAdmin: Boolean(isSuperAdmin),
         },
-        process.env.JWT_SECRET || "mabsol_super_secret_jwt_key_2026",
+        process.env.JWT_SECRET || "MabsolCRM@2026SecretKey",
         { expiresIn: "30d" }
       );
       response.cookies.set("token", token, {

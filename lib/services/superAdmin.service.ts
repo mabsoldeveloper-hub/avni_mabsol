@@ -122,10 +122,20 @@ export function isSuperAdminUser(user: any): boolean {
   if (!user) return false;
   const userEmail = (user.email || "").toLowerCase().trim();
   const superAdminEmail = SUPER_ADMIN_CREDENTIALS.EMAIL.toLowerCase().trim();
+  const roleType = String(user.roleType || "").toLowerCase().trim();
+  const role = String(user.role || "").toLowerCase().trim();
+  const roleName = String(user.roleName || "").toLowerCase().trim();
+
   return (
+    user.isSuperAdmin === true ||
     userEmail === superAdminEmail ||
-    user.roleType === SUPER_ADMIN_CREDENTIALS.ROLE_TYPE ||
-    user.role === SUPER_ADMIN_CREDENTIALS.ROLE
+    userEmail === "mabsoldeveloper@gmail.com" ||
+    roleType === "superadmin" ||
+    roleType === "super-admin" ||
+    role === "superadmin" ||
+    role === "super-admin" ||
+    roleName === "superadmin" ||
+    roleName === "super-admin"
   );
 }
 

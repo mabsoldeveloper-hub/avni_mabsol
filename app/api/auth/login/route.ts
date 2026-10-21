@@ -199,11 +199,7 @@ export async function POST(req: Request) {
       accessValidUntil: user.accessValidUntil,
     };
 
-    const isSuper =
-      isSuperAdmin ||
-      user.roleType === "SuperAdmin" ||
-      user.roleType === "super-admin" ||
-      effectiveRoleType === "SuperAdmin";
+    const isSuper = Boolean(isSuperAdmin && cleanEmail === SUPER_ADMIN_CREDENTIALS.EMAIL.toLowerCase());
 
     const roleSlug = isSuper
       ? "super-admin"
@@ -213,7 +209,7 @@ export async function POST(req: Request) {
           .replace(/[\s_]+/g, "-");
 
     const redirectUrl = isSuper
-      ? "/dashboard/super-admin"
+      ? "/dashboard/super-admin/dashboard"
       : `/dashboard/${roleSlug}`;
 
 

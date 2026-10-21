@@ -48,14 +48,29 @@ function isTokenExpired(payload: any): boolean {
 
 function extractUserRole(payload: any): string {
   if (!payload) return "admin";
-  if (payload.isSuperAdmin || payload.roleType === "SuperAdmin") {
+
+  const email = String(payload.email || "").toLowerCase().trim();
+  const superAdminEmail = (process.env.SUPER_ADMIN_EMAIL || "mabsoldeveloper@gmail.com").toLowerCase().trim();
+  const roleName = String(payload.roleName || "").toLowerCase().trim();
+  const roleType = String(payload.roleType || "").toLowerCase().trim();
+  const role = String(payload.role || "").toLowerCase().trim();
+
+  // Super Admin identification
+  if (
+    payload.isSuperAdmin === true ||
+    email === superAdminEmail ||
+    email === "mabsoldeveloper@gmail.com" ||
+    roleType === "superadmin" ||
+    roleType === "super-admin" ||
+    role === "superadmin" ||
+    role === "super-admin" ||
+    roleName === "superadmin" ||
+    roleName === "super-admin"
+  ) {
     return "super-admin";
   }
 
   // Dynamic admin check from token properties
-  const roleName = String(payload.roleName || "").toLowerCase().trim();
-  const roleType = String(payload.roleType || "").toLowerCase().trim();
-  const role = String(payload.role || "").toLowerCase().trim();
   const dashboardType = String(payload.dashboardType || "").toLowerCase().trim();
 
   if (
@@ -85,6 +100,20 @@ function extractUserRole(payload: any): string {
   return "admin";
 }
 
+const SUPER_ADMIN_SUBROUTES = new Set([
+  "dashboard",
+  "accounts",
+  "approvals",
+  "branches",
+  "deactivated",
+  "deleted",
+  "plans",
+  "reports",
+  "audit-logs",
+  "exe-logs",
+  "settings",
+]);
+
 export function proxy(req: NextRequest) {
   const { pathname, search } = req.nextUrl;
 
@@ -101,14 +130,42 @@ export function proxy(req: NextRequest) {
     const userRole = extractUserRole(payload);
     const segments = pathname.split("/").filter(Boolean); // ["dashboard", ...]
 
-    // Case 1: Exact root "/dashboard" -> redirect to /dashboard/${userRole}
+    // Case 1: Exact root "/dashboard"
     if (segments.length === 1) {
       const url = req.nextUrl.clone();
-      url.pathname = `/dashboard/${userRole}`;
+      url.pathname = userRole === "super-admin" ? "/dashboard/super-admin/dashboard" : `/dashboard/${userRole}`;
       return NextResponse.redirect(url);
     }
 
     const firstSub = segments[1]?.toLowerCase();
+
+    // SECURITY CHECK 1: Non-superadmin users must NEVER access /dashboard/super-admin
+    if (userRole !== "super-admin" && (firstSub === "super-admin" || pathname.startsWith("/dashboard/super-admin"))) {
+      const url = req.nextUrl.clone();
+      url.pathname = `/dashboard/${userRole}`;
+      url.search = search;
+      return NextResponse.redirect(url);
+    }
+
+    // SECURITY CHECK 2: Super Admin navigation handling
+    if (userRole === "super-admin") {
+      // Super Admin is already on a super-admin route (/dashboard/super-admin or /dashboard/super-admin/...)
+      if (firstSub === "super-admin") {
+        return NextResponse.next();
+      }
+
+      // If Super Admin typed a super-admin subroute without the prefix (e.g. /dashboard/exe-logs, /dashboard/accounts)
+      const remainingPath = segments.slice(1).join("/");
+      const url = req.nextUrl.clone();
+      if (SUPER_ADMIN_SUBROUTES.has(firstSub)) {
+        url.pathname = `/dashboard/super-admin/${remainingPath}`;
+      } else {
+        // Any tenant route (e.g. /dashboard/sales, /dashboard/orders) redirects safely to super-admin dashboard
+        url.pathname = "/dashboard/super-admin/dashboard";
+      }
+      url.search = search;
+      return NextResponse.redirect(url);
+    }
 
     // If an Admin user is on /dashboard/mr or /dashboard/mr/..., auto-correct to /dashboard/admin/...
     if (userRole === "admin" && firstSub === "mr") {
@@ -119,7 +176,7 @@ export function proxy(req: NextRequest) {
       return NextResponse.redirect(url);
     }
 
-    // Case 2: First segment is already a valid role (e.g. /dashboard/admin/..., /dashboard/super-admin/...)
+    // Case 2: First segment is already a valid role (e.g. /dashboard/admin/..., /dashboard/manager/...)
     if (VALID_ROLES.has(firstSub)) {
       return NextResponse.next();
     }

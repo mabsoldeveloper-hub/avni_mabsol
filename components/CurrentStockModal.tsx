@@ -414,8 +414,8 @@ export default function CurrentStockModal({ isOpen, onClose }: CurrentStockModal
                                     className="pl-2.5 pr-6 py-1 sm:py-1.5 text-[11px] sm:text-xs rounded-lg sm:rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500/40 max-w-[140px] sm:max-w-[200px] truncate"
                                 >
                                     <option value="">All Companies</option>
-                                    {companies.map((c) => (
-                                        <option key={c.code} value={c.code}>
+                                    {companies.map((c, idx) => (
+                                        <option key={`${c.code}-${idx}`} value={c.code}>
                                             {c.name} ({c.code})
                                         </option>
                                     ))}

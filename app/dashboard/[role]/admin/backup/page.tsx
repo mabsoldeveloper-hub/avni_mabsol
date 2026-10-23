@@ -724,7 +724,7 @@ export default function BackupPage() {
         </div>
 
         {/* Main 2-Column Split: Left = Automated Email Scheduler, Right = Export & Restore */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 items-start">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 xl:gap-12 items-start">
           {/* ======================================================== */}
           {/* LEFT: AUTOMATED GMAIL BACKUP & SCHEDULE SETTINGS         */}
           {/* ======================================================== */}
@@ -745,10 +745,10 @@ export default function BackupPage() {
               </div>
             </div>
 
-            <form onSubmit={handleSaveSettings} className="p-6 space-y-5">
+            <form onSubmit={handleSaveSettings} className="p-6 sm:p-7 space-y-7">
               {/* Receiver Gmail */}
               <div>
-                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">
                   Receiver Gmail Address
                 </label>
                 <div className="relative">
@@ -762,33 +762,33 @@ export default function BackupPage() {
                   />
                   <Mail className="h-4 w-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
                 </div>
-                <p className="text-[11px] text-slate-500 mt-1">
+                <p className="text-[11px] text-slate-500 mt-1.5">
                   Backups are encrypted before email transmission and can only be decrypted inside this CRM.
                 </p>
               </div>
 
               {/* Automatic Email Scope */}
               <div>
-                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">
                   Automatic Backup Scope
                 </label>
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
                   <button
                     type="button"
                     onClick={() => setSchedulerScope("current_fy")}
-                    className={`p-3 rounded-xl border text-left transition-all cursor-pointer ${
+                    className={`p-3.5 rounded-xl border text-left transition-all cursor-pointer ${
                       schedulerScope === "current_fy"
-                        ? "border-blue-500 bg-blue-50/50 text-blue-900 ring-2 ring-blue-500/20"
-                        : "border-slate-200 hover:border-slate-300 text-slate-700 bg-white"
+                        ? "border-blue-500 bg-blue-50/50 text-blue-900 ring-2 ring-blue-500/20 shadow-xs"
+                        : "border-slate-200 hover:border-slate-300 text-slate-700 bg-white hover:bg-slate-50/50"
                     }`}
                   >
-                    <div className="flex items-center justify-between mb-1">
+                    <div className="flex items-center justify-between mb-1.5">
                       <span className="text-xs font-bold">Active Year</span>
                       {schedulerScope === "current_fy" && (
                         <Check className="h-3.5 w-3.5 text-blue-600" />
                       )}
                     </div>
-                    <p className="text-[10px] text-slate-500">
+                    <p className="text-[10px] text-slate-500 leading-relaxed">
                       Auto-advances to new FY when year changes (Recommended)
                     </p>
                   </button>
@@ -796,19 +796,19 @@ export default function BackupPage() {
                   <button
                     type="button"
                     onClick={() => setSchedulerScope("all")}
-                    className={`p-3 rounded-xl border text-left transition-all cursor-pointer ${
+                    className={`p-3.5 rounded-xl border text-left transition-all cursor-pointer ${
                       schedulerScope === "all"
-                        ? "border-blue-500 bg-blue-50/50 text-blue-900 ring-2 ring-blue-500/20"
-                        : "border-slate-200 hover:border-slate-300 text-slate-700 bg-white"
+                        ? "border-blue-500 bg-blue-50/50 text-blue-900 ring-2 ring-blue-500/20 shadow-xs"
+                        : "border-slate-200 hover:border-slate-300 text-slate-700 bg-white hover:bg-slate-50/50"
                     }`}
                   >
-                    <div className="flex items-center justify-between mb-1">
+                    <div className="flex items-center justify-between mb-1.5">
                       <span className="text-xs font-bold">All Years</span>
                       {schedulerScope === "all" && (
                         <Check className="h-3.5 w-3.5 text-blue-600" />
                       )}
                     </div>
-                    <p className="text-[10px] text-slate-500">
+                    <p className="text-[10px] text-slate-500 leading-relaxed">
                       Full multi-year database snapshot in every email
                     </p>
                   </button>
@@ -816,30 +816,30 @@ export default function BackupPage() {
                   <button
                     type="button"
                     onClick={() => setSchedulerScope("custom")}
-                    className={`p-3 rounded-xl border text-left transition-all cursor-pointer ${
+                    className={`p-3.5 rounded-xl border text-left transition-all cursor-pointer ${
                       schedulerScope === "custom"
-                        ? "border-blue-500 bg-blue-50/50 text-blue-900 ring-2 ring-blue-500/20"
-                        : "border-slate-200 hover:border-slate-300 text-slate-700 bg-white"
+                        ? "border-blue-500 bg-blue-50/50 text-blue-900 ring-2 ring-blue-500/20 shadow-xs"
+                        : "border-slate-200 hover:border-slate-300 text-slate-700 bg-white hover:bg-slate-50/50"
                     }`}
                   >
-                    <div className="flex items-center justify-between mb-1">
+                    <div className="flex items-center justify-between mb-1.5">
                       <span className="text-xs font-bold">Fixed FY</span>
                       {schedulerScope === "custom" && (
                         <Check className="h-3.5 w-3.5 text-blue-600" />
                       )}
                     </div>
-                    <p className="text-[10px] text-slate-500">
+                    <p className="text-[10px] text-slate-500 leading-relaxed">
                       Lock to a specific historical financial year
                     </p>
                   </button>
                 </div>
 
                 {schedulerScope === "custom" && (
-                  <div className="mt-2.5">
+                  <div className="mt-4">
                     <select
                       value={schedulerFyId}
                       onChange={(e) => setSchedulerFyId(e.target.value)}
-                      className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs font-semibold text-slate-800"
+                      className="w-full bg-slate-50 border border-slate-300 rounded-xl px-4 py-2.5 text-xs font-semibold text-slate-800 shadow-xs focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
                     >
                       <option value="">Select Fixed Financial Year...</option>
                       {financialYears.map((fy) => (
@@ -853,18 +853,18 @@ export default function BackupPage() {
               </div>
 
               {/* Frequency Selection */}
-              <div>
-                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">
+              <div className="pt-2">
+                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-3">
                   Backup Dispatch Frequency
                 </label>
-                <div className="space-y-2">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   {FREQUENCY_OPTIONS.map((opt) => (
                     <label
                       key={opt.value}
-                      className={`flex items-start gap-3 p-3 rounded-xl border transition-all cursor-pointer ${
+                      className={`flex items-start gap-3 p-4 rounded-xl border transition-all cursor-pointer ${
                         frequency === opt.value
-                          ? "border-blue-500 bg-blue-50/40 text-blue-950 ring-2 ring-blue-500/20"
-                          : "border-slate-200 hover:border-slate-300 bg-white text-slate-700"
+                          ? "border-blue-500 bg-blue-50/40 text-blue-950 ring-2 ring-blue-500/20 shadow-xs"
+                          : "border-slate-200 hover:border-slate-300 bg-white text-slate-700 hover:bg-slate-50/50"
                       }`}
                     >
                       <input
@@ -884,7 +884,7 @@ export default function BackupPage() {
                             </span>
                           )}
                         </div>
-                        <p className="text-[11px] text-slate-500 mt-0.5">
+                        <p className="text-[11px] text-slate-500 mt-1.5 leading-relaxed">
                           {opt.desc}
                         </p>
                       </div>
@@ -894,12 +894,12 @@ export default function BackupPage() {
               </div>
 
               {/* Enable / Disable Switch */}
-              <div className="flex items-center justify-between p-4 bg-slate-50 rounded-xl border border-slate-200/80">
+              <div className="flex items-center justify-between p-5 bg-slate-50 rounded-2xl border border-slate-200/80 my-2">
                 <div>
                   <p className="text-xs font-bold text-slate-900">
                     Enable Background Scheduler
                   </p>
-                  <p className="text-[11px] text-slate-500">
+                  <p className="text-[11px] text-slate-500 mt-0.5">
                     Dispatches backups at the scheduled frequency automatically
                   </p>
                 </div>
@@ -919,7 +919,7 @@ export default function BackupPage() {
               </div>
 
               {/* Form Action Buttons */}
-              <div className="flex flex-col sm:flex-row items-center gap-3 pt-2">
+              <div className="flex flex-col sm:flex-row items-center gap-3.5 pt-3">
                 <button
                   type="submit"
                   disabled={saveLoading}
@@ -1161,7 +1161,7 @@ export default function BackupPage() {
                 type="button"
                 onClick={handleExecuteRestore}
                 disabled={restoreLoading || !selectedFile || inspectLoading}
-                className="w-full mt-4 inline-flex items-center justify-center gap-2 bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold py-2.5 px-4 rounded-xl shadow-sm shadow-rose-500/20 transition-all cursor-pointer disabled:opacity-50"
+                className="w-full mt-5 inline-flex items-center justify-center gap-2 bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold py-3 px-4 rounded-xl shadow-sm shadow-rose-500/20 transition-all cursor-pointer disabled:opacity-50"
               >
                 {restoreLoading ? (
                   <RefreshCw className="h-4 w-4 animate-spin" />

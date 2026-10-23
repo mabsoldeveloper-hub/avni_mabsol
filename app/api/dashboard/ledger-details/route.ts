@@ -134,10 +134,16 @@ export async function GET(req: NextRequest) {
             GLedger.distinct("CODE", ledgerFilter)
         ]);
 
+        const seenPartyCodes = new Set<string>();
         const partiesList = distinctCodes
             .filter(Boolean)
-            .map((cCode: string) => {
-                const code = String(cCode).trim();
+            .map((cCode: string) => String(cCode).trim())
+            .filter((code: string) => {
+                if (!code || seenPartyCodes.has(code)) return false;
+                seenPartyCodes.add(code);
+                return true;
+            })
+            .map((code: string) => {
                 const pInfo = partyMap.get(code);
                 return {
                     code,

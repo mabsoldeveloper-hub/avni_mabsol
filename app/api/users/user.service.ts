@@ -15,14 +15,22 @@ export class UserService {
       throw new Error("Unauthorized");
     }
 
-    const userCompany = currentUser?.companyId
-      ? await Company.findById(currentUser.companyId).lean()
+    const userCompanyId = currentUser?.companyId
+      ? typeof currentUser.companyId === "object" && (currentUser.companyId as any)._id
+        ? String((currentUser.companyId as any)._id)
+        : String(currentUser.companyId)
+      : null;
+
+    const userCompany = userCompanyId
+      ? typeof currentUser?.companyId === "object" && (currentUser.companyId as any)?.companyName
+        ? (currentUser.companyId as any)
+        : await Company.findById(userCompanyId).lean()
       : null;
     const isChildBranchUser = Boolean(userCompany && !userCompany.isHeadOffice);
 
     let targetCompanyId: string | null = null;
     if (isChildBranchUser && userCompany) {
-      targetCompanyId = String(userCompany._id);
+      targetCompanyId = String((userCompany as any)._id || userCompanyId);
     } else if (
       requestedCompanyId &&
       requestedCompanyId !== "ALL" &&
@@ -30,8 +38,8 @@ export class UserService {
       requestedCompanyId !== "null"
     ) {
       targetCompanyId = requestedCompanyId;
-    } else if (currentUser?.companyId && !requestedCompanyId) {
-      targetCompanyId = String(currentUser.companyId);
+    } else if (userCompanyId && !requestedCompanyId) {
+      targetCompanyId = userCompanyId;
     }
 
     let userQuery: any = {};

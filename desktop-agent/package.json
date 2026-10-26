@@ -20,6 +20,7 @@
     "files": [
       "main.js",
       "preload.js",
+      "margMasterCombiner.js",
       "engine_bundle.dat",
       "mabsol_logo.ico",
       "renderer/**/*",

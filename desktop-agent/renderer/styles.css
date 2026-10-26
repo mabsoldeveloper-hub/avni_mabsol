@@ -44,6 +44,7 @@ body {
 /* Utilities */
 .hidden { display: none !important; }
 .flex-1 { flex: 1; }
+.flex-2 { flex: 2; }
 .w-36 { width: 144px; }
 .req { color: var(--accent-red); }
 
@@ -573,11 +574,62 @@ button:disabled, .btn-browse:disabled {
 
 /* Agent Grid */
 .agent-grid {
-  display: grid;
-  grid-template-columns: 1.15fr 1fr;
-  gap: 16px;
+  display: flex;
+  gap: 0;
   flex: 1;
   min-height: 0;
+  position: relative;
+  overflow: hidden;
+}
+
+.settings-card {
+  width: var(--settings-panel-width, 42%);
+  min-width: 310px;
+  max-width: 70%;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.grid-resizer {
+  width: 14px;
+  margin: 0 -1px;
+  cursor: col-resize;
+  background: transparent;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  z-index: 10;
+  user-select: none;
+  flex-shrink: 0;
+  transition: background 0.15s ease;
+}
+
+.grid-resizer:hover, .grid-resizer.dragging {
+  background: rgba(56, 189, 248, 0.15);
+}
+
+.grid-resizer::after {
+  content: "";
+  width: 4px;
+  height: 48px;
+  border-radius: 9999px;
+  background: rgba(148, 163, 184, 0.35);
+  transition: all 0.2s ease;
+}
+
+.grid-resizer:hover::after, .grid-resizer.dragging::after {
+  background: #38bdf8;
+  height: 72px;
+  box-shadow: 0 0 12px rgba(56, 189, 248, 0.6);
+}
+
+.console-card {
+  flex: 1;
+  min-width: 310px;
+  display: flex;
+  flex-direction: column;
 }
 
 .card {
@@ -1704,8 +1756,15 @@ button:disabled, .btn-browse:disabled {
   box-shadow: 0 0 0 2px rgba(239, 68, 68, 0.25) !important;
 }
 
-.clean-input-row:has(.clean-field-icon) input {
+.clean-input-row:has(.clean-field-icon) input,
+.clean-input-row:has(.clean-field-icon) select {
   padding-left: 38px;
+}
+
+.clean-select option {
+  background: #0f172a;
+  color: #f8fafc;
+  padding: 8px 12px;
 }
 
 .clean-input-row:has(.clean-inline-btn) input {
@@ -2616,6 +2675,359 @@ button:disabled, .btn-browse:disabled {
   border-color: rgba(148, 163, 184, 0.2);
   color: #64748b;
 }
+
+/* ==========================================================================
+   ERP MASTER DISCOVERY: EMAIL CHOICE CARD & FINANCIAL YEAR SELECTOR
+   ========================================================================== */
+.clean-email-choice-card {
+  margin-top: 10px;
+  background: linear-gradient(135deg, rgba(14, 165, 233, 0.12) 0%, rgba(30, 41, 59, 0.7) 100%);
+  border: 1px solid rgba(56, 189, 248, 0.35);
+  border-radius: 8px;
+  padding: 12px 14px;
+  animation: fadeInDown 0.25s ease-out;
+}
+
+.email-choice-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.email-choice-icon {
+  font-size: 20px;
+}
+
+.email-choice-title {
+  font-size: 11px;
+  text-transform: uppercase;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  color: #38bdf8;
+}
+
+.email-choice-val {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: #f8fafc;
+  font-family: monospace;
+}
+
+.email-choice-btns {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.btn-email-choice {
+  padding: 6px 14px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  border: none;
+}
+
+.btn-email-choice.active {
+  background: #10b981;
+  color: #fff;
+  box-shadow: 0 2px 8px rgba(16, 185, 129, 0.35);
+}
+
+.btn-email-choice.active:hover {
+  background: #059669;
+}
+
+.btn-email-choice.secondary {
+  background: rgba(148, 163, 184, 0.15);
+  color: #94a3b8;
+  border: 1px solid rgba(148, 163, 184, 0.25);
+}
+
+.btn-email-choice.secondary:hover {
+  background: rgba(148, 163, 184, 0.25);
+  color: #f1f5f9;
+}
+
+/* Financial Year Range Selector */
+.fy-selector-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+  margin-top: 6px;
+}
+
+.fy-choice-card {
+  position: relative;
+  background: rgba(30, 41, 59, 0.6);
+  border: 1.5px solid rgba(148, 163, 184, 0.2);
+  border-radius: 8px;
+  padding: 12px 10px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  flex-direction: column;
+}
+
+.fy-choice-card input[type="radio"] {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  accent-color: #0ea5e9;
+  cursor: pointer;
+}
+
+.fy-choice-card:hover {
+  border-color: rgba(56, 189, 248, 0.5);
+  background: rgba(30, 41, 59, 0.85);
+}
+
+.fy-choice-card.active {
+  border-color: #38bdf8;
+  background: rgba(14, 165, 233, 0.12);
+  box-shadow: 0 0 12px rgba(14, 165, 233, 0.25);
+}
+
+.fy-card-title {
+  font-size: 13.5px;
+  font-weight: 700;
+  color: #f8fafc;
+  display: block;
+}
+
+.fy-card-desc {
+  font-size: 11px;
+  color: #94a3b8;
+  margin-top: 2px;
+  display: block;
+  min-height: 28px;
+}
+
+.fy-card-badge {
+  display: inline-block;
+  margin-top: 6px;
+  padding: 2px 7px;
+  border-radius: 4px;
+  font-size: 10.5px;
+  font-weight: 700;
+  background: rgba(148, 163, 184, 0.15);
+  color: #94a3b8;
+}
+
+.fy-card-badge.badge-success {
+  background: rgba(16, 185, 129, 0.2);
+  color: #34d399;
+  border: 1px solid rgba(16, 185, 129, 0.3);
+}
+
+.fy-card-badge.badge-warn {
+  background: rgba(245, 158, 11, 0.2);
+  color: #fbbf24;
+  border: 1px solid rgba(245, 158, 11, 0.3);
+}
+
+.fy-status-banner {
+  margin-top: 8px;
+  padding: 8px 12px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  background: rgba(14, 165, 233, 0.1);
+  border: 1px solid rgba(14, 165, 233, 0.3);
+  color: #38bdf8;
+}
+
+/* Financial Year Custom Multi-Select Dropdown */
+.multiselect-container {
+  position: relative;
+  width: 100%;
+}
+
+.multiselect-trigger {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  position: relative;
+  min-height: 42px;
+  padding: 8px 36px 8px 38px;
+  border: 1px solid rgba(148, 163, 184, 0.25);
+  border-radius: 10px;
+  background: #0f172a;
+  color: #f8fafc;
+  font-size: 13.5px;
+  font-weight: 600;
+  cursor: pointer;
+  user-select: none;
+  transition: all 0.18s ease;
+  box-sizing: border-box;
+}
+
+.multiselect-trigger:hover {
+  border-color: rgba(56, 189, 248, 0.5);
+  background: #131e34;
+}
+
+.multiselect-container.open .multiselect-trigger,
+.multiselect-trigger:focus {
+  outline: none;
+  border-color: #0ea5e9;
+  background: #111a2a;
+  box-shadow: 0 0 0 2px rgba(14, 165, 233, 0.25);
+}
+
+.multiselect-trigger .clean-field-icon {
+  position: absolute;
+  left: 12px;
+  font-size: 14px;
+  pointer-events: none;
+  opacity: 0.85;
+}
+
+.multiselect-selected-text {
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: #f1f5f9;
+  font-size: 13.5px;
+  font-weight: 600;
+}
+
+.multiselect-selected-text.placeholder {
+  color: #64748b;
+  font-weight: 500;
+}
+
+.multiselect-arrow {
+  position: absolute;
+  right: 14px;
+  font-size: 13px;
+  color: #94a3b8;
+  pointer-events: none;
+  transition: transform 0.2s ease;
+}
+
+.multiselect-container.open .multiselect-arrow {
+  transform: rotate(180deg);
+  color: #38bdf8;
+}
+
+.multiselect-dropdown-menu {
+  position: absolute;
+  top: calc(100% + 5px);
+  left: 0;
+  right: 0;
+  z-index: 1000;
+  background: #0b1322;
+  border: 1px solid #1e293b;
+  box-shadow: 0 12px 28px -4px rgba(0, 0, 0, 0.65), 0 0 0 1px rgba(56, 189, 248, 0.2);
+  border-radius: 10px;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.multiselect-dropdown-menu.hidden {
+  display: none !important;
+}
+
+.multiselect-actions {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 4px 8px 8px;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.15);
+  margin-bottom: 4px;
+}
+
+.multiselect-actions-hint {
+  font-size: 11px;
+  color: #64748b;
+}
+
+.multiselect-actions-btns {
+  display: flex;
+  gap: 8px;
+}
+
+.multiselect-action-btn {
+  background: rgba(56, 189, 248, 0.1);
+  border: 1px solid rgba(56, 189, 248, 0.25);
+  color: #38bdf8;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 3px 8px;
+  border-radius: 4px;
+  transition: all 0.15s ease;
+}
+
+.multiselect-action-btn:hover {
+  background: rgba(56, 189, 248, 0.25);
+  color: #ffffff;
+}
+
+.multiselect-options-list {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  max-height: 220px;
+  overflow-y: auto;
+}
+
+.multiselect-option-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 9px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: #cbd5e1;
+  transition: all 0.15s ease;
+  user-select: none;
+}
+
+.multiselect-option-item:hover {
+  background: rgba(14, 165, 233, 0.12);
+  color: #38bdf8;
+}
+
+.multiselect-option-item.selected {
+  background: rgba(14, 165, 233, 0.2);
+  color: #38bdf8;
+}
+
+.multiselect-option-item input[type="checkbox"] {
+  width: 17px;
+  height: 17px;
+  cursor: pointer;
+  accent-color: #0ea5e9;
+  border-radius: 4px;
+  margin: 0;
+}
+
+.multiselect-option-label {
+  flex: 1;
+  font-family: inherit;
+  font-weight: 600;
+}
+
+.multiselect-tag-count {
+  display: inline-block;
+  background: rgba(56, 189, 248, 0.2);
+  color: #38bdf8;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 1px 6px;
+  border-radius: 10px;
+  margin-left: 6px;
+}
+
 
 
 

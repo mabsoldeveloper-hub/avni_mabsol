@@ -6,6 +6,7 @@ import Company from "@/models/Company";
 import FinancialYear from "@/models/FinancialYear";
 import Role from "@/models/Role";
 import Otp from "@/models/Otp";
+import VfpConfig from "@/models/VfpConfig";
 import { extractPanFromGstin, extractStateCodeFromGstin } from "@/lib/gstHelper";
 import {
   validateName,
@@ -402,6 +403,27 @@ export async function POST(req: Request) {
     // Link createdBy on Head Office
     newCompany.createdBy = user._id;
     await newCompany.save();
+
+    // Auto-create VfpConfig linking the discovered Marg company code and FY preferences
+    if (body.companyCode || body.shortCode || body.financialYearsToUpload) {
+      try {
+        await VfpConfig.findOneAndUpdate(
+          { email: cleanEmail },
+          {
+            $set: {
+              key: `vfp_sync_config_${cleanEmail}`,
+              email: cleanEmail,
+              companyCode: String(body.companyCode || finalCompanyCode).trim().toUpperCase(),
+              autoSyncInterval: 10,
+              useVfpEngine: true,
+            },
+          },
+          { upsert: true, new: true }
+        );
+      } catch (vfpErr) {
+        console.warn("[register] VfpConfig initialization notice:", vfpErr);
+      }
+    }
 
     // ── Create Separate Company Documents for Each Branch ──────────────────────
     for (let i = 0; i < formattedAdditionalGstins.length; i++) {

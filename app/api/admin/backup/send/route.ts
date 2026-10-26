@@ -6,7 +6,7 @@ export const runtime = "nodejs";
 
 export async function POST(request: Request) {
   try {
-    let options: DatabaseBackupOptions | undefined = undefined;
+    let options: any = { force: true };
 
     try {
       const body = await request.json();
@@ -17,6 +17,8 @@ export async function POST(request: Request) {
           fyName: body.fyName || null,
           startDate: body.startDate || null,
           endDate: body.endDate || null,
+          receiverEmail: body.receiverEmail || null,
+          force: true,
         };
       }
     } catch {

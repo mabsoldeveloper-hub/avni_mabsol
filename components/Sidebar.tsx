@@ -33,6 +33,7 @@ import {
   FaFileAlt,
   FaCog,
   FaTrash,
+  FaDownload,
 } from "react-icons/fa";
 import { checkIsSuperAdmin } from "@/lib/constants/superAdmin.constant";
 
@@ -696,6 +697,18 @@ export default function Sidebar({ collapsed, setCollapsed, mobile }: SidebarProp
                         icon={<FaFileAlt size={14} />}
                         label="Audit Logs"
                         active={pathname === "/dashboard/super-admin/audit-logs"}
+                        color="indigo"
+                        iconOnly={iconOnly}
+                        customActiveStyle={true}
+                        onNavigate={handleMobileNavigate}
+                      />
+                    </li>
+                    <li>
+                      <SidebarNavLink
+                        href="/dashboard/super-admin/exe-logs"
+                        icon={<FaDownload size={14} />}
+                        label="EXE & Sync Logs"
+                        active={pathname === "/dashboard/super-admin/exe-logs"}
                         color="indigo"
                         iconOnly={iconOnly}
                         customActiveStyle={true}

@@ -289,8 +289,8 @@ export default function ExpiredBatchesModal({ isOpen, onClose }: ExpiredBatchesM
                                 className="w-full sm:w-auto pl-2.5 pr-6 py-1.5 text-xs rounded-lg sm:rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-rose-500/40 truncate"
                             >
                                 <option value="">All Companies</option>
-                                {companies.map((c) => (
-                                    <option key={c.code} value={c.code}>
+                                {companies.map((c, idx) => (
+                                    <option key={`${c.code}-${idx}`} value={c.code}>
                                         {c.name} ({c.code})
                                     </option>
                                 ))}

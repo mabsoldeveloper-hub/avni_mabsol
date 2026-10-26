@@ -211,6 +211,26 @@ const UserSchema = new mongoose.Schema(
       type: String,
       default: "",
     },
+
+    // Desktop Agent (.EXE) access suspension by Super Admin
+    exeAccessSuspended: {
+      type: Boolean,
+      default: false,
+      index: true,
+    },
+    exeSuspendedAt: {
+      type: Date,
+      default: null,
+    },
+    exeSuspendedReason: {
+      type: String,
+      default: "",
+    },
+    exeSuspendedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      default: null,
+    },
   },
   {
     timestamps: true,

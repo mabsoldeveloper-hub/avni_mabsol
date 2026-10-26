@@ -17,6 +17,7 @@ export const SUPER_ADMIN_ALLOWED_PREFIXES = [
   "/dashboard/super-admin/plans",
   "/dashboard/super-admin/reports",
   "/dashboard/super-admin/audit-logs",
+  "/dashboard/super-admin/exe-logs",
   "/dashboard/super-admin/settings",
 ];
 

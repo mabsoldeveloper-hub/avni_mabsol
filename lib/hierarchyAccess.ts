@@ -1,3 +1,4 @@
+import mongoose from "mongoose";
 import User from "@/models/User";
 import Company from "@/models/Company";
 import SalesHierarchy from "@/models/SalesHierarchy";
@@ -244,11 +245,19 @@ export async function getHierarchyAccess(currentUserArg?: any): Promise<Hierarch
       currentUser.email?.toLowerCase() === "mabsoldeveloper@gmail.com"
     );
     const tenantFilter: any = { status: "Active" };
-    if (!isSuper && currentUser.companyId) {
+    const userCompanyId = currentUser.companyId
+      ? typeof currentUser.companyId === "object" && (currentUser.companyId as any)._id
+        ? String((currentUser.companyId as any)._id)
+        : String(currentUser.companyId)
+      : null;
+
+    if (!isSuper && userCompanyId) {
       try {
-        const userCompany = await Company.findById(currentUser.companyId).lean();
+        const userCompany = typeof currentUser.companyId === "object" && (currentUser.companyId as any)?.companyName
+          ? (currentUser.companyId as any)
+          : await Company.findById(userCompanyId).lean();
         if (userCompany && !userCompany.isHeadOffice) {
-          tenantFilter.companyId = currentUser.companyId;
+          tenantFilter.companyId = new mongoose.Types.ObjectId(userCompanyId);
         } else if (currentUser.tenantId) {
           tenantFilter.tenantId = currentUser.tenantId;
         }

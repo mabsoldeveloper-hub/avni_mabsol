@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import jwt from "jsonwebtoken";
 import dbConnect from "@/lib/mongodb";
 import Company from "@/models/Company";
+import CompanyCatalog from "@/models/CompanyCatalog";
 import User from "@/models/User";
 import { getCurrentUser } from "@/lib/auth";
 
@@ -57,6 +58,11 @@ export async function GET(request: NextRequest) {
       companyCode: string;
       isHeadOffice: boolean;
       gstNo?: string;
+      gstin?: string;
+      extractCode?: string;
+      companyDataCode?: string;
+      ccode?: string;
+      financialYears?: any[];
       city?: string;
     }> = [];
 
@@ -122,15 +128,49 @@ export async function GET(request: NextRequest) {
         if (compName && !isPlaceholderComp(compName)) {
           const codeKey = isPlaceholderComp(compCode) ? "" : compCode;
           if (codeKey) existingCodes.add(codeKey);
-          if (comp.gstNo) existingGstins.add(String(comp.gstNo).trim().toUpperCase());
+          const rawGst = String(comp.gstNo || "").trim().toUpperCase();
+          if (rawGst) existingGstins.add(rawGst);
           existingNames.add(compName.toLowerCase());
+
+          // Cross-reference CompanyCatalog to get Marg ERP code (e.g. C01, B01, A01) and Financial Years
+          let catMatch: any = null;
+          if (rawGst) {
+            catMatch = await CompanyCatalog.findOne({ gstNo: rawGst }).lean();
+          }
+          if (!catMatch && compName) {
+            const escapedName = compName.trim().replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+            catMatch = await CompanyCatalog.findOne({
+              companyName: new RegExp(`^${escapedName}`, "i"),
+            }).lean();
+          }
+          if (!catMatch && codeKey) {
+            catMatch = await CompanyCatalog.findOne({
+              shortCode: new RegExp(`^${codeKey.trim()}`, "i"),
+            }).lean();
+          }
+          if (!catMatch && codeKey) {
+            const alphaPrefix = codeKey.replace(/[^A-Za-z]/g, "");
+            if (alphaPrefix.length >= 3) {
+              catMatch = await CompanyCatalog.findOne({
+                shortCode: new RegExp(`^${alphaPrefix}`, "i"),
+              }).lean();
+            }
+          }
+
+          const resolvedExtractCode = catMatch?.activeCompanyDataCode || (catMatch?.ccode ? `${catMatch.ccode}01` : "") || "";
+          const resolvedGst = rawGst || catMatch?.gstNo || "";
 
           branchesList.push({
             id: comp._id.toString(),
             companyName: compName,
             companyCode: codeKey,
             isHeadOffice: Boolean(comp.isHeadOffice),
-            gstNo: comp.gstNo || "",
+            gstNo: resolvedGst,
+            gstin: resolvedGst,
+            extractCode: resolvedExtractCode,
+            companyDataCode: resolvedExtractCode,
+            ccode: catMatch?.ccode || "",
+            financialYears: catMatch?.financialYears || [],
             city: comp.city || "",
           });
         }
@@ -154,13 +194,22 @@ export async function GET(request: NextRequest) {
               if (!existingCodes.has(subCode)) {
                 existingCodes.add(subCode);
                 existingNames.add(subName.toLowerCase());
-                if (subGst) existingGstins.add(subGst);
+                let subCatMatch: any = null;
+                if (subGst) {
+                  subCatMatch = await CompanyCatalog.findOne({ gstNo: subGst }).lean();
+                }
+                const subExtractCode = subCatMatch?.activeCompanyDataCode || (subCatMatch?.ccode ? `${subCatMatch.ccode}01` : "") || "";
                 branchesList.push({
                   id: `${comp._id}_branch_${i + 1}`,
                   companyName: subName,
                   companyCode: subCode,
                   isHeadOffice: false,
-                  gstNo: sub.gstNo || "",
+                  gstNo: subGst || subCatMatch?.gstNo || "",
+                  gstin: subGst || subCatMatch?.gstNo || "",
+                  extractCode: subExtractCode,
+                  companyDataCode: subExtractCode,
+                  ccode: subCatMatch?.ccode || "",
+                  financialYears: subCatMatch?.financialYears || [],
                   city: sub.city || "",
                 });
               }

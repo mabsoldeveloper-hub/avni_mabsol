@@ -7,7 +7,7 @@ export default function SuperAdminRedirect() {
   const router = useRouter();
 
   useEffect(() => {
-    router.replace("/dashboard/super-admin");
+    router.replace("/dashboard/super-admin/dashboard");
   }, [router]);
 
   return (

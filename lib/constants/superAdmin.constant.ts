@@ -14,7 +14,7 @@ export const SUPER_ADMIN_CREDENTIALS = {
     return pwd;
   },
   get NAME(): string {
-    return process.env.SUPER_ADMIN_NAME || "mabsolinfotech";
+    return process.env.SUPER_ADMIN_NAME || "Super Administrator";
   },
   ROLE: "SuperAdmin",
   ROLE_TYPE: "SuperAdmin",
@@ -49,24 +49,31 @@ export const DEFAULT_ACCESS_DAYS = 30;
  */
 export function checkIsSuperAdmin(user: any): boolean {
   if (!user) return false;
+
+  // 1. Direct boolean flag
   if (user.isSuperAdmin === true) return true;
 
-  const email = String(user.email || "").toLowerCase().trim();
-  const superAdminEmail = (process.env.NEXT_PUBLIC_SUPER_ADMIN_EMAIL || process.env.SUPER_ADMIN_EMAIL || "mabsoldeveloper@gmail.com").toLowerCase().trim();
-  if (email && email === superAdminEmail) return true;
-  if (email === "mabsoldeveloper@gmail.com") return true;
-
+  // 2. Role indicators
   const roleType = String(user.roleType || "").toLowerCase().trim();
-  if (roleType === "superadmin") return true;
+  if (roleType === "superadmin" || roleType === "super-admin") return true;
 
   const role = String(user.role || "").toLowerCase().trim();
-  if (role === "superadmin") return true;
+  if (role === "superadmin" || role === "super-admin") return true;
 
-  const roleName = String(user.roleName || user.roleId?.roleName || "").toLowerCase().trim();
-  if (roleName === "superadmin" || roleName === "super admin") return true;
+  const roleName = String(user.roleName || "").toLowerCase().trim();
+  if (roleName === "superadmin" || roleName === "super-admin") return true;
 
-  const name = String(user.name || "").toLowerCase().trim();
-  if (name.includes("super admin") || name.includes("super administrator")) return true;
+  // 3. Email matching (fallback to mabsoldeveloper@gmail.com if env not present in browser)
+  const email = String(user.email || "").toLowerCase().trim();
+  const superAdminEmail = (
+    process.env.NEXT_PUBLIC_SUPER_ADMIN_EMAIL ||
+    process.env.SUPER_ADMIN_EMAIL ||
+    "mabsoldeveloper@gmail.com"
+  ).toLowerCase().trim();
+
+  if (email && (email === superAdminEmail || email === "mabsoldeveloper@gmail.com")) {
+    return true;
+  }
 
   return false;
 }

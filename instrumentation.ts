@@ -13,5 +13,12 @@ export async function register() {
     } catch (err: any) {
       console.error("[Instrumentation Error - CustomerAlert Scheduler]:", err.message);
     }
+
+    try {
+      const { startBackupScheduler } = await import("@/lib/services/backupScheduler.service");
+      startBackupScheduler();
+    } catch (err: any) {
+      console.error("[Instrumentation Error - Backup Scheduler]:", err.message);
+    }
   }
 }

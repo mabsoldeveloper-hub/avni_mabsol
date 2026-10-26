@@ -114,6 +114,15 @@ export async function POST(request: Request) {
       customEndDate: typeof customEndDate === "string" ? customEndDate : null,
     });
 
+    try {
+      const { restartBackupScheduler } = await import(
+        "@/lib/services/backupScheduler.service"
+      );
+      restartBackupScheduler();
+    } catch (schedErr: any) {
+      console.warn("Could not restart backup scheduler daemon:", schedErr?.message);
+    }
+
     return NextResponse.json({
       message: "Backup settings saved successfully",
       settings,

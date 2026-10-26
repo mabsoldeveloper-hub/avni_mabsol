@@ -7,6 +7,9 @@ import VfpConfig from "@/models/VfpConfig";
 import VfpTableMap from "@/models/VfpTableMap";
 import VfpSyncState from "@/models/VfpSyncState";
 import VfpSyncLog from "@/models/VfpSyncLog";
+import ExeSyncLog from "@/models/ExeSyncLog";
+import User from "@/models/User";
+import Company from "@/models/Company";
 
 const VFP_ENCODING = process.env.VFP_ENCODING || "latin1";
 
@@ -145,6 +148,78 @@ export async function performDirectServerSync(
   const runId = `${Date.now()}-${crypto.randomBytes(4).toString("hex")}`;
   const startedAt = new Date();
 
+  // Fetch user and company hierarchy information for ExeSyncLog
+  let userRecord: any = null;
+  let isHeadOffice = true;
+  let parentCompanyId: any = null;
+  let parentCompanyName = "";
+
+  try {
+    userRecord = await User.findOne({ email }).populate("companyId");
+    if (userRecord?.exeAccessSuspended) {
+      await ExeSyncLog.create({
+        runId,
+        companyId: userRecord.companyId?._id || null,
+        companyName: options?.companyName || userRecord.companyId?.companyName || targetCompanyCode || "Unknown",
+        companyCode: targetCompanyCode || "DEFAULT",
+        isHeadOffice: userRecord.companyId?.isHeadOffice !== false,
+        parentCompanyId: userRecord.companyId?.parentCompanyId || null,
+        userId: userRecord._id,
+        userName: userRecord.name || "Unknown",
+        userEmail: email,
+        licenseKey: config?.license || "",
+        deviceId: config?.boundDeviceId || "",
+        deviceName: config?.boundDeviceName || "",
+        syncType: "desktop_agent_auto",
+        status: "rejected_suspended",
+        tablesSynced: [],
+        totalRecords: 0,
+        durationSeconds: 0,
+        error: `Desktop Agent (.EXE) sync suspended by Super Administrator.${userRecord.exeSuspendedReason ? ` Reason: ${userRecord.exeSuspendedReason}` : ""}`,
+      });
+      throw new Error(`Desktop Agent (.EXE) sync suspended for user ${email}`);
+    }
+
+    if (userRecord?.companyId) {
+      const uComp = userRecord.companyId;
+      if (uComp.isHeadOffice === false || uComp.parentCompanyId) {
+        isHeadOffice = false;
+        parentCompanyId = uComp.parentCompanyId || null;
+        if (parentCompanyId) {
+          const pComp = await Company.findById(parentCompanyId);
+          parentCompanyName = pComp?.companyName || "";
+        }
+      }
+    }
+  } catch (userErr: any) {
+    if (userRecord?.exeAccessSuspended) throw userErr;
+  }
+
+  let runningExeSyncLog: any = null;
+  try {
+    runningExeSyncLog = await ExeSyncLog.create({
+      runId,
+      companyId: userRecord?.companyId?._id || options?.companyId || null,
+      companyName: options?.companyName || userRecord?.companyId?.companyName || config?.companyName || targetCompanyCode || "DEFAULT",
+      companyCode: targetCompanyCode || "DEFAULT",
+      isHeadOffice,
+      parentCompanyId,
+      parentCompanyName,
+      userId: userRecord?._id || null,
+      userName: userRecord?.name || "System",
+      userEmail: email,
+      licenseKey: config?.license || "",
+      deviceId: config?.boundDeviceId || "",
+      deviceName: config?.boundDeviceName || "",
+      syncType: "desktop_agent_auto",
+      status: "running",
+      tablesSynced: [],
+      totalRecords: 0,
+      durationSeconds: 0,
+      startedAt,
+    });
+  } catch {}
+
   const runningSyncLog = await VfpSyncLog.create({
     runId,
     email,
@@ -240,6 +315,19 @@ export async function performDirectServerSync(
       },
     });
 
+    if (runningExeSyncLog) {
+      const durationSeconds = Math.round((Date.now() - startedAt.getTime()) / 1000);
+      await ExeSyncLog.findByIdAndUpdate(runningExeSyncLog._id, {
+        $set: {
+          status: "success",
+          tablesSynced: dbfFiles.map((filePath) => path.basename(filePath)),
+          totalRecords: totalImportedRows,
+          durationSeconds,
+          completedAt: new Date(),
+        },
+      }).catch(() => {});
+    }
+
     return {
       success: true,
       runId,
@@ -256,6 +344,19 @@ export async function performDirectServerSync(
         finishedAt: new Date(),
       },
     });
+
+    if (runningExeSyncLog) {
+      const durationSeconds = Math.round((Date.now() - startedAt.getTime()) / 1000);
+      await ExeSyncLog.findByIdAndUpdate(runningExeSyncLog._id, {
+        $set: {
+          status: "failed",
+          error: syncErr?.message || "Sync failed",
+          durationSeconds,
+          completedAt: new Date(),
+        },
+      }).catch(() => {});
+    }
+
     throw syncErr;
   }
 }

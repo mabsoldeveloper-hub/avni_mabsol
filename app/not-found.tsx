@@ -14,13 +14,19 @@ export default function NotFound() {
       .then((res) => res.json())
       .then((data) => {
         if (data?.success && data?.user) {
-          const role =
-            data.user.isSuperAdmin || data.user.roleType === "SuperAdmin"
-              ? "super-admin"
-              : data.user.roleType
+          const isSuper =
+            data.user.isSuperAdmin === true ||
+            data.user.email === "mabsoldeveloper@gmail.com" ||
+            String(data.user.roleType || "").toLowerCase() === "superadmin" ||
+            String(data.user.roleType || "").toLowerCase() === "super-admin";
+          if (isSuper) {
+            setDashboardHref("/dashboard/super-admin/dashboard");
+          } else {
+            const role = data.user.roleType
               ? String(data.user.roleType).toLowerCase().trim().replace(/[\s_]+/g, "-")
               : "admin";
-          setDashboardHref(`/dashboard/${role}`);
+            setDashboardHref(`/dashboard/${role}`);
+          }
         } else {
           setDashboardHref("/login");
         }

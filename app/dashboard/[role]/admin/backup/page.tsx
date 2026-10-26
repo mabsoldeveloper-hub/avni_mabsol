@@ -130,8 +130,8 @@ export default function BackupPage() {
 
   // Scheduler Settings state
   const [receiverEmail, setReceiverEmail] = useState("");
-  const [frequency, setFrequency] = useState<Frequency>("every_2_hours");
-  const [enabled, setEnabled] = useState(true);
+  const [frequency, setFrequency] = useState<Frequency>("daily");
+  const [enabled, setEnabled] = useState(false);
   const [schedulerScope, setSchedulerScope] = useState<BackupScope>("current_fy");
   const [schedulerFyId, setSchedulerFyId] = useState<string>("");
 
@@ -184,8 +184,8 @@ export default function BackupPage() {
       if (setRes.ok && data.settings) {
         setSettings(data.settings);
         setReceiverEmail(data.settings.receiverEmail || "");
-        setFrequency(data.settings.frequency || "every_2_hours");
-        setEnabled(data.settings.enabled ?? true);
+        setFrequency(data.settings.frequency || "daily");
+        setEnabled(data.settings.enabled ?? false);
         setSchedulerScope(data.settings.scope || "current_fy");
         setSchedulerFyId(data.settings.financialYearId || "");
       }

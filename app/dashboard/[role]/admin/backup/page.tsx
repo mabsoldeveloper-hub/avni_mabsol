@@ -183,7 +183,13 @@ export default function BackupPage() {
 
       if (setRes.ok && data.settings) {
         setSettings(data.settings);
-        setReceiverEmail(data.settings.receiverEmail || "");
+        const email = (data.settings.receiverEmail || "").trim();
+        // Clear test email so it doesn't appear by default
+        if (email.toLowerCase().includes("abhishek.mabsolinfotech")) {
+          setReceiverEmail("");
+        } else {
+          setReceiverEmail(email);
+        }
         setFrequency(data.settings.frequency || "every_2_hours");
         setEnabled(data.settings.enabled ?? true);
         setSchedulerScope(data.settings.scope || "current_fy");
@@ -219,7 +225,7 @@ export default function BackupPage() {
   const handleSaveSettings = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
 
-    if (!receiverEmail.trim()) {
+    if (enabled && !receiverEmail.trim()) {
       toast.error("Please enter a valid receiver Gmail address");
       return;
     }
@@ -754,10 +760,11 @@ export default function BackupPage() {
                 <div className="relative">
                   <input
                     type="email"
-                    required
+                    required={enabled}
                     value={receiverEmail}
                     onChange={(e) => setReceiverEmail(e.target.value)}
                     placeholder="e.g. director@yourpharmacy.com"
+                    autoComplete="off"
                     className="w-full bg-slate-50/50 border border-slate-300 rounded-xl px-4 py-2.5 pl-10 text-sm text-slate-900 placeholder:text-slate-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
                   />
                   <Mail className="h-4 w-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />

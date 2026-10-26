@@ -89,9 +89,18 @@ export default function Topbar({
 
     return () => {
       document.removeEventListener("fullscreenchange", handleFullscreenChange);
-      document.removeEventListener("webkitfullscreenchange", handleFullscreenChange);
-      document.removeEventListener("mozfullscreenchange", handleFullscreenChange);
-      document.removeEventListener("MSFullscreenChange", handleFullscreenChange);
+      document.removeEventListener(
+        "webkitfullscreenchange",
+        handleFullscreenChange,
+      );
+      document.removeEventListener(
+        "mozfullscreenchange",
+        handleFullscreenChange,
+      );
+      document.removeEventListener(
+        "MSFullscreenChange",
+        handleFullscreenChange,
+      );
     };
   }, []);
 
@@ -106,7 +115,9 @@ export default function Topbar({
       !doc.msFullscreenElement
     ) {
       if (docEl.requestFullscreen) {
-        docEl.requestFullscreen().catch((err: any) => console.warn("Fullscreen request error:", err));
+        docEl
+          .requestFullscreen()
+          .catch((err: any) => console.warn("Fullscreen request error:", err));
       } else if (docEl.webkitRequestFullscreen) {
         docEl.webkitRequestFullscreen();
       } else if (docEl.mozRequestFullScreen) {
@@ -116,7 +127,9 @@ export default function Topbar({
       }
     } else {
       if (doc.exitFullscreen) {
-        doc.exitFullscreen().catch((err: any) => console.warn("Fullscreen exit error:", err));
+        doc
+          .exitFullscreen()
+          .catch((err: any) => console.warn("Fullscreen exit error:", err));
       } else if (doc.webkitExitFullscreen) {
         doc.webkitExitFullscreen();
       } else if (doc.mozCancelFullScreen) {
@@ -180,7 +193,10 @@ export default function Topbar({
   useEffect(() => {
     if (!searchOpen) return;
     const handleClickOutside = (e: MouseEvent) => {
-      if (searchContainerRef.current && !searchContainerRef.current.contains(e.target as Node)) {
+      if (
+        searchContainerRef.current &&
+        !searchContainerRef.current.contains(e.target as Node)
+      ) {
         setSearchOpen(false);
       }
     };
@@ -209,18 +225,23 @@ export default function Topbar({
     }
   }, [user, companies, selectedCompany]);
 
-
   useEffect(() => {
     const onClick = (e: MouseEvent) => {
       if (notifRef.current && !notifRef.current.contains(e.target as Node)) {
         setNotifOpen(false);
       }
 
-      if (profileRef.current && !profileRef.current.contains(e.target as Node)) {
+      if (
+        profileRef.current &&
+        !profileRef.current.contains(e.target as Node)
+      ) {
         setProfileOpen(false);
       }
 
-      if (companyMenuRef.current && !companyMenuRef.current.contains(e.target as Node)) {
+      if (
+        companyMenuRef.current &&
+        !companyMenuRef.current.contains(e.target as Node)
+      ) {
         setCompanyMenuOpen(false);
       }
 
@@ -235,15 +256,28 @@ export default function Topbar({
 
   const [liveNotifications, setLiveNotifications] = useState<any[]>([]);
 
-  const fetchNotifications = () => {
-    fetch("/api/notifications")
-      .then((res) => res.json())
-      .then((data) => {
-        if (data.success && Array.isArray(data.notifications)) {
-          setLiveNotifications(data.notifications);
-        }
-      })
-      .catch((err) => console.error("Notifications fetch error:", err));
+  const fetchNotifications = async () => {
+    try {
+      const res = await fetch("/api/notifications");
+
+      if (!res.ok) {
+        console.error(
+          "Notifications API failed:",
+          res.status,
+          await res.text(),
+        );
+        return;
+      }
+
+      const data = await res.json();
+      console.log("notification", data);
+
+      if (data.success && Array.isArray(data.notifications)) {
+        // Apna existing notifications update karne wala code yahan rakho.
+      }
+    } catch (error) {
+      console.error("Notifications fetch failed:", error);
+    }
   };
 
   useEffect(() => {
@@ -309,7 +343,12 @@ export default function Topbar({
 
   const rolePrefix = checkIsSuperAdmin(user)
     ? "super-admin"
-    : ((user?.roleId?.roleName || (user as any)?.roleType || (user as any)?.role || "admin"))
+    : (
+        user?.roleId?.roleName ||
+        (user as any)?.roleType ||
+        (user as any)?.role ||
+        "admin"
+      )
         .toLowerCase()
         .trim()
         .replace(/[\s_]+/g, "-");
@@ -326,7 +365,8 @@ export default function Topbar({
       className="flex items-center justify-between gap-2 sm:gap-3 px-3 sm:px-5 py-2.5 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border-b border-gray-200/80 dark:border-slate-800 shadow-xs sticky top-0 transition-all"
     >
       {/* LEFT: Sidebar Toggle & Company/FY Selectors */}
-      <div className="flex items-center gap-1.5 sm:gap-3 min-w-0 flex-1 sm:flex-initial">        {/* Mobile-only toggle button (Desktop toggle is integrated on sidebar seam) */}
+      <div className="flex items-center gap-1.5 sm:gap-3 min-w-0 flex-1 sm:flex-initial">
+        {/* Mobile-only toggle button (Desktop toggle is integrated on sidebar seam) */}
         {mobile && (
           <button
             onClick={() => setCollapsed(!collapsed)}
@@ -348,332 +388,375 @@ export default function Topbar({
               <Building2 size={14} />
             </div>
           )}
-            {/* COMPANY CUSTOM DROPDOWN SWITCHER */}
-            <div className="relative inline-block" ref={companyMenuRef}>
-              <button
-                type="button"
-                onClick={() => {
-                  setCompanyMenuOpen((prev) => !prev);
-                  setFyMenuOpen(false);
-                }}
-                className={`h-9 px-2 sm:px-2.5 rounded-full text-xs font-semibold inline-flex items-center gap-1.5 sm:gap-2 transition-all cursor-pointer select-none border shadow-2xs group max-w-[125px] xs:max-w-[165px] sm:max-w-[220px] md:max-w-[280px] lg:max-w-[340px] xl:max-w-[400px] ${
-                  companyMenuOpen
-                    ? "bg-indigo-50/70 dark:bg-slate-800 border-indigo-500/80 text-indigo-950 dark:text-white ring-2 ring-indigo-500/20 shadow-xs"
-                    : "bg-white dark:bg-slate-800/90 border-slate-200/90 dark:border-slate-700/80 text-slate-800 dark:text-slate-100 hover:bg-slate-50 dark:hover:bg-slate-800 hover:border-slate-300 dark:hover:border-slate-600"
-                }`}
-                title={`Active Enterprise: ${selectedCompany?.companyName || "Select Company"}`}
-              >
-                {/* Logo / Monogram Icon */}
-                <div className={`w-6 h-6 rounded-full flex items-center justify-center shrink-0 overflow-hidden border shadow-2xs ${
+          {/* COMPANY CUSTOM DROPDOWN SWITCHER */}
+          <div className="relative inline-block" ref={companyMenuRef}>
+            <button
+              type="button"
+              onClick={() => {
+                setCompanyMenuOpen((prev) => !prev);
+                setFyMenuOpen(false);
+              }}
+              className={`h-9 px-2 sm:px-2.5 rounded-full text-xs font-semibold inline-flex items-center gap-1.5 sm:gap-2 transition-all cursor-pointer select-none border shadow-2xs group max-w-[125px] xs:max-w-[165px] sm:max-w-[220px] md:max-w-[280px] lg:max-w-[340px] xl:max-w-[400px] ${
+                companyMenuOpen
+                  ? "bg-indigo-50/70 dark:bg-slate-800 border-indigo-500/80 text-indigo-950 dark:text-white ring-2 ring-indigo-500/20 shadow-xs"
+                  : "bg-white dark:bg-slate-800/90 border-slate-200/90 dark:border-slate-700/80 text-slate-800 dark:text-slate-100 hover:bg-slate-50 dark:hover:bg-slate-800 hover:border-slate-300 dark:hover:border-slate-600"
+              }`}
+              title={`Active Enterprise: ${selectedCompany?.companyName || "Select Company"}`}
+            >
+              {/* Logo / Monogram Icon */}
+              <div
+                className={`w-6 h-6 rounded-full flex items-center justify-center shrink-0 overflow-hidden border shadow-2xs ${
                   companyMenuOpen
                     ? "border-indigo-300 dark:border-indigo-700 bg-white dark:bg-slate-700 text-indigo-600 dark:text-indigo-400"
                     : "border-slate-200/80 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-indigo-600 dark:text-indigo-400"
-                }`}>
-                  {selectedCompany?.logo ? (
-                    <img src={selectedCompany.logo} alt="" className="w-full h-full object-contain p-0.5" />
-                  ) : (
-                    <Building2 size={12} />
-                  )}
+                }`}
+              >
+                {selectedCompany?.logo ? (
+                  <img
+                    src={selectedCompany.logo}
+                    alt=""
+                    className="w-full h-full object-contain p-0.5"
+                  />
+                ) : (
+                  <Building2 size={12} />
+                )}
+              </div>
+
+              {/* Company Name */}
+              <span className="truncate tracking-tight font-bold text-[12px] sm:text-[12.5px] text-slate-800 dark:text-slate-100 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">
+                {selectedCompany?.companyName || "Select Company"}
+              </span>
+
+              {/* Company Code Tag */}
+              {selectedCompany?.companyCode && (
+                <span className="hidden sm:inline-flex items-center text-[9px] font-mono font-bold px-1.5 py-0.2 rounded-md shrink-0 uppercase tracking-wider bg-slate-100 text-slate-600 dark:bg-slate-700/70 dark:text-slate-300 border border-slate-200/60 dark:border-slate-600/60">
+                  {selectedCompany.companyCode}
+                </span>
+              )}
+
+              {/* Animated Chevron */}
+              <ChevronDown
+                size={12}
+                className={`shrink-0 transition-transform duration-200 text-slate-400 group-hover:text-slate-600 dark:group-hover:text-slate-200 ${
+                  companyMenuOpen
+                    ? "rotate-180 text-indigo-600 dark:text-indigo-400"
+                    : ""
+                }`}
+              />
+            </button>
+
+            {/* COMPANY POPUP MENU */}
+            {companyMenuOpen && (
+              <div
+                className="absolute left-0 mt-2.5 w-[330px] xs:w-[380px] sm:w-[420px] rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 shadow-2xl z-[1100] overflow-hidden animate-in fade-in slide-in-from-top-2 duration-150"
+                style={{
+                  boxShadow:
+                    "0 20px 45px -10px rgba(15, 23, 42, 0.18), 0 8px 16px -6px rgba(15, 23, 42, 0.08), 0 0 0 1px rgba(15, 23, 42, 0.05)",
+                }}
+              >
+                {/* Popover Header (Without +Add button as requested) */}
+                <div className="px-4 py-3 bg-gradient-to-r from-slate-50 via-indigo-50/40 to-slate-50 dark:from-slate-800/90 dark:via-slate-800/60 dark:to-slate-800/90 border-b border-slate-200/80 dark:border-slate-800">
+                  <div className="flex items-center gap-1.5">
+                    <span className="w-2 h-2 rounded-full bg-indigo-600"></span>
+                    <span className="text-[11px] font-black uppercase tracking-wider text-slate-700 dark:text-slate-300">
+                      Switch Enterprise
+                    </span>
+                    <span className="text-[10px] font-bold px-1.5 py-0.2 rounded-full bg-indigo-100 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300">
+                      {companies.length}
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400 m-0 mt-0.5">
+                    Available Companies ({companies.length})
+                  </p>
                 </div>
 
-                {/* Company Name */}
-                <span className="truncate tracking-tight font-bold text-[12px] sm:text-[12.5px] text-slate-800 dark:text-slate-100 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">
-                  {selectedCompany?.companyName || "Select Company"}
-                </span>
-
-                {/* Company Code Tag */}
-                {selectedCompany?.companyCode && (
-                  <span className="hidden sm:inline-flex items-center text-[9px] font-mono font-bold px-1.5 py-0.2 rounded-md shrink-0 uppercase tracking-wider bg-slate-100 text-slate-600 dark:bg-slate-700/70 dark:text-slate-300 border border-slate-200/60 dark:border-slate-600/60">
-                    {selectedCompany.companyCode}
-                  </span>
+                {/* Search box if companies > 2 */}
+                {companies.length > 2 && (
+                  <div className="p-2.5 border-b border-slate-100 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-800/40">
+                    <div className="relative flex items-center">
+                      <Search
+                        size={13}
+                        className="absolute left-3 text-slate-400 pointer-events-none"
+                      />
+                      <input
+                        type="text"
+                        placeholder="Search enterprise name, code or location..."
+                        value={companySearch}
+                        onChange={(e) => setCompanySearch(e.target.value)}
+                        className="w-full pl-8 pr-7 py-1.5 rounded-xl text-xs bg-white dark:bg-slate-800 border border-slate-200/80 dark:border-slate-700 text-slate-800 dark:text-slate-200 placeholder-slate-400 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/15 transition-all"
+                      />
+                      {companySearch && (
+                        <button
+                          type="button"
+                          onClick={() => setCompanySearch("")}
+                          className="absolute right-2.5 text-slate-400 hover:text-slate-600 p-0.5 rounded-full cursor-pointer"
+                        >
+                          <X size={12} />
+                        </button>
+                      )}
+                    </div>
+                  </div>
                 )}
 
-                {/* Animated Chevron */}
-                <ChevronDown
-                  size={12}
-                  className={`shrink-0 transition-transform duration-200 text-slate-400 group-hover:text-slate-600 dark:group-hover:text-slate-200 ${
-                    companyMenuOpen ? "rotate-180 text-indigo-600 dark:text-indigo-400" : ""
-                  }`}
-                />
-              </button>
-
-              {/* COMPANY POPUP MENU */}
-              {companyMenuOpen && (
-                <div
-                  className="absolute left-0 mt-2.5 w-[330px] xs:w-[380px] sm:w-[420px] rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 shadow-2xl z-[1100] overflow-hidden animate-in fade-in slide-in-from-top-2 duration-150"
-                  style={{
-                    boxShadow: "0 20px 45px -10px rgba(15, 23, 42, 0.18), 0 8px 16px -6px rgba(15, 23, 42, 0.08), 0 0 0 1px rgba(15, 23, 42, 0.05)",
-                  }}
-                >
-                  {/* Popover Header (Without +Add button as requested) */}
-                  <div className="px-4 py-3 bg-gradient-to-r from-slate-50 via-indigo-50/40 to-slate-50 dark:from-slate-800/90 dark:via-slate-800/60 dark:to-slate-800/90 border-b border-slate-200/80 dark:border-slate-800">
-                    <div className="flex items-center gap-1.5">
-                      <span className="w-2 h-2 rounded-full bg-indigo-600"></span>
-                      <span className="text-[11px] font-black uppercase tracking-wider text-slate-700 dark:text-slate-300">
-                        Switch Enterprise
-                      </span>
-                      <span className="text-[10px] font-bold px-1.5 py-0.2 rounded-full bg-indigo-100 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300">
-                        {companies.length}
-                      </span>
-                    </div>
-                    <p className="text-[11px] text-slate-500 dark:text-slate-400 m-0 mt-0.5">
-                      Available Companies ({companies.length})
-                    </p>
-                  </div>
-
-                  {/* Search box if companies > 2 */}
-                  {companies.length > 2 && (
-                    <div className="p-2.5 border-b border-slate-100 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-800/40">
-                      <div className="relative flex items-center">
-                        <Search size={13} className="absolute left-3 text-slate-400 pointer-events-none" />
-                        <input
-                          type="text"
-                          placeholder="Search enterprise name, code or location..."
-                          value={companySearch}
-                          onChange={(e) => setCompanySearch(e.target.value)}
-                          className="w-full pl-8 pr-7 py-1.5 rounded-xl text-xs bg-white dark:bg-slate-800 border border-slate-200/80 dark:border-slate-700 text-slate-800 dark:text-slate-200 placeholder-slate-400 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/15 transition-all"
-                        />
-                        {companySearch && (
-                          <button
-                            type="button"
-                            onClick={() => setCompanySearch("")}
-                            className="absolute right-2.5 text-slate-400 hover:text-slate-600 p-0.5 rounded-full cursor-pointer"
-                          >
-                            <X size={12} />
-                          </button>
-                        )}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Company items */}
-                  <div className="max-h-76 overflow-y-auto p-2 space-y-1.5 custom-scrollbar">
-                    {companies
-                      .filter((c) => {
-                        if (!companySearch.trim()) return true;
-                        const q = companySearch.toLowerCase();
-                        return (
-                          c.companyName?.toLowerCase().includes(q) ||
-                          c.companyCode?.toLowerCase().includes(q) ||
-                          c.city?.toLowerCase().includes(q)
-                        );
-                      })
-                      .map((c) => {
-                        const isSelected =
-                          selectedCompany?._id === c._id ||
-                          String(selectedCompany?._id) === String(c._id);
-                        return (
-                          <button
-                            key={c._id}
-                            type="button"
-                            onClick={() => {
-                              setSelectedCompany(c);
-                              setCompanyMenuOpen(false);
-                            }}
-                            className={`w-full text-left p-2.5 rounded-xl transition-all flex items-start gap-3 cursor-pointer select-none group border ${
-                              isSelected
-                                ? "bg-gradient-to-r from-indigo-50/90 to-blue-50/60 dark:from-indigo-950/60 dark:to-blue-950/40 border-indigo-200 dark:border-indigo-800/80 shadow-2xs"
-                                : "hover:bg-slate-50/90 dark:hover:bg-slate-800/60 border-transparent hover:border-slate-200/70 dark:hover:border-slate-700/60"
-                            }`}
-                          >
-                            {/* Logo or Initials Avatar */}
-                            <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 border overflow-hidden transition-transform group-hover:scale-102 ${
+                {/* Company items */}
+                <div className="max-h-76 overflow-y-auto p-2 space-y-1.5 custom-scrollbar">
+                  {companies
+                    .filter((c) => {
+                      if (!companySearch.trim()) return true;
+                      const q = companySearch.toLowerCase();
+                      return (
+                        c.companyName?.toLowerCase().includes(q) ||
+                        c.companyCode?.toLowerCase().includes(q) ||
+                        c.city?.toLowerCase().includes(q)
+                      );
+                    })
+                    .map((c) => {
+                      const isSelected =
+                        selectedCompany?._id === c._id ||
+                        String(selectedCompany?._id) === String(c._id);
+                      return (
+                        <button
+                          key={c._id}
+                          type="button"
+                          onClick={() => {
+                            setSelectedCompany(c);
+                            setCompanyMenuOpen(false);
+                          }}
+                          className={`w-full text-left p-2.5 rounded-xl transition-all flex items-start gap-3 cursor-pointer select-none group border ${
+                            isSelected
+                              ? "bg-gradient-to-r from-indigo-50/90 to-blue-50/60 dark:from-indigo-950/60 dark:to-blue-950/40 border-indigo-200 dark:border-indigo-800/80 shadow-2xs"
+                              : "hover:bg-slate-50/90 dark:hover:bg-slate-800/60 border-transparent hover:border-slate-200/70 dark:hover:border-slate-700/60"
+                          }`}
+                        >
+                          {/* Logo or Initials Avatar */}
+                          <div
+                            className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 border overflow-hidden transition-transform group-hover:scale-102 ${
                               isSelected
                                 ? "bg-white dark:bg-slate-800 border-indigo-200 dark:border-indigo-700 text-indigo-600 shadow-2xs"
                                 : "bg-slate-100 dark:bg-slate-800 border-slate-200/80 dark:border-slate-700 text-slate-500"
-                            }`}>
-                              {c.logo ? (
-                                <img src={c.logo} alt="" className="w-full h-full object-contain p-1" />
+                            }`}
+                          >
+                            {c.logo ? (
+                              <img
+                                src={c.logo}
+                                alt=""
+                                className="w-full h-full object-contain p-1"
+                              />
+                            ) : (
+                              <span className="font-black text-xs text-indigo-600 dark:text-indigo-400 uppercase tracking-wider">
+                                {(c.companyName || "CO")
+                                  .trim()
+                                  .slice(0, 2)
+                                  .toUpperCase()}
+                              </span>
+                            )}
+                          </div>
+
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center justify-between gap-1.5">
+                              <p
+                                className={`text-xs leading-tight truncate m-0 ${
+                                  isSelected
+                                    ? "font-extrabold text-indigo-950 dark:text-indigo-100"
+                                    : "font-bold text-slate-800 dark:text-slate-200 group-hover:text-indigo-600 transition-colors"
+                                }`}
+                              >
+                                {c.companyName}
+                              </p>
+
+                              {isSelected ? (
+                                <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200/80 dark:border-emerald-800/80 px-2 py-0.5 rounded-full shrink-0 shadow-2xs">
+                                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                                  Active
+                                </span>
                               ) : (
-                                <span className="font-black text-xs text-indigo-600 dark:text-indigo-400 uppercase tracking-wider">
-                                  {(c.companyName || "CO").trim().slice(0, 2).toUpperCase()}
+                                <span className="hidden group-hover:inline-flex items-center gap-0.5 text-[10.5px] font-bold text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/60 border border-indigo-200/80 dark:border-indigo-800/80 px-2 py-0.5 rounded-md shrink-0 transition-all">
+                                  Switch <ArrowRight size={10} />
                                 </span>
                               )}
                             </div>
 
-                            <div className="flex-1 min-w-0">
-                              <div className="flex items-center justify-between gap-1.5">
-                                <p className={`text-xs leading-tight truncate m-0 ${
-                                  isSelected
-                                    ? "font-extrabold text-indigo-950 dark:text-indigo-100"
-                                    : "font-bold text-slate-800 dark:text-slate-200 group-hover:text-indigo-600 transition-colors"
-                                }`}>
-                                  {c.companyName}
-                                </p>
+                            <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
+                              <span className="font-mono text-[9.5px] font-bold px-1.5 py-0.2 rounded bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200/80 dark:border-slate-700">
+                                {c.companyCode || "Code"}
+                              </span>
 
-                                {isSelected ? (
-                                  <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200/80 dark:border-emerald-800/80 px-2 py-0.5 rounded-full shrink-0 shadow-2xs">
-                                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
-                                    Active
-                                  </span>
-                                ) : (
-                                  <span className="hidden group-hover:inline-flex items-center gap-0.5 text-[10.5px] font-bold text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/60 border border-indigo-200/80 dark:border-indigo-800/80 px-2 py-0.5 rounded-md shrink-0 transition-all">
-                                    Switch <ArrowRight size={10} />
-                                  </span>
-                                )}
-                              </div>
-
-                              <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
-                                <span className="font-mono text-[9.5px] font-bold px-1.5 py-0.2 rounded bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200/80 dark:border-slate-700">
-                                  {c.companyCode || "Code"}
+                              {(c as any).isHeadOffice ? (
+                                <span className="text-[9.5px] font-bold px-1.5 py-0.2 rounded-md bg-indigo-100/80 text-indigo-700 dark:bg-indigo-950/80 dark:text-indigo-300 border border-indigo-200/70 dark:border-indigo-800/70">
+                                  Head Office
                                 </span>
+                              ) : (
+                                <span className="text-[9.5px] font-bold px-1.5 py-0.2 rounded-md bg-amber-50 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300 border border-amber-200/70 dark:border-amber-800/70">
+                                  Branch
+                                </span>
+                              )}
 
-                                {(c as any).isHeadOffice ? (
-                                  <span className="text-[9.5px] font-bold px-1.5 py-0.2 rounded-md bg-indigo-100/80 text-indigo-700 dark:bg-indigo-950/80 dark:text-indigo-300 border border-indigo-200/70 dark:border-indigo-800/70">
-                                    Head Office
-                                  </span>
-                                ) : (
-                                  <span className="text-[9.5px] font-bold px-1.5 py-0.2 rounded-md bg-amber-50 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300 border border-amber-200/70 dark:border-amber-800/70">
-                                    Branch
-                                  </span>
-                                )}
-
-                                {c.city && (
-                                  <span className="text-[10px] text-slate-500 dark:text-slate-400 inline-flex items-center gap-0.5 truncate">
-                                    <MapPin size={10} className="text-slate-400 shrink-0" />
-                                    {c.city}
-                                  </span>
-                                )}
-                              </div>
+                              {c.city && (
+                                <span className="text-[10px] text-slate-500 dark:text-slate-400 inline-flex items-center gap-0.5 truncate">
+                                  <MapPin
+                                    size={10}
+                                    className="text-slate-400 shrink-0"
+                                  />
+                                  {c.city}
+                                </span>
+                              )}
                             </div>
-                          </button>
-                        );
-                      })}
-                  </div>
-
-                  {/* Footer Link */}
-                  <div className="px-3.5 py-2.5 bg-slate-50/70 dark:bg-slate-800/50 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-xs">
-                    <span className="text-[11px] text-slate-500 dark:text-slate-400 font-medium">
-                      {companies.length} {companies.length === 1 ? "enterprise" : "enterprises"} configured
-                    </span>
-                    <a
-                      href={`/dashboard/${rolePrefix}/company/list`}
-                      onClick={() => setCompanyMenuOpen(false)}
-                      className="text-[11px] font-bold text-indigo-600 hover:text-indigo-700 dark:text-indigo-400 inline-flex items-center gap-1 transition-colors hover:underline"
-                    >
-                      Manage Directory <ArrowRight size={11} />
-                    </a>
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {/* FINANCIAL YEAR CUSTOM DROPDOWN SWITCHER (Cleaned, no "FY", no ERP code) */}
-            <div className="relative inline-block" ref={fyMenuRef}>
-              <button
-                type="button"
-                onClick={() => {
-                  setFyMenuOpen((prev) => !prev);
-                  setCompanyMenuOpen(false);
-                }}
-                className={`h-9 px-2.5 sm:px-3 rounded-full text-xs font-semibold inline-flex items-center gap-1.5 sm:gap-2 transition-all cursor-pointer select-none border shadow-2xs group max-w-[110px] xs:max-w-[135px] sm:max-w-[170px] ${
-                  fyMenuOpen
-                    ? "bg-emerald-50/70 dark:bg-slate-800 border-emerald-500/80 text-emerald-950 dark:text-white ring-2 ring-emerald-500/20 shadow-xs"
-                    : "bg-white dark:bg-slate-800/90 border-slate-200/90 dark:border-slate-700/80 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 hover:border-slate-300 dark:hover:border-slate-600"
-                }`}
-                title={`Accounting Period: ${selectedFY?.isAll ? "All Years" : selectedFY?.fyName ? selectedFY.fyName.replace(/^FY\s*/i, "") : "Select Year"}`}
-              >
-                <div className={`w-6 h-6 rounded-full flex items-center justify-center shrink-0 border shadow-2xs ${
-                  fyMenuOpen
-                    ? "border-emerald-300 dark:border-emerald-700 bg-white dark:bg-slate-700 text-emerald-600 dark:text-emerald-400"
-                    : "border-slate-200/80 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-emerald-600 dark:text-emerald-400"
-                }`}>
-                  <Calendar size={12} />
-                </div>
-
-                <span className="truncate tracking-tight font-bold text-[12px] sm:text-[12.5px] text-slate-700 dark:text-slate-200 group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors">
-                  {selectedFY?.isAll
-                    ? "All Years"
-                    : selectedFY?.fyName
-                    ? selectedFY.fyName.replace(/^FY\s*/i, "")
-                    : "Select Year"}
-                </span>
-
-                <ChevronDown
-                  size={12}
-                  className={`shrink-0 transition-transform duration-200 text-slate-400 group-hover:text-slate-600 dark:group-hover:text-slate-200 ${
-                    fyMenuOpen ? "rotate-180 text-emerald-600 dark:text-emerald-400" : ""
-                  }`}
-                />
-              </button>
-
-              {/* FINANCIAL YEAR POPUP MENU */}
-              {fyMenuOpen && (
-                <div
-                  className="absolute left-0 mt-2.5 w-[260px] sm:w-[280px] rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 shadow-2xl z-[1100] overflow-hidden animate-in fade-in slide-in-from-top-2 duration-150"
-                  style={{
-                    boxShadow: "0 20px 45px -10px rgba(15, 23, 42, 0.18), 0 8px 16px -6px rgba(15, 23, 42, 0.08), 0 0 0 1px rgba(15, 23, 42, 0.05)",
-                  }}
-                >
-                  <div className="px-3.5 py-2.5 bg-gradient-to-r from-slate-50 via-emerald-50/40 to-slate-50 dark:from-slate-800/90 dark:via-slate-800/60 dark:to-slate-800/90 border-b border-slate-200/80 dark:border-slate-800 flex items-center justify-between">
-                    <div>
-                      <div className="flex items-center gap-1.5">
-                        <span className="w-2 h-2 rounded-full bg-emerald-600"></span>
-                        <span className="text-[11px] font-black uppercase tracking-wider text-slate-700 dark:text-slate-300">
-                          Accounting Cycle
-                        </span>
-                        <span className="text-[10px] font-bold px-1.5 py-0.2 rounded-full bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300">
-                          {fyList.length}
-                        </span>
-                      </div>
-                      <p className="text-[11px] text-slate-500 dark:text-slate-400 m-0 mt-0.5">
-                        Financial Year ({fyList.length})
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="max-h-64 overflow-y-auto p-1.5 space-y-1 custom-scrollbar">
-                    {fyList.map((fy) => {
-                      const isSelected = selectedFY?._id === fy._id;
-                      const displayName = fy.isAll ? "All Financial Years" : fy.fyName.replace(/^FY\s*/i, "");
-                      return (
-                        <button
-                          key={fy._id}
-                          type="button"
-                          onClick={() => {
-                            setSelectedFY(fy);
-                            setFyMenuOpen(false);
-                          }}
-                          className={`w-full text-left px-3 py-2 rounded-xl transition-all flex items-center justify-between gap-2 cursor-pointer select-none border ${
-                            isSelected
-                              ? "bg-emerald-50/90 dark:bg-emerald-950/70 border-emerald-200 dark:border-emerald-800/80 text-emerald-950 dark:text-emerald-100 font-bold shadow-2xs"
-                              : "hover:bg-slate-50/90 dark:hover:bg-slate-800/60 border-transparent text-slate-700 dark:text-slate-200 font-medium"
-                          }`}
-                        >
-                          <div className="flex items-center gap-2.5 min-w-0 flex-1">
-                            <div className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 border ${
-                              isSelected
-                                ? "bg-white dark:bg-slate-800 border-emerald-200 text-emerald-600 shadow-2xs"
-                                : "bg-slate-100 dark:bg-slate-800 border-slate-200/80 text-slate-400"
-                            }`}>
-                              {fy.isAll ? <Layers size={13} /> : <Calendar size={13} />}
-                            </div>
-
-                            <span className="text-xs truncate font-semibold">
-                              {displayName}
-                            </span>
                           </div>
-
-                          {isSelected && (
-                            <span className="w-5 h-5 rounded-full bg-emerald-600 text-white flex items-center justify-center shrink-0 shadow-2xs">
-                              <Check size={11} strokeWidth={3} />
-                            </span>
-                          )}
                         </button>
                       );
                     })}
+                </div>
+
+                {/* Footer Link */}
+                <div className="px-3.5 py-2.5 bg-slate-50/70 dark:bg-slate-800/50 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-xs">
+                  <span className="text-[11px] text-slate-500 dark:text-slate-400 font-medium">
+                    {companies.length}{" "}
+                    {companies.length === 1 ? "enterprise" : "enterprises"}{" "}
+                    configured
+                  </span>
+                  <a
+                    href={`/dashboard/${rolePrefix}/company/list`}
+                    onClick={() => setCompanyMenuOpen(false)}
+                    className="text-[11px] font-bold text-indigo-600 hover:text-indigo-700 dark:text-indigo-400 inline-flex items-center gap-1 transition-colors hover:underline"
+                  >
+                    Manage Directory <ArrowRight size={11} />
+                  </a>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* FINANCIAL YEAR CUSTOM DROPDOWN SWITCHER (Cleaned, no "FY", no ERP code) */}
+          <div className="relative inline-block" ref={fyMenuRef}>
+            <button
+              type="button"
+              onClick={() => {
+                setFyMenuOpen((prev) => !prev);
+                setCompanyMenuOpen(false);
+              }}
+              className={`h-9 px-2.5 sm:px-3 rounded-full text-xs font-semibold inline-flex items-center gap-1.5 sm:gap-2 transition-all cursor-pointer select-none border shadow-2xs group max-w-[110px] xs:max-w-[135px] sm:max-w-[170px] ${
+                fyMenuOpen
+                  ? "bg-emerald-50/70 dark:bg-slate-800 border-emerald-500/80 text-emerald-950 dark:text-white ring-2 ring-emerald-500/20 shadow-xs"
+                  : "bg-white dark:bg-slate-800/90 border-slate-200/90 dark:border-slate-700/80 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 hover:border-slate-300 dark:hover:border-slate-600"
+              }`}
+              title={`Accounting Period: ${selectedFY?.isAll ? "All Years" : selectedFY?.fyName ? selectedFY.fyName.replace(/^FY\s*/i, "") : "Select Year"}`}
+            >
+              <div
+                className={`w-6 h-6 rounded-full flex items-center justify-center shrink-0 border shadow-2xs ${
+                  fyMenuOpen
+                    ? "border-emerald-300 dark:border-emerald-700 bg-white dark:bg-slate-700 text-emerald-600 dark:text-emerald-400"
+                    : "border-slate-200/80 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-emerald-600 dark:text-emerald-400"
+                }`}
+              >
+                <Calendar size={12} />
+              </div>
+
+              <span className="truncate tracking-tight font-bold text-[12px] sm:text-[12.5px] text-slate-700 dark:text-slate-200 group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors">
+                {selectedFY?.isAll
+                  ? "All Years"
+                  : selectedFY?.fyName
+                    ? selectedFY.fyName.replace(/^FY\s*/i, "")
+                    : "Select Year"}
+              </span>
+
+              <ChevronDown
+                size={12}
+                className={`shrink-0 transition-transform duration-200 text-slate-400 group-hover:text-slate-600 dark:group-hover:text-slate-200 ${
+                  fyMenuOpen
+                    ? "rotate-180 text-emerald-600 dark:text-emerald-400"
+                    : ""
+                }`}
+              />
+            </button>
+
+            {/* FINANCIAL YEAR POPUP MENU */}
+            {fyMenuOpen && (
+              <div
+                className="absolute left-0 mt-2.5 w-[260px] sm:w-[280px] rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 shadow-2xl z-[1100] overflow-hidden animate-in fade-in slide-in-from-top-2 duration-150"
+                style={{
+                  boxShadow:
+                    "0 20px 45px -10px rgba(15, 23, 42, 0.18), 0 8px 16px -6px rgba(15, 23, 42, 0.08), 0 0 0 1px rgba(15, 23, 42, 0.05)",
+                }}
+              >
+                <div className="px-3.5 py-2.5 bg-gradient-to-r from-slate-50 via-emerald-50/40 to-slate-50 dark:from-slate-800/90 dark:via-slate-800/60 dark:to-slate-800/90 border-b border-slate-200/80 dark:border-slate-800 flex items-center justify-between">
+                  <div>
+                    <div className="flex items-center gap-1.5">
+                      <span className="w-2 h-2 rounded-full bg-emerald-600"></span>
+                      <span className="text-[11px] font-black uppercase tracking-wider text-slate-700 dark:text-slate-300">
+                        Accounting Cycle
+                      </span>
+                      <span className="text-[10px] font-bold px-1.5 py-0.2 rounded-full bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300">
+                        {fyList.length}
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400 m-0 mt-0.5">
+                      Financial Year ({fyList.length})
+                    </p>
                   </div>
                 </div>
-              )}
-            </div>
+
+                <div className="max-h-64 overflow-y-auto p-1.5 space-y-1 custom-scrollbar">
+                  {fyList.map((fy) => {
+                    const isSelected = selectedFY?._id === fy._id;
+                    const displayName = fy.isAll
+                      ? "All Financial Years"
+                      : fy.fyName.replace(/^FY\s*/i, "");
+                    return (
+                      <button
+                        key={fy._id}
+                        type="button"
+                        onClick={() => {
+                          setSelectedFY(fy);
+                          setFyMenuOpen(false);
+                        }}
+                        className={`w-full text-left px-3 py-2 rounded-xl transition-all flex items-center justify-between gap-2 cursor-pointer select-none border ${
+                          isSelected
+                            ? "bg-emerald-50/90 dark:bg-emerald-950/70 border-emerald-200 dark:border-emerald-800/80 text-emerald-950 dark:text-emerald-100 font-bold shadow-2xs"
+                            : "hover:bg-slate-50/90 dark:hover:bg-slate-800/60 border-transparent text-slate-700 dark:text-slate-200 font-medium"
+                        }`}
+                      >
+                        <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                          <div
+                            className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 border ${
+                              isSelected
+                                ? "bg-white dark:bg-slate-800 border-emerald-200 text-emerald-600 shadow-2xs"
+                                : "bg-slate-100 dark:bg-slate-800 border-slate-200/80 text-slate-400"
+                            }`}
+                          >
+                            {fy.isAll ? (
+                              <Layers size={13} />
+                            ) : (
+                              <Calendar size={13} />
+                            )}
+                          </div>
+
+                          <span className="text-xs truncate font-semibold">
+                            {displayName}
+                          </span>
+                        </div>
+
+                        {isSelected && (
+                          <span className="w-5 h-5 rounded-full bg-emerald-600 text-white flex items-center justify-center shrink-0 shadow-2xs">
+                            <Check size={11} strokeWidth={3} />
+                          </span>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
           </div>
         </div>
+      </div>
 
       {/* CENTER GLOBAL SEARCH INPUT (Desktop / Tablet) */}
       <div
         ref={searchContainerRef}
         className={`relative hidden md:flex flex-1 transition-all duration-200 mx-3 lg:mx-6 ${
-          searchOpen ? "max-w-2xl lg:max-w-3xl z-50" : "max-w-sm lg:max-w-lg z-20"
+          searchOpen
+            ? "max-w-2xl lg:max-w-3xl z-50"
+            : "max-w-sm lg:max-w-lg z-20"
         }`}
       >
         <div
@@ -782,17 +865,26 @@ export default function Topbar({
         <button
           onClick={toggleFullscreen}
           aria-label={isFullscreen ? "Exit Fullscreen" : "Enter Fullscreen"}
-          title={isFullscreen ? "Exit Fullscreen (Esc)" : "Enter Fullscreen (F11)"}
-          className={`topbar-circle-btn hidden sm:flex items-center justify-center w-8.5 h-8.5 sm:w-9 sm:h-9 rounded-full border transition-all duration-200 shrink-0 cursor-pointer shadow-xs ${isFullscreen
+          title={
+            isFullscreen ? "Exit Fullscreen (Esc)" : "Enter Fullscreen (F11)"
+          }
+          className={`topbar-circle-btn hidden sm:flex items-center justify-center w-8.5 h-8.5 sm:w-9 sm:h-9 rounded-full border transition-all duration-200 shrink-0 cursor-pointer shadow-xs ${
+            isFullscreen
               ? "border-indigo-300 dark:border-indigo-700 bg-indigo-50 dark:bg-indigo-950/80 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-100 dark:hover:bg-indigo-900"
               : "border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:text-indigo-600 hover:bg-indigo-50/60 dark:hover:bg-slate-700"
-            }`}
+          }`}
           style={{ borderRadius: "9999px" }}
         >
           {isFullscreen ? (
-            <Minimize2 size={15} className="transition-transform hover:scale-110" />
+            <Minimize2
+              size={15}
+              className="transition-transform hover:scale-110"
+            />
           ) : (
-            <Maximize2 size={14} className="transition-transform hover:scale-110" />
+            <Maximize2
+              size={14}
+              className="transition-transform hover:scale-110"
+            />
           )}
         </button>
 
@@ -833,7 +925,9 @@ export default function Topbar({
               {/* Header */}
               <div className="flex items-center justify-between px-3.5 pb-2 border-b border-gray-100">
                 <div className="flex items-center gap-1.5">
-                  <span className="font-extrabold text-slate-800 text-xs">Notifications</span>
+                  <span className="font-extrabold text-slate-800 text-xs">
+                    Notifications
+                  </span>
                   {unreadCount > 0 && (
                     <span className="px-1.5 py-0.5 rounded-full bg-red-100 text-red-600 text-[10px] font-black">
                       {unreadCount} new
@@ -870,10 +964,11 @@ export default function Topbar({
                   <button
                     key={cat.id}
                     onClick={() => setActiveCat(cat.id)}
-                    className={`px-3 py-1 rounded-lg whitespace-nowrap transition-all ${activeCat === cat.id
-                      ? "bg-indigo-600 text-white shadow-sm"
-                      : "bg-white text-slate-600 hover:bg-slate-100 border border-slate-200/60"
-                      }`}
+                    className={`px-3 py-1 rounded-lg whitespace-nowrap transition-all ${
+                      activeCat === cat.id
+                        ? "bg-indigo-600 text-white shadow-sm"
+                        : "bg-white text-slate-600 hover:bg-slate-100 border border-slate-200/60"
+                    }`}
                   >
                     {cat.label}
                   </button>
@@ -896,19 +991,23 @@ export default function Topbar({
                       <div
                         key={n._id || i}
                         onClick={() => handleNotifClick(n)}
-                        className={`group px-3.5 py-3 text-[13px] cursor-pointer transition-all duration-150 flex gap-2.5 items-start ${!n.isRead ? "bg-indigo-50/30 hover:bg-indigo-50/60 font-medium" : "hover:bg-slate-50"
-                          }`}
+                        className={`group px-3.5 py-3 text-[13px] cursor-pointer transition-all duration-150 flex gap-2.5 items-start ${
+                          !n.isRead
+                            ? "bg-indigo-50/30 hover:bg-indigo-50/60 font-medium"
+                            : "hover:bg-slate-50"
+                        }`}
                       >
                         {/* Status Icon */}
                         <div
-                          className={`w-2 h-2 rounded-full mt-1.5 shrink-0 ${isErr
-                            ? "bg-rose-500 ring-4 ring-rose-100"
-                            : isWarn
-                              ? "bg-amber-500 ring-4 ring-amber-100"
-                              : isSucc
-                                ? "bg-emerald-500 ring-4 ring-emerald-100"
-                                : "bg-indigo-500 ring-4 ring-indigo-100"
-                            }`}
+                          className={`w-2 h-2 rounded-full mt-1.5 shrink-0 ${
+                            isErr
+                              ? "bg-rose-500 ring-4 ring-rose-100"
+                              : isWarn
+                                ? "bg-amber-500 ring-4 ring-amber-100"
+                                : isSucc
+                                  ? "bg-emerald-500 ring-4 ring-emerald-100"
+                                  : "bg-indigo-500 ring-4 ring-indigo-100"
+                          }`}
                         />
 
                         <div className="flex-1 min-w-0">
@@ -918,7 +1017,10 @@ export default function Topbar({
                             </span>
                             <span className="text-[10px] text-slate-400 font-semibold shrink-0">
                               {n.createdAt
-                                ? new Date(n.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+                                ? new Date(n.createdAt).toLocaleTimeString([], {
+                                    hour: "2-digit",
+                                    minute: "2-digit",
+                                  })
                                 : ""}
                             </span>
                           </div>
@@ -971,10 +1073,14 @@ export default function Topbar({
             {!mobile && (
               <span className="flex flex-col items-start leading-tight text-left">
                 <span className="text-[12.5px] font-bold text-slate-800 dark:text-white">
-                  {checkIsSuperAdmin(user) ? "System Owner" : user?.name || "User"}
+                  {checkIsSuperAdmin(user)
+                    ? "System Owner"
+                    : user?.name || "User"}
                 </span>
                 <span className="text-[10px] text-slate-400 font-medium">
-                  {checkIsSuperAdmin(user) ? "Super Admin" : user?.roleId?.roleName || "—"}
+                  {checkIsSuperAdmin(user)
+                    ? "Super Admin"
+                    : user?.roleId?.roleName || "—"}
                 </span>
               </span>
             )}
@@ -998,9 +1104,13 @@ export default function Topbar({
                   )}
                 </span>
                 <div className="min-w-0 flex-1">
-                  <p className="text-xs font-bold text-slate-800 dark:text-slate-200 truncate">{user?.name || "User"}</p>
+                  <p className="text-xs font-bold text-slate-800 dark:text-slate-200 truncate">
+                    {user?.name || "User"}
+                  </p>
                   <p className="text-[10.5px] text-slate-500 dark:text-slate-400 truncate">
-                    {checkIsSuperAdmin(user) ? "Super Administrator" : user?.roleId?.roleName || user?.email || "Manager"}
+                    {checkIsSuperAdmin(user)
+                      ? "Super Administrator"
+                      : user?.roleId?.roleName || user?.email || "Manager"}
                   </p>
                 </div>
               </div>
@@ -1009,7 +1119,12 @@ export default function Topbar({
                 {(() => {
                   const rolePath = checkIsSuperAdmin(user)
                     ? "super-admin"
-                    : ((user?.roleId?.roleName || (user as any)?.roleType || (user as any)?.role || "admin"))
+                    : (
+                        user?.roleId?.roleName ||
+                        (user as any)?.roleType ||
+                        (user as any)?.role ||
+                        "admin"
+                      )
                         .toLowerCase()
                         .trim()
                         .replace(/[\s_]+/g, "-");
@@ -1040,7 +1155,6 @@ export default function Topbar({
           )}
         </div>
       </div>
-
     </div>
   );
 }

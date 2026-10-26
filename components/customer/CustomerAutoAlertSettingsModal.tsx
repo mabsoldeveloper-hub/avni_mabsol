@@ -496,7 +496,7 @@ export default function CustomerAutoAlertSettingsModal({
                   type="email"
                   value={form.adminNotificationEmail}
                   onChange={(e) => setForm({ ...form, adminNotificationEmail: e.target.value })}
-                  placeholder="e.g. abhishek.mabsolinfotech@gmail.com"
+                  placeholder="e.g. director@yourpharmacy.com"
                   className="flex-1 px-3 py-2 rounded-xl border border-blue-300 bg-white text-xs font-semibold text-slate-800 placeholder:text-slate-400 focus:ring-2 focus:ring-blue-500"
                 />
                 <button

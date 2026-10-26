@@ -19,10 +19,15 @@ export async function GET(request: NextRequest) {
     await dbConnect();
     const user = await getCurrentUser();
     if (!user) {
-      return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
+      return NextResponse.json(
+        { success: false, error: "Unauthorized" },
+        { status: 401 },
+      );
     }
 
-    const roleName = String(user.roleId?.roleName || user.role || "").trim().toLowerCase();
+    const roleName = String(user.roleId?.roleName || user.role || "")
+      .trim()
+      .toLowerCase();
     const isAdminOrManager =
       roleName.includes("admin") ||
       roleName.includes("super") ||
@@ -40,7 +45,7 @@ export async function GET(request: NextRequest) {
         getMrTerritoryRestriction(),
         MrCustomerAssignment.find(
           { userId: user._id, status: "Active" },
-          { customerCode: 1 }
+          { customerCode: 1 },
         ).lean(),
       ]);
 
@@ -49,9 +54,15 @@ export async function GET(request: NextRequest) {
       const currentEmpCodeStr = (user.employeeCode || "").trim().toLowerCase();
 
       // Collect all assigned Customer Codes for this MR from both sources
-      const allowedCustomerCodes = Array.from(restriction.allowedOrdnosSet || []);
-      const directCustomerCodes = directAssignments.map((a: any) => String(a.customerCode || "").trim()).filter(Boolean);
-      const allCustomerCodes = Array.from(new Set([...allowedCustomerCodes, ...directCustomerCodes]));
+      const allowedCustomerCodes = Array.from(
+        restriction.allowedOrdnosSet || [],
+      );
+      const directCustomerCodes = directAssignments
+        .map((a: any) => String(a.customerCode || "").trim())
+        .filter(Boolean);
+      const allCustomerCodes = Array.from(
+        new Set([...allowedCustomerCodes, ...directCustomerCodes]),
+      );
 
       const mrConditions: any[] = [
         { userId: currentUserIdStr },
@@ -59,13 +70,25 @@ export async function GET(request: NextRequest) {
       ];
 
       if (currentUserNameStr) {
-        mrConditions.push({ "metadata.mrName": { $regex: escapeRegex(currentUserNameStr), $options: "i" } });
+        mrConditions.push({
+          "metadata.mrName": {
+            $regex: escapeRegex(currentUserNameStr),
+            $options: "i",
+          },
+        });
       }
       if (currentEmpCodeStr) {
-        mrConditions.push({ "metadata.mrName": { $regex: escapeRegex(currentEmpCodeStr), $options: "i" } });
+        mrConditions.push({
+          "metadata.mrName": {
+            $regex: escapeRegex(currentEmpCodeStr),
+            $options: "i",
+          },
+        });
       }
       if (allCustomerCodes.length > 0) {
-        mrConditions.push({ "metadata.customerCode": { $in: allCustomerCodes } });
+        mrConditions.push({
+          "metadata.customerCode": { $in: allCustomerCodes },
+        });
       }
 
       query = {
@@ -91,9 +114,14 @@ export async function GET(request: NextRequest) {
       unreadCount,
     });
   } catch (error: any) {
+    console.error("GET /api/notifications ERROR:", error);
+
     return NextResponse.json(
-      { success: false, error: error.message || "Failed to fetch notifications" },
-      { status: 500 }
+      {
+        success: false,
+        error: error?.message || "Failed to fetch notifications",
+      },
+      { status: 500 },
     );
   }
 }
@@ -104,27 +132,47 @@ export async function PATCH(request: NextRequest) {
     await dbConnect();
     const user = await getCurrentUser();
     if (!user) {
-      return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
+      return NextResponse.json(
+        { success: false, error: "Unauthorized" },
+        { status: 401 },
+      );
     }
 
     const body = await request.json();
     const { notificationId, markAllRead } = body;
 
     if (markAllRead) {
-      await Notification.updateMany({ isRead: false }, { $set: { isRead: true } });
-      return NextResponse.json({ success: true, message: "All notifications marked as read" });
+      await Notification.updateMany(
+        { isRead: false },
+        { $set: { isRead: true } },
+      );
+      return NextResponse.json({
+        success: true,
+        message: "All notifications marked as read",
+      });
     }
 
     if (notificationId) {
-      await Notification.findByIdAndUpdate(notificationId, { $set: { isRead: true } });
-      return NextResponse.json({ success: true, message: "Notification marked as read" });
+      await Notification.findByIdAndUpdate(notificationId, {
+        $set: { isRead: true },
+      });
+      return NextResponse.json({
+        success: true,
+        message: "Notification marked as read",
+      });
     }
 
-    return NextResponse.json({ success: false, error: "notificationId or markAllRead required" }, { status: 400 });
+    return NextResponse.json(
+      { success: false, error: "notificationId or markAllRead required" },
+      { status: 400 },
+    );
   } catch (error: any) {
     return NextResponse.json(
-      { success: false, error: error.message || "Failed to update notification" },
-      { status: 500 }
+      {
+        success: false,
+        error: error.message || "Failed to update notification",
+      },
+      { status: 500 },
     );
   }
 }
@@ -135,7 +183,10 @@ export async function DELETE(request: NextRequest) {
     await dbConnect();
     const user = await getCurrentUser();
     if (!user) {
-      return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
+      return NextResponse.json(
+        { success: false, error: "Unauthorized" },
+        { status: 401 },
+      );
     }
 
     const { searchParams } = new URL(request.url);
@@ -143,8 +194,17 @@ export async function DELETE(request: NextRequest) {
     const clearAll = searchParams.get("clearAll") === "true";
 
     if (clearAll) {
-      const userFilter = { $or: [{ userId: String(user._id) }, { userId: "" }, { userId: { $exists: false } }] };
-      const allNotifs = await Notification.find(userFilter, { entityId: 1, type: 1 }).lean();
+      const userFilter = {
+        $or: [
+          { userId: String(user._id) },
+          { userId: "" },
+          { userId: { $exists: false } },
+        ],
+      };
+      const allNotifs = await Notification.find(userFilter, {
+        entityId: 1,
+        type: 1,
+      }).lean();
       const dismissedDocs = allNotifs
         .filter((n: any) => n.entityId)
         .map((n: any) => ({
@@ -154,11 +214,16 @@ export async function DELETE(request: NextRequest) {
         }));
 
       if (dismissedDocs.length > 0) {
-        await DismissedAlert.insertMany(dismissedDocs, { ordered: false }).catch(() => {});
+        await DismissedAlert.insertMany(dismissedDocs, {
+          ordered: false,
+        }).catch(() => {});
       }
 
       await Notification.deleteMany({ userId: String(user._id) });
-      return NextResponse.json({ success: true, message: "Notifications cleared" });
+      return NextResponse.json({
+        success: true,
+        message: "Notifications cleared",
+      });
     }
 
     if (notificationId) {
@@ -171,14 +236,23 @@ export async function DELETE(request: NextRequest) {
         }).catch(() => {});
       }
       await Notification.findByIdAndDelete(notificationId);
-      return NextResponse.json({ success: true, message: "Notification deleted" });
+      return NextResponse.json({
+        success: true,
+        message: "Notification deleted",
+      });
     }
 
-    return NextResponse.json({ success: false, error: "id or clearAll parameter required" }, { status: 400 });
+    return NextResponse.json(
+      { success: false, error: "id or clearAll parameter required" },
+      { status: 400 },
+    );
   } catch (error: any) {
     return NextResponse.json(
-      { success: false, error: error.message || "Failed to delete notification" },
-      { status: 500 }
+      {
+        success: false,
+        error: error.message || "Failed to delete notification",
+      },
+      { status: 500 },
     );
   }
 }

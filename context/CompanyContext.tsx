@@ -137,7 +137,7 @@ export function CompanyProvider({ children }: { children: React.ReactNode }) {
         });
       }
     } catch (err) {
-      console.error("Failed to load companies", err);
+      // console.error("Failed to load companies", err);
     } finally {
       setLoading(false);
     }

@@ -1895,3 +1895,11 @@
 2026-10-16T07:18:47:     at l (lib/services/superAdmin.service.ts:31:34)
 2026-10-16T07:18:47:     at d (lib/services/superAdmin.service.ts:44:23)
 2026-10-16T07:18:47:     at async U (app/api/auth/login/route.ts:44:69)
+2026-10-21T09:46:22: [Meta WhatsApp] Missing PHONE_NUMBER_ID in .env. To enable Meta Cloud WhatsApp, set PHONE_NUMBER_ID=<your_meta_phone_number_id> in .env.
+2026-10-21T09:54:28: [Meta WhatsApp] Missing PHONE_NUMBER_ID in .env. To enable Meta Cloud WhatsApp, set PHONE_NUMBER_ID=<your_meta_phone_number_id> in .env.
+2026-10-23T14:06:15: Error: Failed to find Server Action "f160dbcb". This request might be from an older or newer deployment.
+2026-10-23T14:06:15: Read more: https://nextjs.org/docs/messages/failed-to-find-server-action
+2026-10-23T14:06:15:     at ignore-listed frames
+2026-10-23T14:06:18: Error: Failed to find Server Action "e3a89760". This request might be from an older or newer deployment.
+2026-10-23T14:06:18: Read more: https://nextjs.org/docs/messages/failed-to-find-server-action
+2026-10-23T14:06:18:     at ignore-listed frames

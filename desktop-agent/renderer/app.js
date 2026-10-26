@@ -525,6 +525,8 @@ function renderBranchDropdown(branches, selectedCode) {
 function getCodeForFinancialYear(fyString, baseExtractCode, catalogFinancialYears = []) {
   if (!fyString) return baseExtractCode || "A01";
   const cleanFy = fyString.replace(/[^\d-]/g, "");
+  const startMatch = cleanFy.match(/^(\d{4})/);
+  const targetStartYear = startMatch ? parseInt(startMatch[1], 10) : null;
 
   // 1. Check if catalog has an explicit match from Marg master files
   if (Array.isArray(catalogFinancialYears) && catalogFinancialYears.length > 0) {
@@ -541,11 +543,38 @@ function getCodeForFinancialYear(fyString, baseExtractCode, catalogFinancialYear
   const prefixMatch = (baseExtractCode || "A01").match(/^([A-Za-z]+)/);
   const prefix = prefixMatch ? prefixMatch[1].toUpperCase() : "A";
 
-  // 3. Fallback to standard Marg ERP extension ordering for the last 5 financial years
-  const last5Years = typeof getLast5FinancialYears === "function" ? getLast5FinancialYears() : ["(2026-2027)", "(2025-2026)", "(2024-2025)", "(2023-2024)", "(2022-2023)"];
-  const yearIdx = last5Years.findIndex(y => y.includes(cleanFy) || y === fyString);
-  if (yearIdx >= 0) {
-    const extenPad = String(yearIdx + 1).padStart(2, "0");
+  // 3. Dynamic year anchor matching
+  // Default anchor in standard Marg ERP setup: 2025-2026 corresponds to exten 1 (e.g. C01, B01)
+  let anchorStartYear = 2025;
+  let anchorExten = 1;
+
+  // If baseExtractCode has digits (e.g. "C01" -> 1, "C00" -> 0, "B02" -> 2)
+  const numMatch = (baseExtractCode || "").match(/\d+/);
+  if (numMatch) {
+    anchorExten = parseInt(numMatch[0], 10);
+  }
+
+  // If catalog has any entry with a known start year and code/exten, use it as anchor
+  if (Array.isArray(catalogFinancialYears) && catalogFinancialYears.length > 0) {
+    const anchorEntry = catalogFinancialYears.find(f => f.fyName && (f.companyDataCode || f.exten !== undefined));
+    if (anchorEntry) {
+      const aMatch = (anchorEntry.fyName || "").replace(/[^\d-]/g, "").match(/^(\d{4})/);
+      if (aMatch) {
+        anchorStartYear = parseInt(aMatch[1], 10);
+        if (anchorEntry.exten !== undefined) {
+          anchorExten = Number(anchorEntry.exten);
+        } else if (anchorEntry.companyDataCode) {
+          const cMatch = anchorEntry.companyDataCode.match(/\d+/);
+          if (cMatch) anchorExten = parseInt(cMatch[0], 10);
+        }
+      }
+    }
+  }
+
+  if (targetStartYear !== null) {
+    const yearDiff = targetStartYear - anchorStartYear;
+    const targetExten = Math.max(0, anchorExten + yearDiff);
+    const extenPad = String(targetExten).padStart(2, "0");
     return `${prefix}${extenPad}`;
   }
 
@@ -597,7 +626,8 @@ function populateSyncFyDropdown(catalogFys = [], baseCode = "", preferredFy = ""
     }
   }
   if (!selectedOption && fyList.length > 0) {
-    selectedOption = fyList[0];
+    const fy2025 = fyList.find(y => y.includes("2025-2026"));
+    selectedOption = fy2025 || fyList[0];
   }
 
   if (selectedOption) {
@@ -605,7 +635,7 @@ function populateSyncFyDropdown(catalogFys = [], baseCode = "", preferredFy = ""
   }
 
   if (syncFyBadge && syncFySelectDropdown.value) {
-    syncFyBadge.textContent = "Active Financial Year";
+    syncFyBadge.textContent = `Active FY: ${syncFySelectDropdown.value}`;
   }
 }
 
@@ -839,6 +869,25 @@ function updateLicenseStatusUI(isVerified, expiresAt) {
 function updateSyncButtonRequirementState() {
   if (!syncNowBtn) return;
 
+  // If configuration is in edit mode (not yet saved), sync and action buttons must remain disabled until saved!
+  const isEditMode = Boolean(editConfigBtn && editConfigBtn.classList.contains("hidden"));
+  if (isEditMode) {
+    syncNowBtn.disabled = true;
+    syncNowBtn.classList.add("terms-disabled", "btn-disabled-requirements");
+    syncNowBtn.title = "Save configuration to enable synchronization";
+    if (toggleAutoSyncBtn) {
+      toggleAutoSyncBtn.disabled = true;
+      toggleAutoSyncBtn.classList.add("terms-disabled", "btn-disabled-requirements");
+      toggleAutoSyncBtn.title = "Save configuration to enable automatic synchronization";
+    }
+    if (syncAllBranchesBtn) {
+      syncAllBranchesBtn.disabled = true;
+      syncAllBranchesBtn.classList.add("terms-disabled", "btn-disabled-requirements");
+      syncAllBranchesBtn.title = "Save configuration to enable synchronization";
+    }
+    return;
+  }
+
   const licenseKey = (licenseKeyInput?.value || "").trim();
   const companyCode = (companyCodeInput?.value || "").trim();
   const sourceDir = (sourceDirInput?.value || "").trim();
@@ -857,6 +906,7 @@ function updateSyncButtonRequirementState() {
     syncNowBtn.classList.remove("terms-disabled", "btn-disabled-requirements");
     syncNowBtn.title = "Extract & Sync Now";
     if (toggleAutoSyncBtn) {
+      toggleAutoSyncBtn.disabled = false;
       toggleAutoSyncBtn.classList.remove("terms-disabled", "btn-disabled-requirements");
       toggleAutoSyncBtn.title = "Pause or Resume Automatic Synchronization";
     }
@@ -865,6 +915,7 @@ function updateSyncButtonRequirementState() {
     syncNowBtn.classList.add("terms-disabled", "btn-disabled-requirements");
     syncNowBtn.title = `Sync disabled: Please fill all required fields (${missingFields.join(", ")})`;
     if (toggleAutoSyncBtn) {
+      toggleAutoSyncBtn.disabled = true;
       toggleAutoSyncBtn.classList.add("terms-disabled", "btn-disabled-requirements");
       toggleAutoSyncBtn.title = `Sync disabled: Please fill all required fields (${missingFields.join(", ")})`;
     }
@@ -1026,6 +1077,47 @@ function setFormLocked(isLocked) {
     productKeyInput.disabled = isLocked;
     productKeyInput.readOnly = isLocked;
   }
+
+  if (syncFySelectDropdown) {
+    syncFySelectDropdown.disabled = isLocked;
+  }
+
+  if (branchSelectDropdown) {
+    branchSelectDropdown.disabled = isLocked;
+  }
+
+  const btnRefreshBranches = document.getElementById("btnRefreshBranches");
+  if (btnRefreshBranches) {
+    btnRefreshBranches.disabled = isLocked;
+    btnRefreshBranches.style.pointerEvents = isLocked ? "none" : "auto";
+    btnRefreshBranches.style.opacity = isLocked ? "0.5" : "1";
+    btnRefreshBranches.style.cursor = isLocked ? "not-allowed" : "pointer";
+  }
+
+  const btnAddBranch = document.getElementById("btnAddBranchProfile");
+  if (btnAddBranch) {
+    btnAddBranch.disabled = isLocked;
+    btnAddBranch.style.pointerEvents = isLocked ? "none" : "auto";
+    btnAddBranch.style.opacity = isLocked ? "0.5" : "1";
+    btnAddBranch.style.cursor = isLocked ? "not-allowed" : "pointer";
+  }
+
+  const btnVerifyManual = document.getElementById("btnVerifyLicenseKeyManual");
+  if (btnVerifyManual) {
+    btnVerifyManual.disabled = isLocked;
+    btnVerifyManual.style.pointerEvents = isLocked ? "none" : "auto";
+    btnVerifyManual.style.opacity = isLocked ? "0.5" : "1";
+    btnVerifyManual.style.cursor = isLocked ? "not-allowed" : "pointer";
+  }
+
+  const btnGenerateKey = document.getElementById("btnGenerateNewLicenseKey");
+  if (btnGenerateKey) {
+    btnGenerateKey.disabled = isLocked;
+    btnGenerateKey.style.pointerEvents = isLocked ? "none" : "auto";
+    btnGenerateKey.style.opacity = isLocked ? "0.5" : "1";
+    btnGenerateKey.style.cursor = isLocked ? "not-allowed" : "pointer";
+  }
+
   if (autoSyncCheckbox) autoSyncCheckbox.disabled = isLocked;
   intervalSelect.disabled = isLocked || (autoSyncCheckbox && !autoSyncCheckbox.checked);
   browseSourceBtn.disabled = isLocked;
@@ -1042,9 +1134,9 @@ function setFormLocked(isLocked) {
     openTermsBtn.style.cursor = isLocked ? "not-allowed" : "pointer";
   }
 
-  // License key is masked when locked, folder path is always readable text
+  // Mask folder path and license key when saved/locked
   if (isLocked) {
-    sourceDirInput.type = "text";
+    sourceDirInput.type = "password";
     licenseKeyInput.type = "password";
     editConfigBtn.classList.remove("hidden");
     saveConfigBtn.classList.add("hidden");
@@ -2911,12 +3003,14 @@ function setupEventListeners() {
   syncFySelectDropdown?.addEventListener("change", () => {
     const selectedFy = syncFySelectDropdown.value;
     if (!selectedFy) return;
+    const selectedOpt = syncFySelectDropdown.options[syncFySelectDropdown.selectedIndex];
+    const precomputed = selectedOpt?.getAttribute("data-code");
     const currentCode = (companyCodeInput?.value || "").trim().toUpperCase();
-    const newCode = getCodeForFinancialYear(selectedFy, currentCode, activeBranchCatalogFys);
+    const newCode = precomputed || getCodeForFinancialYear(selectedFy, currentCode, activeBranchCatalogFys);
     if (newCode) {
       companyCodeInput.value = newCode;
       if (companyCodeHelper) {
-        companyCodeHelper.textContent = `Auto-updated for ${selectedFy} (extracts .${newCode} files)`;
+        companyCodeHelper.textContent = `Auto-updated for ${selectedFy}`;
       }
       if (syncFyBadge) {
         syncFyBadge.textContent = `Active FY: ${selectedFy}`;
@@ -2940,7 +3034,7 @@ function setupEventListeners() {
           sourceDir: sourceDirInput?.value || ""
         }).catch(() => {});
       }
-      showToast(`Selected FY ${selectedFy} — ERP Extract Code set to ${newCode}`, "success");
+      showToast(`Financial Year updated to ${selectedFy}`, "success");
     }
   });
 

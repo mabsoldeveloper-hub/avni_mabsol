@@ -50,6 +50,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { useParams } from "next/navigation";
 import { FaBuilding, FaMapMarkerAlt, FaArrowRight } from "react-icons/fa";
 
 import InventoryCards from "@/components/inventory/InventoryCards";
@@ -68,6 +69,8 @@ type MrTerritoryInfo = {
 };
 
 export default function InventoryDashboard() {
+  const params = useParams();
+  const role = (params?.role as string) || "admin";
   const { selectedCompany } = useCompany();
   const { selectedFY } = useFinancialYear();
   const [products, setProducts] = useState<any[]>([]);
@@ -328,6 +331,7 @@ export default function InventoryDashboard() {
 
       <InventoryCards
         summary={summary}
+        role={role}
       />
 
       <div className="row mt-4">

@@ -47,9 +47,9 @@ export default function NegativeStockTable({ products }: any) {
           </thead>
           <tbody>
             {products?.length > 0 ? (
-              products.map((p: any) => (
+              products.map((p: any, idx: number) => (
                 <tr
-                  key={p._id}
+                  key={`${p._id || p.CODE || "neg"}-${idx}`}
                   className="border-b border-gray-100/70 last:border-0 hover:bg-white/50 transition-colors duration-200"
                 >
                   <td className="px-4 py-2.5 font-semibold text-gray-700">

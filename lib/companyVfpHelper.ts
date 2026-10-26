@@ -8,7 +8,16 @@ export async function getCompanyVfpFilter(searchParams: URLSearchParams): Promis
   await connectDB();
 
   const currentUser = await getCurrentUser();
-  const userCompany = currentUser?.companyId ? await Company.findById(currentUser.companyId).lean() : null;
+  const userCompanyId = currentUser?.companyId
+    ? typeof currentUser.companyId === "object" && (currentUser.companyId as any)._id
+      ? String((currentUser.companyId as any)._id)
+      : String(currentUser.companyId)
+    : null;
+  const userCompany = userCompanyId
+    ? typeof currentUser?.companyId === "object" && (currentUser.companyId as any)?.companyName
+      ? (currentUser.companyId as any)
+      : await Company.findById(userCompanyId).lean()
+    : null;
   const isChildBranchUser = Boolean(userCompany && !userCompany.isHeadOffice);
 
   const companyId = searchParams.get("companyId");

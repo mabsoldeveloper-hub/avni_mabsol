@@ -209,27 +209,40 @@ export async function GET(req: Request) {
     async () => {
 
   // Company & User Isolation
-  const userCompany = currentUser?.companyId ? await Company.findById(currentUser.companyId).lean() : null;
+  const userCompanyId = currentUser?.companyId
+    ? typeof currentUser.companyId === "object" && (currentUser.companyId as any)._id
+      ? String((currentUser.companyId as any)._id)
+      : String(currentUser.companyId)
+    : null;
+
+  const userCompany = userCompanyId
+    ? typeof currentUser?.companyId === "object" && (currentUser.companyId as any)?.companyName
+      ? (currentUser.companyId as any)
+      : await Company.findById(userCompanyId).lean()
+    : null;
+
   const isChildBranchUser = Boolean(userCompany && !userCompany.isHeadOffice);
 
   // If logged-in user belongs to a child branch, lock to their company strictly.
   // Otherwise, respect searchParams companyId if provided.
   let targetCompanyId: string | null = null;
   if (isChildBranchUser && userCompany) {
-    targetCompanyId = String(userCompany._id);
-  } else if (companyId && companyId !== "ALL") {
+    targetCompanyId = String((userCompany as any)._id || userCompanyId);
+  } else if (companyId && companyId !== "ALL" && companyId !== "null" && companyId !== "undefined") {
     targetCompanyId = companyId;
-  } else if (currentUser?.companyId && !companyId) {
-    targetCompanyId = String(currentUser.companyId);
+  } else if (userCompanyId && !companyId) {
+    if (userCompany?.isHeadOffice) {
+      targetCompanyId = null;
+    } else {
+      targetCompanyId = userCompanyId;
+    }
   }
 
   const userCountQuery: any = {};
   const companyCountQuery: any = {};
 
-  if (targetCompanyId) {
-    const targetObjId = mongoose.Types.ObjectId.isValid(targetCompanyId)
-      ? new mongoose.Types.ObjectId(targetCompanyId)
-      : targetCompanyId;
+  if (targetCompanyId && mongoose.Types.ObjectId.isValid(targetCompanyId)) {
+    const targetObjId = new mongoose.Types.ObjectId(targetCompanyId);
     userCountQuery.companyId = targetObjId;
     userCountQuery.status = { $ne: "Inactive" };
     companyCountQuery._id = targetObjId;

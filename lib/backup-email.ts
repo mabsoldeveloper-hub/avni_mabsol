@@ -1,4 +1,6 @@
 import nodemailer from "nodemailer";
+import connectDB from "@/lib/mongodb";
+import Company from "@/models/Company";
 
 interface SendBackupEmailOptions {
   receiverEmail: string;
@@ -9,29 +11,15 @@ interface SendBackupEmailOptions {
   description?: string;
 }
 
-function getTransporter() {
-  const senderEmail = process.env.SMTP_USER?.trim();
-  const gmailAppPassword = process.env.SMTP_PASS?.trim();
-
-  if (!senderEmail || !gmailAppPassword) {
-    throw new Error(
-      "SMTP_USER or SMTP_PASS is missing in environment variables (.env)"
-    );
-  }
-
-  const transporter = nodemailer.createTransport({
-    host: process.env.BACKUP_SMTP_HOST || "smtp.gmail.com",
-    port: Number(process.env.SMTP_PORT || 465),
-    secure: process.env.BACKUP_SMTP_SECURE !== "false",
-    auth: {
-      user: senderEmail,
-      pass: gmailAppPassword,
-    },
-  });
-
-  return { transporter, senderEmail };
+function clean(value: any): string {
+  if (value === null || value === undefined) return "";
+  return String(value).replace(/\u0000/g, "").trim();
 }
 
+/**
+ * Sends encrypted database backup via Primary SMTP (GoDaddy) with automatic
+ * seamless fallback to Secondary SMTP (Gmail App Password)
+ */
 export async function sendBackupEmail({
   receiverEmail,
   fileName,
@@ -40,68 +28,185 @@ export async function sendBackupEmail({
   subject,
   description,
 }: SendBackupEmailOptions) {
-  const { transporter, senderEmail } = getTransporter();
+  if (!receiverEmail || !receiverEmail.includes("@")) {
+    throw new Error("Invalid receiver email address for backup delivery");
+  }
+
+  // Resolve dynamic company name for email header and sender branding
+  let senderCompanyName = "Mabsol Pharma CRM";
+  try {
+    await connectDB();
+    const compDoc: any =
+      (await Company.findOne({ isHeadOffice: true }).lean()) ||
+      (await Company.findOne().lean());
+    if (compDoc?.companyName) {
+      senderCompanyName = clean(compDoc.companyName);
+    }
+  } catch (e) {
+    // Fallback to default name if DB is unreachable
+  }
 
   const yearLabel = fyName ? (fyName === "ALL" ? "Full Database" : `FY ${fyName}`) : "";
   const emailSubject =
     subject ||
-    (yearLabel
-      ? `Encrypted Database Backup (${yearLabel})`
-      : "Encrypted Database Backup");
+    `📦 ${senderCompanyName} — Encrypted Database Backup ${yearLabel ? `(${yearLabel})` : ""}`.trim();
 
   const emailText =
     description ||
-    `Your encrypted database backup${yearLabel ? ` for ${yearLabel}` : ""} is attached with this email.\n\nFile Name: ${fileName}\nGenerated At: ${new Date().toLocaleString()}`;
+    `Your encrypted database backup${yearLabel ? ` for ${yearLabel}` : ""} is attached with this email.\n\nCompany: ${senderCompanyName}\nFile Name: ${fileName}\nGenerated At: ${new Date().toLocaleString()}`;
 
   const htmlBody = `
-    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e2e8f0; rounded: 12px; background: #ffffff;">
-      <div style="background: #2563eb; color: #ffffff; padding: 16px; border-radius: 8px; text-align: center;">
-        <h2 style="margin: 0; font-size: 20px;">📦 Database Backup</h2>
-        <p style="margin: 4px 0 0; font-size: 13px; opacity: 0.9;">Secure Automated CRM Database Snapshot</p>
+    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e2e8f0; border-radius: 12px; background: #ffffff;">
+      <div style="background: linear-gradient(135deg, #1e3a8a 0%, #2563eb 100%); color: #ffffff; padding: 20px; border-radius: 8px; text-align: center;">
+        <h2 style="margin: 0; font-size: 22px;">📦 Database Backup Archive</h2>
+        <p style="margin: 6px 0 0; font-size: 13px; opacity: 0.9;">${senderCompanyName} — Automated Secure CRM Snapshot</p>
       </div>
 
       <div style="padding: 20px 10px; color: #334155; line-height: 1.6;">
-        <p>Hello,</p>
-        <p>Your scheduled encrypted database backup has been generated successfully.</p>
+        <p style="font-size: 15px; margin-top: 0;">Hello,</p>
+        <p style="font-size: 14px;">Your encrypted database backup has been generated and securely archived. The backup file is attached to this email.</p>
         
-        <table style="width: 100%; border-collapse: collapse; margin: 20px 0; font-size: 14px;">
+        <table style="width: 100%; border-collapse: collapse; margin: 20px 0; font-size: 14px; background: #f8fafc; border-radius: 8px; overflow: hidden; border: 1px solid #e2e8f0;">
           <tr>
-            <td style="padding: 8px; border-bottom: 1px solid #f1f5f9; color: #64748b; font-weight: bold;">Scope / Financial Year:</td>
-            <td style="padding: 8px; border-bottom: 1px solid #f1f5f9; color: #0f172a; font-weight: bold;">${yearLabel || "Full Database"}</td>
+            <td style="padding: 10px 14px; border-bottom: 1px solid #e2e8f0; color: #64748b; font-weight: bold; width: 40%;">Company:</td>
+            <td style="padding: 10px 14px; border-bottom: 1px solid #e2e8f0; color: #0f172a; font-weight: bold;">${senderCompanyName}</td>
           </tr>
           <tr>
-            <td style="padding: 8px; border-bottom: 1px solid #f1f5f9; color: #64748b; font-weight: bold;">File Name:</td>
-            <td style="padding: 8px; border-bottom: 1px solid #f1f5f9; color: #0f172a; font-family: monospace;">${fileName}</td>
+            <td style="padding: 10px 14px; border-bottom: 1px solid #e2e8f0; color: #64748b; font-weight: bold;">Scope / Financial Year:</td>
+            <td style="padding: 10px 14px; border-bottom: 1px solid #e2e8f0; color: #2563eb; font-weight: bold;">${yearLabel || "Full Database"}</td>
           </tr>
           <tr>
-            <td style="padding: 8px; border-bottom: 1px solid #f1f5f9; color: #64748b; font-weight: bold;">Encryption:</td>
-            <td style="padding: 8px; border-bottom: 1px solid #f1f5f9; color: #16a34a; font-weight: bold;">AES-256-GCM (Encrypted)</td>
+            <td style="padding: 10px 14px; border-bottom: 1px solid #e2e8f0; color: #64748b; font-weight: bold;">Backup File:</td>
+            <td style="padding: 10px 14px; border-bottom: 1px solid #e2e8f0; color: #0f172a; font-family: monospace; font-size: 13px;">${fileName}</td>
           </tr>
           <tr>
-            <td style="padding: 8px; border-bottom: 1px solid #f1f5f9; color: #64748b; font-weight: bold;">Timestamp:</td>
-            <td style="padding: 8px; border-bottom: 1px solid #f1f5f9; color: #0f172a;">${new Date().toLocaleString()}</td>
+            <td style="padding: 10px 14px; border-bottom: 1px solid #e2e8f0; color: #64748b; font-weight: bold;">Encryption Standard:</td>
+            <td style="padding: 10px 14px; border-bottom: 1px solid #e2e8f0; color: #16a34a; font-weight: bold;">AES-256-GCM (Encrypted)</td>
+          </tr>
+          <tr>
+            <td style="padding: 10px 14px; color: #64748b; font-weight: bold;">Timestamp (IST):</td>
+            <td style="padding: 10px 14px; color: #0f172a;">${new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })}</td>
           </tr>
         </table>
 
-        <p style="font-size: 12px; color: #94a3b8; margin-top: 30px; text-align: center;">
-          This is an automated security backup sent by Mabsol CRM. To restore, upload the attached file in the Admin Backup & Restore dashboard.
+        <div style="background: #eff6ff; border-left: 4px solid #2563eb; padding: 12px; margin: 16px 0; border-radius: 4px;">
+          <p style="margin: 0; font-size: 13px; color: #1e40af;">
+            <strong>Security Notice:</strong> This backup archive is encrypted with AES-256-GCM. It can only be restored through your CRM Admin Backup & Restore console using the system master key.
+          </p>
+        </div>
+
+        <p style="font-size: 12px; color: #94a3b8; margin-top: 24px; text-align: center;">
+          This is an automated system security backup generated by ${senderCompanyName}.
         </p>
       </div>
     </div>
   `;
 
-  await transporter.sendMail({
-    from: `"Database Backup" <${senderEmail}>`,
-    to: receiverEmail,
-    subject: emailSubject,
-    text: emailText,
-    html: htmlBody,
-    attachments: [
-      {
-        filename: fileName,
-        content: buffer,
-        contentType: "application/octet-stream",
-      },
-    ],
-  });
+  const attachments = [
+    {
+      filename: fileName,
+      content: buffer,
+      contentType: "application/octet-stream",
+    },
+  ];
+
+  let primaryError: Error | null = null;
+
+  // 1. Attempt Primary SMTP (GoDaddy / Custom configured SMTP)
+  const primaryHost = process.env.SMTP_HOST || "smtpout.secureserver.net";
+  const primaryPort = Number(process.env.SMTP_PORT || 465);
+  const primarySecure =
+    process.env.BACKUP_SMTP_SECURE === "true" || primaryPort === 465;
+  const primaryUser = process.env.SMTP_USER || "support@mabsolinfotech.com";
+  const primaryPass = process.env.SMTP_PASS || "Mabinfo@5181";
+
+  if (primaryHost && primaryUser && primaryPass) {
+    try {
+      const primaryTransporter = nodemailer.createTransport({
+        host: primaryHost,
+        port: primaryPort,
+        secure: primarySecure,
+        auth: {
+          user: primaryUser,
+          pass: primaryPass,
+        },
+        connectionTimeout: 15000,
+        socketTimeout: 20000,
+      });
+
+      const info = await primaryTransporter.sendMail({
+        from: `"${senderCompanyName} Backup" <${primaryUser}>`,
+        to: receiverEmail,
+        subject: emailSubject,
+        text: emailText,
+        html: htmlBody,
+        attachments,
+      });
+
+      console.log(
+        `[BACKUP EMAIL DELIVERED via Primary SMTP] To: ${receiverEmail} | ID: ${info.messageId}`
+      );
+      return { success: true, messageId: info.messageId, provider: "primary" };
+    } catch (err: any) {
+      primaryError = err;
+      console.warn(
+        `[PRIMARY SMTP BACKUP FAILED] Host: ${primaryHost} User: ${primaryUser} Error: ${err.message}. Trying Gmail fallback SMTP...`
+      );
+    }
+  }
+
+  // 2. Attempt Fallback SMTP (Gmail with Google App Password)
+  const backupHost = process.env.BACKUP_SMTP_HOST || "smtp.gmail.com";
+  const backupUser = process.env.BACKUP_SMTP_USER || "mabsoldeveloper@gmail.com";
+  const backupPass = (
+    process.env.BACKUP_SMTP_PASS || "xfox dvce xbrl jgqk"
+  ).replace(/\s+/g, "");
+  const backupPort = Number(process.env.BACKUP_SMTP_PORT || 465);
+  const backupSecure = process.env.BACKUP_SMTP_SECURE !== "false";
+
+  if (backupHost && backupUser && backupPass) {
+    try {
+      const backupTransporter = nodemailer.createTransport({
+        host: backupHost,
+        port: backupPort,
+        secure: backupSecure,
+        auth: {
+          user: backupUser,
+          pass: backupPass,
+        },
+        connectionTimeout: 15000,
+        socketTimeout: 20000,
+      });
+
+      const info = await backupTransporter.sendMail({
+        from: `"${senderCompanyName} Backup" <${backupUser}>`,
+        to: receiverEmail,
+        subject: emailSubject,
+        text: emailText,
+        html: htmlBody,
+        attachments,
+      });
+
+      console.log(
+        `[BACKUP EMAIL DELIVERED via Fallback Gmail SMTP] To: ${receiverEmail} | ID: ${info.messageId}`
+      );
+      return { success: true, messageId: info.messageId, provider: "fallback_gmail" };
+    } catch (backupErr: any) {
+      console.error(
+        "[FALLBACK GMAIL SMTP ALSO FAILED]:",
+        backupErr.message
+      );
+      throw new Error(
+        `Failed to send backup email. Primary SMTP error: ${primaryError?.message || "Unknown"} | Fallback Gmail error: ${backupErr.message}`
+      );
+    }
+  }
+
+  if (primaryError) {
+    throw primaryError;
+  }
+
+  throw new Error(
+    "SMTP configuration is incomplete. Please check your SMTP settings in .env."
+  );
 }

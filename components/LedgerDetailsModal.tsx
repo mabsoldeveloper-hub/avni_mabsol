@@ -380,8 +380,8 @@ export default function LedgerDetailsModal({
                                     className="w-full sm:w-auto pl-2.5 pr-6 py-1.5 text-[11px] sm:text-xs rounded-lg sm:rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500/40 max-w-[140px] sm:max-w-[200px] truncate"
                                 >
                                     <option value="">All Parties</option>
-                                    {parties.map((p) => (
-                                        <option key={p.code} value={p.code}>
+                                    {parties.map((p, idx) => (
+                                        <option key={`${p.code}-${idx}`} value={p.code}>
                                             {p.name} ({p.code})
                                         </option>
                                     ))}

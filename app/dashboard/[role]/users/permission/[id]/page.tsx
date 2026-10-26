@@ -77,6 +77,21 @@ const MODULE_STYLES: Record<
     accent: "slate",
   },
 
+  "DESKTOP SYNC": {
+    icon: FaSyncAlt,
+    accent: "cyan",
+  },
+
+  "DATA SYNC": {
+    icon: FaSyncAlt,
+    accent: "cyan",
+  },
+
+  "MABSOL CRM SYNC": {
+    icon: FaSyncAlt,
+    accent: "cyan",
+  },
+
   VFP: {
     icon: FaSyncAlt,
     accent: "cyan",

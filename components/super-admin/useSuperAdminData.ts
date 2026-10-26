@@ -54,7 +54,7 @@ export function useSuperAdminData(initialStatusFilter?: string) {
         setStats(data.stats);
       }
     } catch (err) {
-      console.error("Failed to load super admin users:", err);
+      // silent fallback
     } finally {
       setLoading(false);
     }
@@ -121,7 +121,6 @@ export function useSuperAdminData(initialStatusFilter?: string) {
           alert(data.message || data.error || "Action failed");
         }
       } catch (err) {
-        console.error("Action error:", err);
         alert("An error occurred while updating account");
       } finally {
         setActionLoading(null);
@@ -184,7 +183,6 @@ export function useSuperAdminData(initialStatusFilter?: string) {
           alert(data.message || "Failed to purge account");
         }
       } catch (err) {
-        console.error("Purge error:", err);
         alert("An error occurred while purging account");
       } finally {
         setActionLoading(null);

@@ -130,8 +130,8 @@ export default function BackupPage() {
 
   // Scheduler Settings state
   const [receiverEmail, setReceiverEmail] = useState("");
-  const [frequency, setFrequency] = useState<Frequency>("every_2_hours");
-  const [enabled, setEnabled] = useState(true);
+  const [frequency, setFrequency] = useState<Frequency>("daily");
+  const [enabled, setEnabled] = useState(false);
   const [schedulerScope, setSchedulerScope] = useState<BackupScope>("current_fy");
   const [schedulerFyId, setSchedulerFyId] = useState<string>("");
 

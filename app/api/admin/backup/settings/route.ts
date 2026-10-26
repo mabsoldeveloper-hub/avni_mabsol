@@ -124,7 +124,7 @@ export async function POST(request: Request) {
     const settings = await saveBackupSettings({
       receiverEmail: cleanedEmail,
       frequency: frequency as BackupFrequency,
-      enabled: enabled ?? true,
+      enabled: enabled ?? false,
       scope: resolvedScope,
       financialYearId: typeof financialYearId === "string" ? financialYearId : null,
       financialYearName: typeof financialYearName === "string" ? financialYearName : null,

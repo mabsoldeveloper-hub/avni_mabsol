@@ -529,7 +529,7 @@ export default function TerritoryMasterPage() {
           <div className="text-xs leading-5">
             Existing values come from SALETYPE. New values are also saved into SALETYPE,
             so the Customer Zone / Area / Station / Route selectors can use one common source.
-            Route records are created with <b>SGCODE = ROUT</b>, matching your VFP data.
+            Route records are created with <b>SGCODE = ROUT</b>, matching your ERP data.
           </div>
         </div>
       </div>

@@ -42,6 +42,23 @@ export async function GET(
       );
     }
 
+    // Auto-resolve and persist state from GSTIN if state is missing
+    if (user.companyId) {
+      if (!user.companyId.state && user.companyId.gstNo && user.companyId.gstNo.length >= 2) {
+        const { GST_STATE_CODE } = await import("@/lib/constants/gstStateCodes");
+        const resolvedState = GST_STATE_CODE[user.companyId.gstNo.slice(0, 2)];
+        if (resolvedState) {
+          user.companyId.state = resolvedState;
+          const Company = (await import("@/models/Company")).default;
+          await Company.findByIdAndUpdate(user.companyId._id, { $set: { state: resolvedState } });
+        }
+      }
+      if (!user.state && user.companyId.state) {
+        user.state = user.companyId.state;
+        await User.findByIdAndUpdate(user._id, { $set: { state: user.companyId.state } });
+      }
+    }
+
     // If company exists, retrieve any attached child branches with full details & branch admin users
     if (user.companyId?._id) {
       const Company = (await import("@/models/Company")).default;
@@ -267,11 +284,58 @@ export async function PATCH(
         break;
       }
 
+      case "update_profile":
+      case "update_user_info": {
+        // Superadmin can change: name, company name, and address only (same as branches)
+        if (body.name && typeof body.name === "string") {
+          targetUser.name = body.name.trim();
+        }
+
+        if (body.address !== undefined && typeof body.address === "string") {
+          targetUser.address = body.address.trim();
+        }
+        if (body.city !== undefined && typeof body.city === "string") {
+          targetUser.city = body.city.trim();
+        }
+        if (body.state !== undefined && typeof body.state === "string") {
+          targetUser.state = body.state.trim();
+        }
+        if (body.pincode !== undefined && typeof body.pincode === "string") {
+          targetUser.pincode = body.pincode.trim();
+        }
+
+        // Update company name and commercial address if company exists
+        if (targetUser.companyId) {
+          const Company = (await import("@/models/Company")).default;
+          const compUpdates: any = {};
+          if (body.companyName && typeof body.companyName === "string") {
+            compUpdates.companyName = body.companyName.trim();
+          }
+          if (body.address !== undefined && typeof body.address === "string") {
+            compUpdates.address = body.address.trim();
+          }
+          if (body.city !== undefined && typeof body.city === "string") {
+            compUpdates.city = body.city.trim();
+          }
+          if (body.state !== undefined && typeof body.state === "string") {
+            compUpdates.state = body.state.trim();
+          }
+          if (body.pincode !== undefined && typeof body.pincode === "string") {
+            compUpdates.pincode = body.pincode.trim();
+          }
+          if (Object.keys(compUpdates).length > 0) {
+            await Company.findByIdAndUpdate(targetUser.companyId, { $set: compUpdates });
+          }
+        }
+        break;
+      }
+
       case "update":
       case "update_settings":
       case "update_modules":
       case "manage_modules":
       case "setSessionTimeout": {
+
         if (Array.isArray(body.enabledModules)) {
           targetUser.enabledModules = body.enabledModules;
         }
@@ -495,6 +559,11 @@ export async function PATCH(
         _id: targetUser._id,
         name: targetUser.name,
         email: targetUser.email,
+        mobile: targetUser.mobile,
+        employeeCode: targetUser.employeeCode,
+        designation: targetUser.designation,
+        roleType: targetUser.roleType,
+        roleName: targetUser.roleName,
         status: targetUser.status,
         isApproved: targetUser.isApproved,
         isDeleted: targetUser.isDeleted,

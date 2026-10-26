@@ -563,9 +563,12 @@ function BranchManagementContent() {
                                         {bInitials}
                                       </div>
                                       <div>
-                                        <div className="font-bold text-slate-900 text-xs">
+                                        <Link
+                                          href={`/dashboard/super-admin/branches/${b._id}`}
+                                          className="font-bold text-slate-900 text-xs hover:text-blue-600 hover:underline"
+                                        >
                                           {b.companyName}
-                                        </div>
+                                        </Link>
                                         <div className="font-mono text-[10px] text-teal-700 font-bold mt-0.5">
                                           CODE: {b.companyCode}
                                         </div>
@@ -649,6 +652,14 @@ function BranchManagementContent() {
                                           Activate
                                         </button>
                                       )}
+
+                                      <Link
+                                        href={`/dashboard/super-admin/branches/${b._id}`}
+                                        className="px-2.5 py-1 rounded-full bg-blue-50 hover:bg-blue-600 hover:text-white text-blue-700 border border-blue-200 text-[10.5px] font-bold transition-all"
+                                        title="Open full branch dossier and module permissions"
+                                      >
+                                        Dossier
+                                      </Link>
 
                                       {b.adminUser?._id && (
                                         <Link

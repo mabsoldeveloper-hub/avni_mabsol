@@ -13,16 +13,31 @@ export default async function DashboardRootPage() {
   }
 
   let targetRole = "admin";
+  let isSuperAdmin = false;
   try {
-    const secret = process.env.JWT_SECRET || "mabsol_super_secret_jwt_key_2026";
+    const secret = process.env.JWT_SECRET || "MabsolCRM@2026SecretKey";
     const decoded = jwt.verify(token, secret) as any;
-    if (decoded?.isSuperAdmin || decoded?.roleType === "SuperAdmin") {
-      targetRole = "super-admin";
+    const email = String(decoded?.email || "").toLowerCase().trim();
+    const superEmail = (process.env.SUPER_ADMIN_EMAIL || "mabsoldeveloper@gmail.com").toLowerCase().trim();
+    const roleType = String(decoded?.roleType || "").toLowerCase().trim();
+
+    if (
+      decoded?.isSuperAdmin === true ||
+      email === superEmail ||
+      email === "mabsoldeveloper@gmail.com" ||
+      roleType === "superadmin" ||
+      roleType === "super-admin"
+    ) {
+      isSuperAdmin = true;
     } else if (decoded?.roleType) {
       targetRole = String(decoded.roleType).toLowerCase().trim().replace(/[\s_]+/g, "-");
     }
   } catch {
     redirect("/login");
+  }
+
+  if (isSuperAdmin) {
+    redirect("/dashboard/super-admin/dashboard");
   }
 
   redirect(`/dashboard/${targetRole}`);

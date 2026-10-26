@@ -8,6 +8,7 @@ export const SUPER_ADMIN_NAV_LINKS = [
   { href: "/dashboard/super-admin/plans", label: "Subscription Plans", icon: "plans", badge: "Soon" },
   { href: "/dashboard/super-admin/reports", label: "Reports", icon: "reports", badge: "Soon" },
   { href: "/dashboard/super-admin/audit-logs", label: "Audit Logs", icon: "audit", badge: "Soon" },
+  { href: "/dashboard/super-admin/exe-logs", label: "EXE & Sync Logs", icon: "exe" },
   { href: "/dashboard/super-admin/settings", label: "System Settings", icon: "settings" },
 ] as const;
 

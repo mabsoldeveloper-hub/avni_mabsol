@@ -17,7 +17,12 @@ contextBridge.exposeInMainWorld("electronAPI", {
   sendEditOtp: (payload) => ipcRenderer.invoke("auth:send-edit-otp", payload),
   verifyEditOtp: (payload) => ipcRenderer.invoke("auth:verify-edit-otp", payload),
 
+  // Marg Master Catalog & Company Auto-Discovery
+  getCompanyCatalog: (payload) => ipcRenderer.invoke("catalog:get-company", payload),
+  scanAndDecryptMaster: (sourceDir) => ipcRenderer.invoke("catalog:scan-master", sourceDir),
+
   // Config & License
+  getDeviceInfo: () => ipcRenderer.invoke("system:get-device-info"),
   getConfig: () => ipcRenderer.invoke("config:get"),
   saveConfig: (cfg) => ipcRenderer.invoke("config:save", cfg),
   setCloudUrl: (url) => ipcRenderer.invoke("config:set-cloud-url", url),

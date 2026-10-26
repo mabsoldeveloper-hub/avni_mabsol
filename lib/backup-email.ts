@@ -126,13 +126,14 @@ export async function sendBackupEmail({
         host: primaryHost,
         port: primaryPort,
         secure: primarySecure,
+        family: 4,
         auth: {
           user: primaryUser,
           pass: primaryPass,
         },
-        connectionTimeout: 15000,
-        socketTimeout: 20000,
-      });
+        connectionTimeout: 30000,
+        socketTimeout: 60000,
+      } as any);
 
       const info = await primaryTransporter.sendMail({
         from: `"${senderCompanyName} Backup" <${primaryUser}>`,
@@ -170,13 +171,14 @@ export async function sendBackupEmail({
         host: backupHost,
         port: backupPort,
         secure: backupSecure,
+        family: 4,
         auth: {
           user: backupUser,
           pass: backupPass,
         },
-        connectionTimeout: 15000,
-        socketTimeout: 20000,
-      });
+        connectionTimeout: 30000,
+        socketTimeout: 60000,
+      } as any);
 
       const info = await backupTransporter.sendMail({
         from: `"${senderCompanyName} Backup" <${backupUser}>`,

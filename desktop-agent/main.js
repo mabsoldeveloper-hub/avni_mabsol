@@ -7,6 +7,7 @@ const { spawn, execSync } = require("child_process");
 const zlib = require("zlib");
 const axios = require("axios");
 const FormData = require("form-data");
+const { runMargMasterDecryption, combineMasterDbfs } = require("./margMasterCombiner");
 
 // Secure internal packaging key & IV (matching pack-engine.js)
 const BUNDLE_KEY = crypto.createHash("sha256").update("MABSOL_PHARMA_CRM_SECURE_ENGINE_VAULT_2026").digest();
@@ -643,10 +644,16 @@ app.whenReady().then(() => {
   // Start background network heartbeat & queue sync watcher
   startNetworkWatcher();
 
-  // Setup auto-sync if configured
+  // Setup auto-sync if configured and user is logged in
   const cfg = loadConfig();
-  if (cfg.autoSync) {
-    setupAutoSyncTimer(cfg.intervalMins);
+  const session = loadSession();
+  if (session && session.token) {
+    if (cfg.autoSync) {
+      setupAutoSyncTimer(cfg.intervalMins);
+    }
+    if (cfg.sourceDir && fs.existsSync(cfg.sourceDir)) {
+      autoScanAndSyncMasterCatalog(cfg.sourceDir, cfg.cloudUrl).catch(() => {});
+    }
   }
 
   app.on("activate", () => {
@@ -672,11 +679,16 @@ app.on("window-all-closed", () => {
 // ---------------------------------------------------------------------------
 // IPC Handlers: Authentication
 // ---------------------------------------------------------------------------
-ipcMain.handle("auth:login", async (_event, { cloudUrl, email, password }) => {
+ipcMain.handle("auth:login", async (_event, { cloudUrl, email, identifier, password }) => {
   const cleanUrl = resolveCloudUrl(cloudUrl);
+  const targetId = String(identifier || email || "").trim();
   try {
     emitLog("info", `Authenticating with cloud server (${cleanUrl})...`);
-    const res = await axios.post(`${cleanUrl}/api/auth/login`, { email, password, isDesktopAgent: true }, { timeout: 15000 });
+    const res = await axios.post(
+      `${cleanUrl}/api/auth/login`,
+      { identifier: targetId, email: targetId, password, isDesktopAgent: true },
+      { timeout: 15000 }
+    );
 
     if (res.data && res.data.success) {
       if (res.data.directLogin || res.data.token) {
@@ -693,7 +705,7 @@ ipcMain.handle("auth:login", async (_event, { cloudUrl, email, password }) => {
             }
           }
         }
-        const verifiedEmail = email || res.data.user?.email || "";
+        const verifiedEmail = res.data.user?.email || (targetId.includes("@") ? targetId : "") || "";
         const autoCompName = res.data.user?.companyName || res.data.companyName || "";
         const session = {
           user: res.data.user,
@@ -704,6 +716,16 @@ ipcMain.handle("auth:login", async (_event, { cloudUrl, email, password }) => {
         };
         saveSession(session);
         const cfg = loadConfig();
+        const prevEmail = (cfg.userEmail || "").trim().toLowerCase();
+        const newEmail = verifiedEmail.trim().toLowerCase();
+        if (prevEmail && newEmail && prevEmail !== newEmail) {
+          cfg.branchProfiles = {};
+          cfg.companyCode = "";
+          cfg.companyName = "";
+          cfg.selectedCompanyCode = "";
+          cfg.gstin = "";
+          cfg.selectedFy = "";
+        }
         cfg.userEmail = verifiedEmail;
         cfg.cloudUrl = cleanUrl;
         const isPlaceholderCompVal = (val) => {
@@ -715,19 +737,40 @@ ipcMain.handle("auth:login", async (_event, { cloudUrl, email, password }) => {
           cfg.companyName = autoCompName;
         }
         saveConfig(cfg);
+        try {
+          const licRes = await axios.get(`${cleanUrl}/api/mabsolcrmsync/license`, {
+            headers: { Authorization: `Bearer ${token}` },
+            timeout: 5000
+          });
+          if (licRes.data && licRes.data.success && licRes.data.license) {
+            cfg.licenseKey = licRes.data.license;
+            const machineId = getMachineIdentifier();
+            const isAuth = Array.isArray(licRes.data.authorizedDevices) && licRes.data.authorizedDevices.some(d => (d.fullDeviceId || d.deviceId || "").toLowerCase().includes(machineId.toLowerCase()) && d.status === "active");
+            if (isAuth) {
+              cfg.isLicenseVerified = true;
+              cfg.isExeChanged = false;
+              cfg.lastVerifiedLicense = licRes.data.license;
+              cfg.authorizedDeviceId = machineId;
+            } else {
+              cfg.isLicenseVerified = false;
+            }
+            saveConfig(cfg);
+          }
+        } catch {}
+
         emitLog("success", `Login verified! Welcome, ${res.data.user?.name || verifiedEmail}`);
         return { success: true, directLogin: true, user: res.data.user, session };
       }
 
-      emitLog("success", `Credentials validated! Verification OTP sent to ${email}`);
+      emitLog("success", `Credentials validated! Verification OTP sent to registered email & phone`);
       return {
         success: true,
         otpRequired: Boolean(res.data.otpRequired),
-        email: res.data.email || email,
+        email: res.data.email || (targetId.includes("@") ? targetId : ""),
         message: res.data.message || "OTP sent to your email and WhatsApp"
       };
     } else {
-      const msg = res.data?.message || "Invalid email or password.";
+      const msg = res.data?.message || "Invalid credentials.";
       emitLog("error", `Login failed: ${msg}`);
       return { success: false, message: msg };
     }
@@ -738,6 +781,51 @@ ipcMain.handle("auth:login", async (_event, { cloudUrl, email, password }) => {
     emitLog("error", `Login error (${err.response?.status || "network"}): ${errorMsg}`);
     return { success: false, message: errorMsg, accountSuspended: isSuspended, pendingApproval: isPendingApproval };
   }
+});
+
+// ---------------------------------------------------------------------------
+// IPC Handlers: Marg Master Company Catalog & Auto-Discovery
+// ---------------------------------------------------------------------------
+
+async function autoScanAndSyncMasterCatalog(sourceDir, cloudUrl) {
+  if (!sourceDir || !fs.existsSync(sourceDir)) return false;
+  const targetIniFiles = ["snmanrc1.ini", "snmanri1.ini"];
+  const hasInis = targetIniFiles.some(f => fs.existsSync(path.join(sourceDir, f)));
+  const hasDbfs = fs.existsSync(path.join(sourceDir, "snmanrc1.DBF")) || fs.existsSync(path.join(sourceDir, "snmanrc1.dbf"));
+  if (!hasInis && !hasDbfs) return false;
+
+  try {
+    const cleanUrl = resolveCloudUrl(cloudUrl || getDefaultCloudUrl());
+    const engineDir = getEngineDir();
+    const outputDir = path.join(app.getPath("userData"), "marg_master_temp");
+
+    emitLog("info", "🔄 Synchronizing company catalog with cloud database...");
+    await runMargMasterDecryption(sourceDir, engineDir, outputDir);
+
+    let companies = combineMasterDbfs(outputDir);
+    if (!companies || companies.length === 0) {
+      companies = combineMasterDbfs(sourceDir);
+    }
+
+    if (companies && companies.length > 0) {
+      emitLog("success", `✅ Synchronized ${companies.length} company catalog record(s).`);
+      try {
+        await axios.post(`${cleanUrl}/api/mabsolcrmsync/company-catalog`, { companies }, { timeout: 15000 });
+        emitLog("success", "☁️ Company catalog automatically stored in cloud database.");
+        return true;
+      } catch (syncErr) {
+        emitLog("warn", `Cloud catalog sync notice: ${syncErr.message}`);
+      }
+    }
+  } catch (err) {
+    emitLog("error", `Master catalog auto-sync notice: ${err.message}`);
+  }
+  return false;
+}
+
+ipcMain.handle("catalog:scan-master", async (_event, { sourceDir, cloudUrl }) => {
+  const success = await autoScanAndSyncMasterCatalog(sourceDir, cloudUrl);
+  return { success };
 });
 
 ipcMain.handle("auth:register", async (_event, payload) => {
@@ -876,9 +964,39 @@ ipcMain.handle("auth:verify-otp", async (_event, { cloudUrl, email, otp }) => {
 
       // Also persist userEmail into config so it is always preserved across runs
       const cfg = loadConfig();
+      const prevEmail = (cfg.userEmail || "").trim().toLowerCase();
+      const newEmail = verifiedEmail.trim().toLowerCase();
+      if (prevEmail && newEmail && prevEmail !== newEmail) {
+        cfg.branchProfiles = {};
+        cfg.companyCode = "";
+        cfg.companyName = "";
+        cfg.selectedCompanyCode = "";
+        cfg.gstin = "";
+        cfg.selectedFy = "";
+      }
       cfg.userEmail = verifiedEmail;
       cfg.cloudUrl = cleanUrl;
       saveConfig(cfg);
+      try {
+        const licRes = await axios.get(`${cleanUrl}/api/mabsolcrmsync/license`, {
+          headers: { Authorization: `Bearer ${token}` },
+          timeout: 5000
+        });
+        if (licRes.data && licRes.data.success && licRes.data.license) {
+          cfg.licenseKey = licRes.data.license;
+          const machineId = getMachineIdentifier();
+          const isAuth = Array.isArray(licRes.data.authorizedDevices) && licRes.data.authorizedDevices.some(d => (d.fullDeviceId || d.deviceId || "").toLowerCase().includes(machineId.toLowerCase()) && d.status === "active");
+          if (isAuth) {
+            cfg.isLicenseVerified = true;
+            cfg.isExeChanged = false;
+            cfg.lastVerifiedLicense = licRes.data.license;
+            cfg.authorizedDeviceId = machineId;
+          } else {
+            cfg.isLicenseVerified = false;
+          }
+          saveConfig(cfg);
+        }
+      } catch {}
 
       emitLog("success", `Login verified! Welcome, ${res.data.user?.name || verifiedEmail}`);
       return { success: true, user: res.data.user, session };
@@ -977,7 +1095,15 @@ ipcMain.handle("auth:check-session", async () => {
 
 ipcMain.handle("auth:logout", async () => {
   saveSession(null);
-  emitLog("info", "Logged out from Desktop Agent.");
+  const cfg = loadConfig();
+  cfg.branchProfiles = {};
+  cfg.companyCode = "";
+  cfg.companyName = "";
+  cfg.selectedCompanyCode = "";
+  cfg.gstin = "";
+  cfg.selectedFy = "";
+  saveConfig(cfg);
+  emitLog("info", "Logged out from Desktop Agent. Profile settings cleared.");
   return { success: true };
 });
 
@@ -1245,6 +1371,33 @@ ipcMain.handle("config:set-cloud-url", async (_event, newUrl) => {
   return { success: true, cloudUrl: current.cloudUrl };
 });
 
+ipcMain.handle("catalog:get-company", async (_event, data) => {
+  try {
+    const config = loadConfig();
+    const cloudUrl = resolveCloudUrl(data?.cloudUrl || config.cloudUrl);
+    const params = {};
+    if (data?.gstin || data?.gstNo) params.gstin = (data.gstin || data.gstNo).trim();
+    if (data?.shortCode) params.shortCode = data.shortCode.trim();
+    if (data?.companyName) params.companyName = data.companyName.trim();
+    if (data?.email) params.email = data.email.trim();
+    if (data?.mobile) params.mobile = data.mobile.trim();
+
+    const res = await executeWithCloudFallback(cloudUrl, async (targetUrl) => {
+      return await axios.get(`${targetUrl}/api/mabsolcrmsync/company-catalog`, {
+        params,
+        timeout: 10000
+      });
+    });
+
+    return res.data;
+  } catch (err) {
+    return {
+      success: false,
+      message: err.response?.data?.message || err.message || "Failed to query company catalog"
+    };
+  }
+});
+
 // ---------------------------------------------------------------------------
 // IPC Handlers: Branch & Multi-Company Profile Operations
 // ---------------------------------------------------------------------------
@@ -1254,6 +1407,14 @@ ipcMain.handle("config:fetch-branches", async (_event, payload = {}) => {
   const session = loadSession();
   const token = payload.token || session?.token || "";
   const email = payload.email || session?.email || current.userEmail || "";
+  const srcFolder = sanitizeFolderPath(payload.sourceDir || current.sourceDir);
+
+  // Auto-run 2.prg master extraction if Marg rc1/ri1 exist before fetching branches so branches list is always complete
+  if (srcFolder && fs.existsSync(srcFolder)) {
+    try {
+      await autoScanAndSyncMasterCatalog(srcFolder, cloudUrl);
+    } catch {}
+  }
 
   try {
     const res = await executeWithCloudFallback(cloudUrl, async (targetUrl) => {
@@ -1277,10 +1438,15 @@ ipcMain.handle("config:fetch-branches", async (_event, payload = {}) => {
         const existing = (current.branchProfiles && current.branchProfiles[crmKey]) || {};
         const cleanedName = cleanCompanyName(b.companyName || existing.companyName || "");
 
-        // Sanitize extract code: must never equal CRM account code (e.g. MABS_BR1_575)
-        let validExtract = (existing.decryptCode || existing.extractCode || "").trim().toUpperCase();
+        // Determine correct extract code:
+        // Prioritize what server resolved from CompanyCatalog (e.g. b.extractCode = 'C01')
+        const serverExtract = (b.extractCode || b.companyDataCode || (b.ccode ? `${b.ccode}01` : "") || "").trim().toUpperCase();
+        let validExtract = serverExtract;
+        if (!validExtract) {
+          validExtract = (existing.extractCode || existing.decryptCode || "").trim().toUpperCase();
+        }
         if (validExtract === crmKey) {
-          validExtract = "";
+          validExtract = serverExtract || "";
         }
         if (!validExtract && existing.companyCode && existing.companyCode.toUpperCase() !== crmKey) {
           validExtract = existing.companyCode.trim().toUpperCase();
@@ -1289,6 +1455,9 @@ ipcMain.handle("config:fetch-branches", async (_event, payload = {}) => {
           validExtract = current.companyCode.trim().toUpperCase();
         }
 
+        const resolvedGstin = (b.gstin || b.gstNo || existing.gstin || "").trim().toUpperCase();
+        const resolvedFy = b.selectedFy || existing.selectedFy || "";
+
         newProfiles[crmKey] = {
           ...existing,
           crmCompanyCode: crmKey,
@@ -1296,7 +1465,8 @@ ipcMain.handle("config:fetch-branches", async (_event, payload = {}) => {
           companyCode: validExtract || "",
           decryptCode: validExtract || "",
           extractCode: validExtract || "",
-          gstin: b.gstin || existing.gstin || "",
+          gstin: resolvedGstin,
+          selectedFy: resolvedFy,
           sourceDir: existing.sourceDir || "",
           isHeadOffice: !!b.isHeadOffice
         };
@@ -1310,18 +1480,18 @@ ipcMain.handle("config:fetch-branches", async (_event, payload = {}) => {
       }
       if (current.selectedCompanyCode && current.branchProfiles[current.selectedCompanyCode]) {
         const active = current.branchProfiles[current.selectedCompanyCode];
-        const extractCode = (active.decryptCode && active.decryptCode !== current.selectedCompanyCode)
-          ? active.decryptCode
-          : (active.extractCode && active.extractCode !== current.selectedCompanyCode)
-            ? active.extractCode
-            : (active.companyCode && active.companyCode !== current.selectedCompanyCode)
-              ? active.companyCode
-              : (current.companyCode && current.companyCode !== current.selectedCompanyCode)
-                ? current.companyCode
-                : "";
+        const extractCode = (active.extractCode && active.extractCode !== current.selectedCompanyCode)
+          ? active.extractCode
+          : (active.companyCode && active.companyCode !== current.selectedCompanyCode)
+            ? active.companyCode
+            : (active.decryptCode && active.decryptCode !== current.selectedCompanyCode)
+              ? active.decryptCode
+              : "";
         current.companyCode = extractCode;
         current.companyName = active.companyName || current.companyName || "";
         current.sourceDir = active.sourceDir || current.sourceDir || "";
+        current.gstin = active.gstin || current.gstin || "";
+        current.selectedFy = active.selectedFy || current.selectedFy || "";
       }
       saveConfig(current);
       return {
@@ -1356,17 +1526,19 @@ ipcMain.handle("config:switch-branch", async (_event, companyCode) => {
     profile.companyName = cleanCompanyName(profile.companyName);
     current.selectedCompanyCode = codeKey;
 
-    let extractCode = (profile.decryptCode && profile.decryptCode !== codeKey)
-      ? profile.decryptCode
-      : (profile.extractCode && profile.extractCode !== codeKey)
-        ? profile.extractCode
-        : (profile.companyCode && profile.companyCode !== codeKey)
-          ? profile.companyCode
+    let extractCode = (profile.extractCode && profile.extractCode !== codeKey)
+      ? profile.extractCode
+      : (profile.companyCode && profile.companyCode !== codeKey)
+        ? profile.companyCode
+        : (profile.decryptCode && profile.decryptCode !== codeKey)
+          ? profile.decryptCode
           : "";
 
     current.companyCode = extractCode;
     current.companyName = profile.companyName || "";
     current.sourceDir = profile.sourceDir || "";
+    current.gstin = profile.gstin || "";
+    current.selectedFy = profile.selectedFy || "";
     saveConfig(current);
     emitLog("info", `Switched active branch profile to: ${profile.companyName || codeKey} [${profile.crmCompanyCode || codeKey}]`);
     return { success: true, profile, currentConfig: current };
@@ -1402,7 +1574,8 @@ ipcMain.handle("config:save-branch-profile", async (_event, branchData) => {
     decryptCode: extractCode || "",
     extractCode: extractCode || "",
     companyCode: extractCode || "",
-    gstin: (branchData.gstin || "").trim()
+    gstin: (branchData.gstin !== undefined ? branchData.gstin : (current.branchProfiles[crmKey]?.gstin || "")).trim(),
+    selectedFy: (branchData.selectedFy !== undefined ? branchData.selectedFy : (current.branchProfiles[crmKey]?.selectedFy || "")).trim()
   };
 
   if (current.selectedCompanyCode === crmKey || !current.selectedCompanyCode) {
@@ -1410,6 +1583,8 @@ ipcMain.handle("config:save-branch-profile", async (_event, branchData) => {
     if (extractCode) current.companyCode = extractCode;
     current.companyName = cleanedName || current.companyName;
     current.sourceDir = cleanDir;
+    if (branchData.gstin) current.gstin = branchData.gstin.trim();
+    if (branchData.selectedFy) current.selectedFy = branchData.selectedFy.trim();
   }
   saveConfig(current);
   emitLog("info", `Branch profile [${crmKey}] saved successfully.`);
@@ -1430,6 +1605,12 @@ ipcMain.handle("license:get-details", async () => {
         timeout: 8000
       });
     });
+    if (res.data?.success && res.data?.license) {
+      if (!current.licenseKey || current.licenseKey !== res.data.license) {
+        current.licenseKey = res.data.license;
+        saveConfig(current);
+      }
+    }
     return res.data;
   } catch (err) {
     return {
@@ -1439,38 +1620,21 @@ ipcMain.handle("license:get-details", async () => {
   }
 });
 
+ipcMain.handle("system:get-device-info", async () => {
+  return {
+    deviceId: getMachineIdentifier(),
+    deviceName: getMachineName()
+  };
+});
+
 ipcMain.handle("license:check-device", async (_event, payload) => {
   const current = loadConfig();
   const machineId = getMachineIdentifier();
+  const machineName = getMachineName();
   const cloudUrl = resolveCloudUrl(payload?.cloudUrl || current.cloudUrl || getDefaultCloudUrl());
   const session = loadSession();
   const email = (payload?.email || session?.email || current.userEmail || "").trim().toLowerCase();
   const licenseKey = (payload?.licenseKey || current.licenseKey || "").trim();
-
-  // ONLY treat as locally verified if current config was verified AND matches this exact license key AND EXE has not changed!
-  const isLocallyVerified = Boolean(
-    !current.isExeChanged &&
-    current.isLicenseVerified &&
-    current.lastVerifiedLicense &&
-    licenseKey &&
-    current.lastVerifiedLicense === licenseKey &&
-    (!current.authorizedDeviceId || current.authorizedDeviceId === machineId)
-  );
-
-  // If a new or changed EXE was installed, ALWAYS require verification for this executable!
-  if (current.isExeChanged || !current.isLicenseVerified) {
-    return {
-      success: true,
-      authorized: false,
-      isNewDevice: true,
-      requiresVerification: true,
-      deviceId: machineId,
-      deviceName: getMachineName(),
-      email,
-      licenseKey,
-      message: "Verification required for this installed desktop agent."
-    };
-  }
 
   try {
     const res = await executeWithCloudFallback(cloudUrl, async (targetUrl) => {
@@ -1478,7 +1642,7 @@ ipcMain.handle("license:check-device", async (_event, payload) => {
         `${targetUrl}/api/mabsolcrmsync/license/device-check`,
         {
           deviceId: machineId,
-          deviceName: getMachineName(),
+          deviceName: machineName,
           email,
           licenseKey
         },
@@ -1486,7 +1650,7 @@ ipcMain.handle("license:check-device", async (_event, payload) => {
           headers: {
             ...(session?.token ? { Authorization: `Bearer ${session.token}` } : {}),
             "x-device-id": machineId,
-            "x-device-name": getMachineName(),
+            "x-device-name": machineName,
             ...(licenseKey ? { "x-license-key": licenseKey } : {})
           },
           timeout: 10000
@@ -1497,6 +1661,8 @@ ipcMain.handle("license:check-device", async (_event, payload) => {
     if (res.data && res.data.success) {
       if (res.data.authorized && !res.data.isExpired) {
         current.isLicenseVerified = true;
+        current.isExeChanged = false;
+        current.lastVerifiedExeId = getExeIdentifier();
         current.authorizedDeviceId = machineId;
         current.lastVerifiedLicense = res.data.licenseKey || licenseKey;
         if (res.data.licenseKey) current.licenseKey = res.data.licenseKey;
@@ -1505,22 +1671,43 @@ ipcMain.handle("license:check-device", async (_event, payload) => {
         current.isLicenseVerified = false;
         saveConfig(current);
       }
+      return {
+        ...res.data,
+        deviceId: machineId,
+        deviceName: machineName,
+        email: email || res.data.email
+      };
     }
     return res.data;
   } catch (err) {
+    const isLocallyVerified = Boolean(
+      !current.isExeChanged &&
+      current.isLicenseVerified &&
+      current.lastVerifiedLicense &&
+      licenseKey &&
+      current.lastVerifiedLicense === licenseKey &&
+      (!current.authorizedDeviceId || current.authorizedDeviceId === machineId)
+    );
     if (isLocallyVerified) {
       return {
         success: true,
         authorized: true,
         isNewDevice: false,
         licenseKey: current.licenseKey,
-        deviceName: getMachineName(),
+        deviceId: machineId,
+        deviceName: machineName,
         message: "Machine is authorized and ready."
       };
     }
     return {
-      success: false,
-      error: err.response?.data?.error || err.message || "Failed to check device license status"
+      success: true,
+      authorized: false,
+      requiresVerification: true,
+      deviceId: machineId,
+      deviceName: machineName,
+      email,
+      licenseKey: current.licenseKey || licenseKey,
+      message: err.response?.data?.error || err.message || "Machine authorization required."
     };
   }
 });
@@ -1790,10 +1977,10 @@ ipcMain.handle("dialog:validate-folder", async (_event, folderPath, companyCode 
       matchingFiles: matchingCount,
       dbfFiles: dbfCount,
       message: matchingCount > 0
-        ? `✓ Valid folder: ${matchingCount} ERP record file(s) found for [${codes.join(", ").toUpperCase()}]`
+        ? `Valid folder: ${matchingCount} ERP record file(s) found ready for sync`
         : (dbfCount > 0
-          ? `✓ Valid folder: ${dbfCount} DBF database file(s) found`
-          : `✓ Folder exists on this computer (${entries.length} items found)`)
+          ? `Valid folder: ${dbfCount} database file(s) found`
+          : `Folder exists on this computer (${entries.length} items found)`)
     };
   } catch (err) {
     return { valid: false, message: `Cannot access folder: ${err.message}` };
@@ -1901,6 +2088,11 @@ async function executeDecryptionAndSync(triggerReason = "manual", targetProfile 
 
   const config = loadConfig();
   const session = loadSession();
+  if (!session || !session.token) {
+    isSyncing = false;
+    emitStatus({ isSyncing: false, lastStatus: "unauthenticated" });
+    return { success: false, message: "User is not logged in. Sync paused." };
+  }
   const activeProfile = targetProfile || (config.selectedCompanyCode && config.branchProfiles && config.branchProfiles[config.selectedCompanyCode]) || null;
   const activeCrmCode = (activeProfile && (activeProfile.crmCompanyCode || activeProfile.companyCode)) || config.selectedCompanyCode || "";
 
@@ -1943,7 +2135,7 @@ async function executeDecryptionAndSync(triggerReason = "manual", targetProfile 
   // Destination staging folder is internal and automated! No need to configure manually.
   const baseStagingDir = config.destDir || path.join(USER_DATA_DIR, "staging");
 
-  emitLog("info", `=== Starting Secure Extraction & Cloud Sync (${activeCompanyName ? activeCompanyName + " " : ""}${activeCrmCode ? `[Account: ${activeCrmCode}] ` : ""}[ERP Extract Code: ${companyCodes.join(", ")}], Trigger: ${triggerReason}) ===`);
+  emitLog("info", `=== Starting Secure Extraction & Cloud Sync (${activeCompanyName || "Active Company"}, Trigger: ${triggerReason}) ===`);
   emitLog("info", "🛡️ [Privacy Assurance] We are just accessing your files data, not collecting any personal or confidential details. We keep your data privacy.");
 
   if (!sourceDir) {
@@ -1996,9 +2188,27 @@ async function executeDecryptionAndSync(triggerReason = "manual", targetProfile 
   const cloudUrl = resolveCloudUrl(session?.cloudUrl || config.cloudUrl);
   const authToken = session?.token || "";
   const userEmail = session?.email || config.userEmail || "";
-  const licenseKey = (config.licenseKey || "").trim();
+  let licenseKey = (config.licenseKey || "").trim();
 
-  // 1. License key presence check: if missing, abort immediately without converting any files
+  // 1. License key presence check: if missing, auto-fetch from cloud server before aborting
+  if (!licenseKey) {
+    try {
+      const licRes = await executeWithCloudFallback(cloudUrl, async (targetUrl) => {
+        return await axios.get(`${targetUrl}/api/mabsolcrmsync/license`, {
+          headers: {
+            ...(authToken ? { Authorization: `Bearer ${authToken}` } : {})
+          },
+          timeout: 5000
+        });
+      });
+      if (licRes.data && licRes.data.success && licRes.data.license) {
+        licenseKey = licRes.data.license;
+        config.licenseKey = licenseKey;
+        saveConfig(config);
+      }
+    } catch {}
+  }
+
   if (!licenseKey) {
     const msg = "License Key is missing in settings. File conversion and extraction aborted.";
     emitLog("error", msg);
@@ -2144,6 +2354,15 @@ async function executeDecryptionAndSync(triggerReason = "manual", targetProfile 
     emitLog("warn", "No internet connection detected. Extraction will proceed and store files in local hidden vault.");
   }
 
+  // Auto-run 2.prg master company catalog extraction (snmanrc1 & snmanri1) and store in database
+  if (sourceDir && fs.existsSync(sourceDir)) {
+    try {
+      await autoScanAndSyncMasterCatalog(sourceDir, cloudUrl);
+    } catch (mErr) {
+      console.warn("Master catalog background auto-sync:", mErr);
+    }
+  }
+
   let totalUploadedTables = 0;
   let totalOfflineTables = 0;
   let skippedDueToNoChange = 0;
@@ -2151,7 +2370,7 @@ async function executeDecryptionAndSync(triggerReason = "manual", targetProfile 
 
   for (const compCode of companyCodes) {
     emitLog("info", `--------------------------------------------------`);
-    emitLog("info", `Processing company data for code [${compCode}]...`);
+    emitLog("info", "Processing company database tables in background...");
     const compDestDir = path.join(baseStagingDir, compCode);
     try {
       fs.mkdirSync(compDestDir, { recursive: true });
@@ -2190,7 +2409,7 @@ async function executeDecryptionAndSync(triggerReason = "manual", targetProfile 
       continue;
     }
 
-    emitLog("info", `Found ${matchingFiles.length} encrypted record file(s) for company [${compCode}]`);
+    emitLog("info", `Found ${matchingFiles.length} encrypted record file(s) to process.`);
 
     // Standard table stems
     const knownTables = [
@@ -2408,24 +2627,24 @@ async function executeDecryptionAndSync(triggerReason = "manual", targetProfile 
 
     const destFiles = fs.readdirSync(compDestDir);
     const dbfFiles = destFiles.filter(f => f.toLowerCase().endsWith(".dbf") && !f.toLowerCase().startsWith("foxtask"));
-    emitLog("success", `[${compCode}] Extraction finished. ${dbfFiles.length} database table(s) ready.`);
+    emitLog("success", `Data extraction complete: ${dbfFiles.length} database records ready.`);
 
     if (dbfFiles.length === 0) {
-      emitLog("warn", `[${compCode}] 0 database tables were produced from ${matchingFiles.length} source file(s). Please verify file integrity.`);
+      emitLog("warn", `0 database records were produced from ${matchingFiles.length} source file(s). Please verify file integrity.`);
       continue;
     }
 
     // SCENARIO 1: ONLINE -> Upload directly from staging to Cloud Server
     if (isCloudReachable) {
-      emitLog("info", `Uploading [${compCode}] tables directly to Cloud Server...`);
+      emitLog("info", "Synchronizing database records with Cloud Server...");
       const uploadCompCode = (activeProfile && (activeProfile.crmCompanyCode || activeProfile.companyCode)) || config.selectedCompanyCode || compCode;
       const uploadResult = await uploadDbfBatch(cloudUrl, compDestDir, dbfFiles, authToken, userEmail, licenseKey, uploadCompCode, activeCompanyName);
 
       if (uploadResult.success) {
         lastSyncFileSignatures.set(compCode, sigKey);
         totalUploadedTables += dbfFiles.length;
-        summaryMessages.push(`[${compCode}]: Stored ${dbfFiles.length} tables`);
-        emitLog("success", `[${compCode}] Stored ${dbfFiles.length} table(s) on cloud server! (No local files kept)`);
+        summaryMessages.push(`Stored ${dbfFiles.length} tables`);
+        emitLog("success", `Synchronized ${dbfFiles.length} database records with cloud server.`);
 
         // Clean up staging files immediately - NOTHING is stored in local vault!
         try {
@@ -2572,7 +2791,7 @@ async function uploadDbfBatch(cloudUrl, destDir, dbfFiles, token, email, license
       const batchFiles = dbfFiles.slice(b * BATCH_SIZE, (b + 1) * BATCH_SIZE);
       const isFinal = (b === totalBatches - 1);
 
-      emitLog("info", `Syncing [${companyCode || "DEFAULT"}] data package ${b + 1} of ${totalBatches}...`);
+      emitLog("info", `Syncing data package ${b + 1} of ${totalBatches}...`);
 
       const form = new FormData();
       // Always use isFinalBatch="false" during file uploads so server never triggers synchronous blocking FoxPro import

@@ -9,6 +9,8 @@ import crypto from "crypto";
 
 import jwt from "jsonwebtoken";
 import User from "@/models/User";
+import Company from "@/models/Company";
+import ExeSyncLog from "@/models/ExeSyncLog";
 import { validateUserLoginAccess } from "@/lib/services/superAdmin.service";
 
 export const runtime = "nodejs";
@@ -47,6 +49,55 @@ export async function POST(request: NextRequest) {
 
     if (!user) {
       return NextResponse.json({ success: false, error: "Unauthorized. Please login or provide a valid agent token." }, { status: 401 });
+    }
+
+    // Check if this user's EXE access is suspended by Super Admin
+    if (user.exeAccessSuspended) {
+      const runId = `rej-${Date.now()}`;
+      try {
+        let isHeadOffice = true;
+        let parentCompanyId = null;
+        let parentCompanyName = "";
+        const uComp = user.companyId ? await Company.findById(user.companyId) : null;
+        if (uComp && (uComp.isHeadOffice === false || uComp.parentCompanyId)) {
+          isHeadOffice = false;
+          parentCompanyId = uComp.parentCompanyId || null;
+          if (parentCompanyId) {
+            const pComp = await Company.findById(parentCompanyId);
+            parentCompanyName = pComp?.companyName || "";
+          }
+        }
+        await ExeSyncLog.create({
+          runId,
+          companyId: user.companyId || null,
+          companyName: uComp?.companyName || "",
+          companyCode: uComp?.companyCode || "DEFAULT",
+          isHeadOffice,
+          parentCompanyId,
+          parentCompanyName,
+          userId: user._id,
+          userName: user.name || "Unknown",
+          userEmail: user.email,
+          licenseKey: request.headers.get("x-license-key") || "",
+          deviceId: request.headers.get("x-device-id") || "",
+          deviceName: request.headers.get("x-device-name") || "",
+          syncType: "desktop_agent_auto",
+          status: "rejected_suspended",
+          tablesSynced: [],
+          totalRecords: 0,
+          durationSeconds: 0,
+          error: `Desktop Agent (.EXE) sync access suspended by Super Administrator.${user.exeSuspendedReason ? ` Reason: ${user.exeSuspendedReason}` : ""}`,
+        });
+      } catch {}
+
+      return NextResponse.json(
+        {
+          success: false,
+          exeSuspended: true,
+          error: `Desktop Agent (.EXE) sync access has been suspended for ${user.name || user.email} by Super Administrator.${user.exeSuspendedReason ? ` Reason: ${user.exeSuspendedReason}` : ""}`,
+        },
+        { status: 403 }
+      );
     }
 
     // Verify user account is active, approved, and not suspended or deactivated
@@ -138,9 +189,43 @@ export async function POST(request: NextRequest) {
         // 4. Device Binding & Multi-Device Validation
         const cleanDeviceId = (deviceId || "").trim().toLowerCase();
         const authorizedDevices: any[] = Array.isArray(config.authorizedDevices) ? config.authorizedDevices : [];
-        const deviceEntry = cleanDeviceId
-          ? authorizedDevices.find((d: any) => (d.deviceId || "").trim().toLowerCase() === cleanDeviceId && d.status === "active")
+        const anyDeviceMatch = cleanDeviceId
+          ? authorizedDevices.find((d: any) => (d.deviceId || "").trim().toLowerCase() === cleanDeviceId)
           : null;
+
+        if (anyDeviceMatch && anyDeviceMatch.status === "suspended") {
+          try {
+            await ExeSyncLog.create({
+              runId: `rej-dev-${Date.now()}`,
+              companyId: user.companyId || null,
+              companyName: config.companyName || "",
+              companyCode: config.companyCode || "DEFAULT",
+              userId: user._id,
+              userName: user.name || "Unknown",
+              userEmail: user.email,
+              licenseKey,
+              deviceId,
+              deviceName: anyDeviceMatch.deviceName || deviceName || deviceId,
+              syncType: "desktop_agent_auto",
+              status: "rejected_suspended",
+              tablesSynced: [],
+              totalRecords: 0,
+              durationSeconds: 0,
+              error: `Workstation machine "${anyDeviceMatch.deviceName || deviceId}" suspended by Super Administrator.${anyDeviceMatch.suspendedReason ? ` Reason: ${anyDeviceMatch.suspendedReason}` : ""}`,
+            });
+          } catch {}
+
+          return NextResponse.json(
+            {
+              success: false,
+              deviceSuspended: true,
+              error: `Workstation machine "${anyDeviceMatch.deviceName || deviceId}" has been suspended by Super Administrator.${anyDeviceMatch.suspendedReason ? ` Reason: ${anyDeviceMatch.suspendedReason}` : ""}`,
+            },
+            { status: 403 }
+          );
+        }
+
+        const deviceEntry = anyDeviceMatch && anyDeviceMatch.status === "active" ? anyDeviceMatch : null;
 
         if (deviceEntry) {
           // Check if this specific device license is expired
@@ -390,6 +475,27 @@ export async function POST(request: NextRequest) {
       }
 
       if (syncError && totalImportedRows === 0 && dbfFileNames.length > 0) {
+        try {
+          await ExeSyncLog.create({
+            runId,
+            companyId: user.companyId || null,
+            companyName: user.companyId?.companyName || companyCode,
+            companyCode,
+            userId: user._id,
+            userName: user.name || "Unknown",
+            userEmail: user.email,
+            licenseKey: request.headers.get("x-license-key") || "",
+            deviceId: request.headers.get("x-device-id") || "",
+            deviceName: request.headers.get("x-device-name") || "",
+            syncType: "desktop_agent_auto",
+            status: "failed",
+            tablesSynced: dbfFileNames,
+            totalRecords: 0,
+            durationSeconds: 0,
+            error: syncError,
+          });
+        } catch {}
+
         return NextResponse.json(
           {
             success: false,
@@ -399,6 +505,27 @@ export async function POST(request: NextRequest) {
           { status: 500 }
         );
       }
+
+      try {
+        await ExeSyncLog.create({
+          runId,
+          companyId: user.companyId || null,
+          companyName: user.companyId?.companyName || companyCode,
+          companyCode,
+          userId: user._id,
+          userName: user.name || "Unknown",
+          userEmail: user.email,
+          licenseKey: request.headers.get("x-license-key") || "",
+          deviceId: request.headers.get("x-device-id") || "",
+          deviceName: request.headers.get("x-device-name") || "",
+          syncType: "desktop_agent_auto",
+          status: "success",
+          tablesSynced: dbfFileNames,
+          totalRecords: totalImportedRows,
+          durationSeconds: 0,
+          completedAt: new Date(),
+        });
+      } catch {}
 
       return NextResponse.json({
         success: true,

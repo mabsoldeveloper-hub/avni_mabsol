@@ -28,7 +28,7 @@ function packEngine() {
 
   const files = fs.readdirSync(engineDir).filter((f) => {
     const lower = f.toLowerCase();
-    return !lower.endsWith(".pdb") && !lower.endsWith(".txt") && !lower.endsWith(".bak");
+    return !lower.endsWith(".pdb") && !lower.endsWith(".txt") && !lower.endsWith(".bak") && !lower.endsWith(".js");
   });
 
   console.log(`[pack-engine] Packaging ${files.length} engine files into encrypted bundle...`);

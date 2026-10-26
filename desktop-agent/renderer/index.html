@@ -71,8 +71,8 @@
           <form id="loginForm">
 
             <div class="form-group">
-              <label for="emailInput">Operator Account Email</label>
-              <input type="email" id="emailInput" required placeholder="operator@mabsolinfotech.com">
+              <label for="emailInput">Account Identifier (Email / GST / Phone / Branch Code)</label>
+              <input type="text" id="emailInput" required placeholder="Enter Email, GSTIN, Phone, or Short Code (e.g. MABNEW)" autocomplete="username">
             </div>
 
             <div class="form-group">
@@ -163,18 +163,30 @@
               </div>
             </div>
 
-            <!-- Row 3: GST Number + Verify Button -->
-            <div class="clean-field">
-              <div class="clean-label-row">
-                <label><span class="req-star">*</span> GST Number</label>
-                <span class="field-hint">Auto-fills Address, City, State &amp; PIN</span>
+            <!-- Row 3: GST Number + Verify Button + Branch/Short Code -->
+            <div class="clean-grid-2">
+              <div class="clean-field">
+                <div class="clean-label-row">
+                  <label><span class="req-star">*</span> GST Number</label>
+                  <span class="field-hint">Auto-fills Company &amp; ERP data</span>
+                </div>
+                <div class="clean-input-row">
+                  <span class="clean-field-icon">📋</span>
+                  <input type="text" id="regGstNo" placeholder="ENTER GSTIN (E.G. 22AAAAA0000A1Z5)" maxlength="15" style="text-transform: uppercase; font-family: monospace;">
+                  <button type="button" id="regVerifyGstBtn" class="clean-inline-btn">Verify GST</button>
+                </div>
+                <div id="regGstStatusPill" class="gst-verified-pill hidden"></div>
               </div>
-              <div class="clean-input-row">
-                <span class="clean-field-icon">📋</span>
-                <input type="text" id="regGstNo" placeholder="ENTER GSTIN (E.G. 22AAAAA0000A1Z5)" maxlength="15" style="text-transform: uppercase; font-family: monospace;">
-                <button type="button" id="regVerifyGstBtn" class="clean-inline-btn">Verify GST</button>
+              <div class="clean-field">
+                <div class="clean-label-row">
+                  <label>Branch / Short Code</label>
+                  <span class="field-hint">Auto-filled (e.g. MABNEW)</span>
+                </div>
+                <div class="clean-input-row">
+                  <span class="clean-field-icon">🏢</span>
+                  <input type="text" id="regShortCode" placeholder="Branch Code (e.g. MABNEW)" style="text-transform: uppercase; font-weight: 600;">
+                </div>
               </div>
-              <div id="regGstStatusPill" class="gst-verified-pill hidden"></div>
             </div>
 
             <!-- Row 4: Full Address -->
@@ -233,6 +245,21 @@
                 <button type="button" id="regSendEmailOtpBtn" class="clean-inline-btn">Send OTP</button>
               </div>
               <div id="regEmailErrorText" class="clean-field-error hidden"></div>
+
+              <!-- ERP Email Choice Prompt Card -->
+              <div id="regEmailChoiceCard" class="clean-email-choice-card hidden">
+                <div class="email-choice-header">
+                  <span class="email-choice-icon">✉️</span>
+                  <div>
+                    <div class="email-choice-title">Company ERP Email Detected</div>
+                    <div class="email-choice-val" id="regDetectedEmailVal"></div>
+                  </div>
+                </div>
+                <div class="email-choice-btns">
+                  <button type="button" id="regBtnUseDetectedEmail" class="btn-email-choice active">✓ Continue with this email</button>
+                  <button type="button" id="regBtnChangeEmail" class="btn-email-choice secondary">✏️ Update / Change email</button>
+                </div>
+              </div>
             </div>
 
             <!-- Email OTP Box -->
@@ -249,6 +276,32 @@
                 </div>
                 <button type="button" id="regConfirmEmailOtpBtn" class="clean-otp-confirm-btn" disabled>Confirm OTP ✓</button>
               </div>
+            </div>
+
+            <!-- Financial Year Multi-Select Dropdown -->
+            <div class="clean-field" id="regFySection">
+              <div class="clean-label-row">
+                <label><span class="req-star">*</span> Select Financial Year Data to Upload</label>
+                <span class="field-hint" id="regFyHint">Multi-select enabled</span>
+              </div>
+              <div class="multiselect-container" id="regFyMultiselectContainer">
+                <div class="multiselect-trigger" id="regFyDropdownTrigger" tabindex="0" role="combobox" aria-expanded="false">
+                  <span class="clean-field-icon">📅</span>
+                  <div class="multiselect-selected-text" id="regFySelectedText">Select Financial Year(s)</div>
+                  <span class="multiselect-arrow">▾</span>
+                </div>
+                <div class="multiselect-dropdown-menu hidden" id="regFyDropdownMenu">
+                  <div class="multiselect-actions">
+                    <span class="multiselect-actions-hint">Click years to select/unselect</span>
+                    <div class="multiselect-actions-btns">
+                      <button type="button" class="multiselect-action-btn" id="regFySelectAllBtn">Select All</button>
+                      <button type="button" class="multiselect-action-btn" id="regFyClearBtn">Clear</button>
+                    </div>
+                  </div>
+                  <div class="multiselect-options-list" id="regFyOptionsList"></div>
+                </div>
+              </div>
+              <div id="regFyStatusBanner" class="fy-status-banner hidden"></div>
             </div>
 
             <!-- Row 8: Password & Confirm Password -->
@@ -627,20 +680,38 @@
               </div>
 
               <div class="form-row">
-                <div class="form-group flex-1">
+                <div class="form-group flex-2">
                   <label for="companyNameInput">Company Name</label>
                   <input type="text" id="companyNameInput" placeholder="Enter Company Name" disabled readonly>
                 </div>
-                <div class="form-group" style="width: 145px; flex: none;">
-                  <label for="crmCompanyCodeInput">CRM Account Code</label>
-                  <input type="text" id="crmCompanyCodeInput" placeholder="MABS148" disabled readonly
-                    style="font-family: monospace; font-weight: 700; background: rgba(255,255,255,0.04); color: #38bdf8;" title="Auto-assigned CRM Account Code (e.g. MABS148)">
+                <div class="form-group flex-1" style="min-width: 175px;">
+                  <label for="companyGstInput">GST Number (GSTIN)</label>
+                  <input type="text" id="companyGstInput" placeholder="GSTIN (e.g. 07AAAAA0000A1Z5)" disabled readonly
+                    style="text-transform: uppercase; font-family: monospace; font-weight: 700; color: #38bdf8; background: rgba(56, 189, 248, 0.05); border-color: rgba(56, 189, 248, 0.25);">
                 </div>
+                <div class="form-group" style="display: none;">
+                  <label for="crmCompanyCodeInput">CRM Account Code</label>
+                  <input type="text" id="crmCompanyCodeInput" placeholder="MABS148" disabled readonly>
+                </div>
+              </div>
+
+              <div class="form-row">
                 <div class="form-group flex-1">
-                  <label for="companyCodeInput">ERP Extract Code(s) <span class="req">*</span></label>
-                  <input type="text" id="companyCodeInput" required placeholder="Enter Code(s) (e.g. A01 or B01)"
-                    style="text-transform: uppercase; font-family: monospace; font-weight: 700;" disabled readonly>
-                  <span class="helper">ERP file code for data sync (e.g. A01 extracts .A01 files)</span>
+                  <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                    <label for="syncFySelectDropdown" style="margin-bottom: 0;">Financial Year to Sync</label>
+                    <span style="font-size: 11px; color: #38bdf8; font-weight: 600;" id="syncFyBadge">Active Financial Year</span>
+                  </div>
+                  <div class="clean-input-row">
+                    <span class="clean-field-icon">📅</span>
+                    <select id="syncFySelectDropdown" class="clean-select" style="font-weight: 600; font-size: 13.5px; width: 100%;">
+                      <option value="">-- Select Financial Year --</option>
+                    </select>
+                  </div>
+                  <span class="helper">Select the financial year you want to synchronize.</span>
+                </div>
+                <!-- Company/Extract code kept hidden for internal decryption engine -->
+                <div class="form-group" style="display: none;">
+                  <input type="hidden" id="companyCodeInput" value="">
                 </div>
               </div>
 
@@ -650,7 +721,7 @@
                   <input type="text" id="sourceDirInput" required placeholder="C:\DataFolder or D:\ERPData" disabled readonly>
                   <button type="button" id="browseSourceBtn" class="btn-browse" disabled>Browse</button>
                 </div>
-                <span class="helper">Directory containing encrypted ERP data files (e.g. PRO.B01, GLEDGER.B01)</span>
+                <span class="helper">Directory containing ERP data files on this computer</span>
                 <div id="sourceDirStatusBadge" class="source-dir-status-badge hidden"></div>
               </div>
 
@@ -720,6 +791,9 @@
               </div>
             </form>
           </div>
+
+          <!-- Draggable Resizer Between Panels -->
+          <div class="grid-resizer" id="dashboardGridResizer" title="Drag to adjust panel sizes"></div>
 
           <!-- Right Column: Sync Execution & Real-Time Console -->
           <div class="card console-card">

@@ -6,6 +6,39 @@ if (!MONGODB_URI) {
   throw new Error("Please define MONGODB_URI in .env.local");
 }
 
+// Normalize deprecated `new: true` option to `returnDocument: 'after'` in Mongoose 8/9
+const proto = mongoose.Query.prototype as any;
+if (!proto.__mabsolNormalizedOptions) {
+  proto.__mabsolNormalizedOptions = true;
+
+  const normalizeOptions = (opts: any) => {
+    if (opts && typeof opts === "object" && "new" in opts) {
+      if (opts.new) {
+        opts.returnDocument = "after";
+      }
+      delete opts.new;
+    }
+  };
+
+  const origFindOneAndUpdate = proto.findOneAndUpdate;
+  proto.findOneAndUpdate = function (this: any, ...args: any[]) {
+    if (args.length >= 3 && args[2]) normalizeOptions(args[2]);
+    return origFindOneAndUpdate.apply(this, args);
+  };
+
+  const origFindOneAndReplace = proto.findOneAndReplace;
+  proto.findOneAndReplace = function (this: any, ...args: any[]) {
+    if (args.length >= 3 && args[2]) normalizeOptions(args[2]);
+    return origFindOneAndReplace.apply(this, args);
+  };
+
+  const origSetOptions = proto.setOptions;
+  proto.setOptions = function (this: any, options: any, overwrite: boolean) {
+    normalizeOptions(options);
+    return origSetOptions.call(this, options, overwrite);
+  };
+}
+
 type MongooseCache = {
   conn: typeof mongoose | null;
   promise: Promise<typeof mongoose> | null;

@@ -145,7 +145,7 @@ export async function POST(req: NextRequest) {
       const saved = await CompanyCatalog.findOneAndUpdate(
         filter,
         { $set: updateDoc },
-        { upsert: true, new: true, setDefaultsOnInsert: true }
+        { upsert: true, returnDocument: "after", setDefaultsOnInsert: true }
       );
 
       upsertResults.push(saved);

@@ -161,8 +161,6 @@ const CompanyCatalogSchema = new mongoose.Schema(
 
 // Compound index for fast lookup and single document deduplication
 CompanyCatalogSchema.index({ gstNo: 1, ccode: 1 });
-CompanyCatalogSchema.index({ shortCode: 1 });
-CompanyCatalogSchema.index({ mobile: 1 });
 
 if (mongoose.models && mongoose.models.CompanyCatalog) {
   delete (mongoose.models as any).CompanyCatalog;

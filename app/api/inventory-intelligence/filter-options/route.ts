@@ -14,6 +14,10 @@ function clean(v: unknown): string {
   return String(v ?? "").replace(/\u0000/g, "").trim();
 }
 
+function escapeRegex(str: string): string {
+  return str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
 export async function GET(req: Request) {
   try {
     const user = await getCurrentUser();
@@ -68,7 +72,11 @@ export async function GET(req: Request) {
     // 2. Fetch Divisions
     const divFilter: any = { status: { $ne: "Inactive" } };
     if (selectedCompanyCode) {
-      divFilter.companyCode = { $regex: new RegExp(`^${selectedCompanyCode}$`, "i") };
+      const escComp = escapeRegex(selectedCompanyCode);
+      divFilter.$or = [
+        { companyCode: { $regex: new RegExp(`^${escComp}$`, "i") } },
+        { companyName: { $regex: new RegExp(`^${escComp}$`, "i") } },
+      ];
     }
 
     const [dbDivs, distinctProductDivs] = await Promise.all([
@@ -76,8 +84,8 @@ export async function GET(req: Request) {
       selectedCompanyCode
         ? Product.distinct("DIV", {
             $or: [
-              { COMPANY: new RegExp(`^${selectedCompanyCode}$`, "i") },
-              { GCODE: new RegExp(`^${selectedCompanyCode}$`, "i") },
+              { COMPANY: new RegExp(`^${escapeRegex(selectedCompanyCode)}$`, "i") },
+              { GCODE: new RegExp(`^${escapeRegex(selectedCompanyCode)}$`, "i") },
             ],
           }).catch(() => [])
         : Product.distinct("DIV").catch(() => []),
@@ -110,10 +118,15 @@ export async function GET(req: Request) {
     // 3. Fetch Sub-Divisions
     const subDivFilter: any = { status: { $ne: "Inactive" } };
     if (selectedCompanyCode) {
-      subDivFilter.companyCode = { $regex: new RegExp(`^${selectedCompanyCode}$`, "i") };
+      const escComp = escapeRegex(selectedCompanyCode);
+      subDivFilter.$or = [
+        { companyCode: { $regex: new RegExp(`^${escComp}$`, "i") } },
+        { companyName: { $regex: new RegExp(`^${escComp}$`, "i") } },
+      ];
     }
     if (selectedDivisionCode) {
-      subDivFilter.divisionCode = { $regex: new RegExp(`^${selectedDivisionCode}$`, "i") };
+      const escDiv = escapeRegex(selectedDivisionCode);
+      subDivFilter.divisionCode = { $regex: new RegExp(`^${escDiv}$`, "i") };
     }
 
     const [dbSubDivs, distinctProductSubDivs] = await Promise.all([
@@ -122,8 +135,15 @@ export async function GET(req: Request) {
         .lean()
         .catch(() => []),
       Product.distinct("SUBDIV", {
-        ...(selectedCompanyCode ? { COMPANY: new RegExp(`^${selectedCompanyCode}$`, "i") } : {}),
-        ...(selectedDivisionCode ? { DIV: new RegExp(`^${selectedDivisionCode}$`, "i") } : {}),
+        ...(selectedCompanyCode
+          ? {
+              $or: [
+                { COMPANY: new RegExp(`^${escapeRegex(selectedCompanyCode)}$`, "i") },
+                { GCODE: new RegExp(`^${escapeRegex(selectedCompanyCode)}$`, "i") },
+              ],
+            }
+          : {}),
+        ...(selectedDivisionCode ? { DIV: new RegExp(`^${escapeRegex(selectedDivisionCode)}$`, "i") } : {}),
       }).catch(() => []),
     ]);
 
@@ -161,13 +181,19 @@ export async function GET(req: Request) {
     // 4. Fetch Categories
     const catFilter: any = { status: { $ne: "Inactive" } };
     if (selectedCompanyCode) {
-      catFilter.companyCode = { $regex: new RegExp(`^${selectedCompanyCode}$`, "i") };
+      const escComp = escapeRegex(selectedCompanyCode);
+      catFilter.$or = [
+        { companyCode: { $regex: new RegExp(`^${escComp}$`, "i") } },
+        { companyName: { $regex: new RegExp(`^${escComp}$`, "i") } },
+      ];
     }
     if (selectedDivisionCode) {
-      catFilter.divisionCode = { $regex: new RegExp(`^${selectedDivisionCode}$`, "i") };
+      const escDiv = escapeRegex(selectedDivisionCode);
+      catFilter.divisionCode = { $regex: new RegExp(`^${escDiv}$`, "i") };
     }
     if (selectedSubDivisionCode) {
-      catFilter.subDivisionCode = { $regex: new RegExp(`^${selectedSubDivisionCode}$`, "i") };
+      const escSub = escapeRegex(selectedSubDivisionCode);
+      catFilter.subDivisionCode = { $regex: new RegExp(`^${escSub}$`, "i") };
     }
 
     const [dbCats, distinctProductCats] = await Promise.all([
@@ -176,9 +202,16 @@ export async function GET(req: Request) {
         .lean()
         .catch(() => []),
       Product.distinct("CAT", {
-        ...(selectedCompanyCode ? { COMPANY: new RegExp(`^${selectedCompanyCode}$`, "i") } : {}),
-        ...(selectedDivisionCode ? { DIV: new RegExp(`^${selectedDivisionCode}$`, "i") } : {}),
-        ...(selectedSubDivisionCode ? { SUBDIV: new RegExp(`^${selectedSubDivisionCode}$`, "i") } : {}),
+        ...(selectedCompanyCode
+          ? {
+              $or: [
+                { COMPANY: new RegExp(`^${escapeRegex(selectedCompanyCode)}$`, "i") },
+                { GCODE: new RegExp(`^${escapeRegex(selectedCompanyCode)}$`, "i") },
+              ],
+            }
+          : {}),
+        ...(selectedDivisionCode ? { DIV: new RegExp(`^${escapeRegex(selectedDivisionCode)}$`, "i") } : {}),
+        ...(selectedSubDivisionCode ? { SUBDIV: new RegExp(`^${escapeRegex(selectedSubDivisionCode)}$`, "i") } : {}),
       }).catch(() => []),
     ]);
 
@@ -221,51 +254,56 @@ export async function GET(req: Request) {
     const andClauses: any[] = [];
 
     if (selectedCompanyCode) {
+      const escComp = escapeRegex(selectedCompanyCode);
       andClauses.push({
         $or: [
-          { COMPANY: new RegExp(`^${selectedCompanyCode}$`, "i") },
-          { GCODE: new RegExp(`^${selectedCompanyCode}$`, "i") },
+          { COMPANY: new RegExp(`^${escComp}$`, "i") },
+          { GCODE: new RegExp(`^${escComp}$`, "i") },
           { companyCode: selectedCompanyCode },
         ],
       });
     }
 
     if (selectedDivisionCode) {
+      const escDiv = escapeRegex(selectedDivisionCode);
       andClauses.push({
         $or: [
-          { DIV: new RegExp(`^${selectedDivisionCode}$`, "i") },
-          { DIVISION: new RegExp(`^${selectedDivisionCode}$`, "i") },
+          { DIV: new RegExp(`^${escDiv}$`, "i") },
+          { DIVISION: new RegExp(`^${escDiv}$`, "i") },
           { divisionCode: selectedDivisionCode },
         ],
       });
     }
 
     if (selectedSubDivisionCode) {
+      const escSub = escapeRegex(selectedSubDivisionCode);
       andClauses.push({
         $or: [
-          { SUBDIV: new RegExp(`^${selectedSubDivisionCode}$`, "i") },
-          { SUB_DIV: new RegExp(`^${selectedSubDivisionCode}$`, "i") },
+          { SUBDIV: new RegExp(`^${escSub}$`, "i") },
+          { SUB_DIV: new RegExp(`^${escSub}$`, "i") },
           { subDivisionCode: selectedSubDivisionCode },
         ],
       });
     }
 
     if (selectedCategoryCode) {
+      const escCat = escapeRegex(selectedCategoryCode);
       andClauses.push({
         $or: [
-          { CAT: new RegExp(`^${selectedCategoryCode}$`, "i") },
-          { CATEGORY: new RegExp(`^${selectedCategoryCode}$`, "i") },
+          { CAT: new RegExp(`^${escCat}$`, "i") },
+          { CATEGORY: new RegExp(`^${escCat}$`, "i") },
           { categoryCode: selectedCategoryCode },
         ],
       });
     }
 
     if (searchProduct) {
+      const escProd = escapeRegex(searchProduct);
       andClauses.push({
         $or: [
-          { PRODUCT: new RegExp(searchProduct, "i") },
-          { BILLNAME: new RegExp(searchProduct, "i") },
-          { CODE: new RegExp(searchProduct, "i") },
+          { PRODUCT: new RegExp(escProd, "i") },
+          { BILLNAME: new RegExp(escProd, "i") },
+          { CODE: new RegExp(escProd, "i") },
         ],
       });
     }

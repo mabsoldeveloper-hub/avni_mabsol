@@ -144,6 +144,10 @@ export async function getInventorySettings(
   return JSON.parse(JSON.stringify(merged));
 }
 
+function escapeRegex(str: string): string {
+  return str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
 function buildProductHierarchyClauses(options: {
   companyCode?: string;
   divisionCode?: string;
@@ -154,40 +158,44 @@ function buildProductHierarchyClauses(options: {
   const clauses: any[] = [];
 
   if (options.companyCode) {
+    const escComp = escapeRegex(options.companyCode);
     clauses.push({
       $or: [
-        { COMPANY: new RegExp(`^${options.companyCode}$`, "i") },
-        { GCODE: new RegExp(`^${options.companyCode}$`, "i") },
+        { COMPANY: new RegExp(`^${escComp}$`, "i") },
+        { GCODE: new RegExp(`^${escComp}$`, "i") },
         { companyCode: options.companyCode },
       ],
     });
   }
 
   if (options.divisionCode) {
+    const escDiv = escapeRegex(options.divisionCode);
     clauses.push({
       $or: [
-        { DIV: new RegExp(`^${options.divisionCode}$`, "i") },
-        { DIVISION: new RegExp(`^${options.divisionCode}$`, "i") },
+        { DIV: new RegExp(`^${escDiv}$`, "i") },
+        { DIVISION: new RegExp(`^${escDiv}$`, "i") },
         { divisionCode: options.divisionCode },
       ],
     });
   }
 
   if (options.subDivisionCode) {
+    const escSub = escapeRegex(options.subDivisionCode);
     clauses.push({
       $or: [
-        { SUBDIV: new RegExp(`^${options.subDivisionCode}$`, "i") },
-        { SUB_DIV: new RegExp(`^${options.subDivisionCode}$`, "i") },
+        { SUBDIV: new RegExp(`^${escSub}$`, "i") },
+        { SUB_DIV: new RegExp(`^${escSub}$`, "i") },
         { subDivisionCode: options.subDivisionCode },
       ],
     });
   }
 
   if (options.categoryCode) {
+    const escCat = escapeRegex(options.categoryCode);
     clauses.push({
       $or: [
-        { CAT: new RegExp(`^${options.categoryCode}$`, "i") },
-        { CATEGORY: new RegExp(`^${options.categoryCode}$`, "i") },
+        { CAT: new RegExp(`^${escCat}$`, "i") },
+        { CATEGORY: new RegExp(`^${escCat}$`, "i") },
         { categoryCode: options.categoryCode },
       ],
     });

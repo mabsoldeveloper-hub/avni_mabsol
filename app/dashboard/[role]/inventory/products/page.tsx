@@ -228,7 +228,7 @@ function ProductsContent() {
           setMrTerritoryInfo({
             isMrRestricted: json.isMrRestricted,
             territories: json.territories || [],
-            allowedCompanyCodes: json.allowedCompanyCodes || [],
+            allowedCompanyCodes: json.allpowedCompanyCodes || [],
           });
         }
       }
@@ -797,49 +797,47 @@ function ProductsContent() {
             </div>
           </div>
 
-          {/* Quick Select Company Pills */}
-          <div className="flex flex-wrap gap-1.5 pt-1">
-            <button
-              type="button"
-              onClick={() => router.push(`/dashboard/${role}/inventory/products?filter=companies`)}
-              className={`px-3 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
-                !selectedCompanyParam
-                  ? "bg-violet-600 text-white shadow-xs ring-2 ring-violet-400"
-                  : "bg-white text-slate-700 border border-slate-200 hover:bg-violet-50 hover:border-violet-300"
-              }`}
-            >
-              All Companies ({totalProducts})
-            </button>
-            {companyStats.map((c) => {
-              const isSelected = selectedCompanyParam.toLowerCase() === c.companyName.toLowerCase();
-              return (
-                <button
-                  key={c.companyName}
-                  type="button"
-                  onClick={() =>
+          {/* Company Selection Dropdown (Handles 1000+ companies gracefully without filling dashboard) */}
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 pt-1">
+            <div className="relative flex-1">
+              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-violet-600">
+                <FaBuilding size={13} />
+              </div>
+              <select
+                value={selectedCompanyParam || ""}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  if (!val) {
+                    router.push(`/dashboard/${role}/inventory/products?filter=companies`);
+                  } else {
                     router.push(
-                      `/dashboard/${role}/inventory/products?filter=companies&company=${encodeURIComponent(
-                        c.companyName
-                      )}`
-                    )
+                      `/dashboard/${role}/inventory/products?filter=companies&company=${encodeURIComponent(val)}`
+                    );
                   }
-                  className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
-                    isSelected
-                      ? "bg-violet-600 text-white shadow-xs ring-2 ring-violet-400"
-                      : "bg-white text-slate-700 border border-slate-200 hover:bg-violet-50 hover:border-violet-300 hover:text-violet-700"
-                  }`}
-                >
-                  <span>{c.companyName}</span>
-                  <span
-                    className={`px-1.5 py-0.2 rounded-full text-[10px] font-bold ${
-                      isSelected ? "bg-white/25 text-white" : "bg-slate-100 text-slate-500"
-                    }`}
-                  >
-                    {c.count}
-                  </span>
-                </button>
-              );
-            })}
+                }}
+                className="w-full pl-9 pr-8 py-2 rounded-xl border border-violet-300 bg-white text-xs font-bold text-slate-800 shadow-xs outline-none focus:ring-2 focus:ring-violet-500 transition cursor-pointer"
+              >
+                <option value="">
+                  🏢 Select Company ({companyStats.length} Total Manufacturers Available)
+                </option>
+                {companyStats.map((c) => (
+                  <option key={c.companyName} value={c.companyName}>
+                    {c.companyName} — ({c.count} Products &middot; {c.stock.toLocaleString()} Units &middot; ₹{c.stockValue.toLocaleString("en-IN", { maximumFractionDigits: 0 })})
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {selectedCompanyParam && (
+              <button
+                type="button"
+                onClick={() => router.push(`/dashboard/${role}/inventory/products?filter=companies`)}
+                className="inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl bg-white border border-rose-200 text-rose-600 hover:bg-rose-50 text-xs font-bold shadow-xs transition cursor-pointer shrink-0"
+              >
+                <FaTimes size={10} />
+                <span>Clear Company Filter</span>
+              </button>
+            )}
           </div>
         </div>
       )}

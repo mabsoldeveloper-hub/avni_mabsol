@@ -16,7 +16,7 @@ import InventoryCards from "@/components/inventory/InventoryCards";
 import LowStockTable from "@/components/inventory/LowStockTable";
 import NegativeStockTable from "@/components/inventory/NegativeStockTable";
 import TopProductsTable from "@/components/inventory/TopProductsTable";
-import InventoryHierarchyBreakdown from "@/components/inventory/InventoryHierarchyBreakdown";
+import DashboardProductsTable from "@/components/inventory/DashboardProductsTable";
 import InventoryHierarchyFilter, {
   HierarchyFilterValues,
 } from "@/components/inventory/InventoryHierarchyFilter";
@@ -460,9 +460,9 @@ export default function InventoryDashboard() {
         )}
       </div>
 
-      {/* ==================== 5-TIER COMPANY & PRODUCT HIERARCHY BREAKDOWN ==================== */}
+      {/* ==================== FILTERED PRODUCTS LIST TABLE ==================== */}
       <div>
-        <InventoryHierarchyBreakdown
+        <DashboardProductsTable
           products={filteredProducts}
           role={role}
         />

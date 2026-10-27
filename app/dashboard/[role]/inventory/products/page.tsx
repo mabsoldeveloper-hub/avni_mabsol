@@ -33,11 +33,16 @@ import {
   FaPlus,
   FaFilter,
   FaTimes,
+  FaSitemap,
+  FaTags,
+  FaPills,
 } from "react-icons/fa";
 import AddProductModal from "@/components/product/AddProductModal";
+import InventoryHierarchyFilter, {
+  HierarchyFilterValues,
+} from "@/components/inventory/InventoryHierarchyFilter";
 import { useCompany } from "@/context/CompanyContext";
 import { useFinancialYear } from "@/context/FinancialYearContext";
-
 
 type MrTerritoryInfo = {
   isMrRestricted: boolean;
@@ -51,6 +56,22 @@ type Product = {
   PRODUCT?: string;
   companyName?: string;
   GCODE?: string;
+  COMPANY?: string;
+  DIV?: string;
+  DIVISION?: string;
+  division?: string;
+  divisionCode?: string;
+  SUBDIV?: string;
+  SUB_DIV?: string;
+  subDivision?: string;
+  subDivisionCode?: string;
+  CAT?: string;
+  CATEGORY?: string;
+  category?: string;
+  categoryCode?: string;
+  PACK?: string;
+  PACKING?: string;
+  pack?: string;
   MRP?: number;
   PRATE?: number;
   RATEF?: number;
@@ -181,6 +202,15 @@ function ProductsContent() {
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isCompanyModalOpen, setIsCompanyModalOpen] = useState(false);
 
+  // 5-Tier Hierarchy Filter State
+  const [hierarchyFilters, setHierarchyFilters] = useState<HierarchyFilterValues>({
+    companyCode: "",
+    divisionCode: "",
+    subDivisionCode: "",
+    categoryCode: "",
+    productCode: "",
+  });
+
   useEffect(() => {
     loadMrTerritoryInfo();
   }, []);
@@ -228,6 +258,7 @@ function ProductsContent() {
   const lowStock = products.filter(
     (p) => Number(p.BALANCE) > 0 && Number(p.BALANCE) <= 10
   ).length;
+  const negativeStock = products.filter((p) => Number(p.BALANCE) < 0).length;
   const outOfStock = products.filter((p) => Number(p.BALANCE) <= 0).length;
   const totalStockValue = products.reduce(
     (sum, p) => sum + Number(p.BALANCE || 0) * Number(p.PRATE || 0),
@@ -265,7 +296,7 @@ function ProductsContent() {
     }
   };
 
-  // 3. Filter products based on selected KPI Card, Company, and Search string
+  // 3. Filter products based on selected KPI Card, Company, Search string, and 5-Tier Hierarchy
   const displayProducts = useMemo(() => {
     let list = products;
 
@@ -277,6 +308,8 @@ function ProductsContent() {
       list = list.filter((p) => Number(p.BALANCE) > 0);
     } else if (activeFilter === "low_stock") {
       list = list.filter((p) => Number(p.BALANCE) > 0 && Number(p.BALANCE) <= 10);
+    } else if (activeFilter === "negative_stock") {
+      list = list.filter((p) => Number(p.BALANCE) < 0);
     } else if (activeFilter === "out_of_stock") {
       list = list.filter((p) => Number(p.BALANCE) <= 0);
     } else if (activeFilter === "stock_value") {
@@ -297,6 +330,59 @@ function ProductsContent() {
       );
     }
 
+    // 5-Tier Hierarchy Filters (Company -> Division -> Sub-Division -> Category -> Product)
+    if (hierarchyFilters.companyCode) {
+      const cCode = hierarchyFilters.companyCode.trim().toLowerCase();
+      const cName = (hierarchyFilters.companyName || "").trim().toLowerCase();
+      list = list.filter((p) => {
+        const comp = (p.companyName || "").toLowerCase();
+        const gcode = (p.GCODE || "").toLowerCase();
+        const pcomp = (p.COMPANY || "").toLowerCase();
+        return (
+          comp === cCode ||
+          gcode === cCode ||
+          pcomp === cCode ||
+          (cName && (comp.includes(cName) || cName.includes(comp)))
+        );
+      });
+    }
+
+    if (hierarchyFilters.divisionCode) {
+      const dCode = hierarchyFilters.divisionCode.trim().toLowerCase();
+      const dName = (hierarchyFilters.divisionName || "").trim().toLowerCase();
+      list = list.filter((p) => {
+        const div = (p.division || p.DIV || p.DIVISION || "").toLowerCase();
+        return div === dCode || (dName && div === dName);
+      });
+    }
+
+    if (hierarchyFilters.subDivisionCode) {
+      const sCode = hierarchyFilters.subDivisionCode.trim().toLowerCase();
+      const sName = (hierarchyFilters.subDivisionName || "").trim().toLowerCase();
+      list = list.filter((p) => {
+        const sdiv = (p.subDivision || p.SUBDIV || p.SUB_DIV || "").toLowerCase();
+        return sdiv === sCode || (sName && sdiv === sName);
+      });
+    }
+
+    if (hierarchyFilters.categoryCode) {
+      const catCode = hierarchyFilters.categoryCode.trim().toLowerCase();
+      const catName = (hierarchyFilters.categoryName || "").trim().toLowerCase();
+      list = list.filter((p) => {
+        const cat = (p.category || p.CAT || p.CATEGORY || "").toLowerCase();
+        return cat === catCode || (catName && cat === catName);
+      });
+    }
+
+    if (hierarchyFilters.productCode) {
+      const pCode = hierarchyFilters.productCode.trim().toLowerCase();
+      list = list.filter((p) => {
+        const code = String(p.CODE || "").toLowerCase();
+        const name = (p.PRODUCT || "").toLowerCase();
+        return code === pCode || name === pCode;
+      });
+    }
+
     if (search.trim()) {
       const s = search.toLowerCase();
       list = list.filter(
@@ -304,24 +390,42 @@ function ProductsContent() {
           (p.PRODUCT || "").toLowerCase().includes(s) ||
           String(p.CODE || "").toLowerCase().includes(s) ||
           (p.GCODE || "").toLowerCase().includes(s) ||
-          (p.companyName || "").toLowerCase().includes(s)
+          (p.companyName || "").toLowerCase().includes(s) ||
+          (p.division || p.DIV || "").toLowerCase().includes(s) ||
+          (p.subDivision || p.SUBDIV || "").toLowerCase().includes(s) ||
+          (p.category || p.CAT || "").toLowerCase().includes(s)
       );
     }
 
     return list;
-  }, [products, activeFilter, selectedCompanyParam, search]);
+  }, [products, activeFilter, selectedCompanyParam, hierarchyFilters, search]);
 
   const columns = useMemo(
     () => [
       columnHelper.accessor("CODE", {
         header: "Code",
-        cell: (info) => info.getValue() || "-",
+        cell: (info) => (
+          <span className="font-mono text-xs font-semibold text-gray-600">
+            {info.getValue() || "-"}
+          </span>
+        ),
       }),
       columnHelper.accessor("PRODUCT", {
         header: "Product",
-        cell: (info) => (
-          <span className="font-semibold text-gray-700">{info.getValue()}</span>
-        ),
+        cell: (info) => {
+          const row = info.row.original;
+          const pack = row.pack || row.PACK;
+          return (
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <span className="font-semibold text-gray-800">{info.getValue()}</span>
+              {pack && (
+                <span className="px-1.5 py-0.2 rounded text-[10px] font-bold bg-slate-100 text-slate-600 border border-slate-200">
+                  {pack}
+                </span>
+              )}
+            </div>
+          );                                                                                                         
+        },
       }),
       columnHelper.accessor((row) => row.companyName || row.GCODE, {
         id: "company",
@@ -338,10 +442,58 @@ function ProductsContent() {
                 )
               }
               title={`Click to filter products by ${val}`}
-              className="font-medium text-violet-700 hover:text-violet-900 hover:underline cursor-pointer text-left"
+              className="font-semibold text-violet-700 hover:text-violet-900 hover:underline cursor-pointer text-left truncate max-w-[140px] block"
             >
               {val}
             </button>
+          );
+        },
+      }),
+      columnHelper.accessor((row) => row.division || row.DIV || row.DIVISION || "-", {
+        id: "division",
+        header: "Division",
+        cell: (info) => {
+          const val = info.getValue() || "-";
+          if (val === "-") return <span className="text-gray-400 text-xs">-</span>;
+          return (
+            <span
+              className="inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-semibold bg-emerald-50 text-emerald-800 ring-1 ring-emerald-500/20 max-w-[120px] truncate"
+              title={val}
+            >
+              {val}
+            </span>
+          );
+        },
+      }),
+      columnHelper.accessor((row) => row.subDivision || row.SUBDIV || row.SUB_DIV || "-", {
+        id: "subDivision",
+        header: "Sub-Div",
+        cell: (info) => {
+          const val = info.getValue() || "-";
+          if (val === "-") return <span className="text-gray-400 text-xs">-</span>;
+          return (
+            <span
+              className="inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-semibold bg-amber-50 text-amber-800 ring-1 ring-amber-500/20 max-w-[120px] truncate"
+              title={val}
+            >
+              {val}
+            </span>
+          );
+        },
+      }),
+      columnHelper.accessor((row) => row.category || row.CAT || row.CATEGORY || "-", {
+        id: "category",
+        header: "Category",
+        cell: (info) => {
+          const val = info.getValue() || "-";
+          if (val === "-") return <span className="text-gray-400 text-xs">-</span>;
+          return (
+            <span
+              className="inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-semibold bg-purple-50 text-purple-800 ring-1 ring-purple-500/20 max-w-[120px] truncate"
+              title={val}
+            >
+              {val}
+            </span>
           );
         },
       }),
@@ -363,7 +515,7 @@ function ProductsContent() {
           const val = Number(info.getValue() || 0);
           return (
             <span
-              className={`inline-flex items-center justify-center min-w-[3rem] px-2 py-0.5 rounded-full text-xs font-semibold ring-1 ${stockClasses(
+              className={`inline-flex items-center justify-center min-w-[3rem] px-2 py-0.5 rounded-full text-xs font-bold ring-1 ${stockClasses(
                 val
               )}`}
             >
@@ -407,7 +559,7 @@ function ProductsContent() {
         ),
       }),
     ],
-    [role]
+    [role, router]
   );
 
   const table = useReactTable({
@@ -439,6 +591,8 @@ function ProductsContent() {
         return "Available In Stock";
       case "low_stock":
         return "Low Stock Products (<= 10)";
+      case "negative_stock":
+        return "Negative Stock Products (< 0)";
       case "out_of_stock":
         return "Out Of Stock Products";
       case "stock_value":
@@ -509,8 +663,8 @@ function ProductsContent() {
         </div>
       )}
 
-      {/* ==================== SUMMARY CARDS (8 KPI CARDS) ==================== */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+      {/* ==================== SUMMARY CARDS (9 KPI CARDS) ==================== */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 xl:grid-cols-9 gap-2.5">
         <SummaryCard
           title="Total Products"
           value={totalProducts}
@@ -570,6 +724,16 @@ function ProductsContent() {
           glow="group-hover:shadow-amber-400/30"
           isActive={activeFilter === "low_stock" && !selectedCompanyParam}
           onClick={() => handleCardClick("low_stock")}
+        />
+        <SummaryCard
+          title="Negative Stock"
+          value={negativeStock}
+          icon={<FaTimesCircle size={16} />}
+          ring="from-rose-500/40 to-red-600/40"
+          iconBg="bg-rose-500/15 text-rose-600"
+          glow="group-hover:shadow-rose-400/30"
+          isActive={activeFilter === "negative_stock" && !selectedCompanyParam}
+          onClick={() => handleCardClick("negative_stock")}
         />
         <SummaryCard
           title="Out Of Stock"
@@ -705,6 +869,23 @@ function ProductsContent() {
           </button>
         </div>
       )}
+
+      {/* ==================== 5-TIER PRODUCT HIERARCHY FILTER ==================== */}
+      <InventoryHierarchyFilter
+        initialValues={hierarchyFilters}
+        onChange={(newFilters) => setHierarchyFilters(newFilters)}
+        onReset={() =>
+          setHierarchyFilters({
+            companyCode: "",
+            divisionCode: "",
+            subDivisionCode: "",
+            categoryCode: "",
+            productCode: "",
+          })
+        }
+        title="5-Tier Product Hierarchy Search (Company → Division → Sub-Division → Category → Product)"
+        subtitle="Narrow down catalog products according to exact pharma organization hierarchy"
+      />
 
       {/* ==================== TABLE CARD ==================== */}
       <div

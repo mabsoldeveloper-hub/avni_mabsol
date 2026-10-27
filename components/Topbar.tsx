@@ -254,7 +254,7 @@ export default function Topbar({
     return () => document.removeEventListener("mousedown", onClick);
   }, []);
 
-  const [liveNotifications, setLiveNotifications] = useState<any[]>([]);
+  const [liveNotifications, setLiveNotifications] =                                                                                                                   useState<any[]>([]);
 
   const fetchNotifications = async () => {
     try {

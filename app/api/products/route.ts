@@ -3,12 +3,19 @@ import connectDB from "@/lib/mongodb";
 import Product from "@/models/Product";
 import ProductBatch from "@/models/ProductBatch";
 import SaleType from "@/models/SaleType";
+import Division from "@/models/Division";
+import SubDivision from "@/models/SubDivision";
+import Category from "@/models/Category";
 import { getMrTerritoryRestriction } from "@/lib/mrTerritoryHelper";
 import { getCurrentUser } from "@/lib/auth";
 
 import { getCompanyVfpFilter, combineFilters } from "@/lib/companyVfpHelper";
 
 export const dynamic = "force-dynamic";
+
+function cleanStr(val: unknown): string {
+  return String(val ?? "").trim();
+}
 
 export async function GET(req: Request) {
   await connectDB();
@@ -30,10 +37,13 @@ export async function GET(req: Request) {
     }
   }
 
-  const [products, saleTypes, productBatches] = await Promise.all([
+  const [products, saleTypes, productBatches, dbDivisions, dbSubDivisions, dbCategories] = await Promise.all([
     Product.find(productFilter).sort({ PRODUCT: 1, NAME: 1 }).lean(),
     SaleType.find({}, { SCODE: 1, SNAME: 1 }).lean(),
     ProductBatch.find({}).lean(),
+    Division.find({ status: { $ne: "Inactive" } }, { divisionCode: 1, divisionName: 1, companyCode: 1 }).lean().catch(() => []),
+    SubDivision.find({ status: { $ne: "Inactive" } }, { subDivisionCode: 1, subDivisionName: 1, divisionCode: 1, companyCode: 1 }).lean().catch(() => []),
+    Category.find({ status: { $ne: "Inactive" } }, { categoryCode: 1, categoryName: 1 }).lean().catch(() => []),
   ]);
 
   // SCODE -> SNAME map (Company Name)
@@ -41,6 +51,42 @@ export async function GET(req: Request) {
   saleTypes.forEach((st: any) => {
     companyMap.set(String(st.SCODE).trim(), String(st.SNAME).trim());
   });
+
+  const divisionMap = new Map<string, string>();
+  for (const d of dbDivisions as any[]) {
+    const dCode = cleanStr(d.divisionCode).toUpperCase();
+    const dName = cleanStr(d.divisionName);
+    if (dCode && dName) {
+      divisionMap.set(dCode, dName);
+      if (d.companyCode) {
+        divisionMap.set(`${cleanStr(d.companyCode).toUpperCase()}_${dCode}`, dName);
+      }
+    }
+  }
+
+  const subDivisionMap = new Map<string, string>();
+  for (const s of dbSubDivisions as any[]) {
+    const sCode = cleanStr(s.subDivisionCode).toUpperCase();
+    const sName = cleanStr(s.subDivisionName);
+    if (sCode && sName) {
+      subDivisionMap.set(sCode, sName);
+      if (s.companyCode && s.divisionCode) {
+        subDivisionMap.set(
+          `${cleanStr(s.companyCode).toUpperCase()}_${cleanStr(s.divisionCode).toUpperCase()}_${sCode}`,
+          sName
+        );
+      }
+    }
+  }
+
+  const categoryMap = new Map<string, string>();
+  for (const c of dbCategories as any[]) {
+    const cCode = cleanStr(c.categoryCode).toUpperCase();
+    const cName = cleanStr(c.categoryName);
+    if (cCode && cName) {
+      categoryMap.set(cCode, cName);
+    }
+  }
 
   // Batch Map (Product Code/Name -> Batches Array)
   const batchMap = new Map<string, any[]>();
@@ -94,12 +140,39 @@ export async function GET(req: Request) {
     // Marg rule: Product.BALANCE is the authoritative current product stock.
     const currentStock = Number(p.BALANCE ?? 0);
 
+    const divRaw = cleanStr(p.DIV || p.DIVISION || "");
+    const subDivRaw = cleanStr(p.SUBDIV || p.SUB_DIV || "");
+    const catRaw = cleanStr(p.CAT || p.CATEGORY || "");
+    const pack = cleanStr(p.PACK || p.PACKING || "");
+
+    const divKey = divRaw.toUpperCase();
+    const divisionName =
+      divisionMap.get(`${gcodeStr.toUpperCase()}_${divKey}`) ||
+      divisionMap.get(divKey) ||
+      divRaw;
+
+    const subDivKey = subDivRaw.toUpperCase();
+    const subDivisionName =
+      subDivisionMap.get(`${gcodeStr.toUpperCase()}_${divKey}_${subDivKey}`) ||
+      subDivisionMap.get(subDivKey) ||
+      subDivRaw;
+
+    const catKey = catRaw.toUpperCase();
+    const categoryName = categoryMap.get(catKey) || catRaw;
+
     return {
       ...p,
       currentStock: currentStock,
       NAME: exactProductName,
       PRODUCT: exactProductName,
       companyName: companyMap.get(gcodeStr) || (p.COMPANY && p.COMPANY !== "ZZZZZZ 144" ? p.COMPANY : "N/A"),
+      division: divisionName || divRaw || "",
+      divisionCode: divRaw,
+      subDivision: subDivisionName || subDivRaw || "",
+      subDivisionCode: subDivRaw,
+      category: categoryName || catRaw || "",
+      categoryCode: catRaw,
+      pack,
       batches: finalBatches,
     };
   });

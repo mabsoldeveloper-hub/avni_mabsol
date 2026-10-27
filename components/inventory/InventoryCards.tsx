@@ -16,9 +16,13 @@ import {
 export default function InventoryCards({
   summary,
   role = "admin",
+  activeFilter,
+  onCardClick,
 }: {
   summary: any;
   role?: string;
+  activeFilter?: string;
+  onCardClick?: (filterKey: string) => void;
 }) {
   const cards = [
     {
@@ -82,6 +86,16 @@ export default function InventoryCards({
       glow: "group-hover:shadow-amber-400/30",
     },
     {
+      title: "Negative Stock",
+      filterKey: "negative_stock",
+      value: summary?.negativeStock ?? 0,
+      href: `/dashboard/${role}/inventory/products?filter=negative_stock`,
+      icon: <FaTimesCircle size={16} />,
+      ring: "from-rose-500/40 to-red-600/40",
+      iconBg: "bg-rose-500/15 text-rose-600",
+      glow: "group-hover:shadow-rose-400/30",
+    },
+    {
       title: "Out Of Stock",
       filterKey: "out_of_stock",
       value: summary?.outOfStock ?? 0,
@@ -108,29 +122,20 @@ export default function InventoryCards({
   ];
 
   return (
-    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-      {cards.map((card, index) => (
-        <Link
-          key={index}
-          href={card.href}
-          title={`Click to view ${card.title}`}
-          className={`
-            group relative rounded-2xl p-[1px] block cursor-pointer
-            bg-gradient-to-br ${card.ring}
-            transition-all duration-300 ease-out
-            hover:-translate-y-1.5 hover:scale-[1.02]
-          `}
-        >
-          {/* Glass body */}
+    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 xl:grid-cols-9 gap-2.5">
+      {cards.map((card, index) => {
+        const isCurrentActive = activeFilter === card.filterKey;
+
+        const content = (
           <div
             className={`
               relative h-full rounded-2xl overflow-hidden
-              bg-white/70 backdrop-blur-xl
+              ${isCurrentActive ? "bg-white/95 ring-2 ring-blue-500 shadow-md" : "bg-white/70"} backdrop-blur-xl
               border border-white/50
               shadow-[0_4px_20px_rgba(0,0,0,0.06)]
               transition-all duration-300 ease-out
               group-hover:shadow-xl ${card.glow}
-              p-3.5
+              p-3
             `}
           >
             {/* subtle top sheen — liquid glass highlight */}
@@ -141,16 +146,16 @@ export default function InventoryCards({
 
             <div className="relative flex items-start justify-between">
               <div className="min-w-0 flex-1">
-                <p className="text-[11px] font-medium text-gray-500 tracking-wide truncate">
+                <p className="text-[10.5px] font-medium text-gray-500 tracking-wide truncate">
                   {card.title}
                 </p>
                 <h3
                   className={`mt-0.5 font-bold text-gray-800 tabular-nums whitespace-nowrap ${
                     String(card.value ?? 0).length > 9
-                      ? "text-sm"
+                      ? "text-xs"
                       : String(card.value ?? 0).length > 6
-                        ? "text-base"
-                        : "text-lg"
+                        ? "text-sm"
+                        : "text-base"
                   }`}
                 >
                   {card.value ?? 0}
@@ -159,7 +164,7 @@ export default function InventoryCards({
 
               <div
                 className={`
-                  flex items-center justify-center h-8 w-8 rounded-lg shrink-0
+                  flex items-center justify-center h-7 w-7 rounded-lg shrink-0
                   ${card.iconBg}
                   ring-1 ring-white/50
                   transition-transform duration-300
@@ -171,12 +176,49 @@ export default function InventoryCards({
             </div>
 
             <div className="relative mt-2 flex items-center justify-between text-[10px] text-slate-400 group-hover:text-blue-600 transition-colors font-medium">
-              <span>View list</span>
+              <span>{onCardClick ? "Click to view" : "View list"}</span>
               <FaArrowRight size={8} className="transform group-hover:translate-x-0.5 transition-transform" />
             </div>
           </div>
-        </Link>
-      ))}
+        );
+
+        if (onCardClick) {
+          return (
+            <button
+              key={index}
+              type="button"
+              onClick={() => onCardClick(card.filterKey)}
+              title={`Click to view ${card.title}`}
+              className={`
+                group relative rounded-2xl p-[1px] block cursor-pointer text-left w-full
+                bg-gradient-to-br ${card.ring}
+                transition-all duration-300 ease-out
+                hover:-translate-y-1.5 hover:scale-[1.02]
+                ${isCurrentActive ? "scale-[1.02]" : ""}
+              `}
+            >
+              {content}
+            </button>
+          );
+        }
+
+        return (
+          <Link
+            key={index}
+            href={card.href}
+            title={`Click to view ${card.title}`}
+            className={`
+              group relative rounded-2xl p-[1px] block cursor-pointer
+              bg-gradient-to-br ${card.ring}
+              transition-all duration-300 ease-out
+              hover:-translate-y-1.5 hover:scale-[1.02]
+              ${isCurrentActive ? "scale-[1.02]" : ""}
+            `}
+          >
+            {content}
+          </Link>
+        );
+      })}
     </div>
   );
 }

@@ -20,6 +20,7 @@ export async function POST(request: NextRequest) {
     const deviceId = (body.deviceId || request.headers.get("x-device-id") || "").trim();
     const deviceName = (body.deviceName || request.headers.get("x-device-name") || "Operator Machine").trim();
     let email = (body.email || body.userEmail || "").trim().toLowerCase();
+    const licenseKey = (body.licenseKey || request.headers.get("x-license-key") || "").trim();
 
     // Check JWT Bearer token if available
     let tokenUser: any = null;
@@ -44,14 +45,33 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: "Device identifier is required." }, { status: 400 });
     }
 
+    const cleanDevId = deviceId.trim().toLowerCase();
+
     // Locate company sync config
-    let config: any = null;
+    // 1. First, search if this device is ALREADY active in any config for this email, licenseKey, or key
+    const queryConditions: any[] = [];
+    if (licenseKey) queryConditions.push({ license: licenseKey });
     if (email) {
+      queryConditions.push({ email });
+      queryConditions.push({ key: "vfp_sync_config_" + email });
+    }
+    queryConditions.push({ key: "vfp_sync_config" });
+
+    let config: any = await VfpConfig.findOne({
+      $or: queryConditions,
+      "authorizedDevices.deviceId": { $regex: new RegExp(`^${cleanDevId}$`, "i") },
+      "authorizedDevices.status": "active",
+    });
+
+    if (!config && licenseKey) {
+      config = await VfpConfig.findOne({ license: licenseKey });
+    }
+    if (!config && email) {
       config =
         (await VfpConfig.findOne({ email })) ||
         (await VfpConfig.findOne({ key: "vfp_sync_config_" + email })) ||
         (await VfpConfig.findOne({ key: "vfp_sync_config" }));
-    } else {
+    } else if (!config) {
       config = await VfpConfig.findOne({ key: "vfp_sync_config" });
     }
 
@@ -61,6 +81,11 @@ export async function POST(request: NextRequest) {
           success: false,
           isNewDevice: true,
           authorized: false,
+          requiresVerification: true,
+          deviceId,
+          deviceName,
+          email,
+          licenseKey,
           message: "No sync configuration found for this account. Email OTP verification required to activate device.",
         },
         { status: 200 }
@@ -69,9 +94,18 @@ export async function POST(request: NextRequest) {
 
     const now = new Date();
 
-    // 1. Check if device is in authorizedDevices list
+    const cleanComp = (val?: string) => {
+      if (!val) return "";
+      const lower = val.trim().toLowerCase();
+      if (lower === "default" || lower === "organization" || lower === "your organization" || lower === "test") return "";
+      return val.trim();
+    };
+
+    // 1. Check if device is in authorizedDevices list (case-insensitive)
     const authorizedDevices: any[] = Array.isArray(config.authorizedDevices) ? config.authorizedDevices : [];
-    const matchedDevice = authorizedDevices.find((d: any) => d.deviceId === deviceId && d.status === "active");
+    const matchedDevice = authorizedDevices.find(
+      (d: any) => (d.deviceId || "").trim().toLowerCase() === cleanDevId && d.status === "active"
+    );
 
     if (matchedDevice) {
       const isExpired = matchedDevice.expiresAt ? now > new Date(matchedDevice.expiresAt) : false;
@@ -81,9 +115,12 @@ export async function POST(request: NextRequest) {
         daysRemaining = Math.max(0, Math.ceil(diffMs / (1000 * 60 * 60 * 24)));
       }
 
-      // Update last seen timestamp
-      await VfpConfig.updateOne(
-        { _id: config._id, "authorizedDevices.deviceId": deviceId },
+      // Update last seen timestamp across all matching configs
+      await VfpConfig.updateMany(
+        {
+          $or: queryConditions,
+          "authorizedDevices.deviceId": { $regex: new RegExp(`^${cleanDevId}$`, "i") },
+        },
         {
           $set: {
             "authorizedDevices.$.lastSeenAt": now,
@@ -97,18 +134,18 @@ export async function POST(request: NextRequest) {
         authorized: !isExpired,
         isNewDevice: false,
         isExpired,
-        licenseKey: matchedDevice.licenseKey,
-        expiresAt: matchedDevice.expiresAt,
+        licenseKey: matchedDevice.licenseKey || config.license || licenseKey,
+        expiresAt: matchedDevice.expiresAt || config.licenseExpiresAt,
         daysRemaining,
-        deviceName: matchedDevice.deviceName,
-        companyName: config.companyName || "",
-        companyCode: config.companyCode || "DEFAULT",
+        deviceName: matchedDevice.deviceName || deviceName,
+        companyName: cleanComp(config.companyName),
+        companyCode: cleanComp(config.companyCode),
         message: isExpired ? "License expired for this machine." : "Machine is authorized and active.",
       });
     }
 
     // 2. Legacy fallback: Check single boundDeviceId if authorizedDevices is empty
-    if (config.boundDeviceId === deviceId) {
+    if ((config.boundDeviceId || "").trim().toLowerCase() === cleanDevId) {
       const isExpired = config.licenseExpiresAt ? now > new Date(config.licenseExpiresAt) : false;
       let daysRemaining = 0;
       if (config.licenseExpiresAt && !isExpired) {
@@ -117,20 +154,22 @@ export async function POST(request: NextRequest) {
       }
 
       // Migrate to authorizedDevices
-      await VfpConfig.updateOne(
-        { _id: config._id },
+      const deviceEntry = {
+        deviceId,
+        deviceName: deviceName || config.boundDeviceName || "Primary PC",
+        licenseKey: config.license || licenseKey,
+        activatedAt: config.boundAt || now,
+        expiresAt: config.licenseExpiresAt,
+        lastSeenAt: now,
+        status: "active",
+        activationEmail: config.email || email,
+      };
+
+      await VfpConfig.updateMany(
+        { $or: queryConditions },
         {
           $addToSet: {
-            authorizedDevices: {
-              deviceId,
-              deviceName: deviceName || config.boundDeviceName || "Primary PC",
-              licenseKey: config.license,
-              activatedAt: config.boundAt || now,
-              expiresAt: config.licenseExpiresAt,
-              lastSeenAt: now,
-              status: "active",
-              activationEmail: config.email || email,
-            },
+            authorizedDevices: deviceEntry,
           },
         }
       );
@@ -140,26 +179,30 @@ export async function POST(request: NextRequest) {
         authorized: !isExpired,
         isNewDevice: false,
         isExpired,
-        licenseKey: config.license,
+        licenseKey: config.license || licenseKey,
         expiresAt: config.licenseExpiresAt,
         daysRemaining,
         deviceName: config.boundDeviceName || deviceName,
-        companyName: config.companyName || "",
-        companyCode: config.companyCode || "DEFAULT",
+        companyName: cleanComp(config.companyName),
+        companyCode: cleanComp(config.companyCode),
         message: "Machine authorized via primary license.",
       });
     }
 
-    // 3. New Machine Detected!
+    // 3. New / Unverified Machine Detected!
     return NextResponse.json({
       success: true,
       authorized: false,
       isNewDevice: true,
+      requiresVerification: true,
       deviceId,
       deviceName,
       email: config.email || email,
-      companyName: config.companyName || "",
-      message: `New machine detected: "${deviceName}". Please verify your email with an OTP to activate syncing on this computer.`,
+      licenseKey: config.license || licenseKey,
+      boundDeviceName: config.boundDeviceName || "Another Machine",
+      companyName: cleanComp(config.companyName),
+      companyCode: cleanComp(config.companyCode),
+      message: `Machine "${deviceName}" requires verification. Please verify your email with an OTP to activate syncing on this computer.`,
     });
   } catch (err: any) {
     return NextResponse.json({ success: false, error: err.message || "Device check failed" }, { status: 500 });

@@ -6,7 +6,9 @@ const VfpConfigSchema = new mongoose.Schema(
       type: String,
       required: true,
       unique: true,
-      default: "vfp_sync_config",
+      default: function () {
+        return (this as any)?.email ? `vfp_sync_config_${(this as any).email}` : "vfp_sync_config";
+      },
     },
     email: {
       type: String,
@@ -43,7 +45,7 @@ const VfpConfigSchema = new mongoose.Schema(
     companyCode: {
       type: String,
       required: false,
-      default: "DEFAULT",
+      default: "",
     },
     lastSyncedAt: {
       type: Date,
@@ -123,8 +125,11 @@ const VfpConfigSchema = new mongoose.Schema(
           activatedAt: { type: Date, default: Date.now },
           expiresAt: { type: Date },
           lastSeenAt: { type: Date, default: Date.now },
-          status: { type: String, enum: ["active", "revoked"], default: "active" },
+          status: { type: String, enum: ["active", "revoked", "suspended"], default: "active" },
           activationEmail: { type: String, default: "" },
+          suspendedAt: { type: Date },
+          suspendedReason: { type: String, default: "" },
+          suspendedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
         },
       ],
       required: false,

@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, Suspense } from "react";
 import Link from "next/link";
+import { useParams, useSearchParams, useRouter } from "next/navigation";
 import {
   useReactTable,
   getCoreRowModel,
@@ -30,11 +31,18 @@ import {
   FaMapMarkerAlt,
   FaArrowRight,
   FaPlus,
+  FaFilter,
+  FaTimes,
+  FaSitemap,
+  FaTags,
+  FaPills,
 } from "react-icons/fa";
 import AddProductModal from "@/components/product/AddProductModal";
+import InventoryHierarchyFilter, {
+  HierarchyFilterValues,
+} from "@/components/inventory/InventoryHierarchyFilter";
 import { useCompany } from "@/context/CompanyContext";
 import { useFinancialYear } from "@/context/FinancialYearContext";
-
 
 type MrTerritoryInfo = {
   isMrRestricted: boolean;
@@ -48,6 +56,22 @@ type Product = {
   PRODUCT?: string;
   companyName?: string;
   GCODE?: string;
+  COMPANY?: string;
+  DIV?: string;
+  DIVISION?: string;
+  division?: string;
+  divisionCode?: string;
+  SUBDIV?: string;
+  SUB_DIV?: string;
+  subDivision?: string;
+  subDivisionCode?: string;
+  CAT?: string;
+  CATEGORY?: string;
+  category?: string;
+  categoryCode?: string;
+  PACK?: string;
+  PACKING?: string;
+  pack?: string;
   MRP?: number;
   PRATE?: number;
   RATEF?: number;
@@ -75,6 +99,8 @@ function SummaryCard({
   ring,
   iconBg,
   glow,
+  isActive = false,
+  onClick,
 }: {
   title: string;
   value: string | number;
@@ -82,23 +108,29 @@ function SummaryCard({
   ring: string;
   iconBg: string;
   glow: string;
+  isActive?: boolean;
+  onClick?: () => void;
 }) {
   return (
     <div
+      onClick={onClick}
+      role={onClick ? "button" : undefined}
+      tabIndex={onClick ? 0 : undefined}
       className={`
-        group relative rounded-2xl p-[1px]
+        group relative rounded-2xl p-[1px] cursor-pointer
         bg-gradient-to-br ${ring}
-        transition-all duration-500 ease-out
+        transition-all duration-300 ease-out
         hover:-translate-y-1.5 hover:scale-[1.02]
+        ${isActive ? "ring-2 ring-offset-2 ring-blue-500 scale-[1.02] shadow-lg" : ""}
       `}
     >
       <div
         className={`
           relative h-full rounded-2xl overflow-hidden
-          bg-white/60 backdrop-blur-xl
-          border border-white/40
+          ${isActive ? "bg-white/95" : "bg-white/70"} backdrop-blur-xl
+          border border-white/50
           shadow-[0_4px_20px_rgba(0,0,0,0.06)]
-          transition-all duration-500 ease-out
+          transition-all duration-300 ease-out
           group-hover:shadow-xl ${glow}
           p-3
         `}
@@ -108,12 +140,20 @@ function SummaryCard({
 
         <div className="relative flex items-start justify-between">
           <div className="min-w-0">
-            <p className="text-[11px] font-medium text-gray-500 tracking-wide truncate">
-              {title}
-            </p>
+            <div className="flex items-center gap-1.5">
+              <p className="text-[11px] font-medium text-gray-500 tracking-wide truncate">
+                {title}
+              </p>
+              {isActive && (
+                <span className="px-1.5 py-0.2 rounded-full text-[9px] font-extrabold bg-blue-100 text-blue-700">
+                  Active
+                </span>
+              )}
+            </div>
             <h3
-              className={`mt-0.5 font-semibold text-gray-800 tabular-nums truncate ${String(value).length > 9 ? "text-sm" : "text-lg"
-                }`}
+              className={`mt-0.5 font-bold text-gray-800 tabular-nums truncate ${
+                String(value).length > 9 ? "text-sm" : "text-lg"
+              }`}
             >
               {value}
             </h3>
@@ -123,12 +163,17 @@ function SummaryCard({
               flex items-center justify-center h-8 w-8 rounded-lg shrink-0
               ${iconBg}
               ring-1 ring-white/50
-              transition-transform duration-500
+              transition-transform duration-300
               group-hover:scale-110 group-hover:rotate-3
             `}
           >
             {icon}
           </div>
+        </div>
+
+        <div className="relative mt-2 flex items-center justify-between text-[10px] text-slate-400 group-hover:text-blue-600 transition-colors font-medium">
+          <span>{isActive ? "Filtered (Click to clear)" : "Click to filter"}</span>
+          <FaArrowRight size={7} className="transform group-hover:translate-x-0.5 transition-transform" />
         </div>
       </div>
     </div>
@@ -136,8 +181,18 @@ function SummaryCard({
 }
 
 /* ---------------------------------------------------------- */
-/* Main page                                                    */
-export default function ProductsPage() {
+/* Main page content                                          */
+/* ---------------------------------------------------------- */
+
+function ProductsContent() {
+  const params = useParams();
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  const role = (params?.role as string) || "admin";
+
+  const activeFilter = searchParams.get("filter") || "all";
+  const selectedCompanyParam = searchParams.get("company") || "";
+
   const { selectedCompany } = useCompany();
   const { selectedFY } = useFinancialYear();
   const [products, setProducts] = useState<Product[]>([]);
@@ -145,7 +200,16 @@ export default function ProductsPage() {
   const [sorting, setSorting] = useState<SortingState>([]);
   const [mrTerritoryInfo, setMrTerritoryInfo] = useState<MrTerritoryInfo | null>(null);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [isCompanyModalOpen, setIsCompanyModalOpen] = useState(false);
 
+  // 5-Tier Hierarchy Filter State
+  const [hierarchyFilters, setHierarchyFilters] = useState<HierarchyFilterValues>({
+    companyCode: "",
+    divisionCode: "",
+    subDivisionCode: "",
+    categoryCode: "",
+    productCode: "",
+  });
 
   useEffect(() => {
     loadMrTerritoryInfo();
@@ -164,7 +228,7 @@ export default function ProductsPage() {
           setMrTerritoryInfo({
             isMrRestricted: json.isMrRestricted,
             territories: json.territories || [],
-            allowedCompanyCodes: json.allowedCompanyCodes || [],
+            allowedCompanyCodes: json.allpowedCompanyCodes || [],
           });
         }
       }
@@ -183,52 +247,255 @@ export default function ProductsPage() {
     setProducts(Array.isArray(data) ? data : []);
   };
 
-  const filtered = useMemo(() => {
-    const s = search.toLowerCase();
-    return products.filter(
-      (p) =>
-        (p.PRODUCT || "").toLowerCase().includes(s) ||
-        String(p.CODE || "").toLowerCase().includes(s) ||
-        (p.GCODE || "").toLowerCase().includes(s) ||
-        (p.companyName || "").toLowerCase().includes(s)
-    );
-  }, [search, products]);
-
-  const totalProducts = filtered.length;
-  const activeProducts = filtered.filter((p) => p.STATUS === "Y").length;
-  const inactiveProducts = filtered.filter((p) => p.STATUS !== "Y").length;
+  // 1. Metrics computed across all catalog products
+  const totalProducts = products.length;
+  const activeProducts = products.filter((p) => p.STATUS === "Y").length;
+  const inactiveProducts = products.filter((p) => p.STATUS !== "Y").length;
   const totalCompanies = new Set(
-    filtered.map((p) => p.companyName || p.GCODE).filter(Boolean)
+    products.map((p) => p.companyName || p.GCODE).filter(Boolean)
   ).size;
-  const lowStock = filtered.filter(
+  const availableProducts = products.filter((p) => Number(p.BALANCE) > 0).length;
+  const lowStock = products.filter(
     (p) => Number(p.BALANCE) > 0 && Number(p.BALANCE) <= 10
   ).length;
-  const outOfStock = filtered.filter((p) => Number(p.BALANCE) <= 0).length;
-  const totalStock = filtered.reduce(
-    (sum, p) => sum + Number(p.BALANCE || 0),
-    0
-  );
-  const totalStockValue = filtered.reduce(
+  const negativeStock = products.filter((p) => Number(p.BALANCE) < 0).length;
+  const outOfStock = products.filter((p) => Number(p.BALANCE) <= 0).length;
+  const totalStockValue = products.reduce(
     (sum, p) => sum + Number(p.BALANCE || 0) * Number(p.PRATE || 0),
     0
   );
+
+  // 2. Company statistics breakdown for the 8 companies
+  const companyStats = useMemo(() => {
+    const map = new Map<string, { companyName: string; count: number; stock: number; stockValue: number }>();
+    products.forEach((p) => {
+      const cName = (p.companyName || p.GCODE || "Unknown").trim();
+      if (!cName) return;
+      const cur = map.get(cName) || { companyName: cName, count: 0, stock: 0, stockValue: 0 };
+      cur.count += 1;
+      cur.stock += Number(p.BALANCE || 0);
+      cur.stockValue += Number(p.BALANCE || 0) * Number(p.PRATE || 0);
+      map.set(cName, cur);
+    });
+    return Array.from(map.values()).sort((a, b) => b.count - a.count);
+  }, [products]);
+
+  const handleCardClick = (filterKey: string) => {
+    if (filterKey === "companies") {
+      if (activeFilter === "companies" && !selectedCompanyParam) {
+        router.push(`/dashboard/${role}/inventory/products?filter=all`);
+      } else {
+        router.push(`/dashboard/${role}/inventory/products?filter=companies`);
+      }
+      return;
+    }
+    if (activeFilter === filterKey && filterKey !== "all" && !selectedCompanyParam) {
+      router.push(`/dashboard/${role}/inventory/products?filter=all`);
+    } else {
+      router.push(`/dashboard/${role}/inventory/products?filter=${filterKey}`);
+    }
+  };
+
+  // 3. Filter products based on selected KPI Card, Company, Search string, and 5-Tier Hierarchy
+  const displayProducts = useMemo(() => {
+    let list = products;
+
+    if (activeFilter === "active") {
+      list = list.filter((p) => p.STATUS === "Y");
+    } else if (activeFilter === "inactive") {
+      list = list.filter((p) => p.STATUS !== "Y");
+    } else if (activeFilter === "available") {
+      list = list.filter((p) => Number(p.BALANCE) > 0);
+    } else if (activeFilter === "low_stock") {
+      list = list.filter((p) => Number(p.BALANCE) > 0 && Number(p.BALANCE) <= 10);
+    } else if (activeFilter === "negative_stock") {
+      list = list.filter((p) => Number(p.BALANCE) < 0);
+    } else if (activeFilter === "out_of_stock") {
+      list = list.filter((p) => Number(p.BALANCE) <= 0);
+    } else if (activeFilter === "stock_value") {
+      list = list
+        .filter((p) => Number(p.BALANCE) > 0)
+        .slice()
+        .sort(
+          (a, b) =>
+            Number(b.BALANCE || 0) * Number(b.PRATE || 0) -
+            Number(a.BALANCE || 0) * Number(a.PRATE || 0)
+        );
+    }
+
+    if (selectedCompanyParam) {
+      const matchComp = selectedCompanyParam.toLowerCase();
+      list = list.filter(
+        (p) => (p.companyName || p.GCODE || "").trim().toLowerCase() === matchComp
+      );
+    }
+
+    // 5-Tier Hierarchy Filters (Company -> Division -> Sub-Division -> Category -> Product)
+    if (hierarchyFilters.companyCode) {
+      const cCode = hierarchyFilters.companyCode.trim().toLowerCase();
+      const cName = (hierarchyFilters.companyName || "").trim().toLowerCase();
+      list = list.filter((p) => {
+        const comp = (p.companyName || "").toLowerCase();
+        const gcode = (p.GCODE || "").toLowerCase();
+        const pcomp = (p.COMPANY || "").toLowerCase();
+        return (
+          comp === cCode ||
+          gcode === cCode ||
+          pcomp === cCode ||
+          (cName && (comp.includes(cName) || cName.includes(comp)))
+        );
+      });
+    }
+
+    if (hierarchyFilters.divisionCode) {
+      const dCode = hierarchyFilters.divisionCode.trim().toLowerCase();
+      const dName = (hierarchyFilters.divisionName || "").trim().toLowerCase();
+      list = list.filter((p) => {
+        const div = (p.division || p.DIV || p.DIVISION || "").toLowerCase();
+        return div === dCode || (dName && div === dName);
+      });
+    }
+
+    if (hierarchyFilters.subDivisionCode) {
+      const sCode = hierarchyFilters.subDivisionCode.trim().toLowerCase();
+      const sName = (hierarchyFilters.subDivisionName || "").trim().toLowerCase();
+      list = list.filter((p) => {
+        const sdiv = (p.subDivision || p.SUBDIV || p.SUB_DIV || "").toLowerCase();
+        return sdiv === sCode || (sName && sdiv === sName);
+      });
+    }
+
+    if (hierarchyFilters.categoryCode) {
+      const catCode = hierarchyFilters.categoryCode.trim().toLowerCase();
+      const catName = (hierarchyFilters.categoryName || "").trim().toLowerCase();
+      list = list.filter((p) => {
+        const cat = (p.category || p.CAT || p.CATEGORY || "").toLowerCase();
+        return cat === catCode || (catName && cat === catName);
+      });
+    }
+
+    if (hierarchyFilters.productCode) {
+      const pCode = hierarchyFilters.productCode.trim().toLowerCase();
+      list = list.filter((p) => {
+        const code = String(p.CODE || "").toLowerCase();
+        const name = (p.PRODUCT || "").toLowerCase();
+        return code === pCode || name === pCode;
+      });
+    }
+
+    if (search.trim()) {
+      const s = search.toLowerCase();
+      list = list.filter(
+        (p) =>
+          (p.PRODUCT || "").toLowerCase().includes(s) ||
+          String(p.CODE || "").toLowerCase().includes(s) ||
+          (p.GCODE || "").toLowerCase().includes(s) ||
+          (p.companyName || "").toLowerCase().includes(s) ||
+          (p.division || p.DIV || "").toLowerCase().includes(s) ||
+          (p.subDivision || p.SUBDIV || "").toLowerCase().includes(s) ||
+          (p.category || p.CAT || "").toLowerCase().includes(s)
+      );
+    }
+
+    return list;
+  }, [products, activeFilter, selectedCompanyParam, hierarchyFilters, search]);
 
   const columns = useMemo(
     () => [
       columnHelper.accessor("CODE", {
         header: "Code",
-        cell: (info) => info.getValue() || "-",
+        cell: (info) => (
+          <span className="font-mono text-xs font-semibold text-gray-600">
+            {info.getValue() || "-"}
+          </span>
+        ),
       }),
       columnHelper.accessor("PRODUCT", {
         header: "Product",
-        cell: (info) => (
-          <span className="font-semibold text-gray-700">{info.getValue()}</span>
-        ),
+        cell: (info) => {
+          const row = info.row.original;
+          const pack = row.pack || row.PACK;
+          return (
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <span className="font-semibold text-gray-800">{info.getValue()}</span>
+              {pack && (
+                <span className="px-1.5 py-0.2 rounded text-[10px] font-bold bg-slate-100 text-slate-600 border border-slate-200">
+                  {pack}
+                </span>
+              )}
+            </div>
+          );                                                                                                         
+        },
       }),
       columnHelper.accessor((row) => row.companyName || row.GCODE, {
         id: "company",
         header: "Company",
-        cell: (info) => info.getValue() || "-",
+        cell: (info) => {
+          const val = info.getValue() || "-";
+          if (val === "-") return val;
+          return (
+            <button
+              type="button"
+              onClick={() =>
+                router.push(
+                  `/dashboard/${role}/inventory/products?filter=companies&company=${encodeURIComponent(val)}`
+                )
+              }
+              title={`Click to filter products by ${val}`}
+              className="font-semibold text-violet-700 hover:text-violet-900 hover:underline cursor-pointer text-left truncate max-w-[140px] block"
+            >
+              {val}
+            </button>
+          );
+        },
+      }),
+      columnHelper.accessor((row) => row.division || row.DIV || row.DIVISION || "-", {
+        id: "division",
+        header: "Division",
+        cell: (info) => {
+          const val = info.getValue() || "-";
+          if (val === "-") return <span className="text-gray-400 text-xs">-</span>;
+          return (
+            <span
+              className="inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-semibold bg-emerald-50 text-emerald-800 ring-1 ring-emerald-500/20 max-w-[120px] truncate"
+              title={val}
+            >
+              {val}
+            </span>
+          );
+        },
+      }),
+      columnHelper.accessor((row) => row.subDivision || row.SUBDIV || row.SUB_DIV || "-", {
+        id: "subDivision",
+        header: "Sub-Div",
+        cell: (info) => {
+          const val = info.getValue() || "-";
+          if (val === "-") return <span className="text-gray-400 text-xs">-</span>;
+          return (
+            <span
+              className="inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-semibold bg-amber-50 text-amber-800 ring-1 ring-amber-500/20 max-w-[120px] truncate"
+              title={val}
+            >
+              {val}
+            </span>
+          );
+        },
+      }),
+      columnHelper.accessor((row) => row.category || row.CAT || row.CATEGORY || "-", {
+        id: "category",
+        header: "Category",
+        cell: (info) => {
+          const val = info.getValue() || "-";
+          if (val === "-") return <span className="text-gray-400 text-xs">-</span>;
+          return (
+            <span
+              className="inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-semibold bg-purple-50 text-purple-800 ring-1 ring-purple-500/20 max-w-[120px] truncate"
+              title={val}
+            >
+              {val}
+            </span>
+          );
+        },
       }),
       columnHelper.accessor("MRP", {
         header: "MRP",
@@ -248,7 +515,7 @@ export default function ProductsPage() {
           const val = Number(info.getValue() || 0);
           return (
             <span
-              className={`inline-flex items-center justify-center min-w-[3rem] px-2 py-0.5 rounded-full text-xs font-semibold ring-1 ${stockClasses(
+              className={`inline-flex items-center justify-center min-w-[3rem] px-2 py-0.5 rounded-full text-xs font-bold ring-1 ${stockClasses(
                 val
               )}`}
             >
@@ -279,7 +546,7 @@ export default function ProductsPage() {
         header: "Action",
         cell: (info) => (
           <Link
-            href={`/dashboard/inventory/products/view/${info.row.original._id}`}
+            href={`/dashboard/${role}/inventory/products/view/${info.row.original._id}`}
             className="
               inline-flex items-center px-3 py-1 rounded-lg text-xs font-medium
               bg-white/50 text-blue-600 ring-1 ring-blue-500/30
@@ -292,11 +559,11 @@ export default function ProductsPage() {
         ),
       }),
     ],
-    []
+    [role, router]
   );
 
   const table = useReactTable({
-    data: filtered,
+    data: displayProducts,
     columns,
     state: { sorting },
     onSortingChange: setSorting,
@@ -308,6 +575,32 @@ export default function ProductsPage() {
   });
 
   const numericCols = ["MRP", "PRATE", "RATEF", "BALANCE", "IGST"];
+
+  const getFilterLabel = () => {
+    if (selectedCompanyParam) {
+      return `Company: ${selectedCompanyParam}`;
+    }
+    switch (activeFilter) {
+      case "active":
+        return "Active Products";
+      case "inactive":
+        return "Inactive Products";
+      case "companies":
+        return "All 8 Pharma Companies";
+      case "available":
+        return "Available In Stock";
+      case "low_stock":
+        return "Low Stock Products (<= 10)";
+      case "negative_stock":
+        return "Negative Stock Products (< 0)";
+      case "out_of_stock":
+        return "Out Of Stock Products";
+      case "stock_value":
+        return "Highest Stock Value Products";
+      default:
+        return activeFilter;
+    }
+  };
 
   return (
     <div className="space-y-4">
@@ -370,8 +663,8 @@ export default function ProductsPage() {
         </div>
       )}
 
-      {/* ==================== SUMMARY CARDS ==================== */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+      {/* ==================== SUMMARY CARDS (9 KPI CARDS) ==================== */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 xl:grid-cols-9 gap-2.5">
         <SummaryCard
           title="Total Products"
           value={totalProducts}
@@ -379,6 +672,8 @@ export default function ProductsPage() {
           ring="from-blue-400/40 to-indigo-500/40"
           iconBg="bg-blue-500/15 text-blue-600"
           glow="group-hover:shadow-blue-400/30"
+          isActive={activeFilter === "all" && !selectedCompanyParam}
+          onClick={() => handleCardClick("all")}
         />
         <SummaryCard
           title="Active"
@@ -387,6 +682,8 @@ export default function ProductsPage() {
           ring="from-emerald-400/40 to-green-500/40"
           iconBg="bg-emerald-500/15 text-emerald-600"
           glow="group-hover:shadow-emerald-400/30"
+          isActive={activeFilter === "active" && !selectedCompanyParam}
+          onClick={() => handleCardClick("active")}
         />
         <SummaryCard
           title="Inactive"
@@ -395,6 +692,8 @@ export default function ProductsPage() {
           ring="from-rose-400/40 to-red-500/40"
           iconBg="bg-rose-500/15 text-rose-600"
           glow="group-hover:shadow-rose-400/30"
+          isActive={activeFilter === "inactive" && !selectedCompanyParam}
+          onClick={() => handleCardClick("inactive")}
         />
         <SummaryCard
           title="Companies"
@@ -403,6 +702,18 @@ export default function ProductsPage() {
           ring="from-violet-400/40 to-purple-500/40"
           iconBg="bg-violet-500/15 text-violet-600"
           glow="group-hover:shadow-violet-400/30"
+          isActive={activeFilter === "companies" || Boolean(selectedCompanyParam)}
+          onClick={() => handleCardClick("companies")}
+        />
+        <SummaryCard
+          title="Available"
+          value={availableProducts}
+          icon={<FaWarehouse size={16} />}
+          ring="from-cyan-400/40 to-sky-500/40"
+          iconBg="bg-cyan-500/15 text-cyan-600"
+          glow="group-hover:shadow-cyan-400/30"
+          isActive={activeFilter === "available" && !selectedCompanyParam}
+          onClick={() => handleCardClick("available")}
         />
         <SummaryCard
           title="Low Stock"
@@ -411,6 +722,18 @@ export default function ProductsPage() {
           ring="from-amber-400/40 to-orange-500/40"
           iconBg="bg-amber-500/15 text-amber-700"
           glow="group-hover:shadow-amber-400/30"
+          isActive={activeFilter === "low_stock" && !selectedCompanyParam}
+          onClick={() => handleCardClick("low_stock")}
+        />
+        <SummaryCard
+          title="Negative Stock"
+          value={negativeStock}
+          icon={<FaTimesCircle size={16} />}
+          ring="from-rose-500/40 to-red-600/40"
+          iconBg="bg-rose-500/15 text-rose-600"
+          glow="group-hover:shadow-rose-400/30"
+          isActive={activeFilter === "negative_stock" && !selectedCompanyParam}
+          onClick={() => handleCardClick("negative_stock")}
         />
         <SummaryCard
           title="Out Of Stock"
@@ -419,6 +742,8 @@ export default function ProductsPage() {
           ring="from-slate-400/40 to-gray-500/40"
           iconBg="bg-slate-500/15 text-slate-600"
           glow="group-hover:shadow-slate-400/30"
+          isActive={activeFilter === "out_of_stock" && !selectedCompanyParam}
+          onClick={() => handleCardClick("out_of_stock")}
         />
         <SummaryCard
           title="Stock Value"
@@ -429,8 +754,136 @@ export default function ProductsPage() {
           ring="from-teal-400/40 to-emerald-500/40"
           iconBg="bg-teal-500/15 text-teal-600"
           glow="group-hover:shadow-teal-400/30"
+          isActive={activeFilter === "stock_value" && !selectedCompanyParam}
+          onClick={() => handleCardClick("stock_value")}
         />
       </div>
+
+      {/* ==================== COMPANIES FILTER PANEL ==================== */}
+      {(activeFilter === "companies" || selectedCompanyParam) && (
+        <div className="p-4 rounded-2xl bg-gradient-to-r from-violet-50/90 via-purple-50/70 to-indigo-50/90 border border-violet-200/80 shadow-xs space-y-3">
+          <div className="flex flex-wrap items-center justify-between gap-2.5">
+            <div className="flex items-center gap-2 text-xs">
+              <div className="p-1.5 rounded-lg bg-violet-600 text-white shadow-xs">
+                <FaBuilding size={12} />
+              </div>
+              <span className="font-bold text-violet-950">
+                Companies in Catalog ({totalCompanies} Manufacturers)
+              </span>
+              {selectedCompanyParam && (
+                <span className="px-2 py-0.5 rounded-full text-xs font-extrabold bg-violet-600 text-white shadow-xs">
+                  {selectedCompanyParam} ({displayProducts.length} products)
+                </span>
+              )}
+            </div>
+
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setIsCompanyModalOpen(true)}
+                className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg bg-white border border-violet-300 text-violet-700 hover:bg-violet-50 text-xs font-semibold shadow-xs transition-all cursor-pointer"
+              >
+                <FaBuilding size={11} />
+                <span>View All 8 Companies Detail</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => router.push(`/dashboard/${role}/inventory/products?filter=all`)}
+                className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg bg-white border border-slate-300 text-slate-600 hover:bg-slate-100 text-xs font-semibold shadow-xs transition-all cursor-pointer"
+              >
+                <span>✕ Show All Products</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Company Selection Dropdown (Handles 1000+ companies gracefully without filling dashboard) */}
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 pt-1">
+            <div className="relative flex-1">
+              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-violet-600">
+                <FaBuilding size={13} />
+              </div>
+              <select
+                value={selectedCompanyParam || ""}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  if (!val) {
+                    router.push(`/dashboard/${role}/inventory/products?filter=companies`);
+                  } else {
+                    router.push(
+                      `/dashboard/${role}/inventory/products?filter=companies&company=${encodeURIComponent(val)}`
+                    );
+                  }
+                }}
+                className="w-full pl-9 pr-8 py-2 rounded-xl border border-violet-300 bg-white text-xs font-bold text-slate-800 shadow-xs outline-none focus:ring-2 focus:ring-violet-500 transition cursor-pointer"
+              >
+                <option value="">
+                  🏢 Select Company ({companyStats.length} Total Manufacturers Available)
+                </option>
+                {companyStats.map((c) => (
+                  <option key={c.companyName} value={c.companyName}>
+                    {c.companyName} — ({c.count} Products &middot; {c.stock.toLocaleString()} Units &middot; ₹{c.stockValue.toLocaleString("en-IN", { maximumFractionDigits: 0 })})
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {selectedCompanyParam && (
+              <button
+                type="button"
+                onClick={() => router.push(`/dashboard/${role}/inventory/products?filter=companies`)}
+                className="inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl bg-white border border-rose-200 text-rose-600 hover:bg-rose-50 text-xs font-bold shadow-xs transition cursor-pointer shrink-0"
+              >
+                <FaTimes size={10} />
+                <span>Clear Company Filter</span>
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ==================== ACTIVE FILTER BANNER (NON-COMPANY) ==================== */}
+      {activeFilter !== "all" && activeFilter !== "companies" && !selectedCompanyParam && (
+        <div className="flex flex-wrap items-center justify-between gap-2.5 px-4 py-2.5 rounded-xl bg-blue-50/90 border border-blue-200/80 shadow-xs">
+          <div className="flex items-center gap-2 text-xs text-blue-900">
+            <FaFilter className="text-blue-600 shrink-0" />
+            <span>
+              Active Filter:{" "}
+              <strong className="font-bold text-blue-800 underline">
+                {getFilterLabel()}
+              </strong>{" "}
+              <span className="font-semibold text-blue-600">
+                ({displayProducts.length} {displayProducts.length === 1 ? "product" : "products"} shown)
+              </span>
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={() => handleCardClick("all")}
+            className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg bg-white border border-blue-300 text-blue-700 hover:bg-blue-600 hover:text-white text-xs font-semibold shadow-xs transition-all cursor-pointer"
+          >
+            <span>✕ Clear Filter</span>
+            <span className="text-[10px] opacity-75">(Show All)</span>
+          </button>
+        </div>
+      )}
+
+      {/* ==================== 5-TIER PRODUCT HIERARCHY FILTER ==================== */}
+      <InventoryHierarchyFilter
+        initialValues={hierarchyFilters}
+        onChange={(newFilters) => setHierarchyFilters(newFilters)}
+        onReset={() =>
+          setHierarchyFilters({
+            companyCode: "",
+            divisionCode: "",
+            subDivisionCode: "",
+            categoryCode: "",
+            productCode: "",
+          })
+        }
+        title="5-Tier Product Hierarchy Search (Company → Division → Sub-Division → Category → Product)"
+        subtitle="Narrow down catalog products according to exact pharma organization hierarchy"
+      />
 
       {/* ==================== TABLE CARD ==================== */}
       <div
@@ -646,11 +1099,133 @@ export default function ProductsPage() {
         </div>
       </div>
 
+      {/* ==================== COMPANY BREAKDOWN MODAL ==================== */}
+      {isCompanyModalOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fadeIn"
+          onClick={() => setIsCompanyModalOpen(false)}
+        >
+          <div
+            className="relative w-full max-w-3xl rounded-2xl bg-white shadow-2xl border border-slate-200 overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Modal Header */}
+            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 bg-gradient-to-r from-violet-600 to-indigo-600 text-white">
+              <div className="flex items-center gap-3">
+                <div className="p-2 rounded-xl bg-white/20">
+                  <FaBuilding size={18} />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold">Pharma Companies & Manufacturers</h3>
+                  <p className="text-xs text-violet-100 mt-0.5">
+                    {companyStats.length} total companies linked with catalog products
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsCompanyModalOpen(false)}
+                className="p-2 rounded-lg bg-white/10 hover:bg-white/20 text-white transition-colors cursor-pointer"
+              >
+                <FaTimes size={14} />
+              </button>
+            </div>
+
+            {/* Modal Body: Table of companies */}
+            <div className="p-6 max-h-[65vh] overflow-y-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-slate-200 bg-slate-50 text-xs font-bold text-slate-500 uppercase tracking-wider">
+                    <th className="px-4 py-2.5 text-left w-12">#</th>
+                    <th className="px-4 py-2.5 text-left">Company Name</th>
+                    <th className="px-4 py-2.5 text-center">Products</th>
+                    <th className="px-4 py-2.5 text-right">Stock (Units)</th>
+                    <th className="px-4 py-2.5 text-right">Stock Value (₹)</th>
+                    <th className="px-4 py-2.5 text-center w-28">Action</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {companyStats.map((c, idx) => (
+                    <tr
+                      key={c.companyName + idx}
+                      className="hover:bg-slate-50/80 transition-colors"
+                    >
+                      <td className="px-4 py-3 text-xs text-slate-400 font-medium">
+                        {idx + 1}
+                      </td>
+                      <td className="px-4 py-3 font-semibold text-slate-800">
+                        {c.companyName}
+                      </td>
+                      <td className="px-4 py-3 text-center">
+                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-bold bg-violet-100 text-violet-700">
+                          {c.count}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-right font-medium text-slate-600 tabular-nums">
+                        {c.stock.toLocaleString()}
+                      </td>
+                      <td className="px-4 py-3 text-right font-semibold text-slate-800 tabular-nums">
+                        ₹ {c.stockValue.toLocaleString("en-IN", { maximumFractionDigits: 2 })}
+                      </td>
+                      <td className="px-4 py-3 text-center">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setIsCompanyModalOpen(false);
+                            router.push(
+                              `/dashboard/${role}/inventory/products?filter=companies&company=${encodeURIComponent(
+                                c.companyName
+                              )}`
+                            );
+                          }}
+                          className="inline-flex items-center gap-1 px-3 py-1 rounded-lg text-xs font-semibold bg-violet-600 text-white hover:bg-violet-700 transition-colors shadow-xs cursor-pointer"
+                        >
+                          <span>Filter</span>
+                          <FaArrowRight size={9} />
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Modal Footer */}
+            <div className="flex items-center justify-between px-6 py-3.5 border-t border-slate-100 bg-slate-50">
+              <span className="text-xs text-slate-500 font-medium">
+                Total {companyStats.length} companies &middot; {totalProducts} products
+              </span>
+              <button
+                type="button"
+                onClick={() => setIsCompanyModalOpen(false)}
+                className="px-4 py-1.5 rounded-xl text-xs font-semibold bg-white border border-slate-300 text-slate-700 hover:bg-slate-100 transition-colors cursor-pointer"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <AddProductModal
         isOpen={isAddModalOpen}
         onClose={() => setIsAddModalOpen(false)}
         onSuccess={loadProducts}
       />
     </div>
+  );
+}
+
+export default function ProductsPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-[400px] flex items-center justify-center p-8 text-center text-sm font-medium text-slate-500">
+          Loading Products...
+        </div>
+      }
+    >
+      <ProductsContent />
+    </Suspense>
   );
 }

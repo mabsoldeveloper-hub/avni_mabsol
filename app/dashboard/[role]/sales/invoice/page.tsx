@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState, useCallback, type ReactElement } from "react";
 import Link from "next/link";
+import { useParams } from "next/navigation";
 import { useFinancialYear } from "@/context/FinancialYearContext";
 import { useCompany } from "@/context/CompanyContext";
 import {
@@ -89,6 +90,8 @@ function typeActiveClass(key: string, fallbackIndex: number): string {
 }
 
 export default function InvoicePage() {
+    const routeParams = useParams();
+    const currentRole = (routeParams?.role as string) || "admin";
 
     const [invoices, setInvoices] = useState<InvoiceRow[]>([]);
     const [search, setSearch] = useState("");
@@ -561,7 +564,7 @@ export default function InvoicePage() {
                         </div>
 
                         <Link
-                            href="/dashboard/sales/invoice/create"
+                            href={`/dashboard/${currentRole}/sales/invoice/create`}
                             className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold shadow-md transition"
                         >
                             <FaPlus size={10} /> + Create Invoice
@@ -729,7 +732,7 @@ export default function InvoicePage() {
                                             <div className="flex items-center justify-center gap-1.5">
                                                 {(row.type === "PROFORMA" || row.billType === "PROFORMA") && !Boolean(row.isConverted) && row.status !== "Converted" && !row.convertedToVcn && (
                                                     <Link
-                                                        href={`/dashboard/sales/invoice/create?convertFrom=${encodeURIComponent(row.vcn)}`}
+                                                        href={`/dashboard/${currentRole}/sales/invoice/create?convertFrom=${encodeURIComponent(row.vcn)}`}
                                                         className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-extrabold bg-amber-600 hover:bg-amber-700 text-white shadow-sm transition"
                                                         title="Convert this Proforma / Kaccha Bill into a Final Tax Invoice"
                                                     >
@@ -737,7 +740,7 @@ export default function InvoicePage() {
                                                     </Link>
                                                 )}
                                                 <Link
-                                                    href={`/dashboard/sales/invoice/${encodeURIComponent(row.vcn)}`}
+                                                    href={`/dashboard/${currentRole}/sales/invoice/${encodeURIComponent(row.vcn)}`}
                                                     className="inline-flex items-center justify-center px-3 py-1 rounded-lg text-xs font-medium bg-gray-800 text-white hover:bg-gray-900 transition-colors duration-200"
                                                 >
                                                     View

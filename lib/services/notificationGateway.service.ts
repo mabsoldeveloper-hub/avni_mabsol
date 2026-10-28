@@ -54,9 +54,19 @@ export class NotificationGatewayService {
 
     try {
       const activeConfig = config || (await this.getConfig());
-      const provider = activeConfig?.whatsapp?.provider || "mock";
+      const metaAccessToken =
+        activeConfig?.whatsapp?.metaAccessToken ||
+        process.env.WHATSAPP_TOKEN ||
+        process.env.META_ACCESS_TOKEN ||
+        "";
+      const metaPhoneNumberId =
+        activeConfig?.whatsapp?.metaPhoneNumberId ||
+        process.env.PHONE_NUMBER_ID ||
+        process.env.WHATSAPP_PHONE_NUMBER_ID ||
+        process.env.META_PHONE_NUMBER_ID ||
+        "";
 
-      if (provider === "meta" && activeConfig?.whatsapp?.metaAccessToken && activeConfig?.whatsapp?.metaPhoneNumberId) {
+      if (metaAccessToken && metaPhoneNumberId) {
         const payload: any = {
           messaging_product: "whatsapp",
           recipient_type: "individual",
@@ -83,12 +93,12 @@ export class NotificationGatewayService {
         }
 
         const res = await fetch(
-          `https://graph.facebook.com/v19.0/${activeConfig.whatsapp.metaPhoneNumberId}/messages`,
+          `https://graph.facebook.com/v19.0/${metaPhoneNumberId}/messages`,
           {
             method: "POST",
             headers: {
               "Content-Type": "application/json",
-              Authorization: `Bearer ${activeConfig.whatsapp.metaAccessToken}`,
+              Authorization: `Bearer ${metaAccessToken}`,
             },
             body: JSON.stringify(payload),
           }
@@ -102,13 +112,13 @@ export class NotificationGatewayService {
         }
       }
 
-      // Mock / Sandbox Mode for instant local testing
-      console.log(`[MOCK WHATSAPP] Sent to ${to}: ${message}`);
+      // If credentials are not configured, log and return informative error
+      console.warn(`[WHATSAPP CONFIG] Meta PHONE_NUMBER_ID is not configured for automatic background dispatch to ${to}.`);
       return {
-        success: true,
+        success: false,
         channel: "whatsapp",
         recipient: to,
-        messageId: `mock_wa_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`,
+        error: "Meta WhatsApp PHONE_NUMBER_ID is not configured in settings or .env file. Please use the 1-Click 'Open in WhatsApp Web/App' button to send directly to customer.",
       };
     } catch (err: any) {
       console.error("WhatsApp Send Error:", err);
@@ -119,6 +129,197 @@ export class NotificationGatewayService {
   /**
    * Send Email Message (SMTP / Mock)
    */
+  // static async sendEmail({
+  //   to,
+  //   subject,
+  //   html,
+  //   text,
+  //   config,
+  // }: {
+  //   to: string;
+  //   subject: string;
+  //   html: string;
+  //   text?: string;
+  //   config?: INotificationGatewayConfig | null;
+  // }): Promise<ISendMessageResult> {
+  //   if (!to || !to.includes("@")) {
+  //     return {
+  //       success: false,
+  //       channel: "email",
+  //       recipient: to,
+  //       error: "Invalid email address",
+  //     };
+  //   }
+  
+  //   try {
+  //     const activeConfig =
+  //       config || (await this.getConfig());
+  
+  //     if (!activeConfig) {
+  //       return {
+  //         success: false,
+  //         channel: "email",
+  //         recipient: to,
+  //         error:
+  //           "Email gateway configuration not found",
+  //       };
+  //     }
+  
+  //     const emailConfig =
+  //       activeConfig.email;
+  
+  //     const provider =
+  //       emailConfig?.provider || "";
+  
+  //     /* =====================================================
+  //        SMTP EMAIL
+  //        ===================================================== */
+  
+  //     if (provider === "smtp") {
+  //       if (
+  //         !emailConfig?.smtpHost ||
+  //         !emailConfig?.smtpUser ||
+  //         !emailConfig?.smtpPass
+  //       ) {
+  //         return {
+  //           success: false,
+  //           channel: "email",
+  //           recipient: to,
+  //           error:
+  //             "SMTP configuration is incomplete. Please check SMTP host, username and password.",
+  //         };
+  //       }
+  
+  //       try {
+  //         const nodemailer =
+  //           require("nodemailer");
+  
+  //         const transporter =
+  //           nodemailer.createTransport({
+  //             host: emailConfig.smtpHost,
+  
+  //             port:
+  //               emailConfig.smtpPort || 587,
+  
+  //             secure:
+  //               !!emailConfig.smtpSecure,
+  
+  //             auth: {
+  //               user:
+  //                 emailConfig.smtpUser,
+  
+  //               pass:
+  //                 emailConfig.smtpPass,
+  //             },
+  
+  //             // Helps prevent hanging forever
+  //             connectionTimeout: 15000,
+  //             greetingTimeout: 15000,
+  //             socketTimeout: 20000,
+  //           });
+  
+  //         /* =================================================
+  //            VERIFY SMTP CONNECTION FIRST
+  //            ================================================= */
+  
+  //         await transporter.verify();
+  
+  //         /* =================================================
+  //            SEND EMAIL
+  //            ================================================= */
+  
+  //         const info =
+  //           await transporter.sendMail({
+  //             from: `"${emailConfig.fromName || "Mabsol Pharma"}" <${
+  //               emailConfig.fromEmail ||
+  //               emailConfig.smtpUser
+  //             }>`,
+  //             to,
+  //             subject,
+  //             text: text || subject,
+  //             html,
+  //           });
+  
+  //         console.log(
+  //           "[SMTP EMAIL SENT]",
+  //           {
+  //             to,
+  //             subject,
+  //             messageId:
+  //               info?.messageId,
+  //             accepted:
+  //               info?.accepted,
+  //             rejected:
+  //               info?.rejected,
+  //           }
+  //         );
+  
+  //         return {
+  //           success: true,
+  //           channel: "email",
+  //           recipient: to,
+  //           messageId:
+  //             info?.messageId ||
+  //             `smtp_${Date.now()}`,
+  //         };
+  //       } catch (smtpErr: any) {
+  //         console.error(
+  //           "[SMTP EMAIL ERROR]",
+  //           {
+  //             to,
+  //             subject,
+  //             error:
+  //               smtpErr?.message,
+  //             code:
+  //               smtpErr?.code,
+  //             command:
+  //               smtpErr?.command,
+  //             response:
+  //               smtpErr?.response,
+  //           }
+  //         );
+  
+  //         return {
+  //           success: false,
+  //           channel: "email",
+  //           recipient: to,
+  //           error:
+  //             smtpErr?.response ||
+  //             smtpErr?.message ||
+  //             "SMTP email sending failed",
+  //         };
+  //       }
+  //     }
+  
+  //     /* =====================================================
+  //        NO SMTP CONFIGURATION
+  //        ===================================================== */
+  
+  //     return {
+  //       success: false,
+  //       channel: "email",
+  //       recipient: to,
+  //       error:
+  //         `Email provider is not configured for SMTP. Current provider: ${
+  //           provider || "not configured"
+  //         }`,
+  //     };
+  //   } catch (err: any) {
+  //     console.error(
+  //       "Email Send Error:",
+  //       err
+  //     );
+  
+  //     return {
+  //       success: false,
+  //       channel: "email",
+  //       recipient: to,
+  //       error:
+  //         err?.message ||
+  //         "Failed to send email",
+  //     };
+  //   }
+  // }
   static async sendEmail({
     to,
     subject,
@@ -138,43 +339,103 @@ export class NotificationGatewayService {
 
     try {
       const activeConfig = config || (await this.getConfig());
-      const provider = activeConfig?.email?.provider || "mock";
+      const smtpHost = activeConfig?.email?.smtpHost || process.env.SMTP_HOST;
+      const smtpPort = Number(activeConfig?.email?.smtpPort || process.env.SMTP_PORT || 465);
+      const smtpSecure =
+        activeConfig?.email?.smtpSecure !== undefined
+          ? !!activeConfig.email.smtpSecure
+          : (process.env.BACKUP_SMTP_SECURE === "true" || smtpPort === 465);
+      const smtpUser = activeConfig?.email?.smtpUser || process.env.SMTP_USER;
+      const smtpPass = activeConfig?.email?.smtpPass || process.env.SMTP_PASS;
+      const fromEmail = activeConfig?.email?.fromEmail || process.env.EMAIL_FROM || smtpUser || "";
+      const fromName = activeConfig?.email?.fromName || "Mabsol Pharma CRM";
 
-      if (provider === "smtp" && activeConfig?.email?.smtpHost && activeConfig?.email?.smtpUser) {
+      let lastError = "";
+
+      if (smtpHost && smtpUser && smtpPass) {
         try {
-          // Dynamic import of nodemailer if installed, fallback gracefully
           const nodemailer = require("nodemailer");
           const transporter = nodemailer.createTransport({
-            host: activeConfig.email.smtpHost,
-            port: activeConfig.email.smtpPort || 587,
-            secure: !!activeConfig.email.smtpSecure,
+            host: smtpHost,
+            port: smtpPort,
+            secure: smtpSecure,
             auth: {
-              user: activeConfig.email.smtpUser,
-              pass: activeConfig.email.smtpPass,
+              user: smtpUser,
+              pass: smtpPass,
             },
+            connectionTimeout: 12000,
+            socketTimeout: 12000,
           });
 
           const info = await transporter.sendMail({
-            from: `"${activeConfig.email.fromName || 'MabsolCrm'}" <${activeConfig.email.fromEmail || activeConfig.email.smtpUser}>`,
+            from: fromEmail.includes("<") ? fromEmail : `"${fromName}" <${smtpUser}>`,
             to,
             subject,
             text: text || subject,
             html,
           });
 
+          console.log(`[SMTP EMAIL DELIVERED] To: ${to} | ID: ${info.messageId}`);
           return { success: true, channel: "email", recipient: to, messageId: info.messageId };
         } catch (smtpErr: any) {
-          console.warn("SMTP send failed, logging fallback:", smtpErr.message);
+          lastError = smtpErr?.message || "Primary SMTP failure";
+          console.warn("[PRIMARY SMTP FAILED] Trying backup SMTP fallback...", smtpErr.message);
         }
       }
 
-      // Mock / Console Fallback
-      console.log(`[MOCK EMAIL] To: ${to} | Subject: ${subject}`);
+      // Check Backup SMTP (e.g. Gmail fallback)
+      const backupHost = process.env.BACKUP_SMTP_HOST || "smtp.gmail.com";
+      const backupUser = process.env.BACKUP_SMTP_USER || "mabsoldeveloper@gmail.com";
+      const backupPass = (process.env.BACKUP_SMTP_PASS || "xfox dvce xbrl jgqk").replace(/\s+/g, "");
+      const backupPort = Number(process.env.BACKUP_SMTP_PORT || 465);
+      const backupSecure = process.env.BACKUP_SMTP_SECURE !== "false";
+
+      if (backupHost && backupUser && backupPass && (backupUser !== smtpUser || backupHost !== smtpHost)) {
+        try {
+          const nodemailer = require("nodemailer");
+          const backupTransporter = nodemailer.createTransport({
+            host: backupHost,
+            port: backupPort,
+            secure: backupSecure,
+            auth: {
+              user: backupUser,
+              pass: backupPass,
+            },
+            connectionTimeout: 12000,
+            socketTimeout: 12000,
+          });
+
+          const info = await backupTransporter.sendMail({
+            from: `"${fromName}" <${backupUser}>`,
+            to,
+            subject,
+            text: text || subject,
+            html,
+          });
+
+          console.log(`[BACKUP SMTP EMAIL DELIVERED] To: ${to} | ID: ${info.messageId}`);
+          return { success: true, channel: "email", recipient: to, messageId: info.messageId };
+        } catch (backupErr: any) {
+          console.error("Backup SMTP also failed:", backupErr.message);
+          return {
+            success: false,
+            channel: "email",
+            recipient: to,
+            error: `Primary SMTP error: ${lastError} | Backup error: ${backupErr.message}`,
+          };
+        }
+      }
+
+      if (lastError) {
+        return { success: false, channel: "email", recipient: to, error: `SMTP Error: ${lastError}` };
+      }
+
+      console.warn("[EMAIL CONFIG] SMTP credentials not found in config or .env.");
       return {
-        success: true,
+        success: false,
         channel: "email",
         recipient: to,
-        messageId: `mock_email_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`,
+        error: "SMTP server credentials not configured. Please check SMTP_HOST and SMTP_USER in .env or settings.",
       };
     } catch (err: any) {
       console.error("Email Send Error:", err);
@@ -201,17 +462,22 @@ export class NotificationGatewayService {
 
     try {
       const activeConfig = config || (await this.getConfig());
-      const provider = activeConfig?.sms?.provider || "mock";
+      const apiKey =
+        activeConfig?.sms?.apiKey ||
+        process.env.FAST2SMS_API_KEY ||
+        process.env.SMS_API_KEY ||
+        "";
+      const provider = activeConfig?.sms?.provider || (apiKey ? "fast2sms" : "none");
 
-      if (provider === "fast2sms" && activeConfig?.sms?.apiKey) {
+      if ((provider === "fast2sms" || apiKey) && apiKey) {
         const res = await fetch("https://www.fast2sms.com/dev/bulkV2", {
           method: "POST",
           headers: {
-            authorization: activeConfig.sms.apiKey,
+            authorization: apiKey,
             "Content-Type": "application/json",
           },
           body: JSON.stringify({
-            route: activeConfig.sms.route || "q",
+            route: activeConfig?.sms?.route || "q",
             message,
             language: "english",
             flash: 0,
@@ -223,17 +489,17 @@ export class NotificationGatewayService {
         if (data?.return === true) {
           return { success: true, channel: "sms", recipient: to, messageId: data.request_id || "fast2sms_ok" };
         } else {
-          return { success: false, channel: "sms", recipient: to, error: data?.message?.[0] || "Fast2SMS error" };
+          return { success: false, channel: "sms", recipient: to, error: data?.message?.[0] || "Fast2SMS API error" };
         }
       }
 
-      // Mock SMS
-      console.log(`[MOCK SMS] To: ${cleanPhone} | Message: ${message}`);
+      // No active SMS Gateway configured
+      console.warn(`[SMS NOT CONFIGURED] Attempted SMS to ${cleanPhone}, but no active SMS gateway API key is configured.`);
       return {
-        success: true,
+        success: false,
         channel: "sms",
         recipient: to,
-        messageId: `mock_sms_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`,
+        error: "SMS gateway is not configured. Please add FAST2SMS_API_KEY or SMS_API_KEY in .env or settings, or send via WhatsApp / Email.",
       };
     } catch (err: any) {
       console.error("SMS Send Error:", err);

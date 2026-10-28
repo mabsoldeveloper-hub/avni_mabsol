@@ -34,8 +34,10 @@ import {
   Database,
   Zap,
 } from "lucide-react";
-import { useRouter } from "next/navigation";
+import { useRouter, useParams } from "next/navigation";
 import { usePermission } from "@/context/PermissionContext";
+import { useUser } from "@/context/UserContext";
+import { getRoleBasedHref } from "@/lib/defaultMenuData";
 
 interface QuickNavLink {
   label: string;
@@ -125,6 +127,12 @@ export default function GlobalSearchModal({
   setQuery,
 }: GlobalSearchModalProps) {
   const router = useRouter();
+  const params = useParams();
+  const { user } = useUser();
+  const activeRole = (typeof params?.role === "string" ? params.role : (user?.roleType || "admin"))
+    .toLowerCase()
+    .trim()
+    .replace(/[\s_]+/g, "-");
   const { can } = usePermission();
   const [activeCategory, setActiveCategory] = useState("all");
   const [loading, setLoading] = useState(false);
@@ -228,7 +236,7 @@ export default function GlobalSearchModal({
   const handleRecentClick = (item: any) => {
     if (item && typeof item === "object" && item.actionUrl) {
       onClose();
-      router.push(item.actionUrl);
+      router.push(getRoleBasedHref(item.actionUrl, activeRole));
       return;
     }
 
@@ -400,7 +408,7 @@ export default function GlobalSearchModal({
 
     if (item.actionUrl) {
       onClose();
-      router.push(item.actionUrl);
+      router.push(getRoleBasedHref(item.actionUrl, activeRole));
     }
   };
 

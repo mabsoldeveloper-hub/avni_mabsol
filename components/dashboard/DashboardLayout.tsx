@@ -3,13 +3,13 @@
 import { useState, useEffect } from "react";
 import Sidebar from "@/components/Sidebar";
 import Topbar from "@/components/Topbar";
+import ModuleAccessGuard from "./ModuleAccessGuard";
 
 export default function DashboardLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
-
   const [collapsed, setCollapsed] = useState(false);
   const [mobile, setMobile] = useState(false);
   const [mounted, setMounted] = useState(false);
@@ -17,26 +17,22 @@ export default function DashboardLayout({
   useEffect(() => {
     const checkScreen = () => {
       const isMobile = window.innerWidth < 992;
-  
+
       setMobile(isMobile);
-  
+
       if (isMobile) {
         setCollapsed(true);
       } else {
         setCollapsed(false);
       }
     };
-  
+
     checkScreen();
     setMounted(true);
-  
+
     window.addEventListener("resize", checkScreen);
-  
-    return () =>
-      window.removeEventListener(
-        "resize",
-        checkScreen
-      );
+
+    return () => window.removeEventListener("resize", checkScreen);
   }, []);
 
   return (
@@ -47,45 +43,39 @@ export default function DashboardLayout({
         mobile={mobile}
       />
 
-{!collapsed && mobile && (
-  <div
-    onClick={() => setCollapsed(true)}
-    style={{
-      position: "fixed",
-      inset: 0,
-      background: "rgba(15, 23, 42, 0.45)",
-      backdropFilter: "blur(8px)",
-      WebkitBackdropFilter: "blur(8px)",
-      zIndex: 1040,
-    }}
-  />
-)}
-
+      {!collapsed && mobile && (
         <div
+          onClick={() => setCollapsed(true)}
           style={{
-            paddingLeft: mobile
-              ? "0px"
-              : collapsed
-              ? "76px"
-              : "265px",
-            width: "100%",
-            transition: mounted ? "padding-left 0.28s cubic-bezier(0.4, 0, 0.2, 1)" : "none",
-            minHeight: "100vh",
-            overflowX: "clip",
+            position: "fixed",
+            inset: 0,
+            background: "rgba(15, 23, 42, 0.45)",
+            backdropFilter: "blur(8px)",
+            WebkitBackdropFilter: "blur(8px)",
+            zIndex: 1040,
           }}
-        >
+        />
+      )}
 
-
-
-
-<Topbar
-  setCollapsed={setCollapsed}
-  collapsed={collapsed}
-  mobile={mobile}
-/>
+      <div
+        style={{
+          paddingLeft: mobile ? "0px" : collapsed ? "76px" : "265px",
+          width: "100%",
+          transition: mounted
+            ? "padding-left 0.28s cubic-bezier(0.4, 0, 0.2, 1)"
+            : "none",
+          minHeight: "100vh",
+          overflowX: "clip",
+        }}
+      >
+        <Topbar
+          setCollapsed={setCollapsed}
+          collapsed={collapsed}
+          mobile={mobile}
+        />
 
         <main className="w-full px-2.5 sm:px-4 py-2.5 min-h-[calc(100vh-68px)]">
-          {children}
+          <ModuleAccessGuard>{children}</ModuleAccessGuard>
         </main>
       </div>
     </>

@@ -14,6 +14,7 @@ import {
 import VfpSyncActions from "@/components/VfpSyncActions";
 import { getVfpStatus } from "@/lib/vfp/status";
 import SyncSystemSelector from "@/components/sync/SyncSystemSelector";
+import SyncCompanySelector from "@/components/sync/SyncCompanySelector";
 import { SYNC_SYSTEMS, getSyncSystem } from "@/components/sync/syncSystems";
 import SyncActivityLogs from "@/components/sync/SyncActivityLogs";
 
@@ -24,6 +25,7 @@ type VfpLogRow = {
   status?: string;
   message?: string;
   error?: string;
+  importedCount?: number;
   createdAt?: Date | string;
 };
 
@@ -47,6 +49,9 @@ export default async function VfpDashboardPage({
   const rawRange = resolvedParams.range;
   const rawStartDate = resolvedParams.startDate;
   const rawEndDate = resolvedParams.endDate;
+  const rawCompanyCode = resolvedParams.companyCode;
+  const rawCompanyId = resolvedParams.companyId;
+
   const selectedSourceId = Array.isArray(rawSource)
     ? rawSource[0]
     : rawSource || "mabsolcrm";
@@ -59,6 +64,13 @@ export default async function VfpDashboardPage({
   const endDate = Array.isArray(rawEndDate)
     ? rawEndDate[0]
     : rawEndDate;
+  const selectedCompanyCode = Array.isArray(rawCompanyCode)
+    ? rawCompanyCode[0]
+    : rawCompanyCode;
+  const selectedCompanyId = Array.isArray(rawCompanyId)
+    ? rawCompanyId[0]
+    : rawCompanyId;
+
   const range = rangeOptions.includes(selectedRange as VfpRange)
     ? (selectedRange as VfpRange)
     : "all";
@@ -79,14 +91,21 @@ export default async function VfpDashboardPage({
     user.isSuperAdmin === true ||
     !user.roleType;
 
-  const status = await getVfpStatus({ range, startDate, endDate, fileLimit }, email);
+  const status = await getVfpStatus({
+    range,
+    startDate,
+    endDate,
+    fileLimit,
+    companyCode: selectedCompanyCode,
+    companyId: selectedCompanyId,
+  }, email);
   const recentLogs = status.recentLogs as VfpLogRow[];
 
   const SelectedSystemIcon = currentSystem.icon;
 
   return (
     <ProtectedPage permission="vfp.view">
-      <div className="w-full max-w-full overflow-x-hidden p-4 sm:p-6 space-y-5 text-slate-900 box-border bg-slate-50/40 min-h-screen">
+      <div className="w-full max-w-full overflow-x-hidden p-3 sm:p-6 space-y-4 sm:space-y-5 text-slate-900 box-border bg-slate-50/40 min-h-screen">
 
         {/* Eyebrow & Page Header */}
         <div>
@@ -110,8 +129,11 @@ export default async function VfpDashboardPage({
               </p>
             </div>
 
-            {/* Top Right Actions: System Selector Dropdown, Settings Link, Worker Status */}
+            {/* Top Right Actions: Company Selector Dropdown, System Selector Dropdown, Settings Link, Worker Status */}
             <div className="flex items-center gap-2.5 flex-wrap">
+              {/* Dropdown: Select Company to Sync */}
+              <SyncCompanySelector initialCompanyCode={selectedCompanyCode || status.companyCode} />
+
               {/* Dropdown: Where to sync data */}
               <SyncSystemSelector currentSystemId={currentSystem.id} />
 
@@ -196,7 +218,7 @@ export default async function VfpDashboardPage({
             <span className="animate-flow-line rounded-full" style={{ animationDelay: "1.2s" }} />
           </div>
 
-          {/* Node 3: CRM DBF Table */}
+          {/* Node 3: Cloud CRM Storage */}
           <div className="flex items-center gap-3 flex-1 min-w-0 p-1">
             <div
               className="w-10 h-10 flex items-center justify-center bg-slate-100 text-slate-700 shrink-0 shadow-2xs"
@@ -243,6 +265,7 @@ export default async function VfpDashboardPage({
               status: l.status,
               message: l.message,
               error: l.error,
+              importedCount: l.importedCount,
               createdAt: l.createdAt ? String(l.createdAt) : undefined,
             }))}
             userEmail={user.email}

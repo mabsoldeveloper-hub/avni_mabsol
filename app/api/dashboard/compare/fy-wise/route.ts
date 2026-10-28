@@ -345,12 +345,18 @@ export async function GET(req: Request) {
                 const endDate = new Date(fyDoc.endDate).toISOString().slice(0, 10);
                 const color = FY_COLORS[fyIdx % FY_COLORS.length];
 
+                // Dynamically build per-FY VFP filter for this specific financial year
+                const perFyParams = new URLSearchParams(searchParams);
+                perFyParams.delete("fyIds");
+                if (fyDoc._id) perFyParams.set("fyId", String(fyDoc._id));
+                const perFyCompanyMatch = await getCompanyVfpFilter(perFyParams);
+
                 const dateQueryMDIS = buildFYDateQuery("DATE", startDate, endDate);
                 const dateQueryDIS = buildFYDateQuery("DATE", startDate, endDate);
                 const dateQueryGLedger = buildFYDateQuery("DATE", startDate, endDate);
 
                 // ── 1. SalesMdis: Sales / Purchase / Returns ─────────────────
-                const mdisMatch = combineFilters(companyVfpMatch, mrMdisFilter, dateQueryMDIS, {
+                const mdisMatch = combineFilters(perFyCompanyMatch, mrMdisFilter, dateQueryMDIS, {
                     TYPE: { $in: ["S", "P", "R"] },
                 });
                 const mdisDocs = await SalesMdis.find(mdisMatch).lean();
@@ -402,7 +408,7 @@ export async function GET(req: Request) {
                 const netSales = totalSales - salesReturns;
 
                 // ── 2. GLedger: Collections & Payments ───────────────────────
-                const gledgerMatch = combineFilters(companyVfpMatch, mrGledgerFilter, dateQueryGLedger, {
+                const gledgerMatch = combineFilters(perFyCompanyMatch, mrGledgerFilter, dateQueryGLedger, {
                     BOOK: { $in: ["R", "P"] },
                 });
                 const gledgerDocs = await GLedger.find(gledgerMatch).lean();
@@ -431,7 +437,7 @@ export async function GET(req: Request) {
                 });
 
                 // ── 3. SalesDis: Product + Company breakdown ──────────────────
-                const disMatch = combineFilters(companyVfpMatch, mrDisFilter, dateQueryDIS);
+                const disMatch = combineFilters(perFyCompanyMatch, mrDisFilter, dateQueryDIS);
                 const disDocs = await SalesDis.find(disMatch).lean();
 
                 const productMapAgg = new Map<number, { code: number; qty: number; amount: number }>();

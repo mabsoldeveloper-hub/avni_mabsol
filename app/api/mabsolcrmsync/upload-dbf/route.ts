@@ -9,6 +9,8 @@ import crypto from "crypto";
 
 import jwt from "jsonwebtoken";
 import User from "@/models/User";
+import Company from "@/models/Company";
+import ExeSyncLog from "@/models/ExeSyncLog";
 import { validateUserLoginAccess } from "@/lib/services/superAdmin.service";
 
 export const runtime = "nodejs";
@@ -47,6 +49,55 @@ export async function POST(request: NextRequest) {
 
     if (!user) {
       return NextResponse.json({ success: false, error: "Unauthorized. Please login or provide a valid agent token." }, { status: 401 });
+    }
+
+    // Check if this user's EXE access is suspended by Super Admin
+    if (user.exeAccessSuspended) {
+      const runId = `rej-${Date.now()}`;
+      try {
+        let isHeadOffice = true;
+        let parentCompanyId = null;
+        let parentCompanyName = "";
+        const uComp = user.companyId ? await Company.findById(user.companyId) : null;
+        if (uComp && (uComp.isHeadOffice === false || uComp.parentCompanyId)) {
+          isHeadOffice = false;
+          parentCompanyId = uComp.parentCompanyId || null;
+          if (parentCompanyId) {
+            const pComp = await Company.findById(parentCompanyId);
+            parentCompanyName = pComp?.companyName || "";
+          }
+        }
+        await ExeSyncLog.create({
+          runId,
+          companyId: user.companyId || null,
+          companyName: uComp?.companyName || "",
+          companyCode: uComp?.companyCode || "DEFAULT",
+          isHeadOffice,
+          parentCompanyId,
+          parentCompanyName,
+          userId: user._id,
+          userName: user.name || "Unknown",
+          userEmail: user.email,
+          licenseKey: request.headers.get("x-license-key") || "",
+          deviceId: request.headers.get("x-device-id") || "",
+          deviceName: request.headers.get("x-device-name") || "",
+          syncType: "desktop_agent_auto",
+          status: "rejected_suspended",
+          tablesSynced: [],
+          totalRecords: 0,
+          durationSeconds: 0,
+          error: `Desktop Agent (.EXE) sync access suspended by Super Administrator.${user.exeSuspendedReason ? ` Reason: ${user.exeSuspendedReason}` : ""}`,
+        });
+      } catch {}
+
+      return NextResponse.json(
+        {
+          success: false,
+          exeSuspended: true,
+          error: `Desktop Agent (.EXE) sync access has been suspended for ${user.name || user.email} by Super Administrator.${user.exeSuspendedReason ? ` Reason: ${user.exeSuspendedReason}` : ""}`,
+        },
+        { status: 403 }
+      );
     }
 
     // Verify user account is active, approved, and not suspended or deactivated
@@ -136,9 +187,45 @@ export async function POST(request: NextRequest) {
         }
 
         // 4. Device Binding & Multi-Device Validation
+        const cleanDeviceId = (deviceId || "").trim().toLowerCase();
         const authorizedDevices: any[] = Array.isArray(config.authorizedDevices) ? config.authorizedDevices : [];
-        const deviceEntry = deviceId ? authorizedDevices.find((d: any) => d.deviceId === deviceId && d.status === "active") : null;
-        const keyEntry = authorizedDevices.find((d: any) => d.licenseKey === licenseKey && d.status === "active");
+        const anyDeviceMatch = cleanDeviceId
+          ? authorizedDevices.find((d: any) => (d.deviceId || "").trim().toLowerCase() === cleanDeviceId)
+          : null;
+
+        if (anyDeviceMatch && anyDeviceMatch.status === "suspended") {
+          try {
+            await ExeSyncLog.create({
+              runId: `rej-dev-${Date.now()}`,
+              companyId: user.companyId || null,
+              companyName: config.companyName || "",
+              companyCode: config.companyCode || "DEFAULT",
+              userId: user._id,
+              userName: user.name || "Unknown",
+              userEmail: user.email,
+              licenseKey,
+              deviceId,
+              deviceName: anyDeviceMatch.deviceName || deviceName || deviceId,
+              syncType: "desktop_agent_auto",
+              status: "rejected_suspended",
+              tablesSynced: [],
+              totalRecords: 0,
+              durationSeconds: 0,
+              error: `Workstation machine "${anyDeviceMatch.deviceName || deviceId}" suspended by Super Administrator.${anyDeviceMatch.suspendedReason ? ` Reason: ${anyDeviceMatch.suspendedReason}` : ""}`,
+            });
+          } catch {}
+
+          return NextResponse.json(
+            {
+              success: false,
+              deviceSuspended: true,
+              error: `Workstation machine "${anyDeviceMatch.deviceName || deviceId}" has been suspended by Super Administrator.${anyDeviceMatch.suspendedReason ? ` Reason: ${anyDeviceMatch.suspendedReason}` : ""}`,
+            },
+            { status: 403 }
+          );
+        }
+
+        const deviceEntry = anyDeviceMatch && anyDeviceMatch.status === "active" ? anyDeviceMatch : null;
 
         if (deviceEntry) {
           // Check if this specific device license is expired
@@ -154,72 +241,100 @@ export async function POST(request: NextRequest) {
           }
           // Update last seen timestamp
           VfpConfig.updateOne(
-            { _id: config._id, "authorizedDevices.deviceId": deviceId },
+            { _id: config._id, "authorizedDevices.deviceId": { $regex: new RegExp(`^${cleanDeviceId}$`, "i") } },
             { $set: { "authorizedDevices.$.lastSeenAt": new Date(), "authorizedDevices.$.deviceName": deviceName || deviceEntry.deviceName } }
           ).catch(() => {});
-        } else if (keyEntry && deviceId && keyEntry.deviceId && keyEntry.deviceId !== deviceId) {
+        } else if (cleanDeviceId && (config.boundDeviceId || "").trim().toLowerCase() === cleanDeviceId) {
+          // Primary bound machine - ensure in authorizedDevices
+          await VfpConfig.updateOne(
+            { _id: config._id },
+            {
+              $addToSet: {
+                authorizedDevices: {
+                  deviceId,
+                  deviceName: deviceName || config.boundDeviceName || "Primary Machine",
+                  licenseKey,
+                  activatedAt: config.boundAt || new Date(),
+                  expiresAt: config.licenseExpiresAt,
+                  lastSeenAt: new Date(),
+                  status: "active",
+                  activationEmail: user.email,
+                },
+              },
+            }
+          );
+        } else if (cleanDeviceId && !config.boundDeviceId && authorizedDevices.length === 0) {
+          // First device to use this key -> Bind it!
+          await VfpConfig.updateOne(
+            { _id: config._id },
+            {
+              $set: {
+                boundDeviceId: deviceId,
+                boundDeviceName: deviceName || "Operator Machine",
+                boundAt: new Date(),
+              },
+              $addToSet: {
+                authorizedDevices: {
+                  deviceId,
+                  deviceName: deviceName || "Operator Machine",
+                  licenseKey,
+                  activatedAt: new Date(),
+                  expiresAt: config.licenseExpiresAt,
+                  lastSeenAt: new Date(),
+                  status: "active",
+                  activationEmail: user.email,
+                },
+              },
+            }
+          );
+        } else if (deviceId) {
+          // Unverified device trying to sync with this license key!
           return NextResponse.json(
             {
               success: false,
               deviceMismatch: true,
-              error: `This license key is locked to machine "${keyEntry.deviceName || keyEntry.deviceId}". Please verify your email with OTP in the desktop agent to activate this computer.`,
+              requiresVerification: true,
+              error: `Machine "${deviceName || deviceId}" is not yet authorized for this license key. Please verify your email with the verification code in the desktop agent before syncing.`,
             },
             { status: 403 }
           );
-        } else if (deviceId) {
-          if (!config.boundDeviceId) {
-            // First device to use this key -> Bind it!
-            await VfpConfig.updateOne(
-              { _id: config._id },
-              {
-                $set: {
-                  boundDeviceId: deviceId,
-                  boundDeviceName: deviceName || "Operator Machine",
-                  boundAt: new Date(),
-                },
-                $addToSet: {
-                  authorizedDevices: {
-                    deviceId,
-                    deviceName: deviceName || "Operator Machine",
-                    licenseKey,
-                    activatedAt: new Date(),
-                    expiresAt: config.licenseExpiresAt,
-                    lastSeenAt: new Date(),
-                    status: "active",
-                    activationEmail: user.email,
-                  }
-                }
-              }
-            );
-          } else if (config.boundDeviceId !== deviceId) {
-            // Another device trying to use the same key without being authorized!
-            return NextResponse.json(
-              {
-                success: false,
-                deviceMismatch: true,
-                error: `This machine is not yet authorized for sync. Please enter the verification code sent to your email to activate this device.`,
-              },
-              { status: 403 }
-            );
-          }
         }
 
         // Keep user config's license aligned so future operations know this user is using this license
-        if (user?.email && (!config.email || config.email !== user.email)) {
-          await VfpConfig.updateOne(
-            { email: user.email },
-            {
-              $set: {
-                license: licenseKey,
-                licenseExpiresAt: config.licenseExpiresAt,
-                licenseIssuedAt: config.licenseIssuedAt,
-                licenseStatus: "active",
-                boundDeviceId: deviceId || config.boundDeviceId,
-                boundDeviceName: deviceName || config.boundDeviceName,
+        if (user?.email) {
+          const userKey = "vfp_sync_config_" + user.email;
+          try {
+            await VfpConfig.updateOne(
+              { key: userKey },
+              {
+                $set: {
+                  key: userKey,
+                  email: user.email,
+                  license: licenseKey,
+                  licenseExpiresAt: config.licenseExpiresAt,
+                  licenseIssuedAt: config.licenseIssuedAt,
+                  licenseStatus: "active",
+                  boundDeviceId: deviceId || config.boundDeviceId,
+                  boundDeviceName: deviceName || config.boundDeviceName,
+                },
               },
-            },
-            { upsert: true }
-          );
+              { upsert: true }
+            );
+          } catch (_cfgErr) {
+            await VfpConfig.updateOne(
+              { email: user.email },
+              {
+                $set: {
+                  license: licenseKey,
+                  licenseExpiresAt: config.licenseExpiresAt,
+                  licenseIssuedAt: config.licenseIssuedAt,
+                  licenseStatus: "active",
+                  boundDeviceId: deviceId || config.boundDeviceId,
+                  boundDeviceName: deviceName || config.boundDeviceName,
+                },
+              }
+            ).catch(() => {});
+          }
         }
       } else {
         return NextResponse.json(
@@ -295,32 +410,51 @@ export async function POST(request: NextRequest) {
     const currentEnabled: string[] = existingConfig?.enabledFiles || [];
     const mergedEnabledFiles = Array.from(new Set([...currentEnabled, ...allUploadDbfFiles]));
 
-    // Save uploaded folder location and merged enabled files in VfpConfig
-    await VfpConfig.updateOne(
-      { email: user.email },
-      {
-        $set: {
-          email: user.email,
-          consoleSyncDir: uploadDir,
-          dataDir: uploadDir,
-          companyCode: companyCode,
-          enabledFiles: mergedEnabledFiles,
+    // Save uploaded folder location and merged enabled files in VfpConfig safely
+    const userKey = "vfp_sync_config_" + user.email;
+    try {
+      await VfpConfig.updateOne(
+        { key: userKey },
+        {
+          $set: {
+            key: userKey,
+            email: user.email,
+            consoleSyncDir: uploadDir,
+            dataDir: uploadDir,
+            companyCode: companyCode,
+            enabledFiles: mergedEnabledFiles,
+          },
         },
-      },
-      { upsert: true }
-    );
-    await VfpConfig.updateOne(
-      { key: "vfp_sync_config" },
-      {
-        $set: {
-          consoleSyncDir: uploadDir,
-          dataDir: uploadDir,
-          companyCode: companyCode,
-          enabledFiles: mergedEnabledFiles,
+        { upsert: true }
+      );
+    } catch (_err) {
+      await VfpConfig.updateOne(
+        { email: user.email },
+        {
+          $set: {
+            consoleSyncDir: uploadDir,
+            dataDir: uploadDir,
+            companyCode: companyCode,
+            enabledFiles: mergedEnabledFiles,
+          },
+        }
+      ).catch(() => {});
+    }
+
+    try {
+      await VfpConfig.updateOne(
+        { key: "vfp_sync_config" },
+        {
+          $set: {
+            consoleSyncDir: uploadDir,
+            dataDir: uploadDir,
+            companyCode: companyCode,
+            enabledFiles: mergedEnabledFiles,
+          },
         },
-      },
-      { upsert: true }
-    );
+        { upsert: false }
+      );
+    } catch (_err) {}
 
     const isDirectSync = formData.get("directSync") === "true";
 
@@ -341,6 +475,27 @@ export async function POST(request: NextRequest) {
       }
 
       if (syncError && totalImportedRows === 0 && dbfFileNames.length > 0) {
+        try {
+          await ExeSyncLog.create({
+            runId,
+            companyId: user.companyId || null,
+            companyName: user.companyId?.companyName || companyCode,
+            companyCode,
+            userId: user._id,
+            userName: user.name || "Unknown",
+            userEmail: user.email,
+            licenseKey: request.headers.get("x-license-key") || "",
+            deviceId: request.headers.get("x-device-id") || "",
+            deviceName: request.headers.get("x-device-name") || "",
+            syncType: "desktop_agent_auto",
+            status: "failed",
+            tablesSynced: dbfFileNames,
+            totalRecords: 0,
+            durationSeconds: 0,
+            error: syncError,
+          });
+        } catch {}
+
         return NextResponse.json(
           {
             success: false,
@@ -350,6 +505,27 @@ export async function POST(request: NextRequest) {
           { status: 500 }
         );
       }
+
+      try {
+        await ExeSyncLog.create({
+          runId,
+          companyId: user.companyId || null,
+          companyName: user.companyId?.companyName || companyCode,
+          companyCode,
+          userId: user._id,
+          userName: user.name || "Unknown",
+          userEmail: user.email,
+          licenseKey: request.headers.get("x-license-key") || "",
+          deviceId: request.headers.get("x-device-id") || "",
+          deviceName: request.headers.get("x-device-name") || "",
+          syncType: "desktop_agent_auto",
+          status: "success",
+          tablesSynced: dbfFileNames,
+          totalRecords: totalImportedRows,
+          durationSeconds: 0,
+          completedAt: new Date(),
+        });
+      } catch {}
 
       return NextResponse.json({
         success: true,

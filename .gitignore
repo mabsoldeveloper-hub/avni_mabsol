@@ -49,6 +49,8 @@ next-env.d.ts
 *.DBF
 *.dat
 *.DAT
+worker-config.json
+worker-config*.json
 
 # Electron desktop agent build outputs & dependencies
 /dist-electron/

@@ -1,48 +1,9 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest } from "next/server";
+import { withAuth } from "@/app/api/_middlewares/auth.middleware";
+import { RoleController } from "@/app/api/roles/role.controller";
 
-import connectDB from "@/lib/mongodb";
+export const dynamic = "force-dynamic";
 
-import UserPermission from "@/models/UserPermission";
-
-interface Props {
-  params: Promise<{
-    userId: string;
-  }>;
-}
-
-export async function GET(
-  req: NextRequest,
-  { params }: Props
-) {
-
-  try {
-
-    await connectDB();
-
-    const { userId } =
-      await params;
-
-    const permissions =
-      await UserPermission.find({
-        userId,
-      });
-
-    return NextResponse.json(
-      permissions
-    );
-
-  } catch (error: any) {
-
-    return NextResponse.json(
-      {
-        success: false,
-        error: error.message,
-      },
-      {
-        status: 500,
-      }
-    );
-
-  }
-
+export async function GET(req: NextRequest, props: any) {
+  return withAuth(RoleController.getUserPermissions)(req, props);
 }

@@ -1,4 +1,3 @@
-
 import jwt from "jsonwebtoken";
 import { cookies } from "next/headers";
 
@@ -10,58 +9,42 @@ import "@/models/Role";
 import "@/models/CompanyMaster";
 
 export async function verifyToken() {
+  const cookieStore = await cookies();
 
-  const cookieStore =
-    await cookies();
+  const token = cookieStore.get("token")?.value;
 
-  const token =
-    cookieStore
-      .get("token")
-      ?.value;
-
-  if (!token)
+  if (!token) {
     return null;
+  }
 
   try {
-
     return jwt.verify(
       token,
       process.env.JWT_SECRET || "mabsol_super_secret_jwt_key_2026"
     );
-
   } catch {
-
     return null;
-
   }
-
 }
 
 export async function getCurrentUser() {
-
   await connectDB();
 
-  const payload =
-    await verifyToken();
+  const payload = await verifyToken();
 
-  if (!payload)
+  if (!payload) {
     return null;
+  }
 
-  const user =
-    await User.findById(
-      (payload as any).id
+  const user = await User.findById((payload as any).id)
+    .populate(
+      "companyId",
+      "companyName logo enabledModules isHeadOffice parentCompanyId status companyCode"
     )
-
-      .populate(
-        "companyId",
-        "companyName logo"
-      )
-
-      .populate(
-        "roleId",
-        "roleName"
-      );
+    .populate(
+      "roleId",
+      "roleName dashboardType"
+    );
 
   return user;
-
 }

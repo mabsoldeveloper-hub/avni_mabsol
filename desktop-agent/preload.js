@@ -17,20 +17,35 @@ contextBridge.exposeInMainWorld("electronAPI", {
   sendEditOtp: (payload) => ipcRenderer.invoke("auth:send-edit-otp", payload),
   verifyEditOtp: (payload) => ipcRenderer.invoke("auth:verify-edit-otp", payload),
 
+  // Marg Master Catalog & Company Auto-Discovery
+  getCompanyCatalog: (payload) => ipcRenderer.invoke("catalog:get-company", payload),
+  scanAndDecryptMaster: (sourceDir) => ipcRenderer.invoke("catalog:scan-master", sourceDir),
+
   // Config & License
+  getDeviceInfo: () => ipcRenderer.invoke("system:get-device-info"),
   getConfig: () => ipcRenderer.invoke("config:get"),
   saveConfig: (cfg) => ipcRenderer.invoke("config:save", cfg),
+  setCloudUrl: (url) => ipcRenderer.invoke("config:set-cloud-url", url),
   getLicenseDetails: () => ipcRenderer.invoke("license:get-details"),
   checkDeviceLicense: (payload) => ipcRenderer.invoke("license:check-device", payload),
   sendDeviceOtp: (payload) => ipcRenderer.invoke("license:send-device-otp", payload),
   activateDevice: (payload) => ipcRenderer.invoke("license:activate-device", payload),
+  generateNewLicenseKey: (payload) => ipcRenderer.invoke("license:generate-key", payload),
+  requestAgentPin: (payload) => ipcRenderer.invoke("license:request-agent-pin", payload),
+  checkAgentPinStatus: (payload) => ipcRenderer.invoke("license:check-agent-pin-status", payload),
+
+  // Branch & Multi-Company Profile Operations
+  fetchBranches: (payload) => ipcRenderer.invoke("config:fetch-branches", payload),
+  switchBranchProfile: (companyCode) => ipcRenderer.invoke("config:switch-branch", companyCode),
+  saveBranchProfile: (branchData) => ipcRenderer.invoke("config:save-branch-profile", branchData),
+  startMultiBranchSync: () => ipcRenderer.invoke("sync:start-all-branches"),
 
   // File dialogs & validation
   selectFolder: (title) => ipcRenderer.invoke("dialog:select-folder", title),
   validateFolder: (folderPath, companyCode) => ipcRenderer.invoke("dialog:validate-folder", folderPath, companyCode),
 
   // Sync operations
-  startSync: () => ipcRenderer.invoke("sync:start"),
+  startSync: (payload) => ipcRenderer.invoke("sync:start", payload),
   stopSync: () => ipcRenderer.invoke("sync:stop"),
   resumeSync: () => ipcRenderer.invoke("sync:resume"),
   getSyncStatus: () => ipcRenderer.invoke("sync:status"),
@@ -55,5 +70,10 @@ contextBridge.exposeInMainWorld("electronAPI", {
     const handler = (_event, data) => callback(data);
     ipcRenderer.on("auth:session-revoked", handler);
     return () => ipcRenderer.removeListener("auth:session-revoked", handler);
+  },
+  onVerificationRequired: (callback) => {
+    const handler = (_event, data) => callback(data);
+    ipcRenderer.on("license:verification-required", handler);
+    return () => ipcRenderer.removeListener("license:verification-required", handler);
   }
 });

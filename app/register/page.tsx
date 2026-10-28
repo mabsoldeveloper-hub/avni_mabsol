@@ -7,6 +7,7 @@ import { Plus_Jakarta_Sans, Inter, IBM_Plex_Mono } from "next/font/google";
 import { useToast } from "@/context/ToastContext";
 import "./register.css";
 import { API } from "@/lib/api";
+import { isReservedSuperAdminEmail } from "@/lib/constants/superAdmin.constant";
 
 const displayFont = Plus_Jakarta_Sans({
   subsets: ["latin"],
@@ -35,7 +36,8 @@ interface AdditionalGstItem {
   city: string;
   pincode: string;
   email: string;
-  mobile: string;
+  mobile?: string;
+  sameGstAsStep1?: boolean;
   password?: string;
   confirmPassword?: string;
   showPassword?: boolean;
@@ -210,9 +212,37 @@ export default function RegisterPage() {
     return () => clearInterval(timer);
   }, [emailCountdown, additionalGsts]);
 
+  function handleToggleSameStep1Gst(idx: number, checked: boolean) {
+    const list = [...additionalGsts];
+    if (!list[idx]) return;
+    list[idx].sameGstAsStep1 = checked;
+    if (checked) {
+      list[idx].gstNo = primaryGst;
+      list[idx].state = state;
+      list[idx].city = city;
+      list[idx].address = address;
+      list[idx].pincode = pincode;
+      list[idx].verified = isPrimaryGstVerified;
+      showToast(`Applied Step 1 GST & Address to Branch #${idx + 1}`, "info");
+    } else {
+      list[idx].gstNo = "";
+      list[idx].verified = false;
+    }
+    setAdditionalGsts(list);
+  }
+
+  function handleCopyHeadOfficePhone(idx: number) {
+    const list = [...additionalGsts];
+    if (!list[idx]) return;
+    list[idx].mobile = mobile;
+    setAdditionalGsts(list);
+    showToast(`Copied Head Office Phone (+91 ${mobile}) to Branch #${idx + 1}`, "info");
+  }
+
   function handleCopyHeadOfficeGst(idx: number) {
     const list = [...additionalGsts];
     if (!list[idx]) return;
+    list[idx].sameGstAsStep1 = true;
     list[idx].gstNo = primaryGst;
     list[idx].state = state;
     list[idx].city = city;
@@ -220,7 +250,7 @@ export default function RegisterPage() {
     list[idx].pincode = pincode;
     list[idx].verified = isPrimaryGstVerified;
     setAdditionalGsts(list);
-    showToast(`Copied Head Office GST & Address to Branch #${idx + 1}`, "info");
+    showToast(`Copied Step 1 GST & Address to Branch #${idx + 1}`, "info");
   }
 
   // Branch email duplicate check on blur
@@ -229,6 +259,11 @@ export default function RegisterPage() {
     if (!br || !br.email) return;
     const cleanBrEmail = br.email.trim().toLowerCase();
     if (!cleanBrEmail.includes("@")) return;
+
+    if (isReservedSuperAdminEmail(cleanBrEmail)) {
+      showToast(`Branch #${idx + 1} email is reserved for the Super Administrator and cannot be used.`, "error");
+      return;
+    }
 
     // Check against Head Office Email
     const cleanHoEmail = email.trim().toLowerCase();
@@ -268,6 +303,11 @@ export default function RegisterPage() {
     const cleanBrEmail = (br.email || "").trim().toLowerCase();
     if (!cleanBrEmail || !cleanBrEmail.includes("@")) {
       showToast("Please enter a valid email address for this branch", "error");
+      return;
+    }
+
+    if (isReservedSuperAdminEmail(cleanBrEmail)) {
+      showToast(`Branch #${idx + 1} email is reserved for the Super Administrator and cannot be used.`, "error");
       return;
     }
 
@@ -437,6 +477,7 @@ export default function RegisterPage() {
           pincode: "",
           email: "",
           mobile: "",
+          sameGstAsStep1: false,
           password: "",
           confirmPassword: "",
           showPassword: false,
@@ -592,6 +633,11 @@ export default function RegisterPage() {
     const cleanEmail = email.trim().toLowerCase();
     if (!cleanEmail.includes("@")) return;
 
+    if (isReservedSuperAdminEmail(cleanEmail)) {
+      showToast("This email address is reserved for the Super Administrator and cannot be used.", "error");
+      return;
+    }
+
     try {
       const res = await fetch(API.CHECK_EXISTS, {
         method: "POST",
@@ -637,6 +683,11 @@ export default function RegisterPage() {
     const cleanEmail = email.trim().toLowerCase();
     if (!cleanEmail || !cleanEmail.includes("@")) {
       showToast("Please enter a valid email address", "error");
+      return;
+    }
+
+    if (isReservedSuperAdminEmail(cleanEmail)) {
+      showToast("This email address is reserved for the Super Administrator and cannot be used.", "error");
       return;
     }
 
@@ -861,10 +912,31 @@ export default function RegisterPage() {
     setErrorBanner(null);
 
     try {
+      const cleanHoEmail = email.trim().toLowerCase();
+      if (isReservedSuperAdminEmail(cleanHoEmail)) {
+        const msg = "This email address is reserved for the Super Administrator and cannot be used.";
+        setErrorBanner(msg);
+        showToast(msg, "error");
+        setLoading(false);
+        return;
+      }
+
+      for (let i = 0; i < branchCount; i++) {
+        const br = additionalGsts[i];
+        const cleanBr = (br?.email || "").trim().toLowerCase();
+        if (isReservedSuperAdminEmail(cleanBr)) {
+          const msg = `Branch #${i + 1} email is reserved for the Super Administrator and cannot be used.`;
+          setErrorBanner(msg);
+          showToast(msg, "error");
+          setLoading(false);
+          return;
+        }
+      }
+
       const adminName = name.trim() || companyName.trim();
       const payload = {
         name: adminName,
-        email: email.trim().toLowerCase(),
+        email: cleanHoEmail,
         mobile: mobile.replace(/\D/g, ""),
         password,
         role: "Admin",
@@ -1390,19 +1462,21 @@ export default function RegisterPage() {
 
                     {/* Branch GST Number */}
                     <div className="clean-field">
-                      <div className="clean-label-row" style={{ marginBottom: "4px" }}>
+                      <div className="clean-label-row" style={{ marginBottom: "6px" }}>
                         <label>
-                          <span>GST Number</span>
+                          <span>Branch GST Number</span>
                         </label>
                         {primaryGst && (
-                          <button
-                            type="button"
-                            className="same-as-ho-btn"
-                            onClick={() => handleCopyHeadOfficeGst(idx)}
-                            title="Copy GST & Address from Head Office"
-                          >
-                            📋 Same GST as Head Office
-                          </button>
+                          <label className="same-step1-checkbox-label">
+                            <input
+                              type="checkbox"
+                              checked={Boolean(item.sameGstAsStep1 || (primaryGst && item.gstNo === primaryGst))}
+                              onChange={(e) => handleToggleSameStep1Gst(idx, e.target.checked)}
+                            />
+                            <span>
+                              Same GST as Step 1 GST {primaryGst ? `(${primaryGst})` : ""}
+                            </span>
+                          </label>
                         )}
                       </div>
                       <div className="clean-input-row">
@@ -1411,17 +1485,19 @@ export default function RegisterPage() {
                           placeholder="ENTER GSTIN (E.G. 22AAAAA0000A1Z5)"
                           maxLength={15}
                           value={item.gstNo}
+                          readOnly={Boolean(item.sameGstAsStep1)}
                           onChange={(e) => {
                             const list = [...additionalGsts];
                             list[idx].gstNo = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "");
                             list[idx].verified = false;
+                            list[idx].sameGstAsStep1 = false;
                             setAdditionalGsts(list);
                           }}
                         />
                         <button
                           type="button"
                           className={`clean-inline-btn ${item.verified ? "is-verified" : ""}`}
-                          disabled={item.isVerifying || item.verified}
+                          disabled={item.isVerifying || item.verified || Boolean(item.sameGstAsStep1)}
                           onClick={() => handleVerifyBranchGst(idx)}
                         >
                           {item.isVerifying ? "Verifying…" : item.verified ? "✓ Verified" : "Verify GST"}
@@ -1496,6 +1572,38 @@ export default function RegisterPage() {
                           />
                         </div>
                       </div>
+
+                      <div className="clean-field">
+                        <div className="clean-label-row" style={{ marginBottom: "4px" }}>
+                          <label>
+                            Phone Number <span style={{ fontSize: "11px", fontWeight: "normal", color: "#64748b" }}>(Optional)</span>
+                          </label>
+                          {mobile && (
+                            <button
+                              type="button"
+                              className="same-as-ho-btn"
+                              onClick={() => handleCopyHeadOfficePhone(idx)}
+                              title="Copy Phone from Step 1"
+                            >
+                              📋 Same as Step 1 Phone
+                            </button>
+                          )}
+                        </div>
+                        <div className="clean-input-row">
+                          <input
+                            type="tel"
+                            placeholder="10-digit phone number (optional)"
+                            maxLength={10}
+                            value={item.mobile || ""}
+                            onChange={(e) => {
+                              const list = [...additionalGsts];
+                              list[idx].mobile = e.target.value.replace(/\D/g, "");
+                              setAdditionalGsts(list);
+                            }}
+                          />
+                        </div>
+                      </div>
+
                     </div>
 
                     {/* Branch Email with OTP Verification */}

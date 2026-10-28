@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import connectToDatabase from "@/lib/mongodb";
 import FormTemplate from "@/models/FormTemplate";
+import { getCurrentUser } from "@/lib/auth";
+
+export const dynamic = "force-dynamic";
 
 interface Props {
   params: Promise<{ id: string }>;
@@ -12,6 +15,11 @@ export async function GET(
 ) {
   try {
     await connectToDatabase();
+    const user = await getCurrentUser();
+    if (!user) {
+      return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
+    }
+
     const { id } = await params;
 
     const template = await FormTemplate.findOne({
@@ -32,12 +40,19 @@ export async function GET(
   }
 }
 
+const BLOCKED_TARGET_MODELS = new Set(["user", "users", "role", "roles", "session", "sessions", "otp", "otps", "vfptablemap", "vfpsyncstate"]);
+
 export async function PUT(
   req: NextRequest,
   { params }: Props
 ) {
   try {
     await connectToDatabase();
+    const user = await getCurrentUser();
+    if (!user) {
+      return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
+    }
+
     const { id } = await params;
     const body = await req.json();
 
@@ -66,7 +81,15 @@ export async function PUT(
         : (String(body.accessMode).toLowerCase().includes("public") ? "Public" : (String(body.accessMode).toLowerCase().includes("password") ? "PasswordProtected" : "Internal"));
     }
     if (body.approvalWorkflow) template.approvalWorkflow = body.approvalWorkflow;
-    if (body.autoMasterSync) template.autoMasterSync = body.autoMasterSync;
+    
+    if (body.autoMasterSync) {
+      if (body.autoMasterSync.enabled && body.autoMasterSync.targetModel) {
+        if (BLOCKED_TARGET_MODELS.has(String(body.autoMasterSync.targetModel).toLowerCase().trim())) {
+          return NextResponse.json({ success: false, error: "Target model is restricted" }, { status: 400 });
+        }
+      }
+      template.autoMasterSync = body.autoMasterSync;
+    }
     if (body.theme) template.theme = body.theme;
     if (body.expirationConfig !== undefined) template.expirationConfig = body.expirationConfig;
     if (body.thankYouConfig !== undefined) template.thankYouConfig = body.thankYouConfig;
@@ -109,6 +132,11 @@ export async function DELETE(
 ) {
   try {
     await connectToDatabase();
+    const user = await getCurrentUser();
+    if (!user) {
+      return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
+    }
+
     const { id } = await params;
 
     const deleted = await FormTemplate.findOneAndDelete({

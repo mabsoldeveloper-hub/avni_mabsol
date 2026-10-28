@@ -85,7 +85,7 @@ export default async function VfpTablePage({ params, searchParams }: PageProps) 
               <FaArrowLeft className="me-2" /> Back to Mabsol CRM Sync
             </Link>
             <div className="d-flex align-items-center text-primary fw-bold mb-2 text-uppercase tracking-wider" style={{ fontSize: "0.8rem" }}>
-              <FaTable className="me-2" /> Synced DBF Data
+              <FaTable className="me-2" /> Synced Table Data
             </div>
             <h1 className="h3 fw-bold mb-1 text-dark">{data.table.tableName}</h1>
             <p className="text-secondary small mb-0">

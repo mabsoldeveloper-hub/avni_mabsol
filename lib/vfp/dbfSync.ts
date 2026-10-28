@@ -7,10 +7,44 @@ import VfpConfig from "@/models/VfpConfig";
 import VfpTableMap from "@/models/VfpTableMap";
 import VfpSyncState from "@/models/VfpSyncState";
 import VfpSyncLog from "@/models/VfpSyncLog";
+import ExeSyncLog from "@/models/ExeSyncLog";
+import User from "@/models/User";
+import Company from "@/models/Company";
 
 const VFP_ENCODING = process.env.VFP_ENCODING || "latin1";
 
-export async function performDirectServerSync(userEmail: string, customDataDir?: string) {
+export const CORE_16_SYNC_TABLES = new Set([
+  "acgroup",
+  "billserial",
+  "dis",
+  "gledger",
+  "glmonth",
+  "maorder",
+  "mdis",
+  "mdoc",
+  "order",
+  "pend",
+  "pendings",
+  "pro",
+  "probat",
+  "rate",
+  "saletype",
+  "slipno",
+  "subdis",
+  "support",
+]);
+
+export async function performDirectServerSync(
+  userEmail: string,
+  customDataDir?: string,
+  options?: {
+    companyCode?: string;
+    companyId?: string;
+    companyName?: string;
+    force?: boolean;
+    enabledFiles?: string[];
+  }
+) {
   await dbConnect();
 
   const email = userEmail || "global";
@@ -21,8 +55,11 @@ export async function performDirectServerSync(userEmail: string, customDataDir?:
     (await VfpConfig.findOne({ key: "vfp_sync_config", email }).lean()) ||
     null;
 
-  let dataDir: string = customDataDir || config?.consoleSyncDir || config?.sourceDir || config?.dataDir || process.env.VFP_DATA_DIR || "";
-  const enabledFiles: string[] = config?.enabledFiles || [];
+  const targetCompanyCode = options?.companyCode || config?.companyCode || "";
+  const sanitizedCompany = targetCompanyCode ? String(targetCompanyCode).trim().toUpperCase().replace(/[^a-zA-Z0-9_-]/g, "_") : "";
+
+  let dataDir: string = customDataDir || "";
+  const enabledFiles: string[] = options?.enabledFiles || config?.enabledFiles || [];
 
   const sanitizedEmail = (userEmail || "global").replace(/[^a-zA-Z0-9_-]/g, "_");
   const uploadDir = path.join(process.cwd(), "data", "vfp_uploads", sanitizedEmail);
@@ -47,58 +84,197 @@ export async function performDirectServerSync(userEmail: string, customDataDir?:
   };
 
   if (!dataDir || !fs.existsSync(dataDir) || !findDbfInDir(dataDir)) {
-    const candidates = [
-      uploadDir,
-      path.join("/home/vfpuser/data", sanitizedEmail),
+    const baseDataRoots = [
       "/home/vfpuser/data",
       path.join(process.cwd(), "data"),
+      path.join(process.cwd(), "data", "vfp_uploads"),
     ];
+
+    const candidates: (string | null | undefined)[] = [
+      customDataDir,
+      sanitizedCompany ? path.join("/home/vfpuser/data", sanitizedEmail, sanitizedCompany) : null,
+      sanitizedCompany ? path.join(process.cwd(), "data", sanitizedEmail, sanitizedCompany) : null,
+      sanitizedCompany ? path.join(process.cwd(), "data", "vfp_uploads", sanitizedEmail, sanitizedCompany) : null,
+    ];
+
+    if (sanitizedCompany) {
+      // Direct company folder under base roots
+      for (const root of baseDataRoots) {
+        candidates.push(path.join(root, sanitizedCompany));
+      }
+      // Search all user folders under base roots
+      for (const root of baseDataRoots) {
+        try {
+          if (fs.existsSync(root)) {
+            const entries = fs.readdirSync(root, { withFileTypes: true });
+            for (const ent of entries) {
+              if (ent.isDirectory()) {
+                candidates.push(path.join(root, ent.name, sanitizedCompany));
+              }
+            }
+          }
+        } catch {}
+      }
+    }
+
+    candidates.push(
+      config?.consoleSyncDir,
+      config?.sourceDir,
+      config?.dataDir,
+      path.join("/home/vfpuser/data", sanitizedEmail),
+      path.join(process.cwd(), "data", sanitizedEmail),
+      uploadDir,
+      "/home/vfpuser/data",
+      path.join(process.cwd(), "data")
+    );
+
     for (const c of candidates) {
-      const found = findDbfInDir(c);
-      if (found) {
-        dataDir = found;
-        break;
+      if (c) {
+        const found = findDbfInDir(c);
+        if (found) {
+          dataDir = found;
+          break;
+        }
       }
     }
   }
 
   if (!dataDir || !fs.existsSync(dataDir)) {
     throw new Error(
-      `No valid DBF data directory configured for user ${email}. Please set your folder path in the Sync Console or upload DBF files via the browser.`
+      `No valid DBF data directory found for company [${targetCompanyCode || "DEFAULT"}] (user ${email}). Please ensure files are placed in data/${sanitizedEmail}/${sanitizedCompany || "DEFAULT"} or upload DBF files.`
     );
   }
 
   const runId = `${Date.now()}-${crypto.randomBytes(4).toString("hex")}`;
   const startedAt = new Date();
 
+  // Fetch user and company hierarchy information for ExeSyncLog
+  let userRecord: any = null;
+  let isHeadOffice = true;
+  let parentCompanyId: any = null;
+  let parentCompanyName = "";
+
+  try {
+    userRecord = await User.findOne({ email }).populate("companyId");
+    if (userRecord?.exeAccessSuspended) {
+      await ExeSyncLog.create({
+        runId,
+        companyId: userRecord.companyId?._id || null,
+        companyName: options?.companyName || userRecord.companyId?.companyName || targetCompanyCode || "Unknown",
+        companyCode: targetCompanyCode || "DEFAULT",
+        isHeadOffice: userRecord.companyId?.isHeadOffice !== false,
+        parentCompanyId: userRecord.companyId?.parentCompanyId || null,
+        userId: userRecord._id,
+        userName: userRecord.name || "Unknown",
+        userEmail: email,
+        licenseKey: config?.license || "",
+        deviceId: config?.boundDeviceId || "",
+        deviceName: config?.boundDeviceName || "",
+        syncType: "desktop_agent_auto",
+        status: "rejected_suspended",
+        tablesSynced: [],
+        totalRecords: 0,
+        durationSeconds: 0,
+        error: `Desktop Agent (.EXE) sync suspended by Super Administrator.${userRecord.exeSuspendedReason ? ` Reason: ${userRecord.exeSuspendedReason}` : ""}`,
+      });
+      throw new Error(`Desktop Agent (.EXE) sync suspended for user ${email}`);
+    }
+
+    if (userRecord?.companyId) {
+      const uComp = userRecord.companyId;
+      if (uComp.isHeadOffice === false || uComp.parentCompanyId) {
+        isHeadOffice = false;
+        parentCompanyId = uComp.parentCompanyId || null;
+        if (parentCompanyId) {
+          const pComp = await Company.findById(parentCompanyId);
+          parentCompanyName = pComp?.companyName || "";
+        }
+      }
+    }
+  } catch (userErr: any) {
+    if (userRecord?.exeAccessSuspended) throw userErr;
+  }
+
+  let runningExeSyncLog: any = null;
+  try {
+    runningExeSyncLog = await ExeSyncLog.create({
+      runId,
+      companyId: userRecord?.companyId?._id || options?.companyId || null,
+      companyName: options?.companyName || userRecord?.companyId?.companyName || config?.companyName || targetCompanyCode || "DEFAULT",
+      companyCode: targetCompanyCode || "DEFAULT",
+      isHeadOffice,
+      parentCompanyId,
+      parentCompanyName,
+      userId: userRecord?._id || null,
+      userName: userRecord?.name || "System",
+      userEmail: email,
+      licenseKey: config?.license || "",
+      deviceId: config?.boundDeviceId || "",
+      deviceName: config?.boundDeviceName || "",
+      syncType: "desktop_agent_auto",
+      status: "running",
+      tablesSynced: [],
+      totalRecords: 0,
+      durationSeconds: 0,
+      startedAt,
+    });
+  } catch {}
+
   const runningSyncLog = await VfpSyncLog.create({
     runId,
     email,
     action: "sync",
     status: "running",
-    message: `Direct server data sync started for user ${email}`,
+    message: `Direct server sync started for company [${targetCompanyCode || "DEFAULT"}] (user ${email})`,
     startedAt,
+    ...(targetCompanyCode ? { companyCode: targetCompanyCode } : {}),
   });
 
   try {
-    let files = listFiles(dataDir).filter((filePath) =>
-      isValidTableFile(path.basename(filePath))
-    );
+    try {
+      const db = mongoose.connection.db;
+      if (db) {
+        await db.collection("vfpsyncstates").dropIndex("tableName_1_email_1").catch(() => {});
+        await db.collection("vfptablemaps").dropIndex("fileName_1_email_1").catch(() => {});
+        await db.collection("vfpsynclogs").deleteMany({ importedCount: 0 }).catch(() => {});
+      }
+    } catch {}
 
-    // Only apply the enabledFiles filter when syncing from a non-upload directory
-    const isUploadDir = Boolean(customDataDir) || dataDir === uploadDir || dataDir.includes("vfp_uploads");
-    if (!isUploadDir && enabledFiles && enabledFiles.length > 0) {
+    let files = listFiles(dataDir).filter((filePath) => {
+      const fileName = path.basename(filePath);
+      if (!isValidTableFile(fileName)) return false;
+      const baseName = sanitizeCollectionName(fileName);
+      return CORE_16_SYNC_TABLES.has(baseName);
+    });
+
+    // Apply enabledFiles filter:
+    // If not forced and config has enabledFiles, filter to config.
+    const userSelectedFiles = options?.enabledFiles;
+    if (userSelectedFiles && userSelectedFiles.length > 0) {
+      const enabledSet = new Set(
+        userSelectedFiles.map((f) => path.basename(f).toLowerCase())
+      );
+      files = files.filter((filePath) => {
+        const baseName = path.basename(filePath).toLowerCase();
+        const baseNameWithoutExt = baseName.replace(/\.[^.]+$/, "");
+        return (
+          enabledSet.has(baseName) ||
+          enabledSet.has(`${baseNameWithoutExt}.dbf`) ||
+          enabledSet.has(baseNameWithoutExt)
+        );
+      });
+    } else if (!options?.force && enabledFiles && enabledFiles.length > 0) {
       const enabledSet = new Set(
         enabledFiles.map((f) => path.basename(f).toLowerCase())
       );
       files = files.filter((filePath) => {
         const baseName = path.basename(filePath).toLowerCase();
         const baseNameWithoutExt = baseName.replace(/\.[^.]+$/, "");
-
-        if (enabledSet.has(baseName)) return true;
-        if (enabledSet.has(`${baseNameWithoutExt}.dbf`)) return true;
-        if (enabledSet.has(baseNameWithoutExt)) return true;
-        return false;
+        return (
+          enabledSet.has(baseName) ||
+          enabledSet.has(`${baseNameWithoutExt}.dbf`) ||
+          enabledSet.has(baseNameWithoutExt)
+        );
       });
     }
 
@@ -110,22 +286,52 @@ export async function performDirectServerSync(userEmail: string, customDataDir?:
     let totalImportedRows = 0;
 
     for (const filePath of dbfFiles) {
-      const syncResult = await importSingleDbfFile(filePath, runId, email, dataDir);
+      const syncResult = await importSingleDbfFile(filePath, runId, email, dataDir, {
+        companyCode: targetCompanyCode || "DEFAULT",
+        companyId: options?.companyId,
+        companyName: options?.companyName || config?.companyName,
+      });
       totalImportedRows += syncResult.importedCount;
       totalImportedTables++;
+    }
+
+    // Run MARG ERP Data Mapper to populate CRM master collections
+    try {
+      const { runMargDataMapper } = await import("@/lib/margDataMapper");
+      await runMargDataMapper(email, {
+        companyCode: targetCompanyCode || "DEFAULT",
+        companyId: options?.companyId,
+        companyName: options?.companyName || config?.companyName,
+      });
+    } catch (mapperErr: any) {
+      console.error("[dbfSync] Error running margDataMapper:", mapperErr?.message);
     }
 
     await VfpSyncLog.findByIdAndUpdate(runningSyncLog._id, {
       $set: {
         status: "success",
-        message: `Direct server sync completed successfully. ${totalImportedTables} table(s), ${totalImportedRows} row(s) updated in real-time.`,
+        message: `Direct server sync completed for company [${targetCompanyCode || "DEFAULT"}]. ${totalImportedTables} table(s), ${totalImportedRows} row(s) updated in real-time.`,
         finishedAt: new Date(),
       },
     });
 
+    if (runningExeSyncLog) {
+      const durationSeconds = Math.round((Date.now() - startedAt.getTime()) / 1000);
+      await ExeSyncLog.findByIdAndUpdate(runningExeSyncLog._id, {
+        $set: {
+          status: "success",
+          tablesSynced: dbfFiles.map((filePath) => path.basename(filePath)),
+          totalRecords: totalImportedRows,
+          durationSeconds,
+          completedAt: new Date(),
+        },
+      }).catch(() => {});
+    }
+
     return {
       success: true,
       runId,
+      companyCode: targetCompanyCode || "DEFAULT",
       importedTables: totalImportedTables,
       importedRows: totalImportedRows,
     };
@@ -134,10 +340,23 @@ export async function performDirectServerSync(userEmail: string, customDataDir?:
       $set: {
         status: "failed",
         error: syncErr?.message || "Sync failed",
-        message: `Direct server sync failed: ${syncErr?.message || "Unknown error"}`,
+        message: `Direct server sync failed for company [${targetCompanyCode || "DEFAULT"}]: ${syncErr?.message || "Unknown error"}`,
         finishedAt: new Date(),
       },
     });
+
+    if (runningExeSyncLog) {
+      const durationSeconds = Math.round((Date.now() - startedAt.getTime()) / 1000);
+      await ExeSyncLog.findByIdAndUpdate(runningExeSyncLog._id, {
+        $set: {
+          status: "failed",
+          error: syncErr?.message || "Sync failed",
+          durationSeconds,
+          completedAt: new Date(),
+        },
+      }).catch(() => {});
+    }
+
     throw syncErr;
   }
 }
@@ -146,7 +365,12 @@ export async function importSingleDbfFile(
   filePath: string,
   runId: string,
   email: string,
-  dataDir: string
+  dataDir: string,
+  options?: {
+    companyCode?: string;
+    companyId?: string;
+    companyName?: string;
+  }
 ): Promise<{ importedCount: number; error?: string }> {
   const baseName = path.basename(filePath, path.extname(filePath));
   const fileName = path.basename(filePath);
@@ -154,9 +378,12 @@ export async function importSingleDbfFile(
   const sanitizedTableName = sanitizeCollectionName(baseName);
   const targetCollection = `vfp_new_folder_${sanitizedTableName}`;
   const startedAt = new Date();
+  const companyCode = options?.companyCode || "";
+  const companyId = options?.companyId || "";
+  const companyName = options?.companyName || "";
 
   await VfpSyncState.updateOne(
-    { tableName, email },
+    { tableName, email, ...(companyCode ? { companyCode } : {}) },
     {
       $set: {
         tableName,
@@ -166,6 +393,9 @@ export async function importSingleDbfFile(
         targetCollection,
         status: "running",
         lastStartedAt: startedAt,
+        ...(companyCode ? { companyCode } : {}),
+        ...(companyId ? { companyId } : {}),
+        ...(companyName ? { companyName } : {}),
       },
     },
     { upsert: true }
@@ -181,6 +411,7 @@ export async function importSingleDbfFile(
     status: "running",
     message: `Processing ${fileName}...`,
     startedAt,
+    ...(companyCode ? { companyCode } : {}),
   });
 
   try {
@@ -197,7 +428,7 @@ export async function importSingleDbfFile(
     // Handle empty DBF files or tables with 0 records safely
     if (stats.size < 32 || recordCount === 0 || fields.length === 0) {
       await VfpTableMap.updateOne(
-        { fileName, email },
+        { fileName, email, ...(companyCode ? { companyCode } : {}) },
         {
           $set: {
             fileName,
@@ -210,12 +441,13 @@ export async function importSingleDbfFile(
             lastFileMtimeMs: stats.mtimeMs,
             lastDiscoveredAt: new Date(),
             enabled: true,
+            ...(companyCode ? { companyCode } : {}),
           },
         },
         { upsert: true }
       );
       await VfpSyncState.updateOne(
-        { tableName, email },
+        { tableName, email, ...(companyCode ? { companyCode } : {}) },
         {
           $set: {
             status: "success",
@@ -227,18 +459,14 @@ export async function importSingleDbfFile(
             lastSkippedCount: 0,
             lastHash: `${stats.mtimeMs}-0`,
             lastError: "",
+            ...(companyCode ? { companyCode } : {}),
+            ...(companyId ? { companyId } : {}),
+            ...(companyName ? { companyName } : {}),
           },
         },
         { upsert: true }
       );
-      await VfpSyncLog.findByIdAndUpdate(runningTableLog._id, {
-        $set: {
-          status: "success",
-          importedCount: 0,
-          message: `Imported ${fileName} (0 rows - empty table).`,
-          finishedAt: new Date(),
-        },
-      });
+      await VfpSyncLog.findByIdAndDelete(runningTableLog._id).catch(() => {});
       return { importedCount: 0, error: undefined };
     }
 
@@ -258,7 +486,7 @@ export async function importSingleDbfFile(
     }
 
     await VfpTableMap.updateOne(
-      { fileName, email },
+      { fileName, email, ...(companyCode ? { companyCode } : {}) },
       {
         $set: {
           fileName,
@@ -271,6 +499,7 @@ export async function importSingleDbfFile(
           lastFileMtimeMs: stats.mtimeMs,
           lastDiscoveredAt: new Date(),
           enabled: true,
+          ...(companyCode ? { companyCode } : {}),
         },
       },
       { upsert: true }
@@ -299,7 +528,7 @@ export async function importSingleDbfFile(
     const BATCH_SIZE = 5000;
     const syncedAt = new Date();
 
-    // Stream-process rows in chunks of 2000 directly from the buffer with zero file-descriptor leaks
+    // Stream-process rows in chunks of 5000 directly from the buffer with zero file-descriptor leaks
     for (let i = 0; i < recordCount; i += BATCH_SIZE) {
       const batchEnd = Math.min(i + BATCH_SIZE, recordCount);
       const ops: any[] = [];
@@ -308,8 +537,9 @@ export async function importSingleDbfFile(
         const row = parseRowFromBuffer(buffer, index, headerLength, recordLength, fields, hasFpt, fptBuffer);
         if (!row) break;
 
-        const sourceKey = buildSourceKey(row, tableName, primaryKeyFields, seenCounts, fieldUpperMap);
-        const doc = {
+        const rawKey = buildSourceKey(row, tableName, primaryKeyFields, seenCounts, fieldUpperMap);
+        const sourceKey = companyCode ? `${companyCode}#${rawKey}` : rawKey;
+        const doc: any = {
           ...row.data,
           _vfpTable: tableName,
           _vfpSourceKey: sourceKey,
@@ -321,12 +551,28 @@ export async function importSingleDbfFile(
           _vfpSyncedAt: syncedAt,
         };
 
+        if (companyCode) {
+          doc.companyCode = companyCode;
+          doc.COMPANY = companyCode;
+        }
+        if (companyId) {
+          doc.companyId = companyId;
+        }
+        if (companyName) {
+          doc.companyName = companyName;
+        }
+
+        const filter: any = {
+          _vfpTable: tableName,
+          _vfpSourceKey: sourceKey,
+        };
+        if (companyCode) {
+          filter.companyCode = companyCode;
+        }
+
         ops.push({
           updateOne: {
-            filter: {
-              _vfpTable: tableName,
-              _vfpSourceKey: sourceKey,
-            },
+            filter,
             update: { $set: doc },
             upsert: true,
           },
@@ -334,15 +580,38 @@ export async function importSingleDbfFile(
       }
 
       if (ops.length > 0) {
-        await collection.bulkWrite(ops, { ordered: false, bypassDocumentValidation: true });
-        importedCount += ops.length;
+        try {
+          const res = await collection.bulkWrite(ops, { ordered: false, bypassDocumentValidation: true });
+          importedCount += (res.upsertedCount || 0) + (res.modifiedCount || 0) + (res.matchedCount || 0) || ops.length;
+        } catch (bwErr: any) {
+          if (bwErr?.code === 11000 || bwErr?.name === "MongoBulkWriteError" || bwErr?.message?.includes("E11000")) {
+            const inserted = (bwErr.result?.nUpserted || 0) + (bwErr.result?.nModified || 0) + (bwErr.result?.nMatched || 0);
+            importedCount += (inserted || Math.max(0, ops.length - (bwErr.writeErrors?.length || 0)));
+          } else {
+            throw bwErr;
+          }
+        }
       }
+    }
+
+    // Clean Replace: Overwrite/purge records for this company and table that no longer exist in the DBF
+    try {
+      const purgeFilter: any = {
+        _vfpTable: tableName,
+        _vfpSyncRunId: { $ne: runId },
+      };
+      if (companyCode) {
+        purgeFilter.companyCode = companyCode;
+      }
+      await collection.deleteMany(purgeFilter);
+    } catch (cleanErr) {
+      console.warn(`[Sync] Non-fatal purge warning for ${tableName}:`, cleanErr);
     }
 
     const syncDateLabel = getSyncDateLabel(new Date());
     const tableHash = `${stats.mtimeMs}-${recordCount}`;
     await VfpSyncState.updateOne(
-      { tableName, email },
+      { tableName, email, ...(companyCode ? { companyCode } : {}) },
       {
         $set: {
           status: "success",
@@ -354,29 +623,37 @@ export async function importSingleDbfFile(
           lastSkippedCount: 0,
           lastHash: tableHash,
           lastError: "",
+          ...(companyCode ? { companyCode } : {}),
+          ...(companyId ? { companyId } : {}),
+          ...(companyName ? { companyName } : {}),
         },
       },
       { upsert: true }
     );
 
-    // Update running log in-place to success
-    await VfpSyncLog.findByIdAndUpdate(runningTableLog._id, {
-      $set: {
-        status: "success",
-        importedCount,
-        message: `Imported and updated ${importedCount} row(s) from ${fileName}.`,
-        finishedAt: new Date(),
-      },
-    });
+    // Update running log in-place to success only if rows were actually imported
+    if (importedCount > 0) {
+      await VfpSyncLog.findByIdAndUpdate(runningTableLog._id, {
+        $set: {
+          status: "success",
+          importedCount,
+          message: `Imported and updated ${importedCount} row(s) from ${fileName}.`,
+          finishedAt: new Date(),
+        },
+      });
+    } else {
+      await VfpSyncLog.findByIdAndDelete(runningTableLog._id).catch(() => {});
+    }
 
     return { importedCount, error: undefined };
   } catch (error: any) {
     await VfpSyncState.updateOne(
-      { tableName, email },
+      { tableName, email, ...(companyCode ? { companyCode } : {}) },
       {
         $set: {
           status: "failed",
           lastError: error.message,
+          ...(companyCode ? { companyCode } : {}),
         },
       },
       { upsert: true }
@@ -884,11 +1161,11 @@ function hashJson(value: any) {
 }
 
 function sanitizeCollectionName(value: string) {
-  // Strip trailing year/financial-year/branch/company suffix
-  // e.g. .a01, _a01, _I06, _F17, _E10, _I04, _04, etc.
-  // so dis.a01 -> "dis", GLEDGER_I06 -> "gledger" -> collection: "vfp_new_folder_gledger"
-  let cleaned = value.trim().replace(/\$/g, "");
-  cleaned = cleaned.replace(/[\._][a-z]?\d+$/i, "");
+  // Strip trailing .dbf extension and year/financial-year/branch/company suffix
+  // e.g. .a01, _a01, _I06, _C02, _F17, _E10, _I04, _04, etc.
+  // so dis.a01 -> "dis", GLEDGER_C02.DBF -> "gledger" -> collection: "vfp_new_folder_gledger"
+  let cleaned = value.trim().replace(/\.dbf$/i, "").replace(/\$/g, "");
+  cleaned = cleaned.replace(/[\._][a-zA-Z]?\d+$/i, "");
   cleaned = cleaned.replace(/[\$_]+$/, "");
   return cleaned.toLowerCase().replace(/[^a-z0-9_]/g, "_").replace(/^_+/, "");
 }

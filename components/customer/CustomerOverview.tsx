@@ -117,22 +117,22 @@ function Field({ label, value, copyable = false }: { label: string; value: React
 }
 
 export default function CustomerOverview({ customer }: Props) {
-  const [showRawInspector, setShowRawInspector] = useState(false);
+  // const [showRawInspector, setShowRawInspector] = useState(false);
 
   // Filter keys for raw inspector to show unrecognized dynamic fields
-  const standardKeys = new Set([
-    "_id", "PARNAM", "CODEP", "REF", "STATUS", "SCODE", "GROUPNAME", "MAINGROUP",
-    "PARENTGROUP", "PRICE", "DUEDAYS", "DAYS", "PHONE1", "PHONE2", "MAILNAM",
-    "PARADD", "PARADD2", "PARADD3", "AREA", "ROUT", "ROUTE", "CITY", "STATE",
-    "COUNTRY", "PINCODE", "PIN", "GSTNO", "DLNO", "DLNO2", "FSSAINO", "PANNO",
-    "TINNO", "STAXNO", "CSTNO", "DSM", "SALESMAN", "ASM", "RSM", "GCODE",
-    "COMPANY", "BALANCE", "CREDIT", "DEBIT", "OPNING", "OPENING", "CLBAL",
-    "DISCOUNT", "FINAL", "ORDNO", "__v"
-  ]);
+  // const standardKeys = new Set([
+  //   "_id", "PARNAM", "CODEP", "REF", "STATUS", "SCODE", "GROUPNAME", "MAINGROUP",
+  //   "PARENTGROUP", "PRICE", "DUEDAYS", "DAYS", "PHONE1", "PHONE2", "MAILNAM",
+  //   "PARADD", "PARADD2", "PARADD3", "AREA", "ROUT", "ROUTE", "CITY", "STATE",
+  //   "COUNTRY", "PINCODE", "PIN", "GSTNO", "DLNO", "DLNO2", "FSSAINO", "PANNO",
+  //   "TINNO", "STAXNO", "CSTNO", "DSM", "SALESMAN", "ASM", "RSM", "GCODE",
+  //   "COMPANY", "BALANCE", "CREDIT", "DEBIT", "OPNING", "OPENING", "CLBAL",
+  //   "DISCOUNT", "FINAL", "ORDNO", "__v"
+  // ]);
 
-  const rawEntries = Object.entries(customer || {}).filter(
-    ([key, value]) => !standardKeys.has(key) && value !== null && value !== undefined && value !== ""
-  );
+  // const rawEntries = Object.entries(customer || {}).filter(
+  //   ([key, value]) => !standardKeys.has(key) && value !== null && value !== undefined && value !== ""
+  // );
 
   return (
     <>
@@ -191,9 +191,10 @@ export default function CustomerOverview({ customer }: Props) {
       {/* ==================== 2. CONTACT INFORMATION ==================== */}
       <Section title="Contact Details" tone="emerald" icon={<FaPhoneAlt size={13} />}>
         <Field label="Contact Person" value={show(customer.REF)} />
+        <Field label="Mailing Name" value={show(customer.MAILNAM)} />
         <Field label="Primary Mobile" value={show(customer.PHONE1)} copyable />
         <Field label="Secondary Mobile" value={show(customer.PHONE2)} copyable />
-        <Field label="Email Address" value={show(customer.MAILNAM)} copyable />
+        <Field label="Email Address" value={show(customer.EMAIL)} copyable />
       </Section>
 
       {/* ==================== 3. ADDRESS & LOCATION ==================== */}

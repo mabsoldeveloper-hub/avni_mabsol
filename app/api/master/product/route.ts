@@ -2,6 +2,9 @@ import { NextResponse } from "next/server";
 import connectDB from "@/lib/mongodb";
 import Product from "@/models/Product";
 import SaleType from "@/models/SaleType";
+import Division from "@/models/Division";
+import SubDivision from "@/models/SubDivision";
+import Category from "@/models/Category";
 import MrTerritory from "@/models/MrTerritory";
 import { getCurrentUser } from "@/lib/auth";
 import { getCompanyVfpFilter, combineFilters } from "@/lib/companyVfpHelper";
@@ -17,6 +20,14 @@ const PRODUCT_PROJECTION = {
   GCODE: 1,
   GCODE6: 1,
   COMPANY: 1,
+  DIV: 1,
+  DIVISION: 1,
+  SUBDIV: 1,
+  SUB_DIV: 1,
+  CAT: 1,
+  CATEGORY: 1,
+  PACK: 1,
+  PACKING: 1,
   MRP: 1,
   PRATE: 1,
   RATEF: 1,
@@ -147,7 +158,7 @@ export async function GET(req: Request) {
       return NextResponse.json(usePagination ? { data: [], total: 0, page, pageSize } : []);
     }
 
-    // ---------- SaleType (only needed codes) ----------
+    // ---------- SaleType & Hierarchy Masters ----------
     const requiredCodes = Array.from(
       new Set(
         products
@@ -156,15 +167,31 @@ export async function GET(req: Request) {
       )
     );
 
-    const saleTypes =
+    const [saleTypes, dbDivisions, dbSubDivisions, dbCategories] = await Promise.all([
       requiredCodes.length > 0
-        ? await SaleType.find(
+        ? SaleType.find(
             { SCODE: { $in: requiredCodes } },
             { _id: 0, SCODE: 1, SNAME: 1, SGCODE: 1 }
           )
             .lean()
             .maxTimeMS(4000)
-        : [];
+        : [],
+      Division.find({ status: { $ne: "Inactive" } }, { divisionCode: 1, divisionName: 1, companyCode: 1 })
+        .lean()
+        .maxTimeMS(4000)
+        .catch(() => []),
+      SubDivision.find(
+        { status: { $ne: "Inactive" } },
+        { subDivisionCode: 1, subDivisionName: 1, divisionCode: 1, companyCode: 1 }
+      )
+        .lean()
+        .maxTimeMS(4000)
+        .catch(() => []),
+      Category.find({ status: { $ne: "Inactive" } }, { categoryCode: 1, categoryName: 1 })
+        .lean()
+        .maxTimeMS(4000)
+        .catch(() => []),
+    ]);
 
     const companyMap = new Map<string, string>();
     const hsnMap = new Map<string, string>();
@@ -176,6 +203,42 @@ export async function GET(req: Request) {
       if (item.SNAME) companyMap.set(code, clean(item.SNAME));
       if (clean(item.SGCODE).toUpperCase() === "COMMCD") {
         hsnMap.set(code, clean(item.SNAME));
+      }
+    }
+
+    const divisionMap = new Map<string, string>();
+    for (const d of dbDivisions as any[]) {
+      const dCode = clean(d.divisionCode).toUpperCase();
+      const dName = clean(d.divisionName);
+      if (dCode && dName) {
+        divisionMap.set(dCode, dName);
+        if (d.companyCode) {
+          divisionMap.set(`${clean(d.companyCode).toUpperCase()}_${dCode}`, dName);
+        }
+      }
+    }
+
+    const subDivisionMap = new Map<string, string>();
+    for (const s of dbSubDivisions as any[]) {
+      const sCode = clean(s.subDivisionCode).toUpperCase();
+      const sName = clean(s.subDivisionName);
+      if (sCode && sName) {
+        subDivisionMap.set(sCode, sName);
+        if (s.companyCode && s.divisionCode) {
+          subDivisionMap.set(
+            `${clean(s.companyCode).toUpperCase()}_${clean(s.divisionCode).toUpperCase()}_${sCode}`,
+            sName
+          );
+        }
+      }
+    }
+
+    const categoryMap = new Map<string, string>();
+    for (const c of dbCategories as any[]) {
+      const cCode = clean(c.categoryCode).toUpperCase();
+      const cName = clean(c.categoryName);
+      if (cCode && cName) {
+        categoryMap.set(cCode, cName);
       }
     }
 
@@ -196,11 +259,38 @@ export async function GET(req: Request) {
       const stockValue =
         currentStock > 0 ? Math.round(currentStock * (prate || mrp)) : 0;
 
+      const divRaw = clean(p.DIV || p.DIVISION || "");
+      const subDivRaw = clean(p.SUBDIV || p.SUB_DIV || "");
+      const catRaw = clean(p.CAT || p.CATEGORY || "");
+      const pack = clean(p.PACK || p.PACKING || "");
+
+      const divKey = divRaw.toUpperCase();
+      const divisionName =
+        divisionMap.get(`${gcode.toUpperCase()}_${divKey}`) ||
+        divisionMap.get(divKey) ||
+        divRaw;
+
+      const subDivKey = subDivRaw.toUpperCase();
+      const subDivisionName =
+        subDivisionMap.get(`${gcode.toUpperCase()}_${divKey}_${subDivKey}`) ||
+        subDivisionMap.get(subDivKey) ||
+        subDivRaw;
+
+      const catKey = catRaw.toUpperCase();
+      const categoryName = categoryMap.get(catKey) || catRaw;
+
       return {
         ...p,
         companyName:
           companyMap.get(gcode) ||
           (p.COMPANY && p.COMPANY !== "ZZZZZZ 144" ? String(p.COMPANY) : ""),
+        division: divisionName || divRaw || "",
+        divisionCode: divRaw,
+        subDivision: subDivisionName || subDivRaw || "",
+        subDivisionCode: subDivRaw,
+        category: categoryName || catRaw || "",
+        categoryCode: catRaw,
+        pack,
         HSN: hsnMap.get(gcode6) || "",
         marginPct,
         stockValue,

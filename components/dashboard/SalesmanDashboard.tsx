@@ -56,69 +56,58 @@ export default function SalesmanDashboard({ user, selectedCompany }: SalesmanDas
 
       const userId = user?._id || "";
 
-      // 1. Fetch tracked orders
+      const params = new URLSearchParams();
+      if (selectedCompany?._id) params.set("companyId", selectedCompany._id);
+
+      // Fetch all 4 data sources in parallel
+      const [resOrders, resTargets, resDcr, resDash] = await Promise.all([
+        fetch("/api/orders/tracking").catch(() => null),
+        userId ? fetch(`/api/targets?mrUserId=${userId}`).catch(() => null) : null,
+        userId ? fetch(`/api/mr-reporting/dcr?userId=${userId}`).catch(() => null) : null,
+        fetch(`/api/dashboard?${params.toString()}`).catch(() => null),
+      ]);
+
+      // 1. Process tracked orders
       let fetchedOrders: any[] = [];
-      try {
-        const resOrders = await fetch("/api/orders/tracking");
-        if (resOrders.ok) {
-          const dataOrders = await resOrders.json();
-          if (dataOrders.success && Array.isArray(dataOrders.orders)) {
-            fetchedOrders = dataOrders.orders;
-            setOrders(fetchedOrders.slice(0, 6));
-          }
+      if (resOrders && resOrders.ok) {
+        const dataOrders = await resOrders.json();
+        if (dataOrders.success && Array.isArray(dataOrders.orders)) {
+          fetchedOrders = dataOrders.orders;
+          setOrders(fetchedOrders.slice(0, 6));
         }
-      } catch (e) {
-        console.error("Orders fetch error:", e);
       }
 
-      // 2. Fetch live targets for this user
+      // 2. Process live targets
       let userTarget = 0;
       let userAchieved = 0;
-      try {
-        const resTargets = await fetch(`/api/targets?mrUserId=${userId}`);
-        if (resTargets.ok) {
-          const dataTargets = await resTargets.json();
-          const targetList: any[] = Array.isArray(dataTargets) ? dataTargets : (dataTargets?.targets || []);
-          targetList.forEach((t) => {
-            userTarget += Number(t.targetAmount || t.targetValue || 0);
-            userAchieved += Number(t.achievedAmount || t.salesValue || 0);
-          });
-        }
-      } catch (e) {
-        console.error("Targets fetch error:", e);
+      if (resTargets && resTargets.ok) {
+        const dataTargets = await resTargets.json();
+        const targetList: any[] = Array.isArray(dataTargets) ? dataTargets : (dataTargets?.targets || []);
+        targetList.forEach((t) => {
+          userTarget += Number(t.targetAmount || t.targetValue || 0);
+          userAchieved += Number(t.achievedAmount || t.salesValue || 0);
+        });
       }
 
-      // 3. Fetch DCR / Call reports for user
+      // 3. Process DCR / Call reports
       let totalCalls = 0;
       let lastVisit = "None";
-      try {
-        const resDcr = await fetch(`/api/mr-reporting/dcr?userId=${userId}`);
-        if (resDcr.ok) {
-          const dataDcr = await resDcr.json();
-          const dcrLogs = Array.isArray(dataDcr?.data) ? dataDcr.data : (Array.isArray(dataDcr) ? dataDcr : []);
-          dcrLogs.forEach((d: any) => {
-            totalCalls += Array.isArray(d.callLogs) ? d.callLogs.length : 1;
-          });
-          if (dcrLogs.length > 0) {
-            const latestDate = new Date(dcrLogs[0].dcrDate || dcrLogs[0].createdAt);
-            lastVisit = latestDate.toLocaleDateString("en-IN", { month: "short", day: "numeric" });
-          }
+      if (resDcr && resDcr.ok) {
+        const dataDcr = await resDcr.json();
+        const dcrLogs = Array.isArray(dataDcr?.data) ? dataDcr.data : (Array.isArray(dataDcr) ? dataDcr : []);
+        dcrLogs.forEach((d: any) => {
+          totalCalls += Array.isArray(d.callLogs) ? d.callLogs.length : 1;
+        });
+        if (dcrLogs.length > 0) {
+          const latestDate = new Date(dcrLogs[0].dcrDate || dcrLogs[0].createdAt);
+          lastVisit = latestDate.toLocaleDateString("en-IN", { month: "short", day: "numeric" });
         }
-      } catch (e) {
-        console.error("DCR fetch error:", e);
       }
 
-      // 4. Fetch dashboard KPIs for sales & outstanding
+      // 4. Process dashboard KPIs
       let dashData: any = null;
-      try {
-        const params = new URLSearchParams();
-        if (selectedCompany?._id) params.set("companyId", selectedCompany._id);
-        const resDash = await fetch(`/api/dashboard?${params.toString()}`);
-        if (resDash.ok) {
-          dashData = await resDash.json();
-        }
-      } catch (e) {
-        console.error("Dashboard KPI fetch error:", e);
+      if (resDash && resDash.ok) {
+        dashData = await resDash.json();
       }
 
       // Calculate days remaining in current month
@@ -139,12 +128,12 @@ export default function SalesmanDashboard({ user, selectedCompany }: SalesmanDas
       const totalOrderVal = fetchedOrders.reduce((sum, ord) => sum + Number(ord.totalAmount || 0), 0);
       const inTransit = fetchedOrders.filter((ord) => ord.currentStatus === "Dispatched" || ord.currentStatus === "In-Transit").length;
 
-      const overdueAmount = Number(dashData?.kpis?.credit?.totalOverdue || 0);
-      const overdueAccs = Number(dashData?.kpis?.credit?.overdueCount || 0);
+      const overdueAmount = Number(dashData?.kpis?.overdueAmount ?? dashData?.kpis?.credit?.totalOverdue ?? 0);
+      const overdueAccs = Number(dashData?.kpis?.overdueCount ?? dashData?.kpis?.credit?.overdueCount ?? dashData?.charts?.topOverdueDebtors?.length ?? 0);
 
       setSalesMetrics({
-        territoryOrdersValue: totalOrderVal > 0 ? totalOrderVal : Number(dashData?.kpis?.sales?.totalSales || 0),
-        totalOrdersCount: fetchedOrders.length || Number(dashData?.kpis?.sales?.totalInvoices || 0),
+        territoryOrdersValue: totalOrderVal > 0 ? totalOrderVal : Number(dashData?.kpis?.totalSales ?? dashData?.kpis?.sales?.totalSales ?? 0),
+        totalOrdersCount: fetchedOrders.length || Number(dashData?.kpis?.totalInvoices ?? dashData?.kpis?.sales?.totalInvoices ?? 0),
         inTransitCount: inTransit,
         areaOutstanding: overdueAmount,
         overdueAccountsCount: overdueAccs,

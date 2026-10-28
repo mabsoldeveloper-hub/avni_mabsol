@@ -1,19 +1,21 @@
 import nodemailer from "nodemailer";
 
 const transporter = nodemailer.createTransport({
-  host: process.env.SMTP_HOST || "smtp.hostinger.com",
+  host: process.env.SMTP_HOST || "smtpout.secureserver.net",
   port: Number(process.env.SMTP_PORT || 465),
   secure: Number(process.env.SMTP_PORT || 465) === 465,
   auth: {
-    user: process.env.SMTP_USER,
-    pass: process.env.SMTP_PASS,
+    user: process.env.SMTP_USER || "support@mabsolinfotech.com",
+    pass: process.env.SMTP_PASS || "Mabinfo@5181",
   },
+  pool: true,
+  maxConnections: 3,
   tls: {
     rejectUnauthorized: false,
   },
-  connectionTimeout: 4000,
-  greetingTimeout: 4000,
-  socketTimeout: 4000,
+  connectionTimeout: 6000,
+  greetingTimeout: 6000,
+  socketTimeout: 6000,
 });
 
 // Brand Colors

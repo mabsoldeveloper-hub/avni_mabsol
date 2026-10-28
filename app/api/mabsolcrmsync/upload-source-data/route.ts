@@ -57,23 +57,42 @@ export async function POST(request: NextRequest) {
     const uploaderEmail = user.email || "";
     const uploadTimestamp = new Date();
 
-    // Save source directory path and user upload tracking in VfpConfig
-    await VfpConfig.updateOne(
-      { email: user.email },
-      {
-        $set: {
-          email: user.email,
-          sourceDir: targetSourceDir,
-          dataDir: isLinuxServer ? "/home/vfpuser/MabsolSyncData" : path.join(process.cwd(), "data", "vfp_uploads"),
-          uploadedSourceFilesCount: allSourceFiles.length,
-          lastSourceUploadedAt: uploadTimestamp,
-          lastUploadedByUserId: uploaderId,
-          lastUploadedByUserName: uploaderName,
-          lastUploadedByUserEmail: uploaderEmail,
+    // Save source directory path and user upload tracking in VfpConfig safely
+    const userKey = "vfp_sync_config_" + user.email;
+    try {
+      await VfpConfig.updateOne(
+        { key: userKey },
+        {
+          $set: {
+            key: userKey,
+            email: user.email,
+            sourceDir: targetSourceDir,
+            dataDir: isLinuxServer ? "/home/vfpuser/MabsolSyncData" : path.join(process.cwd(), "data", "vfp_uploads"),
+            uploadedSourceFilesCount: allSourceFiles.length,
+            lastSourceUploadedAt: uploadTimestamp,
+            lastUploadedByUserId: uploaderId,
+            lastUploadedByUserName: uploaderName,
+            lastUploadedByUserEmail: uploaderEmail,
+          },
         },
-      },
-      { upsert: true }
-    );
+        { upsert: true }
+      );
+    } catch (_err) {
+      await VfpConfig.updateOne(
+        { email: user.email },
+        {
+          $set: {
+            sourceDir: targetSourceDir,
+            dataDir: isLinuxServer ? "/home/vfpuser/MabsolSyncData" : path.join(process.cwd(), "data", "vfp_uploads"),
+            uploadedSourceFilesCount: allSourceFiles.length,
+            lastSourceUploadedAt: uploadTimestamp,
+            lastUploadedByUserId: uploaderId,
+            lastUploadedByUserName: uploaderName,
+            lastUploadedByUserEmail: uploaderEmail,
+          },
+        }
+      ).catch(() => {});
+    }
 
     // Also update global sync config
     await VfpConfig.updateOne(

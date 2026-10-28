@@ -44,6 +44,8 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
     if (typeof window !== "undefined") {
       localStorage.removeItem("mabsol_user");
       localStorage.removeItem("mabsol_permissions");
+      localStorage.removeItem("mabsol_selected_company");
+      document.cookie = "mabsol_selected_company_id=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT";
       if (window.location.pathname.startsWith("/dashboard")) {
         window.location.href = isSuspended ? "/login?suspended=1" : "/login";
       }
@@ -127,20 +129,26 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
 
   const loadUser = useCallback(async () => {
     try {
-      const res = await fetch("/api/auth/me", {
+      const res = await fetch(`/api/auth/me?_t=${Date.now()}`, {
         credentials: "include",
         cache: "no-store",
+        headers: {
+          "Cache-Control": "no-cache, no-store, must-revalidate",
+        },
       });
       if (!res.ok) {
         setUser(null);
         return;
       }
       const data = await res.json();
-      console.log("me api",data);
       
       if (data.success && data.user) {
         setUser(data.user);
-        localStorage.setItem("mabsol_user", JSON.stringify(data.user));
+        if (typeof window !== "undefined") {
+          try {
+            localStorage.setItem("mabsol_user", JSON.stringify(data.user));
+          } catch {}
+        }
       } else {
         setUser(null);
       }
@@ -152,12 +160,26 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
-
-
   useEffect(() => {
-    // if (loadStarted.current) return;
-    // loadStarted.current = true;
     loadUser();
+
+    // Automatically revalidate user permissions when tab gains focus, on permission update, or cross-tab storage
+    const handleRefresh = () => {
+      loadUser();
+    };
+    const handleStorage = (e: StorageEvent) => {
+      if (e.key === "mabsol_permissions_version" || e.key === "mabsol_user") {
+        loadUser();
+      }
+    };
+    window.addEventListener("focus", handleRefresh);
+    window.addEventListener("mabsol-permissions-updated", handleRefresh);
+    window.addEventListener("storage", handleStorage);
+    return () => {
+      window.removeEventListener("focus", handleRefresh);
+      window.removeEventListener("mabsol-permissions-updated", handleRefresh);
+      window.removeEventListener("storage", handleStorage);
+    };
   }, [loadUser]);
 
   return (

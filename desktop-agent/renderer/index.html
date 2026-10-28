@@ -52,9 +52,9 @@
               <span class="server-choice-title">mbh.crm.mabsolinfotech.cloud</span>
               <span class="server-choice-sub">MBH Cloud</span>
             </button>
-            <button type="button" class="server-choice-btn local-btn" id="btnServerLocal" data-url="http://localhost:3000">
-              <span class="server-choice-title">Local Dev Server</span>
-              <span class="server-choice-sub">http://localhost:3000</span>
+            <button type="button" class="server-choice-btn local-btn" id="btnServerLocalhost" data-url="http://localhost:3000">
+              <span class="server-choice-title">💻 Localhost (Testing): http://localhost:3000</span>
+              <span class="server-choice-sub">Local Development Testing</span>
             </button>
           </div>
           <input type="url" id="cloudUrlInput" value="https://phcrm.mabsolinfotech.cloud" required
@@ -72,8 +72,8 @@
 
 
             <div class="form-group">
-              <label for="emailInput">Operator Account Email</label>
-              <input type="email" id="emailInput" required placeholder="operator@mabsolinfotech.com">
+              <label for="emailInput">Account Identifier (Email / GST / Phone / Branch Code)</label>
+              <input type="text" id="emailInput" required placeholder="Enter Email, GSTIN, Phone, or Short Code (e.g. MABNEW)" autocomplete="username">
             </div>
 
             <div class="form-group">
@@ -91,6 +91,11 @@
             <div class="auth-footer-link">
               <span>New company or operator?</span>
               <button type="button" id="linkToSignup" class="btn-text-link">Create an Account</button>
+            </div>
+
+            <div class="terms-login-footer">
+              <span>By signing in, you agree to our </span>
+              <button type="button" id="openTermsFromLogin" class="btn-terms-text-link">Terms &amp; Conditions</button>
             </div>
           </form>
         </div>
@@ -159,18 +164,30 @@
               </div>
             </div>
 
-            <!-- Row 3: GST Number + Verify Button -->
-            <div class="clean-field">
-              <div class="clean-label-row">
-                <label><span class="req-star">*</span> GST Number</label>
-                <span class="field-hint">Auto-fills Address, City, State &amp; PIN</span>
+            <!-- Row 3: GST Number + Verify Button + Branch/Short Code -->
+            <div class="clean-grid-2">
+              <div class="clean-field">
+                <div class="clean-label-row">
+                  <label><span class="req-star">*</span> GST Number</label>
+                  <span class="field-hint">Auto-fills Company &amp; ERP data</span>
+                </div>
+                <div class="clean-input-row">
+                  <span class="clean-field-icon">📋</span>
+                  <input type="text" id="regGstNo" placeholder="ENTER GSTIN (E.G. 22AAAAA0000A1Z5)" maxlength="15" style="text-transform: uppercase; font-family: monospace;">
+                  <button type="button" id="regVerifyGstBtn" class="clean-inline-btn">Verify GST</button>
+                </div>
+                <div id="regGstStatusPill" class="gst-verified-pill hidden"></div>
               </div>
-              <div class="clean-input-row">
-                <span class="clean-field-icon">📋</span>
-                <input type="text" id="regGstNo" placeholder="ENTER GSTIN (E.G. 22AAAAA0000A1Z5)" maxlength="15" style="text-transform: uppercase; font-family: monospace;">
-                <button type="button" id="regVerifyGstBtn" class="clean-inline-btn">Verify GST</button>
+              <div class="clean-field">
+                <div class="clean-label-row">
+                  <label>Branch / Short Code</label>
+                  <span class="field-hint">Auto-filled (e.g. MABNEW)</span>
+                </div>
+                <div class="clean-input-row">
+                  <span class="clean-field-icon">🏢</span>
+                  <input type="text" id="regShortCode" placeholder="Branch Code (e.g. MABNEW)" style="text-transform: uppercase; font-weight: 600;">
+                </div>
               </div>
-              <div id="regGstStatusPill" class="gst-verified-pill hidden"></div>
             </div>
 
             <!-- Row 4: Full Address -->
@@ -229,6 +246,21 @@
                 <button type="button" id="regSendEmailOtpBtn" class="clean-inline-btn">Send OTP</button>
               </div>
               <div id="regEmailErrorText" class="clean-field-error hidden"></div>
+
+              <!-- ERP Email Choice Prompt Card -->
+              <div id="regEmailChoiceCard" class="clean-email-choice-card hidden">
+                <div class="email-choice-header">
+                  <span class="email-choice-icon">✉️</span>
+                  <div>
+                    <div class="email-choice-title">Company ERP Email Detected</div>
+                    <div class="email-choice-val" id="regDetectedEmailVal"></div>
+                  </div>
+                </div>
+                <div class="email-choice-btns">
+                  <button type="button" id="regBtnUseDetectedEmail" class="btn-email-choice active">✓ Continue with this email</button>
+                  <button type="button" id="regBtnChangeEmail" class="btn-email-choice secondary">✏️ Update / Change email</button>
+                </div>
+              </div>
             </div>
 
             <!-- Email OTP Box -->
@@ -245,6 +277,32 @@
                 </div>
                 <button type="button" id="regConfirmEmailOtpBtn" class="clean-otp-confirm-btn" disabled>Confirm OTP ✓</button>
               </div>
+            </div>
+
+            <!-- Financial Year Multi-Select Dropdown -->
+            <div class="clean-field" id="regFySection">
+              <div class="clean-label-row">
+                <label><span class="req-star">*</span> Select Financial Year Data to Upload</label>
+                <span class="field-hint" id="regFyHint">Multi-select enabled</span>
+              </div>
+              <div class="multiselect-container" id="regFyMultiselectContainer">
+                <div class="multiselect-trigger" id="regFyDropdownTrigger" tabindex="0" role="combobox" aria-expanded="false">
+                  <span class="clean-field-icon">📅</span>
+                  <div class="multiselect-selected-text" id="regFySelectedText">Select Financial Year(s)</div>
+                  <span class="multiselect-arrow">▾</span>
+                </div>
+                <div class="multiselect-dropdown-menu hidden" id="regFyDropdownMenu">
+                  <div class="multiselect-actions">
+                    <span class="multiselect-actions-hint">Click years to select/unselect</span>
+                    <div class="multiselect-actions-btns">
+                      <button type="button" class="multiselect-action-btn" id="regFySelectAllBtn">Select All</button>
+                      <button type="button" class="multiselect-action-btn" id="regFyClearBtn">Clear</button>
+                    </div>
+                  </div>
+                  <div class="multiselect-options-list" id="regFyOptionsList"></div>
+                </div>
+              </div>
+              <div id="regFyStatusBanner" class="fy-status-banner hidden"></div>
             </div>
 
             <!-- Row 8: Password & Confirm Password -->
@@ -341,7 +399,7 @@
               <div class="terms-checkbox-box" id="regTermsBox">
                 <label class="terms-checkbox-label">
                   <input type="checkbox" id="regTermsAccepted" class="terms-checkbox-input">
-                  <span>I agree to the <strong>Terms of Service</strong> and <strong>Privacy Policy</strong>, and confirm that all company, GST, and branch details are accurate and authorized.</span>
+                  <span>I agree to the <button type="button" id="openTermsFromSignup" class="btn-terms-text-link" style="font-weight: 600;">Terms &amp; Conditions and Privacy Policy</button>, and confirm that all company, GST, and branch details are accurate and authorized.</span>
                 </label>
               </div>
             </div>
@@ -412,6 +470,12 @@
               </button>
               <button type="button" id="backToLoginBtn" class="btn-secondary">Back</button>
             </div>
+
+            <div style="margin-top: 14px; text-align: center;">
+              <button type="button" id="resendOtpBtn" class="btn-text-link" style="font-size: 11.5px; color: #38bdf8;">
+                Didn't receive code? Resend Verification Code
+              </button>
+            </div>
           </form>
         </div>
       </div>
@@ -431,6 +495,10 @@
           <div id="netStatusBadge" class="status-pill online">
             <span class="dot"></span>
             <span class="label">Online</span>
+          </div>
+          <div id="serverEnvToggleBtn" class="status-pill" style="background: rgba(56, 189, 248, 0.1); border: 1px solid rgba(56, 189, 248, 0.3); color: #38bdf8; font-size: 11px; font-weight: 600; cursor: default; padding: 2px 9px; border-radius: 9999px; margin-left: 4px; display: inline-flex; align-items: center; gap: 4px;" title="Connected Server">
+            <span id="serverEnvIcon">💻</span>
+            <span id="serverEnvLabel">Localhost</span>
           </div>
         </div>
 
@@ -457,8 +525,8 @@
                 <span class="item-name">Sync Tally ERP</span>
                 <span class="badge-soon">Coming Soon</span>
               </button>
-              <button type="button" class="sync-target-item disabled" data-id="marg">
-                <span class="item-name">Sync Marg ERP</span>
+              <button type="button" class="sync-target-item disabled" data-id="enterprise">
+                <span class="item-name">Sync Enterprise ERP</span>
                 <span class="badge-soon">Coming Soon</span>
               </button>
               <button type="button" class="sync-target-item disabled" data-id="easysol">
@@ -497,8 +565,7 @@
             <span class="shield-icon">🛡️</span>
             <div>
               <strong>Security Protocol Active:</strong>
-              <span>Extraction security core is permanently purged in real-time immediately after each
-                synchronization.</span>
+              <span>We are just accessing your files data, not collecting any personal or confidential details. We keep your data privacy.</span>
             </div>
           </div>
           <div class="banner-right">
@@ -516,16 +583,136 @@
             </div>
 
             <form id="configForm">
+              <!-- Logged-in Operator & License Profile Card at Top of Sync Details -->
+              <div class="sync-operator-card">
+                <div class="sync-operator-header">
+                  <div class="operator-header-left">
+                    <span class="operator-badge-icon">👤</span>
+                    <div>
+                      <div class="operator-section-title">Logged-in Operator &amp; License</div>
+                      <div class="operator-section-sub">Identity and authorized sync key for this workstation</div>
+                    </div>
+                  </div>
+                  <span class="operator-status-badge" id="operatorStatusBadge">Authorized</span>
+                </div>
+
+                <div class="form-row" style="margin-bottom: 12px;">
+                  <div class="form-group flex-1" style="margin-bottom: 0;">
+                    <label for="operatorNameInput">Operator Name <span class="req">*</span></label>
+                    <input type="text" id="operatorNameInput" placeholder="Operator Name" disabled readonly>
+                  </div>
+                  <div class="form-group flex-1" style="margin-bottom: 0;">
+                    <label for="operatorEmailInput">Account Email <span class="req">*</span></label>
+                    <input type="email" id="operatorEmailInput" placeholder="operator@mabsolinfotech.com" disabled readonly>
+                  </div>
+                </div>
+
+                <div class="form-group" style="margin-bottom: 0;">
+                  <div class="license-header-row">
+                    <label for="licenseKeyInput">License Key <span class="req">*</span></label>
+                    <div style="display: flex; align-items: center; gap: 6px; flex-wrap: wrap;">
+                      <span id="licenseVerifiedBadge" class="license-verified-badge hidden">
+                        <span class="check-icon">✓</span>
+                        <span>Verified</span>
+                      </span>
+                      <span id="licenseCountdownBadge" class="license-countdown-badge hidden">
+                        <span class="countdown-pulse-dot"></span>
+                        <span id="licenseCountdownText">--</span>
+                      </span>
+                      <button type="button" id="btnChangeLicenseKey" class="btn-change-key hidden" title="Change or re-link license key">
+                        Change Key
+                      </button>
+                      <button type="button" id="btnGeneratePinAgent" class="btn-keygen" style="background: linear-gradient(135deg, #2563eb, #7c3aed); color: #fff; font-weight: 700; border: none; padding: 3px 10px; border-radius: 5px; cursor: pointer;" title="Generate 6-digit PIN to link and generate license on Web CRM">
+                        🔑 Web PIN Link
+                      </button>
+                      <button type="button" id="btnGenerateNewLicenseKey" class="btn-keygen" title="Generate a fresh license key for this workspace">
+                        ⚡ New Key Gen
+                      </button>
+                      <button type="button" id="btnVerifyLicenseKeyManual" class="btn-secondary" style="font-size: 11px; padding: 2px 9px; border-radius: 4px; display: inline-flex; align-items: center; gap: 4px; color: #38bdf8; border: 1px solid rgba(56, 189, 248, 0.4); background: rgba(56, 189, 248, 0.08); cursor: pointer;" title="Verify or authorize this computer with OTP">
+                        🔐 Verify Key
+                      </button>
+                    </div>
+                  </div>
+                  <input type="password" id="licenseKeyInput" placeholder="Enter License Key (e.g. MAB-XXXX-XXXX-XXXX)" disabled readonly>
+                  <div id="licenseCountdownDetail" class="license-countdown-detail hidden">
+                    <span id="licenseExpiryNotice">--</span>
+                  </div>
+                </div>
+
+                <div class="form-group" style="margin-top: 12px; margin-bottom: 0;">
+                  <label for="productKeyInput">Serial Key / Product Key</label>
+                  <input type="text" id="productKeyInput" placeholder="Enter Serial Key / Product Key (e.g. PRD-XXXX-XXXX-XXXX)" disabled readonly>
+                  <span class="helper" style="font-size: 10.5px; color: #94a3b8; margin-top: 3px;">Workstation product key or software serial key</span>
+                </div>
+              </div>
+
+              <!-- Branch / Company Profile Selector -->
+              <div class="branch-selector-panel" id="branchSelectorPanel">
+                <div class="branch-selector-header">
+                  <label for="branchSelectDropdown" class="branch-label">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                      <path d="M6 3v12"></path>
+                      <circle cx="18" cy="6" r="3"></circle>
+                      <circle cx="6" cy="18" r="3"></circle>
+                      <path d="M18 9a9 9 0 0 1-9 9"></path>
+                    </svg>
+                    <span>Branch / Company Profile</span>
+                  </label>
+                  <div class="branch-actions-row">
+                    <button type="button" id="btnRefreshBranches" class="btn-branch-sm" title="Refresh linked branches from cloud account">
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <polyline points="23 4 23 10 17 10"></polyline>
+                        <polyline points="1 20 1 14 7 14"></polyline>
+                        <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+                      </svg>
+                      <span>Refresh</span>
+                    </button>
+                    <button type="button" id="btnAddBranchProfile" class="btn-branch-sm btn-branch-add" title="Add another company or branch profile">
+                      <span>+ New Profile</span>
+                    </button>
+                  </div>
+                </div>
+                <div class="branch-dropdown-container">
+                  <select id="branchSelectDropdown" class="branch-select">
+                    <option value="">-- Select Active Company / Branch --</option>
+                  </select>
+                  <span class="branch-badge-status" id="branchBadgeStatus">Active Profile</span>
+                </div>
+              </div>
+
+              <div class="form-row">
+                <div class="form-group flex-2">
+                  <label for="companyNameInput">Company Name</label>
+                  <input type="text" id="companyNameInput" placeholder="Enter Company Name" disabled readonly>
+                </div>
+                <div class="form-group flex-1" style="min-width: 175px;">
+                  <label for="companyGstInput">GST Number (GSTIN)</label>
+                  <input type="text" id="companyGstInput" placeholder="GSTIN (e.g. 07AAAAA0000A1Z5)" disabled readonly
+                    style="text-transform: uppercase; font-family: monospace; font-weight: 700; color: #38bdf8; background: rgba(56, 189, 248, 0.05); border-color: rgba(56, 189, 248, 0.25);">
+                </div>
+                <div class="form-group" style="display: none;">
+                  <label for="crmCompanyCodeInput">CRM Account Code</label>
+                  <input type="text" id="crmCompanyCodeInput" placeholder="MABS148" disabled readonly>
+                </div>
+              </div>
+
               <div class="form-row">
                 <div class="form-group flex-1">
-                  <label for="companyNameInput">Company Name</label>
-                  <input type="text" id="companyNameInput" placeholder="e.g. MABSOL INFOTECH PRIVATE LIMITED" disabled readonly>
+                  <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                    <label for="syncFySelectDropdown" style="margin-bottom: 0;">Financial Year to Sync</label>
+                    <span style="font-size: 11px; color: #38bdf8; font-weight: 600;" id="syncFyBadge">Active Financial Year</span>
+                  </div>
+                  <div class="clean-input-row">
+                    <span class="clean-field-icon">📅</span>
+                    <select id="syncFySelectDropdown" class="clean-select" style="font-weight: 600; font-size: 13.5px; width: 100%;">
+                      <option value="">-- Select Financial Year --</option>
+                    </select>
+                  </div>
+                  <span class="helper">Select the financial year you want to synchronize.</span>
                 </div>
-                <div class="form-group flex-1">
-                  <label for="companyCodeInput">Company Code(s) <span class="req">*</span></label>
-                  <input type="text" id="companyCodeInput" required placeholder="e.g. B01 or B01, B02"
-                    style="text-transform: uppercase; font-family: monospace; font-weight: 700;" disabled readonly>
-                  <span class="helper">Supports single (B01) or multiple (B01, B02)</span>
+                <!-- Company/Extract code kept hidden for internal decryption engine -->
+                <div class="form-group" style="display: none;">
+                  <input type="hidden" id="companyCodeInput" value="">
                 </div>
               </div>
 
@@ -535,7 +722,7 @@
                   <input type="text" id="sourceDirInput" required placeholder="C:\DataFolder or D:\ERPData" disabled readonly>
                   <button type="button" id="browseSourceBtn" class="btn-browse" disabled>Browse</button>
                 </div>
-                <span class="helper">Directory containing encrypted ERP data files (e.g. PRO.B01, GLEDGER.B01)</span>
+                <span class="helper">Directory containing ERP data files on this computer</span>
                 <div id="sourceDirStatusBadge" class="source-dir-status-badge hidden"></div>
               </div>
 
@@ -546,7 +733,7 @@
                     <option value="mabsolcrm" selected>Sync MabsolCRM (Active)</option>
                     <option value="busy" disabled>Sync Busy ERP (Coming Soon)</option>
                     <option value="tally" disabled>Sync Tally ERP (Coming Soon)</option>
-                    <option value="marg" disabled>Sync Marg ERP (Coming Soon)</option>
+                    <option value="enterprise" disabled>Sync Enterprise ERP (Coming Soon)</option>
                     <option value="easysol" disabled>Sync EasySol (Coming Soon)</option>
                     <option value="logic" disabled>Sync Logic ERP (Coming Soon)</option>
                   </select>
@@ -571,17 +758,22 @@
                 </div>
               </div>
 
-              <div class="form-group">
-                <div class="license-header-row">
-                  <label for="licenseKeyInput">License Key</label>
-                  <span id="licenseCountdownBadge" class="license-countdown-badge hidden">
-                    <span class="countdown-pulse-dot"></span>
-                    <span id="licenseCountdownText">--</span>
-                  </span>
+              <!-- Terms & Conditions and Privacy Checkbox -->
+              <div class="terms-consent-box">
+                <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 10px;">
+                  <label class="terms-consent-label" for="termsConsentCheckbox" style="flex: 1;">
+                    <input type="checkbox" id="termsConsentCheckbox">
+                    <span class="terms-consent-text">
+                      <span class="terms-consent-main">I agree to the <strong>Terms &amp; Conditions</strong> and authorize local data synchronization.</span>
+                      <span class="terms-consent-sub">We are just accessing your files data, not collecting or using your personal details, and not using your license. We keep private your data.</span>
+                    </span>
+                  </label>
+                  <button type="button" id="openTermsFromSettings" class="btn-terms-view-pill" title="View full Terms &amp; Privacy Agreement">
+                    📜 View Terms
+                  </button>
                 </div>
-                <input type="password" id="licenseKeyInput" placeholder="MAB-XXXX-XXXX-XXXX" disabled readonly>
-                <div id="licenseCountdownDetail" class="license-countdown-detail hidden">
-                  <span id="licenseExpiryNotice">--</span>
+                <div id="termsNoticeWarning" class="terms-notice-warning hidden">
+                  ⚠️ Please accept the Terms &amp; Conditions to enable synchronization and save settings.
                 </div>
               </div>
 
@@ -601,6 +793,9 @@
             </form>
           </div>
 
+          <!-- Draggable Resizer Between Panels -->
+          <div class="grid-resizer" id="dashboardGridResizer" title="Drag to adjust panel sizes"></div>
+
           <!-- Right Column: Sync Execution & Real-Time Console -->
           <div class="card console-card">
             <div class="card-header">
@@ -614,17 +809,22 @@
             <!-- Sync Action Block -->
             <div class="action-block">
               <div class="sync-actions-group">
-                <button id="syncNowBtn" class="btn-sync-action">
+                <button id="syncNowBtn" class="btn-sync-action" disabled title="Please fill all required fields to enable synchronization">
                   <div class="sync-btn-content">
                     <svg class="sync-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
                       stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-                      <polyline points="23 4 23 10 17 10"></polyline>
+                        <polyline points="23 4 23 10 17 10"></polyline>
                       <polyline points="1 20 1 14 7 14"></polyline>
                       <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
                     </svg>
-                    <span class="sync-text">Extract & Sync Now</span>
+                    <span class="sync-text">Extract & Sync Active</span>
                   </div>
                   <span class="spinner-large hidden"></span>
+                </button>
+
+                <button id="syncAllBranchesBtn" type="button" class="btn-sync-all" disabled title="Sync all configured branch folders sequentially">
+                  <span class="sync-all-icon">🔄</span>
+                  <span class="sync-all-text">Sync All Branches</span>
                 </button>
 
                 <button id="toggleAutoSyncBtn" type="button" class="btn-toggle-sync" title="Pause or Resume Automatic Synchronization">
@@ -652,12 +852,18 @@
             <!-- Real-Time Activity Log Console -->
             <div class="terminal-container">
               <div class="terminal-header">
-                <span>Agent Activity Console</span>
+                <div style="display: flex; align-items: center; gap: 8px;">
+                  <span>Agent Activity Console</span>
+                  <span class="terminal-privacy-pill">🔒 Privacy Protected</span>
+                </div>
                 <button id="clearLogBtn" class="btn-clear-log">Clear</button>
               </div>
+              <div class="terminal-privacy-banner">
+                <span>🛡️ We are just accessing your files data, not collecting any personal or confidential details. We keep your data privacy.</span>
+              </div>
               <div id="terminalBody" class="terminal-body">
-                <div class="log-entry info"><span class="time">[System]</span> Mabsol Desktop Sync Agent initialized and
-                  ready.</div>
+                <div class="log-entry info"><span class="time">[System]</span> Mabsol Desktop Sync Agent initialized and ready.</div>
+                <div class="log-entry privacy-notice"><span class="time">[Data Privacy]</span> We are just accessing your files data, not collecting any personal or confidential details. We keep your data privacy.</div>
               </div>
             </div>
           </div>
@@ -732,57 +938,197 @@
     <!-- MODAL: NEW DEVICE LICENSE ACTIVATION (OTP)                        -->
     <!-- ================================================================= -->
     <div id="deviceActivationModal" class="modal-overlay hidden">
-      <div class="modal-content" style="max-width: 480px;">
+      <div class="modal-content" style="max-width: 480px; position: relative;">
+        <button type="button" id="btnXCloseDevActModal" title="Close" style="position: absolute; top: 12px; right: 16px; background: transparent; border: none; color: #94a3b8; font-size: 20px; cursor: pointer; padding: 4px 8px; line-height: 1;">✕</button>
+
         <div class="modal-header">
           <span class="modal-icon">💻</span>
-          <h3>Activate Sync on This Machine</h3>
-          <p id="deviceActivationSub">This computer needs authorization before it can sync data with your cloud workspace.</p>
+          <h3 id="devActTitle">Authorize Machine for Sync</h3>
+          <p id="deviceActivationSub">Link this computer with your Mabsol CRM license using a 6-digit Web PIN or email verification.</p>
         </div>
 
-        <div style="background: rgba(15, 23, 42, 0.6); border: 1px solid rgba(255,255,255,0.08); border-radius: 8px; padding: 12px 16px; margin-bottom: 16px; font-size: 12px; line-height: 1.6; text-align: left;">
+        <div style="background: rgba(15, 23, 42, 0.6); border: 1px solid rgba(255,255,255,0.08); border-radius: 8px; padding: 10px 14px; margin-bottom: 14px; font-size: 11.5px; line-height: 1.6; text-align: left;">
           <div><span style="color: #94a3b8;">Machine Name:</span> <strong id="devActMachineName" style="color: #38bdf8;">Detecting...</strong></div>
           <div><span style="color: #94a3b8;">Hardware ID:</span> <span id="devActDeviceId" style="font-family: monospace; color: #a5b4fc;">...</span></div>
-          <div><span style="color: #94a3b8;">Registered Email:</span> <strong id="devActEmail" style="color: #f8fafc;">...</strong></div>
+          <div><span style="color: #94a3b8;">Account Email:</span> <strong id="devActEmail" style="color: #f8fafc;">...</strong></div>
+          <div id="devActLicenseRow"><span style="color: #94a3b8;">License Key:</span> <strong id="devActLicenseKey" style="font-family: monospace; color: #34d399;">...</strong></div>
+          <div style="display: flex; align-items: center; justify-content: space-between; margin-top: 6px; padding-top: 6px; border-top: 1px dashed rgba(255,255,255,0.08);">
+            <span style="color: #94a3b8;">Target Server:</span>
+            <select id="devActServerSelect" style="background: rgba(15, 23, 42, 0.9); color: #38bdf8; border: 1px solid rgba(56, 189, 248, 0.4); border-radius: 4px; padding: 2px 8px; font-size: 11px; outline: none; cursor: pointer; font-weight: 600;">
+              <option value="https://phcrm.mabsolinfotech.cloud">☁️ Cloud Production</option>
+              <option value="https://mbh.crm.mabsolinfotech.cloud">☁️ MBH Cloud</option>
+              <option value="http://localhost:3000">💻 Localhost (Testing)</option>
+            </select>
+          </div>
         </div>
 
-        <!-- Step A: Send OTP Button -->
-        <div id="devActSendSection">
-          <p style="font-size: 12.5px; color: #94a3b8; margin-bottom: 14px;">
-            A 6-digit verification code will be dispatched to your account email to issue a new 30-day sync license for this PC.
-          </p>
-          <button type="button" id="btnDevActSendOtp" class="btn-primary" style="width: 100%;">
-            <span class="btn-text">📧 Send Activation Code</span>
-            <span class="spinner hidden"></span>
+        <!-- Mode Tabs: Web PIN (Primary) vs Email OTP -->
+        <div class="devact-tabs" style="display: flex; gap: 6px; margin-bottom: 12px; background: rgba(15, 23, 42, 0.5); padding: 4px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.06);">
+          <button type="button" id="tabDevActPin" class="devact-tab-btn active" style="flex: 1; padding: 7px 10px; font-size: 11.5px; font-weight: 600; border-radius: 6px; border: none; background: #2563eb; color: #fff; cursor: pointer; transition: all 0.2s;">
+            🔑 6-Digit Web PIN (Easy)
+          </button>
+          <button type="button" id="tabDevActOtp" class="devact-tab-btn" style="flex: 1; padding: 7px 10px; font-size: 11.5px; font-weight: 600; border-radius: 6px; border: none; background: transparent; color: #94a3b8; cursor: pointer; transition: all 0.2s;">
+            📧 Email OTP
           </button>
         </div>
 
-        <!-- Step B: Enter OTP Section -->
-        <div id="devActVerifySection" class="hidden" style="margin-top: 12px;">
-          <div style="font-size: 12px; color: #cbd5e1; margin-bottom: 8px;">
-            Enter 6-digit code sent to <strong id="devActSentToEmail" style="color: #38bdf8;"></strong>:
-          </div>
-          <div class="otp-compact-row" style="justify-content: center; margin-bottom: 14px;">
-            <div class="otp-square-grid" id="devActSquareGrid">
-              <input type="text" maxlength="1" class="otp-square-input" data-idx="0">
-              <input type="text" maxlength="1" class="otp-square-input" data-idx="1">
-              <input type="text" maxlength="1" class="otp-square-input" data-idx="2">
-              <input type="text" maxlength="1" class="otp-square-input" data-idx="3">
-              <input type="text" maxlength="1" class="otp-square-input" data-idx="4">
-              <input type="text" maxlength="1" class="otp-square-input" data-idx="5">
-            </div>
-          </div>
-          <div id="devActError" class="clean-field-error hidden" style="margin-bottom: 12px;"></div>
-          <div class="modal-actions" style="margin-top: 0;">
-            <button type="button" id="btnDevActConfirm" class="btn-primary" disabled>
-              <span class="btn-text">Verify &amp; Activate Machine ✓</span>
+        <!-- TAB 1: 6-DIGIT WEB PIN SECTION -->
+        <div id="devActPinSection">
+          <div id="devActPinInitial">
+            <p style="font-size: 12px; color: #cbd5e1; margin-bottom: 12px; line-height: 1.5;">
+              Generate a random 6-digit PIN on this computer, then enter it into your <strong>Web CRM Dashboard</strong> to link your license and unlock sync.
+            </p>
+            <button type="button" id="btnDevActRequestPin" class="btn-primary" style="width: 100%; padding: 10px 16px;">
+              <span class="btn-text">⚡ Generate 6-Digit Agent PIN</span>
               <span class="spinner hidden"></span>
             </button>
-            <button type="button" id="btnDevActResend" class="btn-secondary" style="font-size: 11px;">Resend OTP</button>
+          </div>
+
+          <!-- Active PIN Displayed Card -->
+          <div id="devActPinActiveCard" class="hidden" style="margin-top: 6px;">
+            <div style="background: rgba(30, 41, 59, 0.85); border: 1.5px dashed #38bdf8; border-radius: 10px; padding: 14px 16px; text-align: center;">
+              <div style="font-size: 10.5px; text-transform: uppercase; letter-spacing: 1.5px; color: #94a3b8; font-weight: 700;">
+                Your 6-Digit Agent PIN
+              </div>
+              <div id="devActPinDisplay" style="font-size: 32px; font-weight: 900; letter-spacing: 8px; font-family: monospace; color: #38bdf8; margin: 8px 0; text-shadow: 0 0 16px rgba(56, 189, 248, 0.4);">
+                ------
+              </div>
+              <div style="display: flex; justify-content: center; gap: 8px; margin-bottom: 10px;">
+                <button type="button" id="btnCopyAgentPin" class="btn-secondary" style="font-size: 11px; padding: 3px 10px;">
+                  📋 Copy PIN
+                </button>
+                <button type="button" id="btnDevActRegenPin" class="btn-secondary" style="font-size: 11px; padding: 3px 10px;">
+                  🔄 New PIN
+                </button>
+              </div>
+              <div style="font-size: 11px; color: #f1f5f9; background: rgba(15, 23, 42, 0.7); border-radius: 6px; padding: 8px 12px; text-align: left; line-height: 1.5;">
+                👉 <strong>Next Step on Web:</strong> Open your CRM Web Dashboard &gt; <strong>Desktop Sync Settings</strong> &gt; Enter this PIN in <strong>"Link Desktop Agent via 6-Digit PIN"</strong>.
+              </div>
+            </div>
+
+            <!-- Listening Indicator -->
+            <div style="display: flex; align-items: center; justify-content: center; gap: 8px; margin-top: 12px; font-size: 12px; color: #34d399;">
+              <span class="spinner" style="display: inline-block; width: 14px; height: 14px; border: 2px solid #34d399; border-top-color: transparent; border-radius: 50%; animation: spin 1s linear infinite;"></span>
+              <span id="devActPinListeningText">Listening for Web Verification...</span>
+            </div>
+            <div style="text-align: center; margin-top: 6px;">
+              <button type="button" id="btnDevActCheckPinNow" class="btn-text-link" style="font-size: 11px; color: #38bdf8; font-weight: 600;">
+                Check Verification Status Now
+              </button>
+            </div>
           </div>
         </div>
 
+        <!-- TAB 2: EMAIL OTP SECTION -->
+        <div id="devActOtpSection" class="hidden">
+          <!-- Step A: Send OTP Button -->
+          <div id="devActSendSection">
+            <p style="font-size: 12px; color: #94a3b8; margin-bottom: 12px;">
+              A 6-digit verification code will be sent to your account email to authorize this machine for syncing.
+            </p>
+            <button type="button" id="btnDevActSendOtp" class="btn-primary" style="width: 100%;">
+              <span class="btn-text">📧 Send Verification Code</span>
+              <span class="spinner hidden"></span>
+            </button>
+          </div>
+
+          <!-- Step B: Enter OTP Section -->
+          <div id="devActVerifySection" class="hidden" style="margin-top: 10px;">
+            <div style="font-size: 11.5px; color: #cbd5e1; margin-bottom: 8px;">
+              Enter 6-digit code sent to <strong id="devActSentToEmail" style="color: #38bdf8;"></strong>:
+            </div>
+            <div style="margin-bottom: 12px; text-align: center;">
+              <input type="text" id="devActOtpInput" maxlength="6" pattern="[0-9]{6}" placeholder="••••••" autocomplete="one-time-code"
+                style="width: 240px; box-sizing: border-box; text-align: center; font-size: 24px; font-weight: 700; letter-spacing: 8px; padding: 8px 12px; border-radius: 8px; border: 1.5px solid #38bdf8; background: rgba(15, 23, 42, 0.9); color: #38bdf8; outline: none; font-family: monospace;">
+              <div style="font-size: 10.5px; color: #94a3b8; margin-top: 4px;">Type or paste the 6-digit code together</div>
+            </div>
+            <div id="devActError" class="clean-field-error hidden" style="margin-bottom: 10px;"></div>
+            <div class="modal-actions" style="margin-top: 0;">
+              <button type="button" id="btnDevActConfirm" class="btn-primary" disabled>
+                <span class="btn-text">Verify &amp; Authorize Machine ✓</span>
+                <span class="spinner hidden"></span>
+              </button>
+              <button type="button" id="btnDevActResend" class="btn-secondary" style="font-size: 11px;">Resend Code</button>
+              <button type="button" id="btnDevActBack" class="btn-secondary" style="font-size: 11px;">← Back</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="devact-keygen-box" style="margin-top: 14px; padding-top: 10px; border-top: 1px dashed rgba(255,255,255,0.1); text-align: center;">
+          <span style="font-size: 11px; color: #94a3b8;">Need a fresh license key for this machine?</span>
+          <button type="button" id="btnDevActGenerateKey" class="btn-text-link" style="font-size: 11.5px; color: #10b981; font-weight: 600; margin-left: 6px;">
+            ⚡ Generate New Key
+          </button>
+        </div>
+
         <div style="margin-top: 14px; text-align: center;">
-          <button type="button" id="btnCloseDevActModal" class="btn-secondary" style="font-size: 11px; padding: 4px 12px; background: transparent; border: none; color: #64748b;">Dismiss for now</button>
+          <button type="button" id="btnCloseDevActModal" class="btn-secondary" style="font-size: 11.5px; padding: 5px 16px; background: transparent; border: 1px solid rgba(255,255,255,0.15); border-radius: 6px; color: #cbd5e1; cursor: pointer;">Dismiss for now</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ================================================================= -->
+    <!-- MODAL: TERMS & CONDITIONS AND DATA PRIVACY POLICY                -->
+    <!-- ================================================================= -->
+    <div id="termsModal" class="modal-overlay hidden">
+      <div class="modal-content terms-modal-content">
+        <button type="button" id="btnXCloseTermsModal" class="modal-close-x" title="Close">✕</button>
+
+        <div class="modal-header">
+          <span class="modal-icon">📜</span>
+          <h3>Terms &amp; Conditions and Data Privacy</h3>
+          <p>Mabsol CRM Data Synchronization Protocol &amp; Security Agreement</p>
+        </div>
+
+        <div class="terms-modal-scrollable">
+          <div class="terms-card highlight-card">
+            <div class="terms-card-icon">📁</div>
+            <div class="terms-card-body">
+              <h4>We Are Only Accessing Your Files Data</h4>
+              <p>The Mabsol CRM Desktop Agent exclusively reads local ERP / accounting database files (.dbf, .fpt, .cdx) located in your designated folder to calculate inventory, stock statements, sales, purchases, and ledger transactions for your private CRM dashboard.</p>
+            </div>
+          </div>
+
+          <div class="terms-card highlight-card">
+            <div class="terms-card-icon">🛡️</div>
+            <div class="terms-card-body">
+              <h4>Not Collecting or Using Your Personal Details</h4>
+              <p>We are <strong>NOT collecting or using your personal details</strong>. The desktop agent does NOT inspect, scan, or harvest your personal files, browsing history, private identity documents, or non-business files. Only authorized ERP database tables are read.</p>
+            </div>
+          </div>
+
+          <div class="terms-card highlight-card">
+            <div class="terms-card-icon">🔑</div>
+            <div class="terms-card-body">
+              <h4>Not Using Your License (Dedicated &amp; Protected)</h4>
+              <p>We are <strong>NOT using or sharing your license key</strong>. Your license key is cryptographically assigned exclusively to your authorized company and verified workstation. It is never reused, leased, or accessible by third parties.</p>
+            </div>
+          </div>
+
+          <div class="terms-card highlight-card">
+            <div class="terms-card-icon">🔒</div>
+            <div class="terms-card-body">
+              <h4>We Keep Private Your Data</h4>
+              <p><strong>We keep private your data at all times.</strong> All data synchronized from your local system to your cloud workspace is encrypted in transit using industry-standard TLS/SSL encryption. Your data is isolated strictly to your organization and is never shared, marketed, or sold.</p>
+            </div>
+          </div>
+
+          <div class="terms-card">
+            <div class="terms-card-icon">💻</div>
+            <div class="terms-card-body">
+              <h4>Desktop Account Verification &amp; Security</h4>
+              <p>To safeguard your business analytics, sign-in access on the desktop application requires multi-factor account verification (OTP). Each computer is independently authenticated to prevent unauthorized access.</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="modal-actions" style="margin-top: 18px; justify-content: flex-end;">
+          <button type="button" id="btnCloseTermsModal" class="btn-secondary" style="font-size: 12px; padding: 8px 18px;">
+            Close
+          </button>
+          <button type="button" id="btnAcceptTermsModal" class="btn-primary" style="font-size: 12px; padding: 8px 22px;">
+            ✓ I Understand &amp; Accept Terms
+          </button>
         </div>
       </div>
     </div>

@@ -13,11 +13,20 @@ import {
 
 import {
   getBackupSettings,
+  BackupSettings,
 } from "./backup-settings";
 
 import {
   sendBackupEmail,
 } from "./backup-email";
+
+import connectDB from "./mongodb";
+import mongoose from "mongoose";
+
+export interface SendBackupOptions extends DatabaseBackupOptions {
+  receiverEmail?: string;
+  force?: boolean;
+}
 
 export async function createEncryptedBackup(options: DatabaseBackupOptions = {}) {
   const { archiveBuffer, manifest, fileName } =
@@ -37,24 +46,46 @@ export async function inspectEncryptedBackup(encryptedBuffer: Buffer) {
   return inspectDatabaseBackup(rawBuffer);
 }
 
-export async function sendScheduledBackup(options?: DatabaseBackupOptions) {
+export async function sendScheduledBackup(options?: SendBackupOptions) {
   const settings = await getBackupSettings();
 
-  if (!settings) {
-    throw new Error("Backup settings are not configured");
-  }
+  const isManual = Boolean(
+    options && (
+      options.force ||
+      options.receiverEmail ||
+      options.isAll !== undefined ||
+      options.fyId !== undefined ||
+      options.startDate !== undefined
+    )
+  );
 
-  if (!settings.enabled) {
+  // If triggered automatically by scheduler, verify enabled flag
+  if (!isManual && (!settings || !settings.enabled)) {
     throw new Error("Backup scheduler is disabled");
   }
 
-  if (!settings.receiverEmail) {
-    throw new Error("Receiver Gmail is not configured");
+  const targetEmail = (
+    options?.receiverEmail ||
+    settings?.receiverEmail ||
+    ""
+  ).trim();
+
+  if (!targetEmail) {
+    throw new Error("Receiver email is not configured. Please enter a valid receiver email.");
   }
 
   // Determine backup options from settings if not explicitly passed
-  let backupOptions: DatabaseBackupOptions = options || {};
-  if (!options) {
+  let backupOptions: DatabaseBackupOptions = {};
+
+  if (options && (options.isAll || options.fyId || options.startDate)) {
+    backupOptions = {
+      isAll: options.isAll,
+      fyId: options.fyId,
+      fyName: options.fyName,
+      startDate: options.startDate,
+      endDate: options.endDate,
+    };
+  } else if (settings) {
     if (settings.scope === "all") {
       backupOptions = { isAll: true };
     } else if (settings.scope === "custom") {
@@ -74,14 +105,34 @@ export async function sendScheduledBackup(options?: DatabaseBackupOptions) {
   const backup = await createEncryptedBackup(backupOptions);
 
   await sendBackupEmail({
-    receiverEmail: settings.receiverEmail,
+    receiverEmail: targetEmail,
     fileName: backup.fileName,
     buffer: backup.buffer,
     fyName: backup.manifest.fyName,
   });
 
+  // Update lastBackupAt timestamp in MongoDB
+  try {
+    await connectDB();
+    const db = mongoose.connection.db;
+    if (db) {
+      await db.collection<BackupSettings>("backup_settings").updateOne(
+        { _id: "main" },
+        {
+          $set: {
+            lastBackupAt: new Date(),
+            updatedAt: new Date(),
+          },
+        }
+      );
+    }
+  } catch (err: any) {
+    console.warn("[sendScheduledBackup] Failed to update lastBackupAt:", err.message);
+  }
+
   return {
-    message: "Backup sent successfully",
+    success: true,
+    message: `Encrypted backup archive (${backup.fileName}) sent successfully to ${targetEmail}`,
     fileName: backup.fileName,
     manifest: backup.manifest,
   };

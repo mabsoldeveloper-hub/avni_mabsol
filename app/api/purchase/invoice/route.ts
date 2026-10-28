@@ -1342,7 +1342,7 @@ export async function POST(req: Request) {
           clean(fyCode),
 
         _vfpTable:
-          "MDIS_F18",
+          clean(fyCode) ? `MDIS_${clean(fyCode).toUpperCase()}` : "MDIS",
 
         _vfpSourceKey:
           `MANUAL_PURCHASE_MDIS_${finalBillNumber}`,
@@ -1483,7 +1483,7 @@ export async function POST(req: Request) {
             clean(fyCode),
 
           _vfpTable:
-            "DIS_F18",
+            clean(fyCode) ? `DIS_${clean(fyCode).toUpperCase()}` : "DIS",
 
           _vfpSourceKey:
             `MANUAL_PURCHASE_DIS_${finalBillNumber}_${index}`,
@@ -1554,7 +1554,7 @@ export async function POST(req: Request) {
         clean(fyCode),
 
       _vfpTable:
-        "PENDINGS_F18",
+        clean(fyCode) ? `PENDINGS_${clean(fyCode).toUpperCase()}` : "PENDINGS",
 
       _vfpSourceKey:
         `MANUAL_PURCHASE_PENDING_${vfpVendorCode}_${finalBillNumber}`,

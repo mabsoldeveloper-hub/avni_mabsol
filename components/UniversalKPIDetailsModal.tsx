@@ -87,17 +87,21 @@ export default function UniversalKPIDetailsModal({
         } else if (type === "sales_returns") {
           endpoint = `/api/reports/sales-return${qs}`;
         } else if (type === "today_sales") {
-          endpoint = `/api/sales/invoice?type=today${effectiveCompanyId ? `&companyId=${effectiveCompanyId}` : ""}`;
+          const p = new URLSearchParams(params);
+          p.set("type", "today");
+          endpoint = `/api/sales/invoice?${p.toString()}`;
         } else if (type === "monthly_sales") {
-          endpoint = `/api/sales/invoice?type=monthly${effectiveCompanyId ? `&companyId=${effectiveCompanyId}` : ""}`;
+          const p = new URLSearchParams(params);
+          p.set("type", "monthly");
+          endpoint = `/api/sales/invoice?${p.toString()}`;
         } else if (type === "customers" || type === "active_customers") {
-          endpoint = "/api/customers";
+          endpoint = `/api/customers${qs}`;
         } else if (type === "products") {
-          endpoint = "/api/products";
+          endpoint = `/api/products${qs}`;
         } else if (type === "users") {
-          endpoint = "/api/users";
+          endpoint = `/api/users${qs}`;
         } else if (type === "companies") {
-          endpoint = "/api/company-master";
+          endpoint = `/api/company-master${qs}`;
         }
 
         if (endpoint) {
@@ -113,7 +117,7 @@ export default function UniversalKPIDetailsModal({
             } else if (type === "payments") {
               setItems(json.payments || []);
             } else if (type === "sales_returns") {
-              setItems(json.returns || json.invoices || []);
+              setItems(json.rows || json.returns || json.invoices || []);
             } else if (type === "today_sales" || type === "monthly_sales") {
               setItems(json.invoices || []);
             } else if (type === "customers") {
@@ -287,10 +291,10 @@ export default function UniversalKPIDetailsModal({
                   {paginatedItems.map((item, idx) => (
                     <tr key={idx} className="hover:bg-slate-50/80 dark:hover:bg-slate-800/50 transition">
                       <td className="py-2.5 px-2.5 sm:py-3 sm:px-3 font-extrabold text-slate-900 dark:text-white">
-                        {item.companyName || item.PARNAM || item.PRODUCT || item.name || item.voucherNo || item.vendorName || item.billNumber || "N/A"}
+                        {item.companyName || item.customer || item.PARNAM || item.partyName || item.PRODUCT || item.name || item.voucher || item.voucherNo || item.billNumber || item.vendorName || "N/A"}
                       </td>
                       <td className="py-2.5 px-2.5 sm:py-3 sm:px-3 text-slate-500 font-mono">
-                        {item.companyCode || item.email || item.CITY || item.companyName || item.paymentDate || item.billDate || item.poDate || item.code || "N/A"}
+                        {item.date || item.billDate || item.paymentDate || item.poDate || item.companyCode || item.email || item.CITY || item.companyName || item.code || "N/A"}
                       </td>
                       <td className="py-2.5 px-2.5 sm:py-3 sm:px-3 text-right font-black text-indigo-600 dark:text-indigo-400">
                         {type === "companies"
@@ -299,8 +303,8 @@ export default function UniversalKPIDetailsModal({
                           ? item.mobile || "N/A"
                           : type === "products"
                           ? item.PRATE ? `₹${Number(item.PRATE).toLocaleString("en-IN")}` : item.BALANCE ? `${item.BALANCE} Qty` : "N/A"
-                          : item.amount || item.netAmount || item.netTotal || item.balance || item.BALANCE
-                          ? `₹${Number(item.amount || item.netAmount || item.netTotal || item.balance || item.BALANCE || 0).toLocaleString("en-IN")}`
+                          : (item.finalAmount || item.netAmount || item.amount || item.total || item.netTotal || item.balance || item.BALANCE)
+                          ? `₹${Number(item.finalAmount || item.netAmount || item.amount || item.total || item.netTotal || item.balance || item.BALANCE || 0).toLocaleString("en-IN")}`
                           : item.PHONE1 || "N/A"}
                       </td>
                       <td className="py-2.5 px-2.5 sm:py-3 sm:px-3 text-center">

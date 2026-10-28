@@ -34,14 +34,15 @@ export async function GET() {
   const name = String(userObj.name || "").toLowerCase().trim();
 
   const isSuperAdmin = Boolean(
-    userObj.isSuperAdmin ||
     email === superEmail ||
+    email === "mabsoldeveloper@gmail.com" ||
+    userObj.isSuperAdmin === true ||
     roleType === "superadmin" ||
+    roleType === "super-admin" ||
     role === "superadmin" ||
+    role === "super-admin" ||
     roleName === "superadmin" ||
-    roleName === "super admin" ||
-    name.includes("super admin") ||
-    name.includes("super administrator")
+    roleName === "super-admin"
   );
 
   if (isSuperAdmin) {
@@ -66,27 +67,19 @@ export async function GET() {
       userObj.isAdmin = true;
     }
 
-    // Non-super-admin: verify if active and approved
-    const statusLower = String(userObj.status || "").trim().toLowerCase();
-    const isSuspendedOrInactive =
-      !userObj.isApproved ||
-      statusLower === "suspended" ||
-      statusLower === "inactive" ||
-      statusLower === "deactivated" ||
-      statusLower === "deactive" ||
-      statusLower === "disabled" ||
-      statusLower === "pendingapproval" ||
-      statusLower === "rejected";
-
-    if (isSuspendedOrInactive) {
+    // Validate Super Admin approval, time-bound access expiry, and parent Head Office status
+    const { validateUserLoginAccess } = await import("@/lib/services/superAdmin.service");
+    const accessCheck = await validateUserLoginAccess(userObj);
+    if (!accessCheck.allowed) {
       const response = NextResponse.json(
         {
           success: false,
           suspended: true,
-          message: "Your account has been deactivated or suspended by the Super Administrator.",
+          deleted: Boolean(userObj.isDeleted),
+          message: accessCheck.message,
         },
         {
-          status: 403,
+          status: accessCheck.statusCode || 403,
           headers: {
             "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate",
           },
@@ -94,28 +87,6 @@ export async function GET() {
       );
       response.cookies.delete("token");
       return response;
-    }
-
-    // Check time-bound validity expiry
-    if (!userObj.isUnlimitedAccess && userObj.accessValidUntil) {
-      const expiryDate = new Date(userObj.accessValidUntil);
-      if (expiryDate.getTime() <= Date.now()) {
-        const response = NextResponse.json(
-          {
-            success: false,
-            expired: true,
-            message: "Your account access period has expired. Please contact the Super Administrator.",
-          },
-          {
-            status: 403,
-            headers: {
-              "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate",
-            },
-          }
-        );
-        response.cookies.delete("token");
-        return response;
-      }
     }
   }
 
@@ -132,6 +103,15 @@ export async function GET() {
       if (!userObj.companyName) {
         const vfp: any = await VfpConfig.findOne({ email: userObj.email }).lean();
         if (vfp) userObj.companyName = vfp.companyName || "";
+      }
+    }
+
+    // Populate and normalize enabledModules for client sidebar & route protection
+    if (!Array.isArray(userObj.enabledModules)) {
+      if (Array.isArray(userObj.companyId?.enabledModules)) {
+        userObj.enabledModules = userObj.companyId.enabledModules;
+      } else {
+        userObj.enabledModules = isSuperAdmin ? undefined : [];
       }
     }
   } catch {}
@@ -163,7 +143,7 @@ export async function GET() {
           companyId: userObj.companyId?._id || userObj.companyId,
           isSuperAdmin: Boolean(isSuperAdmin),
         },
-        process.env.JWT_SECRET || "mabsol_super_secret_jwt_key_2026",
+        process.env.JWT_SECRET || "MabsolCRM@2026SecretKey",
         { expiresIn: "30d" }
       );
       response.cookies.set("token", token, {

@@ -49,11 +49,10 @@ export async function POST(req: Request) {
 
     console.log(`\n[COMPANY EMAIL OTP] ${cleanEmail} → ${otp}`);
 
-    try {
-      await sendEmailOTP(cleanEmail, otp);
-    } catch (mailErr) {
-      console.warn("Email delivery failed, returning OTP in response:", mailErr);
-    }
+    // Dispatch email in background so the API responds in <50ms without waiting for slow SMTP handshake
+    sendEmailOTP(cleanEmail, otp).catch((mailErr) => {
+      console.warn("[COMPANY EMAIL OTP] Background delivery notice:", mailErr?.message || mailErr);
+    });
 
     return NextResponse.json({
       success: true,

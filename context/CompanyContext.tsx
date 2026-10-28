@@ -1,6 +1,6 @@
 "use client";
 
-import React, { createContext, useContext, useEffect, useState, useCallback } from "react";
+import React, { createContext, useContext, useEffect, useState, useCallback, useRef } from "react";
 import { useUser } from "./UserContext";
 
 export interface CompanyType {
@@ -20,6 +20,9 @@ export interface CompanyType {
   pincode?: string;
   logo?: string;
   isDefault?: boolean;
+  isHeadOffice?: boolean;
+  parentCompanyId?: string | null;
+  enabledModules?: string[];
   status?: string;
 }
 
@@ -61,11 +64,16 @@ export function CompanyProvider({ children }: { children: React.ReactNode }) {
   });
 
   const userCompId = user?.companyId?._id || (typeof user?.companyId === "string" ? user?.companyId : null);
+  const userCompIdRef = useRef(userCompId);
+  userCompIdRef.current = userCompId;
 
   const fetchCompanies = useCallback(async () => {
     try {
       const res = await fetch("/api/company-master");
-      if (!res.ok) return;
+      if (!res.ok) {
+        setLoading(false);
+        return;
+      }
       const data: CompanyType[] = await res.json();
       setCompanies(data || []);
 
@@ -83,23 +91,27 @@ export function CompanyProvider({ children }: { children: React.ReactNode }) {
 
       let chosen: CompanyType | null = null;
 
+      // 1. If user previously chose a company in localStorage (and it is in accessible companies), preserve that selection!
       if (savedStr) {
         try {
           const parsed = JSON.parse(savedStr);
-          const match = data.find((c) => c._id === parsed._id || c.companyCode === parsed.companyCode);
+          const match = data.find(
+            (c) => String(c._id) === String(parsed._id) || c.companyCode === parsed.companyCode
+          );
           if (match) {
             chosen = match;
           }
         } catch {}
       }
 
-      // Fallback 1: User's assigned company from UserContext
-      if (!chosen && userCompId) {
-        const userMatch = data.find((c) => c._id === userCompId);
+      // 2. Fallback to assigned company if no saved selection
+      const currentAssignedId = userCompIdRef.current;
+      if (!chosen && currentAssignedId) {
+        const userMatch = data.find((c) => String(c._id) === String(currentAssignedId));
         if (userMatch) chosen = userMatch;
       }
 
-      // Fallback 2: Default company
+      // 3. Fallback to default company or first available
       if (!chosen) {
         chosen =
           data.find((c) => c.isDefault) ||
@@ -109,28 +121,59 @@ export function CompanyProvider({ children }: { children: React.ReactNode }) {
 
       if (chosen) {
         setSelectedCompanyState((prev: any) => {
-          if (prev && prev._id === chosen?._id) return prev;
+          const isIdentical =
+            prev &&
+            String(prev._id) === String(chosen?._id) &&
+            JSON.stringify(prev.enabledModules) === JSON.stringify(chosen?.enabledModules) &&
+            prev.status === chosen?.status &&
+            prev.companyName === chosen?.companyName;
+
+          if (isIdentical) return prev;
+
           if (typeof window !== "undefined") {
-            try { localStorage.setItem("mabsol_selected_company", JSON.stringify(chosen)); } catch {}
+            try {
+              localStorage.setItem("mabsol_selected_company", JSON.stringify(chosen));
+              document.cookie = `mabsol_selected_company_id=${chosen._id}; path=/; max-age=31536000; SameSite=Lax`;
+            } catch {}
           }
           return chosen;
         });
       }
     } catch (err) {
-      console.error("Failed to load companies", err);
+      // console.error("Failed to load companies", err);
     } finally {
       setLoading(false);
     }
-  }, [userCompId]);
+  }, [user]);
 
   useEffect(() => {
     fetchCompanies();
+  }, [fetchCompanies, userCompId]);
+
+  useEffect(() => {
+    const handlePermissionsUpdated = () => {
+      fetchCompanies();
+    };
+    const handleStorage = (e: StorageEvent) => {
+      if (e.key === "mabsol_permissions_version" || e.key === "mabsol_user") {
+        fetchCompanies();
+      }
+    };
+    window.addEventListener("mabsol-permissions-updated", handlePermissionsUpdated);
+    window.addEventListener("storage", handleStorage);
+    return () => {
+      window.removeEventListener("mabsol-permissions-updated", handlePermissionsUpdated);
+      window.removeEventListener("storage", handleStorage);
+    };
   }, [fetchCompanies]);
 
   const changeSelectedCompany = useCallback((company: CompanyType) => {
     setSelectedCompanyState(company);
     if (typeof window !== "undefined") {
-      localStorage.setItem("mabsol_selected_company", JSON.stringify(company));
+      try {
+        localStorage.setItem("mabsol_selected_company", JSON.stringify(company));
+        document.cookie = `mabsol_selected_company_id=${company._id}; path=/; max-age=31536000; SameSite=Lax`;
+      } catch {}
       window.dispatchEvent(new CustomEvent("company-changed", { detail: company }));
     }
   }, []);

@@ -22,13 +22,15 @@ import {
 } from "react-icons/fa";
 
 
-import CurrentStockModal from "@/components/CurrentStockModal";
-import NearExpiryModal from "@/components/NearExpiryModal";
-import ExpiredBatchesModal from "@/components/ExpiredBatchesModal";
-import LedgerDetailsModal from "@/components/LedgerDetailsModal";
-import TotalSalesModal from "@/components/TotalSalesModal";
-import TotalPurchaseModal from "@/components/TotalPurchaseModal";
-import UniversalKPIDetailsModal from "@/components/UniversalKPIDetailsModal";
+import dynamic from "next/dynamic";
+
+const CurrentStockModal = dynamic(() => import("@/components/CurrentStockModal"), { ssr: false });
+const NearExpiryModal = dynamic(() => import("@/components/NearExpiryModal"), { ssr: false });
+const ExpiredBatchesModal = dynamic(() => import("@/components/ExpiredBatchesModal"), { ssr: false });
+const LedgerDetailsModal = dynamic(() => import("@/components/LedgerDetailsModal"), { ssr: false });
+const TotalSalesModal = dynamic(() => import("@/components/TotalSalesModal"), { ssr: false });
+const TotalPurchaseModal = dynamic(() => import("@/components/TotalPurchaseModal"), { ssr: false });
+const UniversalKPIDetailsModal = dynamic(() => import("@/components/UniversalKPIDetailsModal"), { ssr: false });
 
 function formatCurrency(n: number) {
     return "₹" + Number(n || 0).toLocaleString("en-IN", { maximumFractionDigits: 0 });
@@ -520,46 +522,60 @@ export default function KPICards({ kpis }: { kpis: any }) {
                 })}
             </div>
 
-            {/* Modals */}
-            <CurrentStockModal
-                isOpen={isStockModalOpen}
-                onClose={() => setIsStockModalOpen(false)}
-            />
+            {/* Modals — Lazy Loaded & Triggered Only When Opened */}
+            {isStockModalOpen && (
+                <CurrentStockModal
+                    isOpen={isStockModalOpen}
+                    onClose={() => setIsStockModalOpen(false)}
+                />
+            )}
 
-            <NearExpiryModal
-                isOpen={isNearExpiryModalOpen}
-                onClose={() => setIsNearExpiryModalOpen(false)}
-            />
+            {isNearExpiryModalOpen && (
+                <NearExpiryModal
+                    isOpen={isNearExpiryModalOpen}
+                    onClose={() => setIsNearExpiryModalOpen(false)}
+                />
+            )}
 
-            <ExpiredBatchesModal
-                isOpen={isExpiredBatchesModalOpen}
-                onClose={() => setIsExpiredBatchesModalOpen(false)}
-            />
+            {isExpiredBatchesModalOpen && (
+                <ExpiredBatchesModal
+                    isOpen={isExpiredBatchesModalOpen}
+                    onClose={() => setIsExpiredBatchesModalOpen(false)}
+                />
+            )}
 
-            <LedgerDetailsModal
-                isOpen={isLedgerModalOpen}
-                onClose={() => setIsLedgerModalOpen(false)}
-                initialType={ledgerInitialType}
-            />
+            {isLedgerModalOpen && (
+                <LedgerDetailsModal
+                    isOpen={isLedgerModalOpen}
+                    onClose={() => setIsLedgerModalOpen(false)}
+                    initialType={ledgerInitialType}
+                />
+            )}
 
-            <TotalSalesModal
-                isOpen={isSalesModalOpen}
-                onClose={() => setIsSalesModalOpen(false)}
-            />
+            {isSalesModalOpen && (
+                <TotalSalesModal
+                    isOpen={isSalesModalOpen}
+                    onClose={() => setIsSalesModalOpen(false)}
+                />
+            )}
 
-            <TotalPurchaseModal
-                isOpen={isPurchaseModalOpen}
-                onClose={() => setIsPurchaseModalOpen(false)}
-            />
+            {isPurchaseModalOpen && (
+                <TotalPurchaseModal
+                    isOpen={isPurchaseModalOpen}
+                    onClose={() => setIsPurchaseModalOpen(false)}
+                />
+            )}
 
-            <UniversalKPIDetailsModal
-                isOpen={universalModal.isOpen}
-                onClose={() => setUniversalModal((prev) => ({ ...prev, isOpen: false }))}
-                title={universalModal.title}
-                value={universalModal.value}
-                type={universalModal.type}
-                url={universalModal.url}
-            />
+            {universalModal.isOpen && (
+                <UniversalKPIDetailsModal
+                    isOpen={universalModal.isOpen}
+                    onClose={() => setUniversalModal((prev) => ({ ...prev, isOpen: false }))}
+                    title={universalModal.title}
+                    value={universalModal.value}
+                    type={universalModal.type}
+                    url={universalModal.url}
+                />
+            )}
 
             <style jsx global>{`
                 @keyframes fadeSlideIn {

@@ -66,6 +66,7 @@ export default function AddCustomerModal({
     PHONE1: "",
     PHONE2: "",
     MAILNAM: "",
+    EMAIL: "",
     // Address & Location
     PARADD: "",
     PARADD2: "",
@@ -501,12 +502,24 @@ export default function AddCustomerModal({
                     />
                   </div>
 
-                  <div className="col-span-1 sm:col-span-2">
+                  <div className="col-span-1">
+                    <label className="block text-[11px] sm:text-xs font-semibold text-gray-700 mb-1">Mailing Name (MAILNAM)</label>
+                    <input
+                      type="text"
+                      name="MAILNAM"
+                      value={formData.MAILNAM}
+                      onChange={handleChange}
+                      placeholder="Mailing / ledger name"
+                      className="w-full px-3 py-2 text-xs rounded-lg border border-gray-300 focus:ring-2 focus:ring-emerald-600 outline-none"
+                    />
+                  </div>
+
+                  <div className="col-span-1">
                     <label className="block text-[11px] sm:text-xs font-semibold text-gray-700 mb-1">Email Address</label>
                     <input
                       type="email"
-                      name="MAILNAM"
-                      value={formData.MAILNAM}
+                      name="EMAIL"
+                      value={formData.EMAIL}
                       onChange={handleChange}
                       placeholder="e.g. apollo@pharmacy.com"
                       className="w-full px-3 py-2 text-xs rounded-lg border border-gray-300 focus:ring-2 focus:ring-emerald-600 outline-none"

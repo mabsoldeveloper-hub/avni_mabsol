@@ -21,15 +21,16 @@ export async function GET(req: NextRequest) {
     const search = searchParams.get("search") || "";
 
     const user = await getCurrentUser();
+    if (!user) {
+      return NextResponse.json({ success: false, message: "Unauthorized" }, { status: 401 });
+    }
     let targetUserId = userIdParam;
 
     // Territory / Role Restriction
-    if (user) {
-      const roleName = String(user.roleId?.roleName || "").trim().toLowerCase();
-      // If user is MR (non-admin), default to their own DCRs unless specified
-      if (!roleName.includes("admin") && !targetUserId) {
-        targetUserId = String(user._id);
-      }
+    const roleName = String(user.roleId?.roleName || "").trim().toLowerCase();
+    // If user is MR (non-admin), default to their own DCRs unless specified
+    if (!roleName.includes("admin") && !targetUserId) {
+      targetUserId = String(user._id);
     }
 
     const filter: any = {};

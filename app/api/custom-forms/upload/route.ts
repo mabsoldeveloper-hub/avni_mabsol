@@ -15,14 +15,36 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // Limit maximum file size to 10MB
+    const MAX_FILE_SIZE = 10 * 1024 * 1024;
+    if (file.size > MAX_FILE_SIZE) {
+      return NextResponse.json(
+        { success: false, error: "File exceeds maximum size limit of 10MB" },
+        { status: 400 }
+      );
+    }
+
+    // Restrict to safe document and image formats
+    const rawExt = (file.name.split(".").pop() || "").toLowerCase().trim();
+    const ALLOWED_EXTENSIONS = new Set([
+      "png", "jpg", "jpeg", "webp", "gif",
+      "pdf", "doc", "docx", "xls", "xlsx", "csv", "txt"
+    ]);
+
+    if (!ALLOWED_EXTENSIONS.has(rawExt)) {
+      return NextResponse.json(
+        { success: false, error: "Unsupported file type. Only standard documents and images are allowed." },
+        { status: 400 }
+      );
+    }
+
     const bytes = await file.arrayBuffer();
     const buffer = Buffer.from(bytes);
 
     const uploadsDir = path.join(process.cwd(), "public", "uploads", "custom-forms");
     await mkdir(uploadsDir, { recursive: true });
 
-    const ext = file.name.split(".").pop() || "bin";
-    const fileName = `${uuidv4()}.${ext}`;
+    const fileName = `${uuidv4()}.${rawExt}`;
     const filePath = path.join(uploadsDir, fileName);
 
     await writeFile(filePath, buffer);

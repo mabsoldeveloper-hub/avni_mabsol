@@ -23,6 +23,7 @@ import {
     FaCubes,
     FaBullseye,
     FaGift,
+    // FaBell
 } from "react-icons/fa";
 
 /* ─────────────────────────── colour tokens ─────────────────────────── */
@@ -154,6 +155,14 @@ const accountMasters: MasterItem[] = [
         link: "/dashboard/master/targets",
         color: "rose",
     },
+    //     {
+    //     title: "Alert & Notification Engine",
+    //     desc: "Automated payment reminders, WhatsApp & email notifications",
+    //     icon: <FaBell size={16} />,
+    //     link: "/dashboard/master/alert-settings",
+    //     color: "amber",
+    // },
+// 
     // {
     //     title: "MR Daily Reporting (DCR)",
     //     desc:  "Doctor visits, chemist calls, POB & approvals",

@@ -3,12 +3,18 @@ import connectDB from "@/lib/mongodb";
 import VoucherSeries from "@/models/VoucherSeries";
 import { formatVoucherNumber } from "@/lib/voucherSeriesHelper";
 import { getCompanyVfpFilter } from "@/lib/companyVfpHelper";
+import { getCurrentUser } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(req: NextRequest) {
   try {
     await connectDB();
+    const user = await getCurrentUser();
+    if (!user) {
+      return NextResponse.json({ success: false, message: "Unauthorized" }, { status: 401 });
+    }
+
     const { searchParams } = new URL(req.url);
     const companyId = searchParams.get("companyId") || "";
     const fyId = searchParams.get("fyId") || "";
@@ -139,6 +145,11 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   try {
     await connectDB();
+    const user = await getCurrentUser();
+    if (!user) {
+      return NextResponse.json({ success: false, message: "Unauthorized" }, { status: 401 });
+    }
+
     const body = await req.json();
 
     const seriesName = String(body.seriesName || "").trim();

@@ -52,7 +52,7 @@ export default function SuperAdminSettingsPage() {
         {/* Setting Card 1: Default Access Validity */}
         <div className="bg-white rounded-2xl border border-slate-200/80 p-6 shadow-2xs space-y-4">
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center text-sm">
+            <div className="w-9 h-9 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center text-sm">
               <FaClock />
             </div>
             <div>
@@ -69,9 +69,9 @@ export default function SuperAdminSettingsPage() {
                 key={days}
                 type="button"
                 onClick={() => setDefaultDuration(days)}
-                className={`py-2.5 px-4 rounded-full text-xs font-bold border transition-all cursor-pointer ${
+                className={`py-2.5 px-4 rounded-xl text-xs font-bold border transition-all cursor-pointer ${
                   defaultDuration === days
-                    ? "bg-blue-600 text-white border-blue-600 shadow-sm shadow-blue-600/25"
+                    ? "bg-indigo-600 text-white border-indigo-600 shadow-sm shadow-indigo-600/25"
                     : "bg-white border-slate-200 text-slate-700 hover:bg-slate-50"
                 }`}
               >
@@ -101,9 +101,9 @@ export default function SuperAdminSettingsPage() {
                 key={hours}
                 type="button"
                 onClick={() => setDefaultSessionHours(hours)}
-                className={`py-2.5 px-4 rounded-full text-xs font-bold border transition-all cursor-pointer ${
+                className={`py-2.5 px-4 rounded-xl text-xs font-bold border transition-all cursor-pointer ${
                   defaultSessionHours === hours
-                    ? "bg-blue-600 text-white border-blue-600 shadow-sm shadow-blue-600/25"
+                    ? "bg-indigo-600 text-white border-indigo-600 shadow-sm shadow-indigo-600/25"
                     : "bg-white border-slate-200 text-slate-700 hover:bg-slate-50"
                 }`}
               >
@@ -126,7 +126,7 @@ export default function SuperAdminSettingsPage() {
               type="button"
               onClick={() => setAutoRevokeExpired(!autoRevokeExpired)}
               className={`w-12 h-6 flex items-center rounded-full p-1 cursor-pointer transition-colors duration-200 ${
-                autoRevokeExpired ? "bg-blue-600" : "bg-slate-300"
+                autoRevokeExpired ? "bg-indigo-600" : "bg-slate-300"
               }`}
             >
               <div
@@ -142,7 +142,7 @@ export default function SuperAdminSettingsPage() {
         <div className="flex items-center gap-3 pt-2">
           <button
             type="submit"
-            className="px-8 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-full border border-blue-600 text-xs font-bold shadow-md shadow-blue-600/25 flex items-center gap-2 cursor-pointer transition-all"
+            className="px-8 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl border border-indigo-600 text-xs font-bold shadow-md shadow-indigo-600/25 flex items-center gap-2 cursor-pointer transition-all"
           >
             <FaSave size={13} /> Save System Settings
           </button>

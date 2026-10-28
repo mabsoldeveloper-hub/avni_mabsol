@@ -1,65 +1,13 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest } from "next/server";
+import { withAuth } from "@/app/api/_middlewares/auth.middleware";
+import { RoleController } from "./role.controller";
 
-import connectDB from "@/lib/mongodb";
-import Role from "@/models/Role";
+export const dynamic = "force-dynamic";
 
-export async function GET() {
-
-  try {
-
-    await connectDB();
-
-    const roles =
-      await Role.find()
-      .sort({
-        roleName:1
-      });
-
-    return NextResponse.json(roles);
-
-  } catch {
-
-    return NextResponse.json(
-      {
-        error:"Failed"
-      },
-      {
-        status:500
-      }
-    );
-
-  }
-
+export async function GET(req: NextRequest, props: any) {
+  return withAuth(RoleController.list)(req, props);
 }
 
-export async function POST(
-  req:NextRequest
-){
-
-  try{
-
-    await connectDB();
-
-    const body =
-      await req.json();
-
-    const role =
-      await Role.create(body);
-
-    return NextResponse.json(role);
-
-  }
-  catch(error:any){
-
-    return NextResponse.json(
-      {
-        error:error.message
-      },
-      {
-        status:500
-      }
-    );
-
-  }
-
+export async function POST(req: NextRequest, props: any) {
+  return withAuth(RoleController.create, { requireAdmin: true })(req, props);
 }

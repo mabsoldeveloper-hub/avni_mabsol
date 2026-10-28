@@ -74,7 +74,7 @@ function ReportsContent() {
             type="button"
             onClick={handleExportCSV}
             disabled={users.length === 0}
-            className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-full text-xs font-bold border border-blue-600 shadow-sm shadow-blue-600/25 flex items-center gap-2 cursor-pointer disabled:opacity-50"
+            className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold border border-indigo-600 shadow-sm shadow-indigo-600/25 flex items-center gap-2 cursor-pointer disabled:opacity-50"
           >
             <FaDownload size={11} /> Export CSV Report
           </button>
@@ -83,10 +83,10 @@ function ReportsContent() {
             type="button"
             onClick={refetch}
             disabled={loading}
-            className="p-2.5 rounded-full bg-white border border-slate-200 text-slate-600 hover:text-slate-900 hover:border-slate-300 shadow-xs transition-all cursor-pointer disabled:opacity-50 flex items-center justify-center"
+            className="p-2.5 rounded-xl bg-white border border-slate-200 text-slate-600 hover:text-slate-900 hover:border-slate-300 shadow-xs transition-all cursor-pointer disabled:opacity-50 flex items-center justify-center"
             title="Refresh reports"
           >
-            <FaSync className={`text-xs ${loading ? "animate-spin text-blue-600" : ""}`} />
+            <FaSync className={`text-xs ${loading ? "animate-spin text-indigo-600" : ""}`} />
           </button>
         </div>
       </div>
@@ -123,7 +123,7 @@ function ReportsContent() {
       <div className="grid grid-cols-1 md:grid-cols-3 gap-5 mb-8">
         <div className="bg-white rounded-2xl border border-slate-200/80 p-5 shadow-2xs flex flex-col justify-between">
           <div>
-            <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center text-lg mb-3">
+            <div className="w-10 h-10 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center text-lg mb-3">
               <FaFileAlt />
             </div>
             <h3 className="text-sm font-bold text-slate-900">Tenant Registration Master</h3>

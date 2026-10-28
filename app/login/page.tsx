@@ -48,7 +48,24 @@ export default function LoginPage() {
         setError(
           "Your account has been deactivated or suspended by the Super Administrator. You cannot access this platform until re-approved by the Super Admin."
         );
+        return;
       }
+
+      // Check if user already has an active, valid session
+      fetch("/api/auth/me", { cache: "no-store", credentials: "include" })
+        .then((res) => res.json())
+        .then((data) => {
+          if (data?.success && data?.user) {
+            const roleSlug =
+              data.user.isSuperAdmin || data.user.roleType === "SuperAdmin" || data.user.roleType === "super-admin"
+                ? "super-admin"
+                : data.user.roleType
+                ? String(data.user.roleType).toLowerCase().trim().replace(/[\s_]+/g, "-")
+                : "admin";
+            window.location.href = `/dashboard/${roleSlug}`;
+          }
+        })
+        .catch(() => {});
     }
   }, []);
 

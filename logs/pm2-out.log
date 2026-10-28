@@ -47,3 +47,98 @@
 2026-10-01T12:15:52: ======================================================
 2026-10-01T12:15:52: 
 2026-10-01T12:15:59: Mail Sent: <ce8a7a71-ff30-c63c-c555-3b585c3462dc@mabsolinfotech.com>
+2026-10-01T12:55:59: ▲ Next.js 16.2.9
+2026-10-01T12:55:59: - Local:         http://localhost:3004
+2026-10-01T12:55:59: - Network:       http://172.31.2.35:3004
+2026-10-01T12:55:59: ✓ Ready in 310ms
+2026-10-01T12:55:59: [Auto-Sync Daemon] Server background scheduler initialized and active.
+2026-10-01T12:56:01: [server] Launching VFP background worker automatically: /home/vfpuser/Anvi_mabsol/avni_mabsol/scripts/vfp-sync/worker.cjs
+2026-10-08T10:25:15: GET /api/master/product: 250 products in 26ms
+2026-10-09T05:34:38: ▲ Next.js 16.2.9
+2026-10-09T05:34:38: - Local:         http://localhost:3004
+2026-10-09T05:34:38: - Network:       http://172.31.2.35:3004
+2026-10-09T05:34:38: ✓ Ready in 1691ms
+2026-10-09T05:34:40: [Auto-Sync Daemon] Server background scheduler initialized and active.
+2026-10-09T05:35:00: [server] Launching VFP background worker automatically: /home/vfpuser/Anvi_mabsol/avni_mabsol/scripts/vfp-sync/worker.cjs
+2026-10-09T12:30:46: ▲ Next.js 16.2.9
+2026-10-09T12:30:46: - Local:         http://localhost:3004
+2026-10-09T12:30:46: - Network:       http://172.31.2.35:3004
+2026-10-09T12:30:46: ✓ Ready in 477ms
+2026-10-09T12:30:48: [Auto-Sync Daemon] Server background scheduler initialized and active.
+2026-10-09T12:31:00: [server] Launching VFP background worker automatically: /home/vfpuser/Anvi_mabsol/avni_mabsol/scripts/vfp-sync/worker.cjs
+2026-10-12T07:11:41: 
+2026-10-12T07:11:41: ======================================================
+2026-10-12T07:11:41: [EMAIL VERIFICATION OTP] Sent to: rakeshbhanott@gmail.com | OTP: 436805
+2026-10-12T07:11:41: ======================================================
+2026-10-12T07:11:41: 
+2026-10-12T07:11:48: Mail Sent: <19ffc715-3c5d-649a-469f-3714601df1a2@mabsolinfotech.com>
+2026-10-12T08:58:09: Pending Bills : 64
+2026-10-12T08:58:09: Pend Rows : 3172
+2026-10-12T08:58:09: Bill Rows : 22
+2026-10-12T11:49:42: ▲ Next.js 16.2.9
+2026-10-12T11:49:42: - Local:         http://localhost:3004
+2026-10-12T11:49:42: - Network:       http://172.31.2.35:3004
+2026-10-12T11:49:42: ✓ Ready in 1567ms
+2026-10-12T11:49:44: [Auto-Sync Daemon] Server background scheduler initialized and active.
+2026-10-12T11:50:00: [server] Launching VFP background worker automatically: /home/vfpuser/Anvi_mabsol/avni_mabsol/scripts/vfp-sync/worker.cjs
+2026-10-12T12:56:23: ▲ Next.js 16.2.9
+2026-10-12T12:56:23: - Local:         http://localhost:3004
+2026-10-12T12:56:23: - Network:       http://172.31.2.35:3004
+2026-10-12T12:56:23: ✓ Ready in 483ms
+2026-10-12T12:56:24: [Auto-Sync Daemon] Server background scheduler initialized and active.
+2026-10-12T12:57:00: [server] Launching VFP background worker automatically: /home/vfpuser/Anvi_mabsol/avni_mabsol/scripts/vfp-sync/worker.cjs
+2026-10-14T10:20:24: ▲ Next.js 16.2.9
+2026-10-14T10:20:24: - Local:         http://localhost:3004
+2026-10-14T10:20:24: - Network:       http://172.31.2.35:3004
+2026-10-14T10:20:24: ✓ Ready in 2.4s
+2026-10-14T10:20:26: [Auto-Sync Daemon] Server background scheduler initialized and active.
+2026-10-14T10:21:00: [server] Launching VFP background worker automatically: /home/vfpuser/Anvi_mabsol/avni_mabsol/scripts/vfp-sync/worker.cjs
+2026-10-14T12:28:00: ▲ Next.js 16.2.9
+2026-10-14T12:28:00: - Local:         http://localhost:3004
+2026-10-14T12:28:00: - Network:       http://172.31.2.35:3004
+2026-10-14T12:28:00: ✓ Ready in 460ms
+2026-10-14T12:28:01: [Auto-Sync Daemon] Server background scheduler initialized and active.
+2026-10-14T12:29:00: [server] Launching VFP background worker automatically: /home/vfpuser/Anvi_mabsol/avni_mabsol/scripts/vfp-sync/worker.cjs
+2026-10-16T07:27:55: ▲ Next.js 16.2.9
+2026-10-16T07:27:55: - Local:         http://localhost:3004
+2026-10-16T07:27:55: - Network:       http://172.31.2.35:3004
+2026-10-16T07:27:55: ✓ Ready in 492ms
+2026-10-16T07:27:57: [Auto-Sync Daemon] Server background scheduler initialized and active.
+2026-10-16T07:28:01: [server] Launching VFP background worker automatically: /home/vfpuser/Anvi_mabsol/avni_mabsol/scripts/vfp-sync/worker.cjs
+2026-10-16T12:39:11: ▲ Next.js 16.2.9
+2026-10-16T12:39:11: - Local:         http://localhost:3004
+2026-10-16T12:39:11: - Network:       http://172.31.2.35:3004
+2026-10-16T12:39:11: ✓ Ready in 581ms
+2026-10-16T12:39:12: [Auto-Sync Daemon] Server background scheduler initialized and active.
+2026-10-16T12:40:00: [server] Launching VFP background worker automatically: /home/vfpuser/Anvi_mabsol/avni_mabsol/scripts/vfp-sync/worker.cjs
+2026-10-26T05:42:11: ▲ Next.js 16.2.9
+2026-10-26T05:42:11: - Local:         http://localhost:3004
+2026-10-26T05:42:11: - Network:       http://172.31.2.35:3004
+2026-10-26T05:42:11: ✓ Ready in 531ms
+2026-10-26T05:42:12: [Auto-Sync Daemon] Server background scheduler initialized and active.
+2026-10-26T05:43:00: [server] Launching VFP background worker automatically: /home/vfpuser/Anvi_mabsol/avni_mabsol/scripts/vfp-sync/worker.cjs
+2026-10-26T05:56:14: ▲ Next.js 16.2.9
+2026-10-26T05:56:14: - Local:         http://localhost:3004
+2026-10-26T05:56:14: - Network:       http://172.31.2.35:3004
+2026-10-26T05:56:14: ✓ Ready in 504ms
+2026-10-26T05:56:15: [Auto-Sync Daemon] Server background scheduler initialized and active.
+2026-10-26T05:57:01: [server] Launching VFP background worker automatically: /home/vfpuser/Anvi_mabsol/avni_mabsol/scripts/vfp-sync/worker.cjs
+2026-10-26T07:10:16: ▲ Next.js 16.2.9
+2026-10-26T07:10:16: - Local:         http://localhost:3004
+2026-10-26T07:10:16: - Network:       http://172.31.2.35:3004
+2026-10-26T07:10:16: ✓ Ready in 494ms
+2026-10-26T07:10:18: [Auto-Sync Daemon] Server background scheduler initialized and active.
+2026-10-26T07:11:01: [server] Launching VFP background worker automatically: /home/vfpuser/Anvi_mabsol/avni_mabsol/scripts/vfp-sync/worker.cjs
+2026-10-26T09:12:07: ▲ Next.js 16.2.9
+2026-10-26T09:12:07: - Local:         http://localhost:3004
+2026-10-26T09:12:07: - Network:       http://172.31.2.35:3004
+2026-10-26T09:12:07: ✓ Ready in 510ms
+2026-10-26T09:12:09: [Auto-Sync Daemon] Server background scheduler initialized and active.
+2026-10-26T09:13:00: [server] Launching VFP background worker automatically: /home/vfpuser/Anvi_mabsol/avni_mabsol/scripts/vfp-sync/worker.cjs
+2026-10-26T12:04:49: GET /api/master/product: 250 products in 33ms
+2026-10-28T07:11:44: ▲ Next.js 16.2.9
+2026-10-28T07:11:44: - Local:         http://localhost:3004
+2026-10-28T07:11:44: - Network:       http://172.31.2.35:3004
+2026-10-28T07:11:44: ✓ Ready in 505ms
+2026-10-28T07:11:46: [Auto-Sync Daemon] Server background scheduler initialized and active.
+2026-10-28T07:12:01: [server] Launching VFP background worker automatically: /home/vfpuser/Anvi_mabsol/avni_mabsol/scripts/vfp-sync/worker.cjs

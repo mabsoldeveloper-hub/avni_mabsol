@@ -5,7 +5,11 @@ import User from "@/models/User";
 import Company from "@/models/Company";
 import Role from "@/models/Role";
 import FinancialYear from "@/models/FinancialYear";
-import { USER_APPROVAL_STATUS, DEFAULT_ACCESS_DAYS } from "@/lib/constants/superAdmin.constant";
+import {
+  USER_APPROVAL_STATUS,
+  DEFAULT_ACCESS_DAYS,
+  isReservedSuperAdminEmail,
+} from "@/lib/constants/superAdmin.constant";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -49,7 +53,18 @@ export async function POST(req: NextRequest) {
     const cleanEmail = email.toLowerCase().trim();
     const cleanMobile = mobile ? String(mobile).replace(/\D/g, "") : "";
 
-    // 2. Check if user email already exists
+    // 2. Super Admin reserved email check
+    if (isReservedSuperAdminEmail(cleanEmail)) {
+      return NextResponse.json(
+        {
+          success: false,
+          message: "This email address is reserved for the Super Administrator and cannot be used to register an account.",
+        },
+        { status: 403 }
+      );
+    }
+
+    // 3. Check if user email already exists
     const existingUser = await User.findOne({ email: cleanEmail });
     if (existingUser) {
       return NextResponse.json(
@@ -78,6 +93,9 @@ export async function POST(req: NextRequest) {
       ownerName: name.trim(),
       email: cleanEmail,
       mobile: cleanMobile,
+      enabledModules: [
+        "dashboard", "sales", "purchases", "purchase", "inventory", "customer", "master", "area", "compare", "leads", "custom-forms", "financial-year", "reports", "mabsolcrmsync", "users", "settings", "company", "billing", "fieldforce", "financial_years", "custom_forms"
+      ],
       status: "Active",
       isDefault: true,
       isHeadOffice: true,

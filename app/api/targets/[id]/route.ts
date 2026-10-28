@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import connectDB from "@/lib/mongodb";
 import TargetMaster from "@/models/TargetMaster";
 import User from "@/models/User";
+import { getCurrentUser } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
@@ -14,6 +15,11 @@ export async function GET(
 ) {
   try {
     await connectDB();
+    const currentUser = await getCurrentUser();
+    if (!currentUser) {
+      return NextResponse.json({ success: false, message: "Unauthorized" }, { status: 401 });
+    }
+
     const { id } = await params;
 
     const record = await TargetMaster.findById(id).populate(
@@ -46,6 +52,11 @@ export async function PUT(
 ) {
   try {
     await connectDB();
+    const currentUser = await getCurrentUser();
+    if (!currentUser) {
+      return NextResponse.json({ success: false, message: "Unauthorized" }, { status: 401 });
+    }
+
     const { id } = await params;
     const body = await req.json();
 
@@ -107,6 +118,11 @@ export async function DELETE(
 ) {
   try {
     await connectDB();
+    const currentUser = await getCurrentUser();
+    if (!currentUser) {
+      return NextResponse.json({ success: false, message: "Unauthorized" }, { status: 401 });
+    }
+
     const { id } = await params;
 
     const deleted = await TargetMaster.findByIdAndDelete(id);

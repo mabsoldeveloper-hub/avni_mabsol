@@ -1,54 +1,57 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { restoreEncryptedBackup } from "@/lib/backup-service";
+import { withAuth } from "@/app/api/_middlewares/auth.middleware";
 
 export const runtime = "nodejs";
 
-export async function POST(request: Request) {
-  try {
-    const formData = await request.formData();
+export async function POST(request: NextRequest, props: any) {
+  return withAuth(async (req) => {
+    try {
+      const formData = await req.formData();
 
-    const file = formData.get("file");
-    const mode = formData.get("mode") as "replace_year" | "merge" | null;
+      const file = formData.get("file");
+      const mode = formData.get("mode") as "replace_year" | "merge" | null;
 
-    if (!(file instanceof File)) {
-      return NextResponse.json(
-        { message: "Backup file is required" },
-        { status: 400 }
-      );
-    }
+      if (!(file instanceof File)) {
+        return NextResponse.json(
+          { message: "Backup file is required" },
+          { status: 400 }
+        );
+      }
 
-    if (!file.name.endsWith(".mbak")) {
+      if (!file.name.endsWith(".mbak")) {
+        return NextResponse.json(
+          {
+            message: "Only encrypted .mbak files are allowed",
+          },
+          { status: 400 }
+        );
+      }
+
+      const encryptedBuffer = Buffer.from(await file.arrayBuffer());
+
+      const result = await restoreEncryptedBackup(encryptedBuffer, {
+        mode: mode || "replace_year",
+      });
+
+      return NextResponse.json({
+        success: true,
+        message: result.message,
+        manifest: result.manifest,
+        stats: result.stats,
+      });
+    } catch (error) {
+      console.error("Database restore error:", error);
+
       return NextResponse.json(
         {
-          message: "Only encrypted .mbak files are allowed",
+          message:
+            error instanceof Error
+              ? error.message
+              : "Restore failed. File may be corrupted or encryption key may not match.",
         },
-        { status: 400 }
+        { status: 500 }
       );
     }
-
-    const encryptedBuffer = Buffer.from(await file.arrayBuffer());
-
-    const result = await restoreEncryptedBackup(encryptedBuffer, {
-      mode: mode || "replace_year",
-    });
-
-    return NextResponse.json({
-      success: true,
-      message: result.message,
-      manifest: result.manifest,
-      stats: result.stats,
-    });
-  } catch (error) {
-    console.error("Database restore error:", error);
-
-    return NextResponse.json(
-      {
-        message:
-          error instanceof Error
-            ? error.message
-            : "Restore failed. File may be corrupted or encryption key may not match.",
-      },
-      { status: 500 }
-    );
-  }
+  }, { requireAdmin: true })(request, props);
 }

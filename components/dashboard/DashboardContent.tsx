@@ -1,6 +1,8 @@
 "use client";
 
-import { useEffect, useState, useCallback, useRef } from "react";
+import { useEffect, useState, useCallback, useRef, useMemo } from "react";
+import useSWR from "swr";
+import { useDashboardData, defaultFetcher, defaultSWRConfig } from "@/lib/swr";
 import KPICards from "@/components/KPICards";
 import DashboardCharts, { PurchaseDashboardCharts, CreditDashboardCharts } from "@/components/dashboard/DashboardCharts";
 import AnalyticsCards from "@/components/AnalyticsCards";
@@ -21,6 +23,7 @@ import {
     FaPalette,
     FaCheck,
     FaUndoAlt,
+    FaCalendarAlt,
 } from "react-icons/fa";
 import { useFinancialYear } from "@/context/FinancialYearContext";
 import { useCompany } from "@/context/CompanyContext";
@@ -299,11 +302,7 @@ function isColorDark(hex: string) {
 }
 
 export default function DashboardContent() {
-    const [data, setData] = useState<any>(null);
-    const [loading, setLoading] = useState(true);
-    const [refreshing, setRefreshing] = useState(false);
     const [activeTab, setActiveTab] = useState<TabType>("overview");
-    const [mrTerritoryInfo, setMrTerritoryInfo] = useState<MrTerritoryInfo | null>(null);
     const [isSpeaking, setIsSpeaking] = useState(false);
     const [voiceEnabled, setVoiceEnabled] = useState<boolean>(true);
     const hasSpokenRef = useRef(false);
@@ -317,8 +316,49 @@ export default function DashboardContent() {
     const [sidebarCustomHex, setSidebarCustomHex] = useState<string>("#001f54");
     const colorPickerRef = useRef<HTMLDivElement>(null);
 
-    const { selectedCompany } = useCompany();
-    const { selectedFY } = useFinancialYear();
+    const { selectedCompany, loading: companyLoading } = useCompany();
+    const { selectedFY, loading: fyLoading } = useFinancialYear();
+
+    // Use SWR for MR territory info so it caches across navigation without refetching
+    const { data: mrTerritoryRes } = useSWR(
+        "/api/mr-territory/my-territories",
+        defaultFetcher,
+        { ...defaultSWRConfig, dedupingInterval: 60000 }
+    );
+
+    const mrTerritoryInfo = useMemo(() => {
+        if (!mrTerritoryRes?.success) return null;
+        return {
+            isMrRestricted: mrTerritoryRes.isMrRestricted,
+            territories: mrTerritoryRes.territories || [],
+            allowedCompanyCodes: mrTerritoryRes.allowedCompanyCodes || [],
+        };
+    }, [mrTerritoryRes]);
+
+    // Build FY date range params
+    const fyDates = useMemo(() => {
+        if (!selectedFY || selectedFY.isAll || !selectedFY.startDate || !selectedFY.endDate) {
+            return { startDate: null, endDate: null };
+        }
+        return {
+            startDate: new Date(selectedFY.startDate).toISOString().slice(0, 10),
+            endDate: new Date(selectedFY.endDate).toISOString().slice(0, 10),
+        };
+    }, [selectedFY]);
+
+    // SWR Hook with automatic deduplication, caching, and instant stale-while-revalidate render
+    const {
+        data,
+        isLoading: loading,
+        isValidating: refreshing,
+        refresh: handleManualRefresh,
+    } = useDashboardData({
+        companyId: selectedCompany?._id,
+        fyId: selectedFY?.isAll ? "ALL" : selectedFY?._id,
+        startDate: fyDates.startDate,
+        endDate: fyDates.endDate,
+        enabled: !companyLoading && !fyLoading,
+    });
 
     useEffect(() => {
         if (typeof window !== "undefined") {
@@ -489,77 +529,7 @@ export default function DashboardContent() {
         };
     }, []);
 
-    const loadMrTerritoryInfo = async () => {
-        try {
-            const res = await fetch("/api/mr-territory/my-territories");
-            if (res.ok) {
-                const json = await res.json();
-                if (json.success) {
-                    setMrTerritoryInfo({
-                        isMrRestricted: json.isMrRestricted,
-                        territories: json.territories || [],
-                        allowedCompanyCodes: json.allowedCompanyCodes || [],
-                    });
-                }
-            }
-        } catch {
-            // Silently ignore
-        }
-    };
 
-    const loadDashboard = useCallback(async () => {
-        if (!data) {
-            setLoading(true);
-        }
-        try {
-            const params = new URLSearchParams();
-            if (selectedCompany?._id) {
-                params.set("companyId", selectedCompany._id);
-            }
-            if (selectedFY) {
-                if (selectedFY.isAll) {
-                    params.set("fyId", "ALL");
-                } else if (selectedFY._id) {
-                    params.set("fyId", selectedFY._id);
-                    if (selectedFY.startDate && selectedFY.endDate) {
-                        const s = new Date(selectedFY.startDate).toISOString().slice(0, 10);
-                        const e = new Date(selectedFY.endDate).toISOString().slice(0, 10);
-                        params.set("startDate", s);
-                        params.set("endDate", e);
-                    }
-                }
-            }
-
-            const queryString = params.toString();
-            const url = queryString ? `/api/dashboard?${queryString}` : "/api/dashboard";
-
-            const res = await fetch(url);
-            if (!res.ok) {
-                console.error(`Dashboard API returned status ${res.status}`);
-                return;
-            }
-            const json = await res.json();
-            setData(json);
-        } catch (err) {
-            console.error("Dashboard fetch error:", err);
-        } finally {
-            setLoading(false);
-            setRefreshing(false);
-        }
-    }, [selectedCompany?._id, selectedFY?._id, data]);
-
-    const handleManualRefresh = () => {
-        setRefreshing(true);
-        loadDashboard();
-    };
-
-    useEffect(() => {
-        loadMrTerritoryInfo();
-    }, []);
-
-    useEffect(() => {
-        loadDashboard();
-    }, [selectedCompany?._id, selectedFY?._id]);
 
     // Dynamic Celestial Time Info according to local hour
     const getCelestialTimeInfo = () => {
@@ -753,6 +723,11 @@ export default function DashboardContent() {
 
     return (
         <div className="flex flex-col gap-5 min-h-screen">
+            {/* Top Loading / Syncing Indicator Bar during FY changes or background refresh */}
+            {refreshing && (
+                <div className="fixed top-0 left-0 right-0 z-[9999] h-1 bg-gradient-to-r from-emerald-500 via-amber-400 to-indigo-600 animate-pulse shadow-xs pointer-events-none" />
+            )}
+
             {/* ==================== DYNAMIC CELESTIAL EXECUTIVE BANNER WITH COLOR CUSTOMIZATION ==================== */}
             <div
                 style={celestial.customStyles?.container}
@@ -789,6 +764,16 @@ export default function DashboardContent() {
                             {selectedCompany?.companyName && (
                                 <span className={`text-[10px] sm:text-[10.5px] font-bold flex items-center gap-1 sm:gap-1.5 px-2.5 sm:px-3 py-0.5 rounded-full border shadow-xs transition-all duration-200 hover:scale-105 cursor-default ${celestial.isDark ? 'bg-indigo-900/60 text-sky-300 border-indigo-400/30' : 'bg-sky-500/10 text-sky-700 border-sky-400/30'}`}>
                                     <FaBuilding size={9} className={celestial.isDark ? 'text-sky-400' : 'text-sky-600'} /> {selectedCompany.companyName}
+                                </span>
+                            )}
+                            {selectedFY?.fyName && (
+                                <span className={`text-[10px] sm:text-[10.5px] font-bold flex items-center gap-1 sm:gap-1.5 px-2.5 sm:px-3 py-0.5 rounded-full border shadow-xs transition-all duration-200 hover:scale-105 cursor-default ${celestial.isDark ? 'bg-emerald-900/60 text-emerald-300 border-emerald-400/30' : 'bg-emerald-500/10 text-emerald-700 border-emerald-400/30'}`}>
+                                    <FaCalendarAlt size={9} className={celestial.isDark ? 'text-emerald-400' : 'text-emerald-600'} /> {selectedFY.fyName}
+                                </span>
+                            )}
+                            {refreshing && (
+                                <span className="text-[10px] sm:text-[10.5px] font-bold flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-amber-500/20 text-amber-700 dark:text-amber-300 border border-amber-400/40 animate-pulse">
+                                    <FaSyncAlt size={8} className="animate-spin" /> Updating...
                                 </span>
                             )}
                         </div>
@@ -1175,7 +1160,7 @@ export default function DashboardContent() {
                                     {Array.from(
                                         new Set(
                                             mrTerritoryInfo.territories.map(
-                                                (t) => t.companyName || t.companyCode
+                                                (t: any) => t.companyName || t.companyCode
                                             )
                                         )
                                     ).join(", ")}
@@ -1184,7 +1169,7 @@ export default function DashboardContent() {
                         </p>
                         {mrTerritoryInfo.territories.length > 0 && (
                             <div className="flex flex-wrap gap-1.5 mt-1.5">
-                                {mrTerritoryInfo.territories.map((t, i) => (
+                                {mrTerritoryInfo.territories.map((t: any, i: number) => (
                                     <span
                                         key={i}
                                         className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-100 dark:bg-amber-950/80 text-amber-800 dark:text-amber-300 text-[10px] font-medium border border-amber-200 dark:border-amber-800"

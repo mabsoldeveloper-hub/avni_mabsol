@@ -108,7 +108,7 @@ export default function FinancialSimulatorWidget({ kpis, analytics, selectedFYNa
             </div>
 
             {/* Data Lineage & Instruction Banner */}
-            <div className="mb-5 p-3 rounded-2xl bg-cyan-500/10 border border-cyan-500/20 backdrop-blur-md flex items-center justify-between gap-3 text-xs text-cyan-800 dark:text-cyan-200">
+            {/* <div className="mb-5 p-3 rounded-2xl bg-cyan-500/10 border border-cyan-500/20 backdrop-blur-md flex items-center justify-between gap-3 text-xs text-cyan-800 dark:text-cyan-200">
                 <div className="flex items-center gap-2">
                     <Info size={16} className="text-cyan-500 shrink-0" />
                     <span>
@@ -118,7 +118,7 @@ export default function FinancialSimulatorWidget({ kpis, analytics, selectedFYNa
                 <span className="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full bg-cyan-600 text-white shrink-0">
                     Data Verified
                 </span>
-            </div>
+            </div> */}
 
             {/* Main Content Grid: Sliders Left + Realtime Forecast Cards Right */}
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-stretch">

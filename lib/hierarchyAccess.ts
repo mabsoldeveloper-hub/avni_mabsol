@@ -1,4 +1,6 @@
+import mongoose from "mongoose";
 import User from "@/models/User";
+import Company from "@/models/Company";
 import SalesHierarchy from "@/models/SalesHierarchy";
 import MrTerritory from "@/models/MrTerritory";
 import MrCustomerAssignment from "@/models/MrCustomerAssignment";
@@ -72,6 +74,7 @@ export function getHierarchyDisplayRole(user: any, hierarchy?: any | null): stri
 export function resolveHierarchyRole(user: any, hierarchy?: any | null): HierarchyRole {
   const candidates = [
     hierarchy?.roleLevel,
+    user?.role,
     user?.roleId?.roleName,
     user?.designation,
     user?.roleType,
@@ -156,7 +159,11 @@ export async function getDescendantUsers(rootUser: any): Promise<any[]> {
   if (!rootUser?._id) return [];
 
   const baseFilter: any = { status: "Active" };
-  if (rootUser.tenantId) baseFilter.tenantId = rootUser.tenantId;
+  if (rootUser.companyId) {
+    baseFilter.companyId = rootUser.companyId;
+  } else if (rootUser.tenantId) {
+    baseFilter.tenantId = rootUser.tenantId;
+  }
 
   const users = await User.find(baseFilter)
     .select(
@@ -238,7 +245,28 @@ export async function getHierarchyAccess(currentUserArg?: any): Promise<Hierarch
       currentUser.email?.toLowerCase() === "mabsoldeveloper@gmail.com"
     );
     const tenantFilter: any = { status: "Active" };
-    if (!isSuper && currentUser.tenantId) tenantFilter.tenantId = currentUser.tenantId;
+    const userCompanyId = currentUser.companyId
+      ? typeof currentUser.companyId === "object" && (currentUser.companyId as any)._id
+        ? String((currentUser.companyId as any)._id)
+        : String(currentUser.companyId)
+      : null;
+
+    if (!isSuper && userCompanyId) {
+      try {
+        const userCompany = typeof currentUser.companyId === "object" && (currentUser.companyId as any)?.companyName
+          ? (currentUser.companyId as any)
+          : await Company.findById(userCompanyId).lean();
+        if (userCompany && !userCompany.isHeadOffice) {
+          tenantFilter.companyId = new mongoose.Types.ObjectId(userCompanyId);
+        } else if (currentUser.tenantId) {
+          tenantFilter.tenantId = currentUser.tenantId;
+        }
+      } catch {
+        if (currentUser.tenantId) tenantFilter.tenantId = currentUser.tenantId;
+      }
+    } else if (!isSuper && currentUser.tenantId) {
+      tenantFilter.tenantId = currentUser.tenantId;
+    }
 
     const allUsers = await User.find(tenantFilter)
       .select(

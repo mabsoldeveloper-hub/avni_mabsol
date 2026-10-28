@@ -19,6 +19,13 @@ export async function GET() {
       });
     }
 
+    if (
+      settings.receiverEmail &&
+      settings.receiverEmail.toLowerCase().includes("abhishek.mabsolinfotech")
+    ) {
+      settings.receiverEmail = "";
+    }
+
     return NextResponse.json({
       settings,
     });
@@ -58,14 +65,22 @@ export async function POST(request: Request) {
       customEndDate?: unknown;
     };
 
-    if (
-      typeof receiverEmail !== "string" ||
-      !receiverEmail.trim() ||
-      typeof frequency !== "string"
-    ) {
+    const emailStr = typeof receiverEmail === "string" ? receiverEmail.trim() : "";
+    const isEnabled = enabled !== undefined ? Boolean(enabled) : true;
+
+    if (typeof frequency !== "string") {
       return NextResponse.json(
         {
-          message: "Receiver and frequency are required",
+          message: "Frequency is required",
+        },
+        { status: 400 }
+      );
+    }
+
+    if (isEnabled && !emailStr) {
+      return NextResponse.json(
+        {
+          message: "Receiver Gmail address is required when automated backup is enabled",
         },
         { status: 400 }
       );
@@ -103,16 +118,28 @@ export async function POST(request: Request) {
         ? (scope as BackupScope)
         : "current_fy";
 
+    const cleanedEmail =
+      emailStr.toLowerCase().includes("abhishek.mabsolinfotech") ? "" : emailStr;
+
     const settings = await saveBackupSettings({
-      receiverEmail: receiverEmail.trim(),
+      receiverEmail: cleanedEmail,
       frequency: frequency as BackupFrequency,
-      enabled: enabled ?? true,
+      enabled: enabled ?? false,
       scope: resolvedScope,
       financialYearId: typeof financialYearId === "string" ? financialYearId : null,
       financialYearName: typeof financialYearName === "string" ? financialYearName : null,
       customStartDate: typeof customStartDate === "string" ? customStartDate : null,
       customEndDate: typeof customEndDate === "string" ? customEndDate : null,
     });
+
+    try {
+      const { restartBackupScheduler } = await import(
+        "@/lib/services/backupScheduler.service"
+      );
+      restartBackupScheduler();
+    } catch (schedErr: any) {
+      console.warn("Could not restart backup scheduler daemon:", schedErr?.message);
+    }
 
     return NextResponse.json({
       message: "Backup settings saved successfully",

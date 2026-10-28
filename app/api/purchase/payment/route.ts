@@ -244,7 +244,7 @@ async function getOrCreatePending(m: any, companyId: string, companyCode: string
     companyCode,
     fyId,
     fyCode,
-    _vfpTable: "PENDINGS_F18",
+    _vfpTable: clean(fyCode) ? `PENDINGS_${clean(fyCode).toUpperCase()}` : "PENDINGS",
     _vfpSourceKey: `PURCHASE_PENDING_${billNo}_${clean(m.CODEP)}`,
   });
 }

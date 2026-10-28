@@ -134,13 +134,19 @@ export async function GET(req: Request) {
         const month = searchParams.get("month");
         const fyId = searchParams.get("fyId");
 
+        if (fyId && fyId !== "ALL") {
+            try {
+                const currentFY = await FinancialYear.findById(fyId).lean();
+                if (currentFY?.fyName) {
+                    fy = currentFY.fyName;
+                }
+            } catch (e) {
+                console.error("Error fetching FY in india-map route:", e);
+            }
+        }
+
         if (!fy || fy === "null" || fy === "undefined" || fy.toLowerCase().startsWith("all")) {
             fy = "All";
-        } else if (fyId && fyId !== "ALL") {
-            let currentFY = await FinancialYear.findById(fyId);
-            if (currentFY?.fyName) {
-                fy = currentFY.fyName;
-            }
         }
 
         const acc = new Map<string, StateAccumulator>();

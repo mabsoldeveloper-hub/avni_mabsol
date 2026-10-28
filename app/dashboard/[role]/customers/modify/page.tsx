@@ -55,6 +55,7 @@ interface Customer {
   CODEP?: string;
   PARNAM?: string;
   MAILNAM?: string;
+  EMAIL?: string;
   PHONE1?: string;
   CITY?: string;
   GSTNO?: string;
@@ -169,6 +170,7 @@ function CustomerDetailModal({
     { label: "Code", value: customer.CODEP || "-" },
     { label: "Party Name", value: customer.PARNAM || "-" },
     { label: "Mailing Name", value: customer.MAILNAM || "-" },
+    { label: "Email Address", value: customer.EMAIL || "-" },
     { label: "Phone", value: customer.PHONE1 || "-" },
     { label: "State", value: customer.state1 || customer.REF || "-" },
     { label: "Country", value: customer.country || "India" },
@@ -527,7 +529,7 @@ export default function CustomerPage() {
         cell: (info) => (
           <div>
             <div className="font-semibold text-slate-800">{info.getValue() || "-"}</div>
-            <div className="text-xs text-slate-500">{info.row.original.MAILNAM || "No email"}</div>
+            {/* <div className="text-xs text-slate-500">{info.row.original.MAILNAM || "No email"}</div> */}
           </div>
         ),
       }),

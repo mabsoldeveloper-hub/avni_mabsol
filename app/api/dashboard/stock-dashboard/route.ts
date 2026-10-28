@@ -58,14 +58,34 @@ const NEAR_EXPIRY_WINDOW_DAYS = 90; // adjust as needed
 const SLOW_MOVING_DAYS = 90; // no sale in last N days = slow moving
 
 import { getCompanyVfpFilter, combineFilters } from "@/lib/companyVfpHelper";
+import { getFYDateRange, buildFYDateQuery } from "@/lib/financialYearHelper";
+import { fetchWithServerCache } from "@/lib/serverCache";
+
+export const dynamic = "force-dynamic";
 
 export async function GET(request: Request) {
     try {
         await dbConnect();
 
         const { searchParams } = new URL(request.url);
-        const companyVfpMatch = await getCompanyVfpFilter(searchParams);
-        const restriction = await getMrTerritoryRestriction();
+        const companyId = searchParams.get("companyId") || "ALL";
+        const fyId = searchParams.get("fyId") || "ALL";
+        const startDateParam = searchParams.get("startDate") || "";
+        const endDateParam = searchParams.get("endDate") || "";
+
+        const cacheKey = `stock-dashboard:${companyId}:${fyId}:${startDateParam}:${endDateParam}`;
+
+        const payload = await fetchWithServerCache(
+            cacheKey,
+            30, // 30s cache
+            async () => {
+                const companyVfpMatch = await getCompanyVfpFilter(searchParams);
+                const fyRange = await getFYDateRange(searchParams);
+                const { startDate, endDate } = fyRange;
+                const dateMatchDIS = buildFYDateQuery("DATE", startDate, endDate);
+                const isTodayInsideFY = !!startDate && !!endDate && todayStr() >= startDate && todayStr() <= endDate;
+                const todayMatch = isTodayInsideFY ? { DATE: todayStr() } : { _id: { $exists: false } };
+                const restriction = await getMrTerritoryRestriction();
 
         const productFilter: any = combineFilters(
             restriction.isMrRestricted
@@ -192,9 +212,9 @@ export async function GET(request: Request) {
                 BALANCE: { $gt: 0 },
                 EXP: { $lt: today, $ne: null },
             }),
-            SubDis.countDocuments({ ...disFilter, DATE: today }),
+            SubDis.countDocuments(combineFilters(disFilter, todayMatch)),
             SalesDis.aggregate([
-                { $match: { ...disFilter, DATE: today } },
+                { $match: combineFilters(disFilter, todayMatch) },
                 {
                     $group: {
                         _id: null,
@@ -228,7 +248,7 @@ export async function GET(request: Request) {
                 { $group: { _id: null, opening: { $sum: { $ifNull: ["$OPENING", 0] } } } },
             ]),
             SalesDis.aggregate([
-                { $match: disFilter },
+                { $match: combineFilters(disFilter, dateMatchDIS) },
                 { $group: { _id: null, sold: { $sum: { $ifNull: ["$ISSUEQTY", 0] } } } },
             ]),
         ]);
@@ -349,7 +369,7 @@ export async function GET(request: Request) {
 
         /* ================= 7. TOP SELLING PRODUCTS ================= */
         const topSellingAgg = await SalesDis.aggregate([
-            { $match: disFilter },
+            { $match: combineFilters(disFilter, dateMatchDIS) },
             {
                 $group: {
                     _id: "$CODE",
@@ -381,7 +401,7 @@ export async function GET(request: Request) {
 
         /* ================= 8. SLOW MOVING PRODUCTS ================= */
         const lastSaleAll = await SalesDis.aggregate([
-            { $match: disFilter },
+            { $match: combineFilters(disFilter, dateMatchDIS) },
             { $sort: { DATE: -1 } },
             { $group: { _id: "$CODE", lastSaleDate: { $first: "$DATE" } } },
         ]);
@@ -410,8 +430,12 @@ export async function GET(request: Request) {
             {
                 $lookup: {
                     from: "vfp_new_folder_probat",
-                    localField: "CODE",
-                    foreignField: "CODE",
+                    let: { pCode: "$CODE" },
+                    pipeline: [
+                        { $match: { $expr: { $eq: ["$CODE", "$$pCode"] } } },
+                        ...(batchFilter._vfpTable ? [{ $match: { _vfpTable: batchFilter._vfpTable } }] : []),
+                        ...(batchFilter.$or ? [{ $match: { $or: batchFilter.$or } }] : []),
+                    ],
                     as: "batches",
                 },
             },
@@ -610,24 +634,28 @@ export async function GET(request: Request) {
             })),
         };
 
-        return NextResponse.json({
-            success: true,
-            generatedAt: new Date().toISOString(),
-            kpis,
-            stockSummary,
-            lowStock,
-            outOfStock,
-            nearExpiry,
-            expiredStock,
-            topSelling,
-            slowMoving,
-            stockValueByCompany,
-            latestDispatch,
-            latestSales,
-            recentActivity,
-            financialSummary,
-            pendingAdjustments,
-        });
+                return {
+                    success: true,
+                    generatedAt: new Date().toISOString(),
+                    kpis,
+                    stockSummary,
+                    lowStock,
+                    outOfStock,
+                    nearExpiry,
+                    expiredStock,
+                    topSelling,
+                    slowMoving,
+                    stockValueByCompany,
+                    latestDispatch,
+                    latestSales,
+                    recentActivity,
+                    financialSummary,
+                    pendingAdjustments,
+                };
+            }
+        );
+
+        return NextResponse.json(payload);
     } catch (error: any) {
         console.error("Stock dashboard API error:", error);
         return NextResponse.json(

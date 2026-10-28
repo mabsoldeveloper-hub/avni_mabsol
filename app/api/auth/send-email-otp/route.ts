@@ -3,6 +3,7 @@ import connectDB from "@/lib/mongodb";
 import User from "@/models/User";
 import Otp from "@/models/Otp";
 import { sendEmailOTP } from "@/lib/mail";
+import { isReservedSuperAdminEmail } from "@/lib/constants/superAdmin.constant";
 
 export const dynamic = "force-dynamic";
 
@@ -20,6 +21,13 @@ export async function POST(req: Request) {
     }
 
     const cleanEmail = email.toLowerCase().trim();
+
+    if (isReservedSuperAdminEmail(cleanEmail)) {
+      return NextResponse.json({
+        success: false,
+        message: "This email address is reserved for the Super Administrator and cannot be used for registration.",
+      }, { status: 403 });
+    }
 
     const existingUser = await User.findOne({ email: cleanEmail });
     if (existingUser) {
@@ -46,9 +54,7 @@ export async function POST(req: Request) {
       { upsert: true, new: true }
     );
 
-    console.log(`\n======================================================`);
-    console.log(`[EMAIL VERIFICATION OTP] Sent to: ${cleanEmail} | OTP: ${otp}`);
-    console.log(`======================================================\n`);
+    console.log(`[EMAIL VERIFICATION OTP] Code dispatched to: ${cleanEmail}`);
 
     // Send email asynchronously in background so response returns instantly
     sendEmailOTP(cleanEmail, otp).catch((err) => {

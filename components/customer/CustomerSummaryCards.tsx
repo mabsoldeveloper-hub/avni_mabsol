@@ -4,6 +4,7 @@ import { FaWallet, FaArrowUp, FaArrowDown, FaPiggyBank, FaPercent, FaScaleBalanc
 
 interface Props {
   customer: any;
+  onEditClick?: () => void;
 }
 
 function formatCurrency(n: any) {
@@ -12,6 +13,11 @@ function formatCurrency(n: any) {
 }
 
 export default function CustomerSummaryCards({ customer }: Props) {
+  const credit = Number(customer.CREDIT ?? 0);
+  const balance = Number(customer.BALANCE ?? customer.FINAL ?? 0);
+  const isCreditLimitExceeded = credit > 0 && balance > credit;
+  const utilization = credit > 0 ? Math.round((balance / credit) * 100) : 0;
+
   const cards = [
     {
       title: "Outstanding Balance",
@@ -26,9 +32,12 @@ export default function CustomerSummaryCards({ customer }: Props) {
       title: "Credit Limit",
       value: formatCurrency(customer.CREDIT),
       subtitle: customer.DUEDAYS ? `${customer.DUEDAYS} Days Credit Term` : "Credit Terms",
+      badge: isCreditLimitExceeded ? `${utilization}% Exceeded` : (credit > 0 ? `${utilization}% Used` : null),
       icon: <FaArrowUp size={16} />,
-      ring: "from-emerald-400/40 to-green-500/40",
-      iconBg: "bg-emerald-500/15 text-emerald-600",
+      ring: isCreditLimitExceeded
+        ? "from-amber-400/50 to-rose-500/50"
+        : "from-emerald-400/40 to-green-500/40",
+      iconBg: isCreditLimitExceeded ? "bg-amber-500/15 text-amber-700" : "bg-emerald-500/15 text-emerald-600",
       glow: "group-hover:shadow-emerald-500/25",
     },
     {
@@ -97,9 +106,17 @@ export default function CustomerSummaryCards({ customer }: Props) {
 
             <div className="relative flex items-start justify-between">
               <div className="min-w-0">
-                <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider truncate">
-                  {card.title}
-                </p>
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider truncate">
+                    {card.title}
+                  </p>
+                  {card.badge && (
+                    <span className="text-[9px] font-extrabold px-1.5 py-0.2 rounded-md bg-amber-100 text-amber-800">
+                      {card.badge}
+                    </span>
+                  )}
+                </div>
+
                 <h3 className="mt-1 text-base sm:text-lg font-extrabold text-slate-800 tabular-nums truncate">
                   {card.value}
                 </h3>

@@ -11,6 +11,8 @@ import { getMrTerritoryRestriction } from "@/lib/mrTerritoryHelper";
 import { getFYDateRange, buildFYDateQuery } from "@/lib/financialYearHelper";
 import { getCompanyVfpFilter, combineFilters } from "@/lib/companyVfpHelper";
 
+import { fetchWithServerCache } from "@/lib/serverCache";
+
 export const dynamic = "force-dynamic";
 
 export async function GET(req: Request) {
@@ -19,10 +21,18 @@ export async function GET(req: Request) {
 
     const { searchParams } = new URL(req.url);
     const companyId = searchParams.get("companyId") || "";
+    const fyId = searchParams.get("fyId") || "ALL";
+    const period = searchParams.get("period") || "ALL";
 
-    const companyVfpMatch = await getCompanyVfpFilter(searchParams);
-    const fyRange = await getFYDateRange(searchParams);
-    const { startDate, endDate } = fyRange;
+    const cacheKey = `purchase-dashboard:${companyId}:${fyId}:${period}`;
+
+    const payload = await fetchWithServerCache(
+      cacheKey,
+      30, // 30s cache
+      async () => {
+        const companyVfpMatch = await getCompanyVfpFilter(searchParams);
+        const fyRange = await getFYDateRange(searchParams);
+        const { startDate, endDate } = fyRange;
 
     const dateMatchDdate = buildFYDateQuery("DDATE", startDate, endDate);
     const dateMatchDate = buildFYDateQuery("DATE", startDate, endDate);
@@ -41,6 +51,16 @@ export async function GET(req: Request) {
       paymentQuery.companyId = companyId;
       orderQuery.companyId = companyId;
     }
+
+    const billDateMatch = buildFYDateQuery("billDate", startDate, endDate);
+    const returnDateMatch = buildFYDateQuery("returnDate", startDate, endDate);
+    const paymentDateMatch = buildFYDateQuery("paymentDate", startDate, endDate);
+    const poDateMatch = buildFYDateQuery("poDate", startDate, endDate);
+
+    const fullBillQuery = combineFilters(billQuery, billDateMatch);
+    const fullReturnQuery = combineFilters(returnQuery, returnDateMatch);
+    const fullPaymentQuery = combineFilters(paymentQuery, paymentDateMatch);
+    const fullOrderQuery = combineFilters(orderQuery, poDateMatch);
 
     // 2. Legacy VFP Query filters
     const pendingFilter: any = combineFilters(
@@ -73,10 +93,10 @@ export async function GET(req: Request) {
       salesMdisRows,
       customerCount,
     ] = await Promise.all([
-      PurchaseBill.find(billQuery).sort({ billDate: -1 }).lean(),
-      PurchaseReturn.find(returnQuery).sort({ returnDate: -1 }).lean(),
-      PurchasePayment.find(paymentQuery).sort({ paymentDate: -1 }).lean(),
-      PurchaseOrder.find(orderQuery).sort({ poDate: -1 }).lean(),
+      PurchaseBill.find(fullBillQuery).sort({ billDate: -1 }).lean(),
+      PurchaseReturn.find(fullReturnQuery).sort({ returnDate: -1 }).lean(),
+      PurchasePayment.find(fullPaymentQuery).sort({ paymentDate: -1 }).lean(),
+      PurchaseOrder.find(fullOrderQuery).sort({ poDate: -1 }).lean(),
       Pendings.find(pendingFilter).lean(),
       SalesMdis.find(purchaseMdisFilter).sort({ DATE: -1 }).limit(200).lean(),
       Customer.countDocuments({ ACGROUP: /^D/i }),
@@ -360,26 +380,30 @@ export async function GET(req: Request) {
       },
     };
 
-    return NextResponse.json({
-      success: true,
-      summary: {
-        totalPurchases,
-        purchaseReturns,
-        netPurchase,
-        totalPayments: webPaymentsTotal,
-        totalBillsCount: totalBillsCount || pendingBills.length,
-        totalOutstanding,
-        totalOverdue,
-        overdueBillsCount,
-        suppliersCount: suppliersCount || 18,
-        totalOrdersCount: newOrders.length || 2,
-      },
-      monthlyTrend: defaultMonthlyTrend,
-      topSuppliers,
-      recentBills: recentBills.slice(0, 8),
-      overdueList: overdueList.slice(0, 10),
-      dataExplanations,
-    });
+        return {
+          success: true,
+          summary: {
+            totalPurchases,
+            purchaseReturns,
+            netPurchase,
+            totalPayments: webPaymentsTotal,
+            totalBillsCount: totalBillsCount || pendingBills.length,
+            totalOutstanding,
+            totalOverdue,
+            overdueBillsCount,
+            suppliersCount: suppliersCount || 18,
+            totalOrdersCount: newOrders.length || 2,
+          },
+          monthlyTrend: defaultMonthlyTrend,
+          topSuppliers,
+          recentBills: recentBills.slice(0, 8),
+          overdueList: overdueList.slice(0, 10),
+          dataExplanations,
+        };
+      }
+    );
+
+    return NextResponse.json(payload);
   } catch (error: any) {
     console.error("Purchase Dashboard API Error:", error);
     return NextResponse.json(

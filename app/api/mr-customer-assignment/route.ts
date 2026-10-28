@@ -12,6 +12,10 @@ export const dynamic = "force-dynamic";
 export async function GET(req: NextRequest) {
   try {
     await connectDB();
+    const currentUser = await getCurrentUser();
+    if (!currentUser) {
+      return NextResponse.json({ success: false, message: "Unauthorized" }, { status: 401 });
+    }
 
     const { searchParams } = new URL(req.url);
     const userId = searchParams.get("userId") || "";
@@ -55,6 +59,9 @@ export async function POST(req: NextRequest) {
   try {
     await connectDB();
     const currentUser = await getCurrentUser();
+    if (!currentUser) {
+      return NextResponse.json({ success: false, message: "Unauthorized" }, { status: 401 });
+    }
 
     const body = await req.json();
     const { userId, assignedCustomers } = body;

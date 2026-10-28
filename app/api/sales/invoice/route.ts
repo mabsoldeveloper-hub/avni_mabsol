@@ -66,7 +66,7 @@ export async function GET(req: Request) {
     const fyRange = await getFYDateRange(searchParams);
     const { startDate, endDate } = fyRange;
 
-    const dateMatch = buildFYDateQuery("DATE", startDate, endDate);
+    let dateMatch = buildFYDateQuery("DATE", startDate, endDate);
     const companyVfpMatch = await getCompanyVfpFilter(searchParams);
     const restriction = await getMrTerritoryRestriction();
 
@@ -76,6 +76,36 @@ export async function GET(req: Request) {
       typeFilter = {};
     } else if (rawType === "NET_SALE" || rawType === "S_AND_R" || rawType === "S_R" || rawType === "SALE_NET") {
       typeFilter = { TYPE: { $in: ["S", "R"] } };
+    } else if (rawType === "TODAY") {
+      typeFilter = { TYPE: "S" };
+      const now = new Date();
+      const yyyy = now.getFullYear();
+      const mm = String(now.getMonth() + 1).padStart(2, "0");
+      const dd = String(now.getDate()).padStart(2, "0");
+      const todayStr = `${yyyy}-${mm}-${dd}`;
+      const isTodayInsideFY = !!startDate && !!endDate && todayStr >= startDate && todayStr <= endDate;
+      dateMatch = startDate && endDate
+        ? isTodayInsideFY
+          ? buildFYDateQuery("DATE", todayStr, todayStr)
+          : { _id: { $exists: false } }
+        : { DATE: { $regex: `^${todayStr}` } };
+    } else if (rawType === "MONTHLY") {
+      typeFilter = { TYPE: "S" };
+      const now = new Date();
+      const yyyy = now.getFullYear();
+      const mm = String(now.getMonth() + 1).padStart(2, "0");
+      const calendarMonthStart = `${yyyy}-${mm}-01`;
+      const todayStr = now.toISOString().slice(0, 10);
+      if (startDate && endDate) {
+        const monthRangeStart = calendarMonthStart > startDate ? calendarMonthStart : startDate;
+        const monthRangeEnd = todayStr < endDate ? todayStr : endDate;
+        dateMatch = monthRangeStart <= monthRangeEnd
+          ? buildFYDateQuery("DATE", monthRangeStart, monthRangeEnd)
+          : { _id: { $exists: false } };
+      } else {
+        const monthStr = `${yyyy}-${mm}`;
+        dateMatch = { DATE: { $regex: `^${monthStr}` } };
+      }
     } else {
       typeFilter = { TYPE: rawType };
     }
@@ -329,8 +359,8 @@ export async function POST(req: Request) {
       $or: [
         { CODEP: customerCode },
         { ORDNO: customerCode },
-        { CODEP: new RegExp(`^${customerCode}$`, "i") },
-        { ORDNO: new RegExp(`^${customerCode}$`, "i") },
+        { CODEP: new RegExp(`^${escapeRegex(customerCode)}$`, "i") },
+        { ORDNO: new RegExp(`^${escapeRegex(customerCode)}$`, "i") },
       ],
     }).lean();
 

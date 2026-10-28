@@ -532,7 +532,7 @@ export default function ProductReportPage() {
                                         const isOpen = expanded.has(row.CODE);
 
                                         return (
-                                            <Fragment key={row.CODE ?? idx}>
+                                            <Fragment key={`${row.CODE ?? ""}-${idx}`}>
                                                 <tr>
                                                     <td>
                                                         <button
@@ -601,7 +601,7 @@ export default function ProductReportPage() {
                                                 </tr>
 
                                                 {isOpen && (
-                                                    <tr key={`${row.CODE}-details`}>
+                                                    <tr key={`${row.CODE ?? ""}-${idx}-details`}>
                                                         <td></td>
                                                         <td colSpan={10} className="bg-light">
                                                             <div className="row g-3 py-2">

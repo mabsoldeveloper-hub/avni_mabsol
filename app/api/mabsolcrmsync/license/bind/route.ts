@@ -29,8 +29,25 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Try finding by exact license first, then by company sync config, then by user email
-    let config: any = await VfpConfig.findOne({ license: licenseKey }).lean();
+    const cleanDevId = deviceId.trim().toLowerCase();
+    const queryConditions: any[] = [];
+    if (licenseKey) queryConditions.push({ license: licenseKey });
+    if (userEmail) {
+      queryConditions.push({ email: userEmail });
+      queryConditions.push({ key: "vfp_sync_config_" + userEmail });
+    }
+    queryConditions.push({ key: "vfp_sync_config" });
+
+    // Try finding config where this device is already active first
+    let config: any = await VfpConfig.findOne({
+      $or: queryConditions,
+      "authorizedDevices.deviceId": { $regex: new RegExp(`^${cleanDevId}$`, "i") },
+      "authorizedDevices.status": "active",
+    }).lean();
+
+    if (!config && licenseKey) {
+      config = await VfpConfig.findOne({ license: licenseKey }).lean();
+    }
     if (!config) {
       config = await VfpConfig.findOne({ key: "vfp_sync_config" }).lean();
     }
@@ -72,46 +89,135 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Single-device binding lock check
+    // Check if device is already authorized
+    const authorizedDevices: any[] = Array.isArray(config.authorizedDevices) ? config.authorizedDevices : [];
+    const isDeviceAuthorized =
+      authorizedDevices.some(
+        (d: any) => (d.deviceId || "").trim().toLowerCase() === cleanDevId && d.status === "active" && (!d.expiresAt || new Date(d.expiresAt) > now)
+      ) || ((config.boundDeviceId || "").trim().toLowerCase() === cleanDevId);
+
     if (deviceId) {
-      if (config.boundDeviceId && config.boundDeviceId !== deviceId) {
-        return NextResponse.json(
-          {
-            success: false,
-            deviceMismatch: true,
-            error: `License key is already locked to machine: "${config.boundDeviceName || "Another Device"}". It cannot be used on this machine.`,
-          },
-          { status: 403 }
-        );
-      }
+      if (isDeviceAuthorized) {
+        // Machine is already authorized! Update last seen timestamp & device name across all matching configs
+        const updatePayload = {
+          license: licenseKey,
+          licenseExpiresAt: config.licenseExpiresAt,
+          licenseIssuedAt: config.licenseIssuedAt,
+          licenseStatus: "active",
+        };
 
-      // Bind machine immediately across all config representations
-      const updatePayload = {
-        license: licenseKey,
-        licenseExpiresAt: config.licenseExpiresAt,
-        licenseIssuedAt: config.licenseIssuedAt,
-        boundDeviceId: deviceId,
-        boundDeviceName: deviceName || "Operator Machine",
-        boundAt: now,
-        licenseStatus: "active",
-      };
-
-      await VfpConfig.updateMany(
-        { license: licenseKey },
-        { $set: updatePayload }
-      );
-
-      await VfpConfig.updateMany(
-        { key: { $in: ["vfp_sync_config", "vfp_sync_config_" + userEmail] } },
-        { $set: updatePayload }
-      );
-
-      if (userEmail) {
         await VfpConfig.updateMany(
-          { email: userEmail },
-          { $set: updatePayload }
+          {
+            $or: queryConditions,
+            "authorizedDevices.deviceId": { $regex: new RegExp(`^${cleanDevId}$`, "i") },
+          },
+          {
+            $set: {
+              "authorizedDevices.$.lastSeenAt": now,
+              "authorizedDevices.$.deviceName": deviceName || "Operator Machine",
+              "authorizedDevices.$.licenseKey": licenseKey,
+              ...updatePayload,
+            },
+          }
         );
+
+        // If not in authorizedDevices but was boundDeviceId, add to authorizedDevices
+        const inArray = authorizedDevices.some((d: any) => (d.deviceId || "").trim().toLowerCase() === cleanDevId);
+        if (!inArray) {
+          const newEntry = {
+            deviceId,
+            deviceName: deviceName || config.boundDeviceName || "Operator Machine",
+            licenseKey,
+            activatedAt: config.boundAt || now,
+            expiresAt: config.licenseExpiresAt,
+            lastSeenAt: now,
+            status: "active",
+            activationEmail: config.email || userEmail,
+          };
+          await VfpConfig.updateMany(
+            { $or: queryConditions },
+            { $addToSet: { authorizedDevices: newEntry } }
+          );
+        }
+
+        return NextResponse.json({
+          success: true,
+          authorized: true,
+          message: `License key verified and active on machine: ${deviceName}`,
+          boundDeviceId: deviceId,
+          boundDeviceName: deviceName,
+          licenseExpiresAt: config.licenseExpiresAt,
+        });
       }
+
+      // Check if this is the very first machine activating a freshly generated key
+      if (!config.boundDeviceId && authorizedDevices.length === 0) {
+        const updatePayload = {
+          license: licenseKey,
+          licenseExpiresAt: config.licenseExpiresAt,
+          licenseIssuedAt: config.licenseIssuedAt,
+          boundDeviceId: deviceId,
+          boundDeviceName: deviceName || "Primary Machine",
+          boundAt: now,
+          licenseStatus: "active",
+        };
+
+        const deviceEntry = {
+          deviceId,
+          deviceName: deviceName || "Primary Machine",
+          licenseKey,
+          activatedAt: now,
+          expiresAt: config.licenseExpiresAt,
+          lastSeenAt: now,
+          status: "active",
+          activationEmail: config.email || userEmail,
+        };
+
+        await VfpConfig.updateMany(
+          { license: licenseKey },
+          { $set: updatePayload, $addToSet: { authorizedDevices: deviceEntry } }
+        );
+
+        await VfpConfig.updateMany(
+          { key: { $in: ["vfp_sync_config", "vfp_sync_config_" + userEmail] } },
+          { $set: updatePayload, $addToSet: { authorizedDevices: deviceEntry } }
+        );
+
+        if (userEmail) {
+          await VfpConfig.updateMany(
+            { email: userEmail },
+            { $set: updatePayload, $addToSet: { authorizedDevices: deviceEntry } }
+          );
+        }
+
+        return NextResponse.json({
+          success: true,
+          authorized: true,
+          message: `License key activated and authorized for primary machine: ${deviceName}`,
+          boundDeviceId: deviceId,
+          boundDeviceName: deviceName,
+          licenseExpiresAt: config.licenseExpiresAt,
+        });
+      }
+
+      // If we reach here, this machine is not yet authorized for this license key!
+      // DO NOT permanently lock: Prompt for email OTP verification so they can authorize this computer.
+      const primaryOwner = config.boundDeviceName || "Another Machine";
+      return NextResponse.json(
+        {
+          success: false,
+          authorized: false,
+          requiresVerification: true,
+          deviceMismatch: true,
+          email: config.email || userEmail,
+          deviceId,
+          deviceName,
+          licenseKey,
+          boundDeviceName: primaryOwner,
+          error: `This computer "${deviceName}" is not yet authorized for this license key (currently registered on ${primaryOwner}). Please verify with the code sent to ${config.email || userEmail || "your email"} to authorize this machine for syncing.`,
+        },
+        { status: 403 }
+      );
     } else if (userEmail) {
       await VfpConfig.updateMany(
         { email: userEmail },
@@ -128,9 +234,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      message: `License key verified and locked to machine: ${deviceName}`,
-      boundDeviceId: deviceId,
-      boundDeviceName: deviceName,
+      message: `License key verified: ${licenseKey}`,
       licenseExpiresAt: config.licenseExpiresAt,
     });
   } catch (err: any) {

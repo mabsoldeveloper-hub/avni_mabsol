@@ -5,6 +5,7 @@ import Otp from "@/models/Otp";
 
 import jwt from "jsonwebtoken";
 import User from "@/models/User";
+import { getLicenseOtpRecipientEmails } from "@/lib/constants/licenseAlert.constant";
 
 export async function POST(req: Request) {
   try {
@@ -67,31 +68,18 @@ export async function POST(req: Request) {
       );
     }
 
-    const escapedEmail = email.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    // Target verification candidate emails configured in lib/constants/licenseAlert.constant.ts:
+    const candidateEmails = getLicenseOtpRecipientEmails(email);
     const record = await Otp.findOne({
-      email: { $regex: new RegExp(`^${escapedEmail}$`, "i") },
-      type: "email"
+      email: { $in: candidateEmails },
+      type: "email",
+      otp: String(otp).trim(),
+      expiresAt: { $gt: new Date() }
     });
 
     if (!record) {
       return NextResponse.json(
-        { success: false, message: "OTP not found. Please request a new code." },
-        { status: 400 }
-      );
-    }
-
-    if (new Date() > record.expiresAt) {
-      return NextResponse.json(
-        { success: false, message: "OTP has expired. Please request a new code." },
-        { status: 400 }
-      );
-    }
-
-    if (record.otp !== String(otp).trim()) {
-      record.attempts = (record.attempts || 0) + 1;
-      await record.save();
-      return NextResponse.json(
-        { success: false, message: "Invalid verification code. Please check and try again." },
+        { success: false, message: "Invalid or expired verification code. Please check code or request new." },
         { status: 400 }
       );
     }

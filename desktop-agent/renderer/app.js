@@ -9,7 +9,7 @@ const loginForm = document.getElementById("loginForm");
 const cloudUrlInput = document.getElementById("cloudUrlInput");
 const btnServerPhcrm = document.getElementById("btnServerPhcrm");
 const btnServerMbh = document.getElementById("btnServerMbh");
-const btnServerLocal = document.getElementById("btnServerLocal");
+const btnServerLocalhost = document.getElementById("btnServerLocalhost");
 const emailInput = document.getElementById("emailInput");
 const passwordInput = document.getElementById("passwordInput");
 const loginBtn = document.getElementById("loginBtn");
@@ -44,16 +44,31 @@ const logoutBtn = document.getElementById("logoutBtn");
 
 // DOM Elements - Config Form
 const configForm = document.getElementById("configForm");
+const operatorNameInput = document.getElementById("operatorNameInput");
+const operatorEmailInput = document.getElementById("operatorEmailInput");
+const operatorStatusBadge = document.getElementById("operatorStatusBadge");
+const termsConsentCheckbox = document.getElementById("termsConsentCheckbox");
+const termsNoticeWarning = document.getElementById("termsNoticeWarning");
 const companyNameInput = document.getElementById("companyNameInput");
+const companyGstInput = document.getElementById("companyGstInput");
+const crmCompanyCodeInput = document.getElementById("crmCompanyCodeInput");
+const syncFySelectDropdown = document.getElementById("syncFySelectDropdown");
+const syncFyBadge = document.getElementById("syncFyBadge");
 const companyCodeInput = document.getElementById("companyCodeInput");
+const companyCodeHelper = document.getElementById("companyCodeHelper");
 const sourceDirInput = document.getElementById("sourceDirInput");
 const sourceDirStatusBadge = document.getElementById("sourceDirStatusBadge");
 const destDirInput = document.getElementById("destDirInput");
 const licenseKeyInput = document.getElementById("licenseKeyInput");
+const productKeyInput = document.getElementById("productKeyInput");
+const btnVerifyLicenseKeyManual = document.getElementById("btnVerifyLicenseKeyManual");
+const licenseVerifiedBadge = document.getElementById("licenseVerifiedBadge");
+const btnChangeLicenseKey = document.getElementById("btnChangeLicenseKey");
 const licenseCountdownBadge = document.getElementById("licenseCountdownBadge");
 const licenseCountdownText = document.getElementById("licenseCountdownText");
 const licenseCountdownDetail = document.getElementById("licenseCountdownDetail");
 const licenseExpiryNotice = document.getElementById("licenseExpiryNotice");
+let isMachineLocallyAuthorized = false;
 const intervalSelect = document.getElementById("intervalSelect");
 const browseSourceBtn = document.getElementById("browseSourceBtn");
 const browseDestBtn = document.getElementById("browseDestBtn");
@@ -94,6 +109,15 @@ const closeUnlockPasswordModalBtn = document.getElementById("closeUnlockPassword
 const switchToPasswordBtn = document.getElementById("switchToPasswordBtn");
 const switchToOtpBtn = document.getElementById("switchToOtpBtn");
 
+// DOM Elements - Branch & Multi-Company Selector
+const branchSelectDropdown = document.getElementById("branchSelectDropdown");
+const btnRefreshBranches = document.getElementById("btnRefreshBranches");
+const btnAddBranchProfile = document.getElementById("btnAddBranchProfile");
+const branchBadgeStatus = document.getElementById("branchBadgeStatus");
+const syncAllBranchesBtn = document.getElementById("syncAllBranchesBtn");
+let currentBranchProfiles = [];
+let activeBranchCatalogFys = [];
+
 // DOM Elements - Action & Stats & Terminal
 const syncNowBtn = document.getElementById("syncNowBtn");
 const statTablesCount = document.getElementById("statTablesCount");
@@ -104,17 +128,89 @@ const clearLogBtn = document.getElementById("clearLogBtn");
 
 let currentAuthEmail = "";
 
+// ---------------------------------------------------------------------------
+// Global Utilities: HTML Escaping & Toast Notifications
+// ---------------------------------------------------------------------------
+function escapeHtml(str) {
+  return String(str || "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+}
+
+function showToast(message, type = "info") {
+  const container = document.getElementById("toastContainer");
+  if (!container) return;
+  const item = document.createElement("div");
+  item.className = `toast-item toast-${type}`;
+  const icon = type === "success" ? "✓" : type === "error" ? "✕" : type === "warning" ? "⚠️" : "ℹ️";
+  item.innerHTML = `<span style="font-size:14px; font-weight:bold;">${icon}</span><span>${escapeHtml(String(message || ""))}</span>`;
+  container.appendChild(item);
+  setTimeout(() => {
+    item.style.opacity = "0";
+    item.style.transform = "translateX(20px)";
+    item.style.transition = "all 0.3s ease";
+    setTimeout(() => item.remove(), 300);
+  }, 4500);
+}
+window.escapeHtml = escapeHtml;
+window.showToast = showToast;
+
+function updateTermsState(isAgreed) {
+  if (syncNowBtn) {
+    if (isAgreed) {
+      syncNowBtn.classList.remove("terms-disabled");
+    } else {
+      syncNowBtn.classList.add("terms-disabled");
+    }
+  }
+  if (saveConfigBtn) {
+    if (isAgreed) {
+      saveConfigBtn.classList.remove("terms-disabled");
+    } else {
+      saveConfigBtn.classList.add("terms-disabled");
+    }
+  }
+  if (termsNoticeWarning && isAgreed) {
+    termsNoticeWarning.classList.add("hidden");
+  }
+  const box = document.querySelector(".terms-consent-box");
+  if (box && isAgreed) {
+    box.classList.remove("has-warning");
+  }
+  if (typeof updateSyncButtonRequirementState === "function") {
+    updateSyncButtonRequirementState();
+  }
+}
+window.updateTermsState = updateTermsState;
+
+function cleanCompanyName(name) {
+  if (!name) return "";
+  let s = String(name).trim();
+  s = s.replace(/[\s\-_/\\|]*new[\s_-]*folder(\s*\(\d+\))?[\s\-_/\\|]*/gi, " ").trim();
+  s = s.replace(/^[-_\s/\\|]+|[-_\s/\\|]+$/g, "").trim();
+  const lower = s.toLowerCase();
+  if (lower === "default" || lower === "test" || lower === "organization" || lower === "your organization" || lower === "new folder") {
+    return "";
+  }
+  return s;
+}
+
 function updateActiveServerButtons(url) {
   const normalized = (url || "").trim().toLowerCase().replace(/\/+$/, "");
   const buttons = [
     { btn: btnServerPhcrm, url: "https://phcrm.mabsolinfotech.cloud" },
     { btn: btnServerMbh, url: "https://mbh.crm.mabsolinfotech.cloud" },
-    { btn: btnServerLocal, url: "http://localhost:3000" }
+    { btn: btnServerLocalhost, url: "http://localhost:3000" }
   ];
 
   buttons.forEach(({ btn, url: targetUrl }) => {
     if (!btn) return;
-    if (normalized === targetUrl.toLowerCase()) {
+    const isLocal = targetUrl.includes("localhost");
+    const matches = isLocal
+      ? normalized.includes("localhost") || normalized.includes("127.0.0.1")
+      : normalized === targetUrl.toLowerCase();
+    if (matches) {
       btn.classList.add("active");
     } else {
       btn.classList.remove("active");
@@ -128,6 +224,7 @@ function updateActiveServerButtons(url) {
 document.addEventListener("DOMContentLoaded", async () => {
   setupEventListeners();
   setupIpcListeners();
+  initDashboardResizer();
 
   // 1. Preload config immediately so cloudUrlInput and emailInput are populated
   try {
@@ -148,7 +245,18 @@ document.addEventListener("DOMContentLoaded", async () => {
       currentAuthEmail = sessionRes.session.email || "";
       showDashboard(sessionRes.session);
     } else {
-      if (sessionRes?.accountSuspended) {
+      if (sessionRes?.isExeChanged) {
+        if (sessionRes.email) emailInput.value = sessionRes.email;
+        loginError.textContent = "New desktop agent executable detected. Please sign in and verify your account.";
+        loginError.classList.remove("hidden");
+        // Clear prefilled fields so newly downloaded/installed EXE starts completely clean
+        if (operatorNameInput) operatorNameInput.value = "";
+        if (companyNameInput) companyNameInput.value = "";
+        if (companyCodeInput) companyCodeInput.value = "";
+        if (sourceDirInput) sourceDirInput.value = "";
+        if (licenseKeyInput) licenseKeyInput.value = "";
+        if (productKeyInput) productKeyInput.value = "";
+      } else if (sessionRes?.accountSuspended) {
         if (sessionRes.email) emailInput.value = sessionRes.email;
         loginError.textContent = sessionRes.message || "Your account has been deactivated or suspended. Please contact administrator.";
         loginError.classList.remove("hidden");
@@ -171,6 +279,7 @@ function showLogin() {
   otpStep.classList.add("hidden");
   signupStep?.classList.add("hidden");
   authCardBox?.classList.remove("expanded-signup-mode");
+  if (deviceActivationModal) deviceActivationModal.classList.add("hidden");
   if (authSubtitle) authSubtitle.textContent = "Desktop Data Synchronization Agent";
 }
 
@@ -178,14 +287,24 @@ async function showDashboard(session) {
   authView.classList.add("hidden");
   dashboardView.classList.remove("hidden");
 
-  // Populate user pill
+  // Populate user pill and top operator fields
   const userName = session.user?.name || session.email || "Operator";
   navUserName.textContent = userName;
   navUserInitial.textContent = userName.charAt(0).toUpperCase();
   currentAuthEmail = session.email || "";
 
+  if (operatorNameInput && (!operatorNameInput.value || operatorNameInput.value === "Operator")) {
+    operatorNameInput.value = userName;
+  }
+  if (operatorEmailInput && !operatorEmailInput.value) {
+    operatorEmailInput.value = currentAuthEmail;
+  }
+
   // Load configuration
   await loadAndDisplayConfig();
+  try {
+    await loadBranches(true);
+  } catch {}
 
   // Load sync status
   try {
@@ -204,19 +323,72 @@ async function loadAndDisplayConfig() {
     const cfg = await window.electronAPI.getConfig();
     if (cfg) {
       if (cfg.cloudUrl) cloudUrlInput.value = cfg.cloudUrl;
-      const session = await window.electronAPI.getSession();
-      const compNameFromUser = session?.user?.companyName || session?.user?.companyId?.companyName || "";
-      if (cfg.companyName && cfg.companyName.toLowerCase() !== "test") {
-        companyNameInput.value = cfg.companyName;
-      } else if (compNameFromUser) {
-        companyNameInput.value = compNameFromUser;
+      let compNameFromUser = "";
+      try {
+        const sessionRes = await window.electronAPI.checkSession();
+        compNameFromUser = sessionRes?.session?.user?.companyName || sessionRes?.session?.user?.companyId?.companyName || "";
+      } catch {}
+      const isPlaceholderComp = (val) => {
+        if (!val) return true;
+        const s = String(val).trim().toLowerCase();
+        return (
+          s === "your organization" ||
+          s === "organization" ||
+          s === "default" ||
+          s === "test" ||
+          s === "new folder" ||
+          s === "new_folder" ||
+          s.startsWith("new folder") ||
+          s.startsWith("new_folder")
+        );
+      };
+
+      const cleanFromCfg = cleanCompanyName(cfg.companyName);
+      const cleanFromUser = cleanCompanyName(compNameFromUser);
+      if (cleanFromCfg && !isPlaceholderComp(cleanFromCfg)) {
+        companyNameInput.value = cleanFromCfg;
+      } else if (cleanFromUser && !isPlaceholderComp(cleanFromUser)) {
+        companyNameInput.value = cleanFromUser;
       } else {
-        companyNameInput.value = cfg.companyName || "";
+        companyNameInput.value = "";
       }
-      companyCodeInput.value = (cfg.companyCode || "").toUpperCase();
+      if (crmCompanyCodeInput) {
+        crmCompanyCodeInput.value = cfg.selectedCompanyCode || "";
+      }
+      if (companyGstInput) {
+        companyGstInput.value = cfg.gstin || cfg.gstNo || "";
+      }
+      let currentExtract = "";
+      if (cfg.companyCode && !isPlaceholderComp(cfg.companyCode)) {
+        currentExtract = (cfg.companyCode || "").toUpperCase();
+        companyCodeInput.value = currentExtract;
+      } else {
+        companyCodeInput.value = "";
+      }
+      populateSyncFyDropdown([], currentExtract, cfg.selectedFy);
+      if (syncFySelectDropdown && syncFySelectDropdown.value) {
+        const autoCode = getCodeForFinancialYear(syncFySelectDropdown.value, currentExtract || "A01", []);
+        if (autoCode && !currentExtract) {
+          companyCodeInput.value = autoCode;
+        }
+      }
       sourceDirInput.value = cfg.sourceDir || "";
       destDirInput.value = cfg.destDir || "";
       licenseKeyInput.value = cfg.licenseKey || "";
+      if (cfg.operatorName && operatorNameInput) {
+        operatorNameInput.value = cfg.operatorName;
+      }
+      if (cfg.userEmail && operatorEmailInput) {
+        operatorEmailInput.value = cfg.userEmail;
+      }
+      if (productKeyInput) {
+        productKeyInput.value = cfg.productKey || "";
+      }
+      if (termsConsentCheckbox) {
+        const isTermsAccepted = cfg.termsAccepted !== undefined ? Boolean(cfg.termsAccepted) : true;
+        termsConsentCheckbox.checked = isTermsAccepted;
+        updateTermsState(isTermsAccepted);
+      }
       const isAutoSyncOn = cfg.autoSync !== false && String(cfg.intervalMins) !== "0";
       if (autoSyncCheckbox) {
         autoSyncCheckbox.checked = isAutoSyncOn;
@@ -244,9 +416,371 @@ async function loadAndDisplayConfig() {
 
       // Fetch active license validity & start live countdown timer
       fetchAndShowLicenseDetails();
+      updateSyncButtonRequirementState();
+
+      // Immediately render cached branch profile so company is automatically visible upon login without pressing refresh
+      if (cfg.branchProfiles && Object.keys(cfg.branchProfiles).length > 0) {
+        currentBranchProfiles = Object.values(cfg.branchProfiles);
+        renderBranchDropdown(currentBranchProfiles, cfg.selectedCompanyCode);
+        const activeCode = branchSelectDropdown?.value || cfg.selectedCompanyCode;
+        if (activeCode) {
+          handleBranchChange(activeCode, true).catch(() => {});
+        }
+      }
+      loadBranches(true);
     }
   } catch (err) {
     console.error("Failed to load config:", err);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Multi-Branch & Multi-Company Profile Operations
+// ---------------------------------------------------------------------------
+async function loadBranches(forceRefresh = false) {
+  if (!window.electronAPI?.fetchBranches) return;
+  try {
+    if (btnRefreshBranches) btnRefreshBranches.disabled = true;
+    const cfg = await window.electronAPI.getConfig();
+    const sessionRes = await window.electronAPI.checkSession().catch(() => null);
+    const email = cfg?.userEmail || sessionRes?.session?.user?.email || currentAuthEmail;
+    const token = sessionRes?.session?.token || "";
+
+    // Show cached branches immediately if dropdown is currently unpopulated
+    if ((!branchSelectDropdown || branchSelectDropdown.options.length <= 1) && cfg?.branchProfiles && Object.keys(cfg.branchProfiles).length > 0) {
+      currentBranchProfiles = Object.values(cfg.branchProfiles);
+      renderBranchDropdown(currentBranchProfiles, cfg.selectedCompanyCode);
+    }
+
+    const res = await window.electronAPI.fetchBranches({ email, token, cloudUrl: cfg?.cloudUrl, sourceDir: cfg?.sourceDir });
+    if (res && res.success && Array.isArray(res.branches) && res.branches.length > 0) {
+      currentBranchProfiles = res.branches;
+      const targetCode = res.selectedCompanyCode || cfg?.selectedCompanyCode || (res.branches[0] && (res.branches[0].crmCompanyCode || res.branches[0].companyCode));
+      renderBranchDropdown(res.branches, targetCode);
+      const activeCode = branchSelectDropdown?.value || targetCode;
+      if (activeCode) {
+        await handleBranchChange(activeCode, true);
+      }
+    }
+  } catch (err) {
+    console.error("Failed to load branches:", err);
+  } finally {
+    if (btnRefreshBranches) btnRefreshBranches.disabled = false;
+  }
+}
+
+function renderBranchDropdown(branches, selectedCode) {
+  if (!branchSelectDropdown) return;
+  branchSelectDropdown.innerHTML = "";
+
+  if (!branches || branches.length === 0) {
+    const opt = document.createElement("option");
+    opt.value = "";
+    opt.textContent = "-- No companies available for this account --";
+    branchSelectDropdown.appendChild(opt);
+    if (branchBadgeStatus) {
+      branchBadgeStatus.textContent = "Unconfigured";
+      branchBadgeStatus.style.borderColor = "rgba(148, 163, 184, 0.3)";
+      branchBadgeStatus.style.color = "#94a3b8";
+    }
+    return;
+  }
+
+  let matched = false;
+  branches.forEach(b => {
+    const opt = document.createElement("option");
+    const crmCode = (b.crmCompanyCode || b.companyCode || "").trim().toUpperCase();
+    opt.value = crmCode;
+    const isSelected = selectedCode && crmCode === selectedCode.toUpperCase();
+    if (isSelected) matched = true;
+    opt.selected = isSelected;
+
+    // Remove any "new folder" text and do NOT show company code or folder naming in the option
+    const cleanName = cleanCompanyName(b.companyName);
+    const displayName = cleanName || "Company";
+
+    opt.textContent = displayName;
+    branchSelectDropdown.appendChild(opt);
+  });
+
+  if (!matched && branches.length > 0) {
+    branchSelectDropdown.selectedIndex = 0;
+  }
+
+  const activeVal = branchSelectDropdown.value || "";
+  const active = branches.find(b => (b.crmCompanyCode || b.companyCode || "").toUpperCase() === activeVal.toUpperCase());
+  if (branchBadgeStatus) {
+    if (active?.sourceDir) {
+      branchBadgeStatus.textContent = "Configured ✓";
+      branchBadgeStatus.style.borderColor = "rgba(34, 197, 94, 0.4)";
+      branchBadgeStatus.style.color = "#4ade80";
+    } else {
+      branchBadgeStatus.textContent = "Ready";
+      branchBadgeStatus.style.borderColor = "rgba(56, 189, 248, 0.4)";
+      branchBadgeStatus.style.color = "#38bdf8";
+    }
+  }
+}
+
+function getCodeForFinancialYear(fyString, baseExtractCode, catalogFinancialYears = []) {
+  if (!fyString) return baseExtractCode || "A01";
+  const cleanFy = fyString.replace(/[^\d-]/g, "");
+  const startMatch = cleanFy.match(/^(\d{4})/);
+  const targetStartYear = startMatch ? parseInt(startMatch[1], 10) : null;
+
+  // 1. Check if catalog has an explicit match from Marg master files
+  if (Array.isArray(catalogFinancialYears) && catalogFinancialYears.length > 0) {
+    const matched = catalogFinancialYears.find(f => {
+      const fFy = (f.fyName || "").replace(/[^\d-]/g, "");
+      return fFy && cleanFy && (fFy.includes(cleanFy) || cleanFy.includes(fFy));
+    });
+    if (matched && matched.companyDataCode) {
+      return matched.companyDataCode.toUpperCase();
+    }
+  }
+
+  // 2. Extract company letter prefix (e.g. "G" from "G01", "B" from "B01", "A" from "A01", "C" from "C01")
+  const prefixMatch = (baseExtractCode || "A01").match(/^([A-Za-z]+)/);
+  const prefix = prefixMatch ? prefixMatch[1].toUpperCase() : "A";
+
+  // 3. Dynamic year anchor matching
+  // Default anchor in standard Marg ERP setup: 2025-2026 corresponds to exten 1 (e.g. C01, B01)
+  let anchorStartYear = 2025;
+  let anchorExten = 1;
+
+  // If baseExtractCode has digits (e.g. "C01" -> 1, "C00" -> 0, "B02" -> 2)
+  const numMatch = (baseExtractCode || "").match(/\d+/);
+  if (numMatch) {
+    anchorExten = parseInt(numMatch[0], 10);
+  }
+
+  // If catalog has any entry with a known start year and code/exten, use it as anchor
+  if (Array.isArray(catalogFinancialYears) && catalogFinancialYears.length > 0) {
+    const anchorEntry = catalogFinancialYears.find(f => f.fyName && (f.companyDataCode || f.exten !== undefined));
+    if (anchorEntry) {
+      const aMatch = (anchorEntry.fyName || "").replace(/[^\d-]/g, "").match(/^(\d{4})/);
+      if (aMatch) {
+        anchorStartYear = parseInt(aMatch[1], 10);
+        if (anchorEntry.exten !== undefined) {
+          anchorExten = Number(anchorEntry.exten);
+        } else if (anchorEntry.companyDataCode) {
+          const cMatch = anchorEntry.companyDataCode.match(/\d+/);
+          if (cMatch) anchorExten = parseInt(cMatch[0], 10);
+        }
+      }
+    }
+  }
+
+  if (targetStartYear !== null) {
+    const yearDiff = targetStartYear - anchorStartYear;
+    const targetExten = Math.max(0, anchorExten + yearDiff);
+    const extenPad = String(targetExten).padStart(2, "0");
+    return `${prefix}${extenPad}`;
+  }
+
+  return baseExtractCode || `${prefix}01`;
+}
+
+function populateSyncFyDropdown(catalogFys = [], baseCode = "", preferredFy = "") {
+  if (!syncFySelectDropdown) return;
+  syncFySelectDropdown.innerHTML = "";
+
+  const last5 = typeof getLast5FinancialYears === "function" ? getLast5FinancialYears() : ["(2026-2027)", "(2025-2026)", "(2024-2025)", "(2023-2024)", "(2022-2023)"];
+  const fyList = [];
+  if (Array.isArray(catalogFys) && catalogFys.length > 0) {
+    catalogFys.forEach((cf) => {
+      const rawName = (cf.fyName || "").replace(/[^\d-]/g, "");
+      const formatted = rawName ? `(${rawName})` : "";
+      if (formatted && !fyList.includes(formatted)) {
+        fyList.push(formatted);
+      }
+    });
+  }
+
+  last5.forEach((y) => {
+    if (!fyList.includes(y)) {
+      fyList.push(y);
+    }
+  });
+
+  fyList.forEach((fy) => {
+    const opt = document.createElement("option");
+    opt.value = fy;
+    const mappedCode = getCodeForFinancialYear(fy, baseCode, catalogFys);
+    opt.textContent = fy;
+    opt.setAttribute("data-code", mappedCode);
+    syncFySelectDropdown.appendChild(opt);
+  });
+
+  let selectedOption = "";
+  if (preferredFy) {
+    const found = fyList.find((y) => y === preferredFy || preferredFy.includes(y));
+    if (found) selectedOption = found;
+  }
+  if (!selectedOption && baseCode && Array.isArray(catalogFys)) {
+    const matched = catalogFys.find((cf) => (cf.companyDataCode || "").toUpperCase() === baseCode.toUpperCase());
+    if (matched && matched.fyName) {
+      const raw = matched.fyName.replace(/[^\d-]/g, "");
+      const found = fyList.find((y) => y.includes(raw));
+      if (found) selectedOption = found;
+    }
+  }
+  if (!selectedOption && fyList.length > 0) {
+    const fy2025 = fyList.find(y => y.includes("2025-2026"));
+    selectedOption = fy2025 || fyList[0];
+  }
+
+  if (selectedOption) {
+    syncFySelectDropdown.value = selectedOption;
+  }
+
+  if (syncFyBadge && syncFySelectDropdown.value) {
+    syncFyBadge.textContent = `Active FY: ${syncFySelectDropdown.value}`;
+  }
+}
+
+async function handleBranchChange(newCode, silent = false) {
+  if (!newCode || !window.electronAPI?.switchBranchProfile) return;
+  try {
+    const res = await window.electronAPI.switchBranchProfile(newCode);
+    if (res && res.success && res.profile) {
+      const p = res.profile;
+      const cleanName = cleanCompanyName(p.companyName);
+      if (companyNameInput) companyNameInput.value = cleanName || "";
+      const crmAccountCode = (p.crmCompanyCode || newCode || "").toUpperCase();
+      if (crmCompanyCodeInput) crmCompanyCodeInput.value = crmAccountCode;
+
+      // Cross check currentBranchProfiles array from server
+      const currentBranch = (currentBranchProfiles || []).find(b => (b.crmCompanyCode || b.companyCode || "").toUpperCase() === crmAccountCode);
+
+      // GSTIN
+      let gstVal = (p.gstin || p.gstNo || currentBranch?.gstin || currentBranch?.gstNo || "").trim().toUpperCase();
+
+      let extractVal = (currentBranch?.extractCode && currentBranch.extractCode !== crmAccountCode)
+        ? currentBranch.extractCode
+        : (currentBranch?.companyDataCode && currentBranch.companyDataCode !== crmAccountCode)
+          ? currentBranch.companyDataCode
+          : (p.extractCode && p.extractCode !== crmAccountCode)
+            ? p.extractCode
+            : (p.decryptCode && p.decryptCode !== crmAccountCode)
+              ? p.decryptCode
+              : (p.companyCode && p.companyCode !== crmAccountCode)
+                ? p.companyCode
+                : "";
+
+      if (currentBranch && Array.isArray(currentBranch.financialYears) && currentBranch.financialYears.length > 0) {
+        activeBranchCatalogFys = currentBranch.financialYears;
+      }
+
+      // Fetch company catalog details to get GST and financial years if available
+      const cloudUrl = cloudUrlInput ? cloudUrlInput.value.trim() : "";
+      try {
+        const catRes = await window.electronAPI.getCompanyCatalog({
+          cloudUrl,
+          gstin: gstVal,
+          shortCode: crmAccountCode,
+          companyName: cleanName
+        });
+        if (catRes && catRes.success && catRes.data) {
+          if (!gstVal && catRes.data.gstNo) {
+            gstVal = catRes.data.gstNo.trim().toUpperCase();
+          }
+          if (Array.isArray(catRes.data.financialYears) && catRes.data.financialYears.length > 0) {
+            activeBranchCatalogFys = catRes.data.financialYears;
+          }
+          if (catRes.data.activeCompanyDataCode) {
+            // If extractVal was empty, or equal to crmAccountCode, or stale (mismatched company letter)
+            if (!extractVal || extractVal === crmAccountCode || (catRes.data.ccode && !extractVal.startsWith(catRes.data.ccode))) {
+              extractVal = catRes.data.activeCompanyDataCode;
+            }
+          }
+        }
+      } catch (catErr) {
+        console.warn("Catalog lookup error in branch switch:", catErr);
+      }
+
+      if (companyGstInput) companyGstInput.value = gstVal;
+
+      // Populate Sync Financial Year Dropdown
+      populateSyncFyDropdown(activeBranchCatalogFys, extractVal, p.selectedFy);
+
+      // Auto-get company code (e.g. C01, G01, B01) according to selected financial year
+      const activeFy = syncFySelectDropdown ? syncFySelectDropdown.value : "";
+      if (activeFy) {
+        const autoCode = getCodeForFinancialYear(activeFy, extractVal || "A01", activeBranchCatalogFys);
+        if (autoCode) extractVal = autoCode;
+      }
+
+      if (companyCodeInput) companyCodeInput.value = extractVal || "";
+      if (companyCodeHelper) {
+        companyCodeHelper.textContent = extractVal ? `Auto-updated for ${activeFy || "FY"} (extracts .${extractVal} files)` : "ERP file code for data sync";
+      }
+      if (syncFyBadge && activeFy) {
+        syncFyBadge.textContent = `Active FY: ${activeFy}`;
+      }
+      if (sourceDirInput) sourceDirInput.value = p.sourceDir || "";
+
+      if (p.sourceDir) {
+        updateFolderValidation(p.sourceDir, extractVal);
+        setFormLocked(true);
+      } else {
+        if (sourceDirStatusBadge) {
+          sourceDirStatusBadge.className = "source-dir-status-badge warning";
+          sourceDirStatusBadge.innerHTML = "<span>⚠️</span> <span>Please click Browse to select this branch's ERP Data folder.</span>";
+          sourceDirStatusBadge.classList.remove("hidden");
+        }
+        setFormLocked(false);
+      }
+      if (branchBadgeStatus) {
+        if (p.sourceDir) {
+          branchBadgeStatus.textContent = "Configured ✓";
+          branchBadgeStatus.style.borderColor = "rgba(34, 197, 94, 0.4)";
+          branchBadgeStatus.style.color = "#4ade80";
+        } else {
+          branchBadgeStatus.textContent = "Ready";
+          branchBadgeStatus.style.borderColor = "rgba(56, 189, 248, 0.4)";
+          branchBadgeStatus.style.color = "#38bdf8";
+        }
+      }
+      updateSyncButtonRequirementState();
+      const displayTitle = cleanName || p.crmCompanyCode || p.companyCode || "Company";
+      if (!silent) {
+        showToast(`Switched active branch to ${displayTitle}`, "info");
+      }
+    }
+  } catch (err) {
+    console.error("Failed to switch branch:", err);
+    if (!silent) {
+      showToast(`Error switching branch: ${err.message}`, "error");
+    }
+  }
+}
+
+async function handleAddNewBranchProfile() {
+  const code = prompt("Enter new Branch Company Code (e.g. B02 or A02):");
+  if (!code || !code.trim()) return;
+  const cleanCode = code.trim().toUpperCase();
+  const name = prompt(`Enter Branch Company Name for [${cleanCode}]:`, `Branch ${cleanCode}`);
+  if (name === null) return;
+
+  try {
+    const res = await window.electronAPI.saveBranchProfile({
+      companyCode: cleanCode,
+      companyName: (name || cleanCode).trim(),
+      sourceDir: ""
+    });
+    if (res && res.success) {
+      showToast(`Branch profile [${cleanCode}] created. Please select its ERP data folder.`, "success");
+      await loadBranches();
+      if (branchSelectDropdown) {
+        branchSelectDropdown.value = cleanCode;
+        await handleBranchChange(cleanCode);
+      }
+      setFormLocked(false);
+      if (browseSourceBtn) browseSourceBtn.focus();
+    }
+  } catch (err) {
+    showToast(`Failed to add branch: ${err.message}`, "error");
   }
 }
 
@@ -265,21 +799,21 @@ async function updateFolderValidation(folderPath, companyCode) {
     const res = await window.electronAPI.validateFolder(path, companyCode || (companyCodeInput ? companyCodeInput.value.trim() : ""));
     if (!res) return;
     sourceDirStatusBadge.classList.remove("hidden");
+    const cleanMsg = (res.message || "").replace(/^✓\s*/, "");
     if (res.valid) {
       if (res.matchingFiles > 0) {
         sourceDirStatusBadge.className = "source-dir-status-badge valid";
-        sourceDirStatusBadge.innerHTML = `<span>✓</span> <span>${res.message}</span>`;
+        sourceDirStatusBadge.innerHTML = `<span>✓</span> <span>${cleanMsg}</span>`;
       } else if (res.dbfFiles > 0) {
         sourceDirStatusBadge.className = "source-dir-status-badge valid";
-        sourceDirStatusBadge.innerHTML = `<span>✓</span> <span>${res.message}</span>`;
+        sourceDirStatusBadge.innerHTML = `<span>✓</span> <span>${cleanMsg}</span>`;
       } else {
-        const codeDisplay = (companyCode || (companyCodeInput ? companyCodeInput.value : "")).trim().toUpperCase();
         sourceDirStatusBadge.className = "source-dir-status-badge warning";
-        sourceDirStatusBadge.innerHTML = `<span>⚠️</span> <span>${res.message} — No matching files found for Company Code [${codeDisplay || "N/A"}]</span>`;
+        sourceDirStatusBadge.innerHTML = `<span>⚠️</span> <span>${cleanMsg}</span>`;
       }
     } else {
       sourceDirStatusBadge.className = "source-dir-status-badge invalid";
-      sourceDirStatusBadge.innerHTML = `<span>❌</span> <span>${res.message}</span>`;
+      sourceDirStatusBadge.innerHTML = `<span>❌</span> <span>${cleanMsg}</span>`;
     }
   } catch (err) {
     sourceDirStatusBadge.className = "source-dir-status-badge invalid";
@@ -287,6 +821,119 @@ async function updateFolderValidation(folderPath, companyCode) {
     sourceDirStatusBadge.classList.remove("hidden");
   }
 }
+
+function isPlaceholderComp(val) {
+  if (!val) return true;
+  const s = String(val).trim().toLowerCase();
+  return s === "your organization" || s === "organization" || s === "default" || s === "test";
+}
+
+function updateLicenseStatusUI(isVerified, expiresAt) {
+  const verifiedBadge = document.getElementById("licenseVerifiedBadge");
+  const pinBtn = document.getElementById("btnGeneratePinAgent");
+  const newKeyBtn = document.getElementById("btnGenerateNewLicenseKey");
+  const verifyBtn = document.getElementById("btnVerifyLicenseKeyManual");
+  const changeBtn = document.getElementById("btnChangeLicenseKey");
+  const countdownBadge = document.getElementById("licenseCountdownBadge");
+
+  const keyVal = (licenseKeyInput?.value || "").trim();
+  const hasKey = Boolean(keyVal);
+  const isExpired = countdownBadge?.classList.contains("expired");
+
+  const isActuallyVerified = Boolean(isVerified && hasKey && !isExpired);
+
+  if (isActuallyVerified) {
+    if (verifiedBadge) verifiedBadge.classList.remove("hidden");
+    if (pinBtn) pinBtn.classList.add("hidden");
+    if (newKeyBtn) newKeyBtn.classList.add("hidden");
+    if (verifyBtn) verifyBtn.classList.add("hidden");
+
+    // Only show Change Key button if the form is currently in edit mode (unlocked)
+    const isEditMode = editConfigBtn && editConfigBtn.classList.contains("hidden");
+    if (changeBtn) {
+      if (isEditMode) {
+        changeBtn.classList.remove("hidden");
+      } else {
+        changeBtn.classList.add("hidden");
+      }
+    }
+  } else {
+    if (verifiedBadge) verifiedBadge.classList.add("hidden");
+    if (pinBtn) pinBtn.classList.remove("hidden");
+    if (newKeyBtn) newKeyBtn.classList.remove("hidden");
+    if (verifyBtn) verifyBtn.classList.remove("hidden");
+    if (changeBtn) changeBtn.classList.add("hidden");
+  }
+}
+
+function updateSyncButtonRequirementState() {
+  if (!syncNowBtn) return;
+
+  // If configuration is in edit mode (not yet saved), sync and action buttons must remain disabled until saved!
+  const isEditMode = Boolean(editConfigBtn && editConfigBtn.classList.contains("hidden"));
+  if (isEditMode) {
+    syncNowBtn.disabled = true;
+    syncNowBtn.classList.add("terms-disabled", "btn-disabled-requirements");
+    syncNowBtn.title = "Save configuration to enable synchronization";
+    if (toggleAutoSyncBtn) {
+      toggleAutoSyncBtn.disabled = true;
+      toggleAutoSyncBtn.classList.add("terms-disabled", "btn-disabled-requirements");
+      toggleAutoSyncBtn.title = "Save configuration to enable automatic synchronization";
+    }
+    if (syncAllBranchesBtn) {
+      syncAllBranchesBtn.disabled = true;
+      syncAllBranchesBtn.classList.add("terms-disabled", "btn-disabled-requirements");
+      syncAllBranchesBtn.title = "Save configuration to enable synchronization";
+    }
+    return;
+  }
+
+  const licenseKey = (licenseKeyInput?.value || "").trim();
+  const companyCode = (companyCodeInput?.value || "").trim();
+  const sourceDir = (sourceDirInput?.value || "").trim();
+  const termsAccepted = Boolean(termsConsentCheckbox && termsConsentCheckbox.checked);
+
+  const missingFields = [];
+  if (!licenseKey) missingFields.push("License Key");
+  if (!companyCode || isPlaceholderComp(companyCode)) missingFields.push("Company Code");
+  if (!sourceDir) missingFields.push("Encrypted Data Folder");
+  if (!termsAccepted) missingFields.push("Terms & Conditions");
+
+  const allFilled = missingFields.length === 0;
+
+  if (allFilled) {
+    syncNowBtn.disabled = false;
+    syncNowBtn.classList.remove("terms-disabled", "btn-disabled-requirements");
+    syncNowBtn.title = "Extract & Sync Now";
+    if (toggleAutoSyncBtn) {
+      toggleAutoSyncBtn.disabled = false;
+      toggleAutoSyncBtn.classList.remove("terms-disabled", "btn-disabled-requirements");
+      toggleAutoSyncBtn.title = "Pause or Resume Automatic Synchronization";
+    }
+  } else {
+    syncNowBtn.disabled = true;
+    syncNowBtn.classList.add("terms-disabled", "btn-disabled-requirements");
+    syncNowBtn.title = `Sync disabled: Please fill all required fields (${missingFields.join(", ")})`;
+    if (toggleAutoSyncBtn) {
+      toggleAutoSyncBtn.disabled = true;
+      toggleAutoSyncBtn.classList.add("terms-disabled", "btn-disabled-requirements");
+      toggleAutoSyncBtn.title = `Sync disabled: Please fill all required fields (${missingFields.join(", ")})`;
+    }
+  }
+
+  if (syncAllBranchesBtn) {
+    if (licenseKey && termsAccepted) {
+      syncAllBranchesBtn.disabled = false;
+      syncAllBranchesBtn.classList.remove("terms-disabled", "btn-disabled-requirements");
+      syncAllBranchesBtn.title = "Sync all configured branch folders sequentially";
+    } else {
+      syncAllBranchesBtn.disabled = true;
+      syncAllBranchesBtn.classList.add("terms-disabled", "btn-disabled-requirements");
+      syncAllBranchesBtn.title = "Batch sync disabled: Please verify License Key and accept Terms";
+    }
+  }
+}
+window.updateSyncButtonRequirementState = updateSyncButtonRequirementState;
 
 let licenseCountdownInterval = null;
 
@@ -299,6 +946,8 @@ function updateLicenseCountdown(expiresAtStr) {
   if (!expiresAtStr) {
     if (licenseCountdownBadge) licenseCountdownBadge.classList.add("hidden");
     if (licenseCountdownDetail) licenseCountdownDetail.classList.add("hidden");
+    updateLicenseStatusUI(false, null);
+    updateSyncButtonRequirementState();
     return;
   }
 
@@ -318,6 +967,8 @@ function updateLicenseCountdown(expiresAtStr) {
         licenseCountdownDetail.classList.remove("hidden");
         if (licenseExpiryNotice) licenseExpiryNotice.textContent = "License key expired. Please renew from Web Settings.";
       }
+      updateLicenseStatusUI(false, null);
+      updateSyncButtonRequirementState();
       if (licenseCountdownInterval) {
         clearInterval(licenseCountdownInterval);
         licenseCountdownInterval = null;
@@ -349,6 +1000,8 @@ function updateLicenseCountdown(expiresAtStr) {
         licenseExpiryNotice.textContent = `${days} days remaining in 30-day term`;
       }
     }
+
+    updateLicenseStatusUI(true, expiresAtStr);
   }
 
   tick();
@@ -361,61 +1014,150 @@ async function fetchAndShowLicenseDetails() {
     const res = await window.electronAPI.getLicenseDetails();
     if (res && res.success) {
       // Auto-fill company information & license key from cloud server if not yet populated
-      if (res.license && (!licenseKeyInput.value || !licenseKeyInput.value.trim())) {
+      if (res.license) {
         licenseKeyInput.value = res.license;
+        window.electronAPI?.saveConfig({ licenseKey: res.license, isLicenseVerified: true }).catch(() => {});
       }
-      if (res.companyName && (!companyNameInput.value || !companyNameInput.value.trim() || companyNameInput.value.toLowerCase() === "test")) {
+      if (res.companyName && !isPlaceholderComp(res.companyName) && (!companyNameInput.value || isPlaceholderComp(companyNameInput.value))) {
         companyNameInput.value = res.companyName;
       }
-      if (res.companyCode && (!companyCodeInput.value || !companyCodeInput.value.trim())) {
+      if (res.companyCode && !isPlaceholderComp(res.companyCode) && (!companyCodeInput.value || isPlaceholderComp(companyCodeInput.value))) {
         companyCodeInput.value = res.companyCode.toUpperCase();
         if (sourceDirInput.value) {
           updateFolderValidation(sourceDirInput.value, res.companyCode);
         }
       }
-      if (res.licenseExpiresAt) {
+      if (res.licenseExpiresAt && res.license && !res.isExpired) {
         updateLicenseCountdown(res.licenseExpiresAt);
+        updateLicenseStatusUI(true, res.licenseExpiresAt);
       } else {
         updateLicenseCountdown(null);
+        updateLicenseStatusUI(false, null);
+      }
+      if (res.license && !isMachineLocallyAuthorized) {
+        checkAndPromptDeviceLicense(currentAuthEmail, res.license);
       }
     } else {
       updateLicenseCountdown(null);
+      updateLicenseStatusUI(false, null);
     }
   } catch (err) {
     console.error("Failed to query license details:", err);
+  } finally {
+    updateSyncButtonRequirementState();
   }
 }
 
 function setFormLocked(isLocked) {
+  if (operatorNameInput) {
+    operatorNameInput.disabled = isLocked;
+    operatorNameInput.readOnly = isLocked;
+  }
+  if (operatorEmailInput) {
+    operatorEmailInput.disabled = isLocked;
+    operatorEmailInput.readOnly = isLocked;
+  }
   companyNameInput.disabled = isLocked;
   companyNameInput.readOnly = isLocked;
+  if (companyGstInput) {
+    companyGstInput.disabled = true;
+    companyGstInput.readOnly = true;
+  }
+  if (crmCompanyCodeInput) {
+    crmCompanyCodeInput.disabled = true;
+    crmCompanyCodeInput.readOnly = true;
+  }
   companyCodeInput.disabled = isLocked;
   companyCodeInput.readOnly = isLocked;
   sourceDirInput.disabled = isLocked;
   sourceDirInput.readOnly = isLocked;
   licenseKeyInput.disabled = isLocked;
   licenseKeyInput.readOnly = isLocked;
+  if (productKeyInput) {
+    productKeyInput.disabled = isLocked;
+    productKeyInput.readOnly = isLocked;
+  }
+
+  if (syncFySelectDropdown) {
+    syncFySelectDropdown.disabled = isLocked;
+  }
+
+  if (branchSelectDropdown) {
+    branchSelectDropdown.disabled = isLocked;
+  }
+
+  const btnRefreshBranches = document.getElementById("btnRefreshBranches");
+  if (btnRefreshBranches) {
+    btnRefreshBranches.disabled = isLocked;
+    btnRefreshBranches.style.pointerEvents = isLocked ? "none" : "auto";
+    btnRefreshBranches.style.opacity = isLocked ? "0.5" : "1";
+    btnRefreshBranches.style.cursor = isLocked ? "not-allowed" : "pointer";
+  }
+
+  const btnAddBranch = document.getElementById("btnAddBranchProfile");
+  if (btnAddBranch) {
+    btnAddBranch.disabled = isLocked;
+    btnAddBranch.style.pointerEvents = isLocked ? "none" : "auto";
+    btnAddBranch.style.opacity = isLocked ? "0.5" : "1";
+    btnAddBranch.style.cursor = isLocked ? "not-allowed" : "pointer";
+  }
+
+  const btnVerifyManual = document.getElementById("btnVerifyLicenseKeyManual");
+  if (btnVerifyManual) {
+    btnVerifyManual.disabled = isLocked;
+    btnVerifyManual.style.pointerEvents = isLocked ? "none" : "auto";
+    btnVerifyManual.style.opacity = isLocked ? "0.5" : "1";
+    btnVerifyManual.style.cursor = isLocked ? "not-allowed" : "pointer";
+  }
+
+  const btnGenerateKey = document.getElementById("btnGenerateNewLicenseKey");
+  if (btnGenerateKey) {
+    btnGenerateKey.disabled = isLocked;
+    btnGenerateKey.style.pointerEvents = isLocked ? "none" : "auto";
+    btnGenerateKey.style.opacity = isLocked ? "0.5" : "1";
+    btnGenerateKey.style.cursor = isLocked ? "not-allowed" : "pointer";
+  }
+
   if (autoSyncCheckbox) autoSyncCheckbox.disabled = isLocked;
   intervalSelect.disabled = isLocked || (autoSyncCheckbox && !autoSyncCheckbox.checked);
   browseSourceBtn.disabled = isLocked;
   if (syncTargetSelect) syncTargetSelect.disabled = isLocked;
 
-  // License key is masked when locked, folder path is always readable text
+  const openTermsBtn = document.getElementById("openTermsFromSettings");
+  if (termsConsentCheckbox) {
+    termsConsentCheckbox.disabled = isLocked;
+  }
+  if (openTermsBtn) {
+    openTermsBtn.disabled = isLocked;
+    openTermsBtn.style.pointerEvents = isLocked ? "none" : "auto";
+    openTermsBtn.style.opacity = isLocked ? "0.5" : "1";
+    openTermsBtn.style.cursor = isLocked ? "not-allowed" : "pointer";
+  }
+
+  // Mask folder path and license key when saved/locked
   if (isLocked) {
-    sourceDirInput.type = "text";
+    sourceDirInput.type = "password";
     licenseKeyInput.type = "password";
     editConfigBtn.classList.remove("hidden");
     saveConfigBtn.classList.add("hidden");
     cancelEditBtn.classList.add("hidden");
+    if (btnChangeLicenseKey) btnChangeLicenseKey.classList.add("hidden");
   } else {
     sourceDirInput.type = "text";
     licenseKeyInput.type = "text";
-    saveConfigBtn.disabled = false;
+    // Save button cannot be active until terms are checked
+    saveConfigBtn.disabled = !Boolean(termsConsentCheckbox && termsConsentCheckbox.checked);
     setButtonLoading(saveConfigBtn, false);
     editConfigBtn.classList.add("hidden");
     saveConfigBtn.classList.remove("hidden");
     cancelEditBtn.classList.remove("hidden");
+    // If license key is verified in edit mode, show Change Key button
+    const hasKey = Boolean(licenseKeyInput && licenseKeyInput.value.trim());
+    if (hasKey && licenseVerifiedBadge && !licenseVerifiedBadge.classList.contains("hidden")) {
+      if (btnChangeLicenseKey) btnChangeLicenseKey.classList.remove("hidden");
+    }
   }
+  updateSyncButtonRequirementState();
 }
 
 // ---------------------------------------------------------------------------
@@ -431,17 +1173,22 @@ function setupEventListeners() {
     btn.addEventListener("click", () => {
       cloudUrlInput.value = url;
       updateActiveServerButtons(url);
+      updateServerEnvDisplay(url);
+      if (window.electronAPI?.setCloudUrl) {
+        window.electronAPI.setCloudUrl(url);
+      }
       cloudUrlInput.focus();
     });
   };
 
   bindServerBtn(btnServerPhcrm, "https://phcrm.mabsolinfotech.cloud");
   bindServerBtn(btnServerMbh, "https://mbh.crm.mabsolinfotech.cloud");
-  bindServerBtn(btnServerLocal, "http://localhost:3000");
+  bindServerBtn(btnServerLocalhost, "http://localhost:3000");
 
   if (cloudUrlInput) {
     cloudUrlInput.addEventListener("input", () => {
       updateActiveServerButtons(cloudUrlInput.value);
+      updateServerEnvDisplay(cloudUrlInput.value);
     });
   }
 
@@ -452,11 +1199,11 @@ function setupEventListeners() {
     setButtonLoading(loginBtn, true);
 
     const cloudUrl = cloudUrlInput.value.trim();
-    const email = emailInput.value.trim();
+    const identifier = emailInput.value.trim();
     const password = passwordInput.value;
 
     try {
-      const res = await window.electronAPI.login({ cloudUrl, email, password });
+      const res = await window.electronAPI.login({ cloudUrl, email: identifier, identifier, password });
       setButtonLoading(loginBtn, false);
 
       if (res.success && res.directLogin) {
@@ -495,21 +1242,6 @@ function setupEventListeners() {
   // ---------------------------------------------------------------------------
   // Clean Onboarding & Multi-Branch Signup Wizard (Identical to Website)
   // ---------------------------------------------------------------------------
-  function showToast(message, type = "info") {
-    const container = document.getElementById("toastContainer");
-    if (!container) return;
-    const item = document.createElement("div");
-    item.className = `toast-item toast-${type}`;
-    const icon = type === "success" ? "✓" : type === "error" ? "✕" : "ℹ️";
-    item.innerHTML = `<span style="font-size:14px; font-weight:bold;">${icon}</span><span>${escapeHtml(message)}</span>`;
-    container.appendChild(item);
-    setTimeout(() => {
-      item.style.opacity = "0";
-      item.style.transform = "translateX(20px)";
-      item.style.transition = "all 0.3s ease";
-      setTimeout(() => item.remove(), 300);
-    }, 4500);
-  }
 
   // Wizard State
   const signupWizardState = {
@@ -648,6 +1380,7 @@ function setupEventListeners() {
   const regBranchCount = document.getElementById("regBranchCount");
   const regFullName = document.getElementById("regFullName");
   const regGstNo = document.getElementById("regGstNo");
+  const regShortCode = document.getElementById("regShortCode");
   const regVerifyGstBtn = document.getElementById("regVerifyGstBtn");
   const regGstStatusPill = document.getElementById("regGstStatusPill");
   const regAddress = document.getElementById("regAddress");
@@ -656,6 +1389,188 @@ function setupEventListeners() {
   const regPincode = document.getElementById("regPincode");
   const regMobile = document.getElementById("regMobile");
   const regEmail = document.getElementById("regEmail");
+  const regEmailChoiceCard = document.getElementById("regEmailChoiceCard");
+  const regDetectedEmailVal = document.getElementById("regDetectedEmailVal");
+  const regBtnUseDetectedEmail = document.getElementById("regBtnUseDetectedEmail");
+  const regBtnChangeEmail = document.getElementById("regBtnChangeEmail");
+  const regFySection = document.getElementById("regFySection");
+  const regFyStatusBanner = document.getElementById("regFyStatusBanner");
+  const regFyMultiselectContainer = document.getElementById("regFyMultiselectContainer");
+  const regFyDropdownTrigger = document.getElementById("regFyDropdownTrigger");
+  const regFySelectedText = document.getElementById("regFySelectedText");
+  const regFyDropdownMenu = document.getElementById("regFyDropdownMenu");
+  const regFyOptionsList = document.getElementById("regFyOptionsList");
+  const regFySelectAllBtn = document.getElementById("regFySelectAllBtn");
+  const regFyClearBtn = document.getElementById("regFyClearBtn");
+
+  function getLast5FinancialYears() {
+    const now = new Date();
+    const currentYear = now.getFullYear();
+    // Indian FY: starts April 1 (month index 3). If month >= 3, FY start is current year, else current year - 1
+    const baseStartYear = now.getMonth() >= 3 ? currentYear : currentYear - 1;
+    const years = [];
+    for (let i = 0; i < 5; i++) {
+      const s = baseStartYear - i;
+      const e = s + 1;
+      years.push(`(${s}-${e})`);
+    }
+    return years;
+  }
+
+  function getSelectedFinancialYears() {
+    if (!regFyOptionsList) return [];
+    const cbs = regFyOptionsList.querySelectorAll("input.multiselect-cb:checked");
+    return Array.from(cbs).map((cb) => cb.value);
+  }
+
+  function updateFyMultiSelectUI(statusCustomText) {
+    const selected = getSelectedFinancialYears();
+    // Update trigger display text
+    if (regFySelectedText) {
+      if (selected.length === 0) {
+        regFySelectedText.textContent = "Select Financial Year(s)";
+        regFySelectedText.classList.add("placeholder");
+      } else if (selected.length === 1) {
+        regFySelectedText.textContent = selected[0];
+        regFySelectedText.classList.remove("placeholder");
+      } else if (selected.length <= 2) {
+        regFySelectedText.textContent = selected.join(", ");
+        regFySelectedText.classList.remove("placeholder");
+      } else {
+        regFySelectedText.innerHTML = `${selected.slice(0, 2).join(", ")} <span class="multiselect-tag-count">+${selected.length - 2} more</span>`;
+        regFySelectedText.classList.remove("placeholder");
+      }
+    }
+
+    // Update row highlighting
+    if (regFyOptionsList) {
+      const items = regFyOptionsList.querySelectorAll(".multiselect-option-item");
+      items.forEach((item) => {
+        const cb = item.querySelector("input.multiselect-cb");
+        if (cb && cb.checked) {
+          item.classList.add("selected");
+        } else {
+          item.classList.remove("selected");
+        }
+      });
+    }
+
+    // Update status banner (strictly no ERP company codes)
+    if (regFyStatusBanner) {
+      if (statusCustomText) {
+        regFyStatusBanner.textContent = statusCustomText;
+        regFyStatusBanner.classList.remove("hidden");
+      } else if (selected.length === 1) {
+        regFyStatusBanner.textContent = `✓ Financial Year ${selected[0]} selected for synchronization`;
+        regFyStatusBanner.classList.remove("hidden");
+      } else if (selected.length > 1) {
+        regFyStatusBanner.textContent = `✓ ${selected.length} Financial Years selected: ${selected.join(", ")}`;
+        regFyStatusBanner.classList.remove("hidden");
+      } else {
+        regFyStatusBanner.classList.add("hidden");
+      }
+    }
+  }
+
+  function populateFinancialYearDropdown(detectedFys = []) {
+    if (!regFyOptionsList) return;
+    const years = getLast5FinancialYears();
+    regFyOptionsList.innerHTML = "";
+
+    const toCheck = new Set();
+    if (Array.isArray(detectedFys) && detectedFys.length > 0) {
+      for (const df of detectedFys) {
+        const rawFy = (df.fyName || "").replace(/[^\d-]/g, "");
+        const formatted = `(${rawFy})`;
+        const found = years.find((y) => y === formatted || (rawFy && y.includes(rawFy)));
+        if (found) {
+          toCheck.add(found);
+        }
+      }
+    }
+
+    if (toCheck.size === 0 && years.length > 0) {
+      toCheck.add(years[0]);
+    }
+
+    years.forEach((fy) => {
+      const label = document.createElement("label");
+      label.className = `multiselect-option-item${toCheck.has(fy) ? " selected" : ""}`;
+
+      const cb = document.createElement("input");
+      cb.type = "checkbox";
+      cb.className = "multiselect-cb";
+      cb.value = fy;
+      cb.checked = toCheck.has(fy);
+
+      const span = document.createElement("span");
+      span.className = "multiselect-option-label";
+      span.textContent = fy;
+
+      label.appendChild(cb);
+      label.appendChild(span);
+
+      cb.addEventListener("change", () => {
+        updateFyMultiSelectUI();
+      });
+
+      regFyOptionsList.appendChild(label);
+    });
+
+    const selectedYears = Array.from(toCheck);
+    let customBanner = "";
+    if (Array.isArray(detectedFys) && detectedFys.length > 0 && selectedYears.length > 0) {
+      customBanner = selectedYears.length === 1
+        ? `✓ Master Data Verified: Financial Year ${selectedYears[0]} ready for sync`
+        : `✓ Master Data Verified: ${selectedYears.length} Financial Years ready for sync: ${selectedYears.join(", ")}`;
+    }
+
+    updateFyMultiSelectUI(customBanner);
+  }
+
+  // Toggle multi-select dropdown menu
+  regFyDropdownTrigger?.addEventListener("click", (e) => {
+    e.stopPropagation();
+    const isOpen = regFyMultiselectContainer?.classList.toggle("open");
+    if (regFyDropdownMenu) {
+      if (isOpen) {
+        regFyDropdownMenu.classList.remove("hidden");
+        regFyDropdownTrigger.setAttribute("aria-expanded", "true");
+      } else {
+        regFyDropdownMenu.classList.add("hidden");
+        regFyDropdownTrigger.setAttribute("aria-expanded", "false");
+      }
+    }
+  });
+
+  // Select all & Clear buttons
+  regFySelectAllBtn?.addEventListener("click", (e) => {
+    e.stopPropagation();
+    if (!regFyOptionsList) return;
+    const cbs = regFyOptionsList.querySelectorAll("input.multiselect-cb");
+    cbs.forEach((cb) => (cb.checked = true));
+    updateFyMultiSelectUI();
+  });
+
+  regFyClearBtn?.addEventListener("click", (e) => {
+    e.stopPropagation();
+    if (!regFyOptionsList) return;
+    const cbs = regFyOptionsList.querySelectorAll("input.multiselect-cb");
+    cbs.forEach((cb) => (cb.checked = false));
+    updateFyMultiSelectUI();
+  });
+
+  // Close dropdown on outside click
+  document.addEventListener("click", (e) => {
+    if (regFyMultiselectContainer && !regFyMultiselectContainer.contains(e.target)) {
+      regFyMultiselectContainer.classList.remove("open");
+      if (regFyDropdownMenu) regFyDropdownMenu.classList.add("hidden");
+      regFyDropdownTrigger?.setAttribute("aria-expanded", "false");
+    }
+  });
+
+  // Populate multi-select dropdown on initialization with last 5 financial years
+  populateFinancialYearDropdown();
   const regSendEmailOtpBtn = document.getElementById("regSendEmailOtpBtn");
   const regEmailVerifiedBadge = document.getElementById("regEmailVerifiedBadge");
   const regEmailOtpBox = document.getElementById("regEmailOtpBox");
@@ -849,6 +1764,46 @@ function setupEventListeners() {
           regGstStatusPill.classList.remove("hidden");
         }
         showToast(`GSTIN Verified: ${displayName}`, "success");
+
+        // Cross-reference with Marg Master Catalog in Database
+        try {
+          const catRes = await window.electronAPI.getCompanyCatalog({ cloudUrl, gstin: cleanGst });
+          if (catRes && catRes.success && catRes.data) {
+            const comp = catRes.data;
+            signupWizardState.catalogCompany = comp;
+
+            // Auto-fill Branch / Short Code
+            if (regShortCode && comp.shortCode && !regShortCode.value.trim()) {
+              regShortCode.value = comp.shortCode;
+            }
+
+            // Auto-fill Mobile / Phone if empty
+            if (regMobile && !regMobile.value.trim()) {
+              if (comp.mobile) regMobile.value = comp.mobile;
+              else if (comp.phone && /^\d{10}$/.test(comp.phone)) regMobile.value = comp.phone;
+            }
+
+            // Auto-fill Company Name if better than placeholder
+            if (comp.companyName && (!regCompanyName.value || regCompanyName.value.includes("Company"))) {
+              regCompanyName.value = comp.companyName;
+            }
+
+            // Auto-fill Email with Prompt Card
+            if (comp.email) {
+              if (regDetectedEmailVal) regDetectedEmailVal.textContent = comp.email;
+              if (regEmailChoiceCard) regEmailChoiceCard.classList.remove("hidden");
+              if (regEmail && !regEmail.value.trim()) {
+                regEmail.value = comp.email;
+              }
+            }
+
+            // Auto-detect Financial Years from ERP master data without exposing company codes (A01, B01)
+            const fys = comp.financialYears || [];
+            populateFinancialYearDropdown(fys);
+          }
+        } catch (catErr) {
+          console.warn("Catalog lookup notice:", catErr.message);
+        }
       } else {
         signupWizardState.isPrimaryGstVerified = false;
         if (regGstStatusPill) regGstStatusPill.classList.add("hidden");
@@ -860,6 +1815,31 @@ function setupEventListeners() {
       showToast("Network error verifying GSTIN. Please check connection.", "error");
     }
   });
+
+  // ERP Email Prompt Button Listeners
+  regBtnUseDetectedEmail?.addEventListener("click", () => {
+    const detected = (regDetectedEmailVal?.textContent || "").trim();
+    if (detected && regEmail) {
+      regEmail.value = detected;
+      regEmail.readOnly = true;
+      regBtnUseDetectedEmail.classList.add("active");
+      regBtnChangeEmail?.classList.remove("active");
+      showToast(`Using ERP master email: ${detected}`, "success");
+    }
+  });
+
+  regBtnChangeEmail?.addEventListener("click", () => {
+    if (regEmail) {
+      regEmail.readOnly = false;
+      regEmail.value = "";
+      regEmail.focus();
+      regBtnUseDetectedEmail?.classList.remove("active");
+      regBtnChangeEmail?.classList.add("active");
+      showToast("Please enter your preferred email address", "info");
+    }
+  });
+
+
 
   // Pincode Blur Auto-Lookup
   regPincode?.addEventListener("blur", async () => {
@@ -1063,6 +2043,7 @@ function setupEventListeners() {
           pincode: "",
           address: "",
           mobile: "",
+          sameGstAsStep1: false,
           email: "",
           password: "",
           confirmPassword: "",
@@ -1127,39 +2108,8 @@ function setupEventListeners() {
   function validateBranchMobileField(curIdx, cleanMob, showUiError = true) {
     const errEl = document.getElementById("brMobileErrorText");
     const inputEl = document.getElementById("brMobileInput");
-    const hoMob = (regMobile?.value || "").replace(/\D/g, "");
 
-    if (!cleanMob) {
-      if (errEl) errEl.classList.add("hidden");
-      inputEl?.classList.remove("input-has-error");
-      return { valid: false, message: "Branch phone number is required" };
-    }
-
-    // 1. Cannot equal Head Office phone from Step 1
-    if (cleanMob.length === 10 && cleanMob === hoMob) {
-      const msg = `Cannot use Head Office phone (+91 ${hoMob}) for Branch #${curIdx + 1}. Each branch requires a unique phone number.`;
-      if (showUiError) {
-        if (errEl) { errEl.textContent = `❌ ${msg}`; errEl.classList.remove("hidden"); }
-        inputEl?.classList.add("input-has-error");
-      }
-      return { valid: false, message: msg };
-    }
-
-    // 2. Cannot duplicate other branches
-    if (cleanMob.length === 10) {
-      for (let j = 0; j < signupWizardState.additionalBranches.length; j++) {
-        const otherMob = (signupWizardState.additionalBranches[j].mobile || "").replace(/\D/g, "");
-        if (j !== curIdx && otherMob === cleanMob) {
-          const msg = `This phone number is already assigned to Branch #${j + 1}. Each branch requires a unique phone number.`;
-          if (showUiError) {
-            if (errEl) { errEl.textContent = `❌ ${msg}`; errEl.classList.remove("hidden"); }
-            inputEl?.classList.add("input-has-error");
-          }
-          return { valid: false, message: msg };
-        }
-      }
-    }
-
+    // Branch contact phone is optional - no mandatory validation required
     if (errEl) errEl.classList.add("hidden");
     inputEl?.classList.remove("input-has-error");
     return { valid: true };
@@ -1197,7 +2147,7 @@ function setupEventListeners() {
     activeBranchCard.innerHTML = `
       <div class="branch-top-bar">
         <h4>🏢 Branch #${curIdx + 1} Configuration</h4>
-        <button type="button" class="btn-copy-ho" id="brCopyHoBtn">📋 Copy Head Office Details (GST &amp; Address)</button>
+        <button type="button" class="btn-copy-ho" id="brCopyHoBtn">📋 Same as Step 1 Details</button>
       </div>
 
       <div class="clean-field">
@@ -1209,13 +2159,16 @@ function setupEventListeners() {
 
       <div class="clean-field">
         <div class="clean-label-row">
-          <label>Branch GSTIN (Optional if using Head Office GST)</label>
-          <span class="field-hint">Auto-fills branch address</span>
+          <label>Branch GSTIN</label>
+          <label class="same-step1-checkbox-label">
+            <input type="checkbox" id="brSameStep1GstCheckbox" ${curBranch.sameGstAsStep1 || (curBranch.gstNo && curBranch.gstNo === (regGstNo?.value || '').trim().toUpperCase()) ? 'checked' : ''}>
+            <span>Same GST as Step 1 GST ${regGstNo?.value ? `(${escapeHtml(regGstNo.value.trim().toUpperCase())})` : ''}</span>
+          </label>
         </div>
         <div class="clean-input-row">
           <span class="clean-field-icon">📋</span>
-          <input type="text" id="brGstInput" placeholder="ENTER 15-DIGIT GSTIN" maxlength="15" value="${escapeHtml(curBranch.gstNo)}" style="text-transform:uppercase; font-family:monospace;">
-          <button type="button" id="brVerifyGstBtn" class="clean-inline-btn">${curBranch.verified ? 'Verified ✓' : 'Verify GST'}</button>
+          <input type="text" id="brGstInput" placeholder="ENTER 15-DIGIT GSTIN" maxlength="15" value="${escapeHtml(curBranch.gstNo)}" style="text-transform:uppercase; font-family:monospace;" ${curBranch.sameGstAsStep1 ? 'readonly' : ''}>
+          <button type="button" id="brVerifyGstBtn" class="clean-inline-btn" ${curBranch.sameGstAsStep1 ? 'disabled' : ''}>${curBranch.verified ? 'Verified ✓' : 'Verify GST'}</button>
         </div>
         <div id="brGstStatusPill" class="gst-verified-pill ${curBranch.verified ? '' : 'hidden'}">✓ Branch GSTIN Verified</div>
       </div>
@@ -1250,10 +2203,10 @@ function setupEventListeners() {
           </div>
         </div>
         <div class="clean-field">
-          <label><span class="req-star">*</span> Branch Contact Phone (Must be unique)</label>
+          <label>Branch Contact Phone (Optional)</label>
           <div class="clean-input-row">
             <span class="clean-field-icon">📞</span>
-            <input type="tel" id="brMobileInput" placeholder="10-digit mobile number" maxlength="10" value="${escapeHtml(curBranch.mobile)}">
+            <input type="tel" id="brMobileInput" placeholder="10-digit mobile number (optional)" maxlength="10" value="${escapeHtml(curBranch.mobile || '')}">
           </div>
           <div id="brMobileErrorText" class="clean-field-error hidden"></div>
         </div>
@@ -1305,16 +2258,38 @@ function setupEventListeners() {
       </div>
     `;
 
+    // Wire Same GST as Step 1 Checkbox
+    document.getElementById("brSameStep1GstCheckbox")?.addEventListener("change", (e) => {
+      const isChecked = e.target.checked;
+      curBranch.sameGstAsStep1 = isChecked;
+      if (isChecked) {
+        curBranch.gstNo = (regGstNo?.value || "").trim().toUpperCase();
+        curBranch.address = curBranch.address || (regAddress?.value || "").trim();
+        curBranch.city = curBranch.city || (regCity?.value || "").trim();
+        curBranch.state = curBranch.state || (regState?.value || "").trim();
+        curBranch.pincode = curBranch.pincode || (regPincode?.value || "").trim();
+        curBranch.verified = Boolean(signupWizardState.isPrimaryGstVerified);
+        renderBranchTabsAndCard();
+        showToast("Applied Step 1 GST & Address to Branch!", "info");
+      } else {
+        curBranch.gstNo = "";
+        curBranch.verified = false;
+        renderBranchTabsAndCard();
+      }
+    });
+
     // Wire Copy Head Office Details (Copies GST & Address only, NOT email or phone)
     document.getElementById("brCopyHoBtn")?.addEventListener("click", () => {
+      curBranch.sameGstAsStep1 = true;
       curBranch.branchName = curBranch.branchName || `${regCompanyName?.value || 'Branch'} - Branch ${curIdx + 1}`;
-      curBranch.gstNo = curBranch.gstNo || (regGstNo?.value || "").trim();
-      curBranch.address = curBranch.address || (regAddress?.value || "").trim();
-      curBranch.city = curBranch.city || (regCity?.value || "").trim();
-      curBranch.state = curBranch.state || (regState?.value || "").trim();
-      curBranch.pincode = curBranch.pincode || (regPincode?.value || "").trim();
+      curBranch.gstNo = (regGstNo?.value || "").trim().toUpperCase();
+      curBranch.address = (regAddress?.value || "").trim();
+      curBranch.city = (regCity?.value || "").trim();
+      curBranch.state = (regState?.value || "").trim();
+      curBranch.pincode = (regPincode?.value || "").trim();
+      curBranch.verified = Boolean(signupWizardState.isPrimaryGstVerified);
       renderBranchTabsAndCard();
-      showToast("Copied Head Office address, city & GST to Branch!", "info");
+      showToast("Copied Step 1 address, city & GST to Branch!", "info");
     });
 
     // Wire Branch Inputs
@@ -1788,37 +2763,7 @@ function setupEventListeners() {
           return;
         }
 
-        const brMob = (br.mobile || "").replace(/\D/g, "");
-        if (brMob.length !== 10) {
-          const msg = `Please enter a valid 10-digit phone number for Branch #${i + 1}`;
-          if (signupErrorBanner) { signupErrorBanner.textContent = msg; signupErrorBanner.classList.remove("hidden"); }
-          showToast(msg, "error");
-          signupWizardState.activeBranchIndex = i;
-          renderBranchTabsAndCard();
-          return;
-        }
-
-        const hoMob = (regMobile?.value || "").replace(/\D/g, "");
-        if (brMob === hoMob) {
-          const msg = `Branch #${i + 1} phone number cannot be the same as Head Office phone (+91 ${hoMob}). Each branch must have a unique phone number.`;
-          if (signupErrorBanner) { signupErrorBanner.textContent = msg; signupErrorBanner.classList.remove("hidden"); }
-          showToast(msg, "error");
-          signupWizardState.activeBranchIndex = i;
-          renderBranchTabsAndCard();
-          return;
-        }
-
-        for (let k = 0; k < i; k++) {
-          const prevMob = (signupWizardState.additionalBranches[k].mobile || "").replace(/\D/g, "");
-          if (prevMob === brMob) {
-            const msg = `Branch #${i + 1} phone number is already used for Branch #${k + 1}. Each branch requires a unique phone number.`;
-            if (signupErrorBanner) { signupErrorBanner.textContent = msg; signupErrorBanner.classList.remove("hidden"); }
-            showToast(msg, "error");
-            signupWizardState.activeBranchIndex = i;
-            renderBranchTabsAndCard();
-            return;
-          }
-        }
+        // Branch contact phone is optional - no validation required
 
         const brEmail = (br.email || "").trim().toLowerCase();
         if (!brEmail || !brEmail.includes("@")) {
@@ -1902,6 +2847,32 @@ function setupEventListeners() {
     const cleanMob = (regMobile?.value || "").replace(/\D/g, "");
     const cleanEmail = (regEmail?.value || "").trim().toLowerCase();
 
+    const selectedFys = getSelectedFinancialYears();
+    if (selectedFys.length === 0) {
+      setButtonLoading(regCompleteBtn, false);
+      showToast("Please select at least one Financial Year to upload.", "error");
+      return;
+    }
+
+    const selectedFyStr = selectedFys.join(", ");
+    const shortCode = (regShortCode?.value || "").trim().toUpperCase();
+    const catalogComp = signupWizardState.catalogCompany || null;
+    let companyDataCode = "";
+    const companyCodes = [];
+    if (catalogComp && Array.isArray(catalogComp.financialYears) && catalogComp.financialYears.length > 0) {
+      for (const sfy of selectedFys) {
+        const cleanFy = sfy.replace(/[^\d-]/g, "");
+        const matched = catalogComp.financialYears.find(f => (f.fyName && cleanFy && f.fyName.includes(cleanFy)));
+        if (matched && matched.companyDataCode) {
+          companyCodes.push(matched.companyDataCode);
+        }
+      }
+      companyDataCode = companyCodes[0] || catalogComp.activeCompanyDataCode || `${catalogComp.ccode || "A"}01`;
+    } else if (catalogComp?.ccode) {
+      companyDataCode = `${catalogComp.ccode}01`;
+      companyCodes.push(companyDataCode);
+    }
+
     const payload = {
       cloudUrl,
       name: adminName,
@@ -1911,6 +2882,12 @@ function setupEventListeners() {
       role: "Admin",
       companyName: (regCompanyName?.value || "").trim(),
       gstNo: (regGstNo?.value || "").trim().toUpperCase(),
+      shortCode,
+      companyCode: companyDataCode,
+      companyCodes: companyCodes.length > 0 ? companyCodes : [companyDataCode],
+      financialYear: selectedFyStr,
+      financialYears: selectedFys,
+      financialYearsToUpload: selectedFys.length,
       drugLicenseNo: (regDrugLicense?.value || "").trim().toUpperCase(),
       address: (regAddress?.value || "").trim(),
       city: (regCity?.value || "").trim(),
@@ -1987,6 +2964,7 @@ function setupEventListeners() {
 
   // Logout Button
   logoutBtn.addEventListener("click", async () => {
+    isMachineLocallyAuthorized = false;
     await window.electronAPI.logout();
     currentAuthEmail = "";
     showLogin();
@@ -1998,11 +2976,13 @@ function setupEventListeners() {
     if (selected) {
       sourceDirInput.value = selected;
       updateFolderValidation(selected, companyCodeInput.value);
+      updateSyncButtonRequirementState();
     }
   });
 
   // Live input validation on typing or pasting path/code
   sourceDirInput.addEventListener("input", () => {
+    updateSyncButtonRequirementState();
     if (folderValidateTimer) clearTimeout(folderValidateTimer);
     folderValidateTimer = setTimeout(() => {
       updateFolderValidation(sourceDirInput.value, companyCodeInput.value);
@@ -2010,12 +2990,72 @@ function setupEventListeners() {
   });
 
   companyCodeInput.addEventListener("input", () => {
+    updateSyncButtonRequirementState();
     if (folderValidateTimer) clearTimeout(folderValidateTimer);
     folderValidateTimer = setTimeout(() => {
       if (sourceDirInput.value) {
         updateFolderValidation(sourceDirInput.value, companyCodeInput.value);
       }
     }, 400);
+  });
+
+  // Sync Financial Year dropdown change: auto-determines ERP Extract Code (e.g. G01, G02, B01, A01)
+  syncFySelectDropdown?.addEventListener("change", () => {
+    const selectedFy = syncFySelectDropdown.value;
+    if (!selectedFy) return;
+    const selectedOpt = syncFySelectDropdown.options[syncFySelectDropdown.selectedIndex];
+    const precomputed = selectedOpt?.getAttribute("data-code");
+    const currentCode = (companyCodeInput?.value || "").trim().toUpperCase();
+    const newCode = precomputed || getCodeForFinancialYear(selectedFy, currentCode, activeBranchCatalogFys);
+    if (newCode) {
+      companyCodeInput.value = newCode;
+      if (companyCodeHelper) {
+        companyCodeHelper.textContent = `Auto-updated for ${selectedFy}`;
+      }
+      if (syncFyBadge) {
+        syncFyBadge.textContent = `Active FY: ${selectedFy}`;
+      }
+      if (sourceDirInput.value) {
+        updateFolderValidation(sourceDirInput.value, newCode);
+      }
+      updateSyncButtonRequirementState();
+
+      // Persist to active branch profile silently
+      const activeCrmCode = (crmCompanyCodeInput?.value || branchSelectDropdown?.value || "").trim().toUpperCase();
+      if (activeCrmCode && window.electronAPI?.saveBranchProfile) {
+        window.electronAPI.saveBranchProfile({
+          companyCode: newCode,
+          crmCompanyCode: activeCrmCode,
+          decryptCode: newCode,
+          extractCode: newCode,
+          companyName: companyNameInput?.value || "",
+          gstin: companyGstInput?.value || "",
+          selectedFy,
+          sourceDir: sourceDirInput?.value || ""
+        }).catch(() => {});
+      }
+      showToast(`Financial Year updated to ${selectedFy}`, "success");
+    }
+  });
+
+  licenseKeyInput?.addEventListener("input", () => {
+    updateSyncButtonRequirementState();
+    const hasKey = Boolean(licenseKeyInput.value.trim());
+    if (!hasKey) {
+      updateLicenseStatusUI(false);
+    }
+  });
+
+  companyNameInput?.addEventListener("input", () => {
+    updateSyncButtonRequirementState();
+  });
+
+  btnChangeLicenseKey?.addEventListener("click", () => {
+    updateLicenseStatusUI(false);
+    licenseKeyInput.readOnly = false;
+    licenseKeyInput.disabled = false;
+    licenseKeyInput.focus();
+    licenseKeyInput.select();
   });
 
   // Browse Destination Folder (Optional/Legacy)
@@ -2081,6 +3121,20 @@ function setupEventListeners() {
   // Click "Edit Configuration" -> Unlocks form fields immediately for direct editing!
   editConfigBtn.addEventListener("click", () => {
     setFormLocked(false);
+  });
+
+  // Click "Verify Key with OTP" button
+  btnVerifyLicenseKeyManual?.addEventListener("click", () => {
+    isMachineLocallyAuthorized = false;
+    openDeviceActivationModal({
+      email: currentAuthEmail || (emailInput ? emailInput.value.trim() : ""),
+      licenseKey: licenseKeyInput ? licenseKeyInput.value.trim() : ""
+    });
+  });
+
+  // When user edits license key, reset authorization state
+  licenseKeyInput?.addEventListener("input", () => {
+    isMachineLocallyAuthorized = false;
   });
 
   // Switch between OTP and Password in Unlock Modal
@@ -2189,36 +3243,117 @@ function setupEventListeners() {
   // Save Config
   configForm.addEventListener("submit", async (e) => {
     e.preventDefault();
+
+    // Verify Terms and Conditions are checked before saving
+    if (termsConsentCheckbox && !termsConsentCheckbox.checked) {
+      setButtonLoading(saveConfigBtn, false);
+      saveConfigBtn.disabled = false;
+      const box = document.querySelector(".terms-consent-box");
+      if (box) box.classList.add("has-warning");
+      if (termsNoticeWarning) termsNoticeWarning.classList.remove("hidden");
+      showToast("Please agree to the Terms & Conditions and Privacy Policy before saving.", "warning");
+      termsConsentCheckbox.focus();
+      return;
+    }
+
     setButtonLoading(saveConfigBtn, true);
     saveNotice.classList.add("hidden");
 
     const isAutoSync = autoSyncCheckbox ? (autoSyncCheckbox.checked && intervalSelect.value !== "0") : (intervalSelect.value !== "0");
+    const activeCrmCode = (crmCompanyCodeInput?.value || branchSelectDropdown?.value || "").trim().toUpperCase();
     const newCfg = {
+      operatorName: operatorNameInput ? operatorNameInput.value.trim() : "",
+      userEmail: operatorEmailInput ? operatorEmailInput.value.trim() : (currentAuthEmail || emailInput.value.trim()),
+      termsAccepted: termsConsentCheckbox ? termsConsentCheckbox.checked : false,
       companyName: companyNameInput.value.trim(),
+      gstin: companyGstInput ? companyGstInput.value.trim().toUpperCase() : "",
+      selectedFy: syncFySelectDropdown ? syncFySelectDropdown.value : "",
       companyCode: companyCodeInput.value.trim().toUpperCase(),
       sourceDir: sourceDirInput.value.trim(),
       destDir: destDirInput ? destDirInput.value.trim() : "",
       licenseKey: licenseKeyInput.value.trim(),
+      productKey: productKeyInput ? productKeyInput.value.trim() : "",
       syncTarget: syncTargetSelect ? syncTargetSelect.value : "mabsolcrm",
       autoSync: isAutoSync,
       intervalMins: isAutoSync ? (intervalSelect.value === "realtime" ? "realtime" : (Number(intervalSelect.value) || 10)) : 0,
       cloudUrl: cloudUrlInput.value.trim(),
-      userEmail: currentAuthEmail || emailInput.value.trim()
+      selectedCompanyCode: activeCrmCode
     };
+
+    // Before saving the config, if a license key is entered, verify email OTP first!
+    if (newCfg.licenseKey && !isMachineLocallyAuthorized && window.electronAPI?.checkDeviceLicense) {
+      try {
+        const checkRes = await window.electronAPI.checkDeviceLicense({
+          email: newCfg.userEmail,
+          cloudUrl: newCfg.cloudUrl,
+          licenseKey: newCfg.licenseKey
+        });
+        if (checkRes && (!checkRes.authorized || checkRes.requiresVerification || checkRes.isNewDevice)) {
+          setButtonLoading(saveConfigBtn, false);
+          saveConfigBtn.disabled = false;
+          pendingConfigToSave = newCfg;
+          const warnMsg = checkRes.message || "Email OTP verification required before saving license key.";
+          saveNotice.textContent = warnMsg;
+          saveNotice.className = "save-notice warning";
+          saveNotice.classList.remove("hidden");
+          openDeviceActivationModal({
+            email: checkRes.email || newCfg.userEmail,
+            deviceName: checkRes.deviceName,
+            deviceId: checkRes.deviceId,
+            licenseKey: newCfg.licenseKey,
+            error: warnMsg,
+            autoSend: true
+          });
+          showToast("Please verify the OTP code sent to your email before saving.", "warning");
+          return;
+        } else if (checkRes && checkRes.authorized && !checkRes.isExpired) {
+          isMachineLocallyAuthorized = true;
+        }
+      } catch (checkErr) {
+        console.warn("Pre-save license check error:", checkErr);
+      }
+    }
 
     try {
       const res = await window.electronAPI.saveConfig(newCfg);
       setButtonLoading(saveConfigBtn, false);
       saveConfigBtn.disabled = false;
 
-      if (res && res.success) {
+      const needsDevVerification = Boolean(
+        res?.requiresVerification ||
+        res?.deviceMismatch ||
+        (!res?.success && (res?.licenseWarning || res?.error)) ||
+        (res?.licenseWarning && (res.licenseWarning.includes("locked to machine") || res.licenseWarning.includes("not authorized") || res.licenseWarning.includes("requires") || res.licenseWarning.includes("Verification Required"))) ||
+        (typeof res?.error === "string" && (res.error.includes("locked to machine") || res.error.includes("not authorized") || res.error.includes("requires")))
+      );
+
+      if (needsDevVerification) {
+        isMachineLocallyAuthorized = false;
+        pendingConfigToSave = newCfg;
+        const warnMsg = res?.message || res?.licenseWarning || res?.error || "License verification required to authorize this machine.";
+        saveNotice.textContent = warnMsg;
+        saveNotice.className = "save-notice warning";
+        saveNotice.classList.remove("hidden");
+        appendLogEntry("warn", `[License Verification Required] ${warnMsg}`);
+        openDeviceActivationModal({
+          email: res?.email || newCfg.userEmail || currentAuthEmail,
+          deviceName: res?.deviceName,
+          deviceId: res?.deviceId,
+          licenseKey: res?.licenseKey || newCfg.licenseKey,
+          error: warnMsg,
+          autoSend: true
+        });
+        showToast("Please verify the OTP code sent to your email to authorize this machine.", "warning");
+        return;
+      } else if (res && res.success) {
         saveNotice.textContent = res.message || "Configuration saved successfully!";
-        saveNotice.className = res.licenseWarning ? "save-notice warning" : "save-notice";
+        saveNotice.className = "save-notice";
         saveNotice.classList.remove("hidden");
         setTimeout(() => saveNotice.classList.add("hidden"), 4000);
         setFormLocked(true); // Re-locks after successful save!
         fetchAndShowLicenseDetails();
         updateFolderValidation(newCfg.sourceDir, newCfg.companyCode);
+        loadBranches();
       } else {
         const errorText = sanitizeMessage(res?.error || "Failed to save configuration.");
         saveNotice.textContent = errorText;
@@ -2303,14 +3438,80 @@ function setupEventListeners() {
     });
   }
 
+  // Wire Terms & Conditions Checkbox
+  if (termsConsentCheckbox) {
+    termsConsentCheckbox.addEventListener("change", () => {
+      const isChecked = termsConsentCheckbox.checked;
+      updateTermsState(isChecked);
+      if (saveConfigBtn && !saveConfigBtn.classList.contains("hidden")) {
+        saveConfigBtn.disabled = !isChecked;
+      }
+      updateSyncButtonRequirementState();
+      if (isChecked) {
+        window.electronAPI?.saveConfig({ termsAccepted: true }).catch(() => {});
+      } else {
+        window.electronAPI?.saveConfig({ termsAccepted: false }).catch(() => {});
+      }
+    });
+  }
+
   // Decrypt & Sync Now Action
   syncNowBtn.addEventListener("click", async () => {
+    const licenseKey = (licenseKeyInput?.value || "").trim();
+    const companyCode = (companyCodeInput?.value || "").trim();
+    const sourceDir = (sourceDirInput?.value || "").trim();
+    const crmCompanyCode = (crmCompanyCodeInput?.value || branchSelectDropdown?.value || "").trim().toUpperCase();
+    const companyName = (companyNameInput?.value || "").trim();
+    const termsAccepted = Boolean(termsConsentCheckbox && termsConsentCheckbox.checked);
+
+    if (!licenseKey || !companyCode || isPlaceholderComp(companyCode) || !sourceDir || !termsAccepted) {
+      updateSyncButtonRequirementState();
+      if (!termsAccepted) {
+        const box = document.querySelector(".terms-consent-box");
+        if (box) box.classList.add("has-warning");
+        if (termsNoticeWarning) termsNoticeWarning.classList.remove("hidden");
+        termsConsentCheckbox?.focus();
+      }
+      showToast("Please fill in all required fields (License Key, Company Code, Data Folder, Terms) before syncing.", "warning");
+      return;
+    }
+
+    // Persist active branch profile with latest configuration
+    if (crmCompanyCode) {
+      await window.electronAPI?.saveBranchProfile({
+        companyCode,
+        crmCompanyCode,
+        companyName,
+        decryptCode: companyCode,
+        sourceDir
+      }).catch(() => {});
+    }
+
     setSyncButtonLoading(true);
     try {
-      const res = await window.electronAPI.startSync();
+      const res = await window.electronAPI.startSync({
+        branchCode: crmCompanyCode,
+        companyCode,
+        decryptCode: companyCode,
+        sourceDir,
+        companyName
+      });
       if (!res.success) {
         statLastStatus.textContent = "Error";
-        statLastStatus.style.color = "#f87171";
+        const needsDevVerification = Boolean(
+          res.requiresVerification ||
+          res.deviceMismatch ||
+          (typeof res.message === "string" && (res.message.includes("locked to machine") || res.message.includes("not authorized") || res.message.includes("License Blocked") || res.message.includes("requires")))
+        );
+        if (needsDevVerification) {
+          isMachineLocallyAuthorized = false;
+          openDeviceActivationModal({
+            email: currentAuthEmail || (emailInput ? emailInput.value.trim() : ""),
+            licenseKey: licenseKeyInput ? licenseKeyInput.value.trim() : "",
+            error: res.message
+          });
+          showToast("Verification code required to authorize this machine before sync.", "warning");
+        }
       }
     } catch (err) {
       console.error("Sync error:", err);
@@ -2319,9 +3520,67 @@ function setupEventListeners() {
     }
   });
 
+  // Branch & Multi-Company Selector Events
+  if (branchSelectDropdown) {
+    branchSelectDropdown.addEventListener("change", (e) => {
+      handleBranchChange(e.target.value);
+    });
+  }
+
+  if (btnRefreshBranches) {
+    btnRefreshBranches.addEventListener("click", () => {
+      showToast("Fetching linked branches from cloud...", "info");
+      loadBranches(true);
+    });
+  }
+
+  if (btnAddBranchProfile) {
+    btnAddBranchProfile.addEventListener("click", () => {
+      handleAddNewBranchProfile();
+    });
+  }
+
+  // Batch Multi-Branch Sync Action
+  if (syncAllBranchesBtn) {
+    syncAllBranchesBtn.addEventListener("click", async () => {
+      const licenseKey = (licenseKeyInput?.value || "").trim();
+      const termsAccepted = Boolean(termsConsentCheckbox && termsConsentCheckbox.checked);
+
+      if (!licenseKey || !termsAccepted) {
+        showToast("Please verify License Key and accept Terms & Conditions before syncing.", "warning");
+        return;
+      }
+
+      syncAllBranchesBtn.disabled = true;
+      syncNowBtn.disabled = true;
+      const textSpan = syncAllBranchesBtn.querySelector(".sync-all-text");
+      const originalText = textSpan ? textSpan.textContent : "Sync All Branches";
+      if (textSpan) textSpan.textContent = "Syncing All...";
+
+      appendLogEntry("info", "🔄 Initiating batch synchronization across all configured branch profiles...");
+      try {
+        const res = await window.electronAPI.startMultiBranchSync();
+        if (res && res.success) {
+          showToast("Batch multi-branch sync completed!", "success");
+          await loadBranches();
+        } else {
+          showToast(res?.message || "Multi-branch sync encountered an issue.", "warning");
+        }
+      } catch (err) {
+        showToast(`Sync failed: ${err.message}`, "error");
+      } finally {
+        if (textSpan) textSpan.textContent = originalText;
+        updateSyncButtonRequirementState();
+      }
+    });
+  }
+
   // Clear Log Console
   clearLogBtn.addEventListener("click", () => {
-    terminalBody.innerHTML = "";
+    terminalBody.innerHTML = `
+      <div class="log-entry info"><span class="time">[System]</span> Mabsol Desktop Sync Agent initialized and ready.</div>
+      <div class="log-entry privacy-notice"><span class="time">[Data Privacy]</span> We are just accessing your files data, not collecting any personal or confidential details. We keep your data privacy.</div>
+    `;
   });
 }
 
@@ -2350,6 +3609,17 @@ function setupIpcListeners() {
       showLogin();
       loginError.textContent = message || "Your account has been deactivated or suspended. Please contact administrator.";
       loginError.classList.remove("hidden");
+    });
+  }
+
+  // Device license verification prompt from server / sync attempt
+  if (window.electronAPI.onVerificationRequired) {
+    window.electronAPI.onVerificationRequired((data) => {
+      const isDashboardVisible = dashboardView && !dashboardView.classList.contains("hidden");
+      if (!isDashboardVisible) return;
+      isMachineLocallyAuthorized = false;
+      openDeviceActivationModal(data);
+      showToast(data?.error || "Verification code required to authorize this machine for syncing.", "warning");
     });
   }
 }
@@ -2481,14 +3751,8 @@ function setSyncButtonLoading(isLoading) {
   } else {
     content.classList.remove("hidden");
     spinner.classList.add("hidden");
+    updateSyncButtonRequirementState();
   }
-}
-
-function escapeHtml(str) {
-  return String(str)
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;");
 }
 
 // ---------------------------------------------------------------------------
@@ -2498,55 +3762,368 @@ const deviceActivationModal = document.getElementById("deviceActivationModal");
 const devActMachineName = document.getElementById("devActMachineName");
 const devActDeviceId = document.getElementById("devActDeviceId");
 const devActEmail = document.getElementById("devActEmail");
+const devActLicenseKey = document.getElementById("devActLicenseKey");
 const devActSendSection = document.getElementById("devActSendSection");
 const devActVerifySection = document.getElementById("devActVerifySection");
 const btnDevActSendOtp = document.getElementById("btnDevActSendOtp");
-const devActSquareGrid = document.getElementById("devActSquareGrid");
+const devActOtpInput = document.getElementById("devActOtpInput");
 const btnDevActConfirm = document.getElementById("btnDevActConfirm");
 const btnDevActResend = document.getElementById("btnDevActResend");
+const btnDevActBack = document.getElementById("btnDevActBack");
 const btnCloseDevActModal = document.getElementById("btnCloseDevActModal");
+const btnXCloseDevActModal = document.getElementById("btnXCloseDevActModal");
 const devActError = document.getElementById("devActError");
 const devActSentToEmail = document.getElementById("devActSentToEmail");
 
-let devActOtpCode = "";
-let devActTargetEmail = "";
+// Web PIN Link Elements
+const tabDevActPin = document.getElementById("tabDevActPin");
+const tabDevActOtp = document.getElementById("tabDevActOtp");
+const devActPinSection = document.getElementById("devActPinSection");
+const devActOtpSection = document.getElementById("devActOtpSection");
+const devActPinInitial = document.getElementById("devActPinInitial");
+const devActPinActiveCard = document.getElementById("devActPinActiveCard");
+const devActPinDisplay = document.getElementById("devActPinDisplay");
+const btnDevActRequestPin = document.getElementById("btnDevActRequestPin");
+const btnCopyAgentPin = document.getElementById("btnCopyAgentPin");
+const btnDevActRegenPin = document.getElementById("btnDevActRegenPin");
+const btnDevActCheckPinNow = document.getElementById("btnDevActCheckPinNow");
+const btnGeneratePinAgent = document.getElementById("btnGeneratePinAgent");
 
-const devActGridHelper = setupSquareOtpGrid(devActSquareGrid, (code) => {
-  devActOtpCode = code;
-  if (btnDevActConfirm) {
-    btnDevActConfirm.disabled = code.length !== 6;
+// Target Server Switcher Elements
+const devActServerSelect = document.getElementById("devActServerSelect");
+const serverEnvToggleBtn = document.getElementById("serverEnvToggleBtn");
+const serverEnvIcon = document.getElementById("serverEnvIcon");
+const serverEnvLabel = document.getElementById("serverEnvLabel");
+
+function normalizeTargetUrl(url) {
+  const clean = (url || "").trim().toLowerCase();
+  if (clean.includes("localhost") || clean.includes("127.0.0.1")) {
+    return "http://localhost:3000";
+  }
+  if (clean.includes("mbh.crm")) {
+    return "https://mbh.crm.mabsolinfotech.cloud";
+  }
+  return "https://phcrm.mabsolinfotech.cloud";
+}
+
+function updateServerEnvDisplay(url) {
+  const canonicalUrl = normalizeTargetUrl(url);
+  const isLocal = canonicalUrl.includes("localhost");
+  const isMbh = canonicalUrl.includes("mbh.crm");
+
+  if (serverEnvLabel) {
+    serverEnvLabel.textContent = isLocal ? "Localhost" : (isMbh ? "MBH Cloud" : "Cloud");
+  }
+  if (serverEnvIcon) {
+    serverEnvIcon.textContent = isLocal ? "💻" : "☁️";
+  }
+  if (serverEnvToggleBtn) {
+    const label = isLocal ? "Localhost Testing" : (isMbh ? "MBH Cloud" : "Cloud Production");
+    serverEnvToggleBtn.title = `Target Server: ${label} (${canonicalUrl})`;
+  }
+
+  if (devActServerSelect) {
+    devActServerSelect.value = canonicalUrl;
+  }
+
+  if (cloudUrlInput) {
+    cloudUrlInput.value = canonicalUrl;
+    updateActiveServerButtons(canonicalUrl);
+  }
+}
+
+serverEnvToggleBtn?.addEventListener("click", () => {
+  const currentVal = normalizeTargetUrl(cloudUrlInput?.value || "http://localhost:3000");
+  showToast(`Current target server: ${currentVal}`, "info");
+});
+
+devActServerSelect?.addEventListener("change", async () => {
+  const chosen = normalizeTargetUrl(devActServerSelect.value);
+  if (window.electronAPI?.setCloudUrl) {
+    await window.electronAPI.setCloudUrl(chosen);
+  }
+  updateServerEnvDisplay(chosen);
+  showToast(`Target server switched to: ${chosen}`, "info");
+
+  // Immediately request a fresh PIN from the newly selected target server!
+  currentActiveAgentPin = "";
+  if (devActPinDisplay) devActPinDisplay.textContent = "⏳ ...";
+  await requestAndDisplayAgentPin();
+});
+
+let currentActiveAgentPin = "";
+let agentPinPollTimer = null;
+
+function switchDevActTab(mode) {
+  if (mode === "pin") {
+    if (tabDevActPin) { tabDevActPin.style.background = "#2563eb"; tabDevActPin.style.color = "#fff"; }
+    if (tabDevActOtp) { tabDevActOtp.style.background = "transparent"; tabDevActOtp.style.color = "#94a3b8"; }
+    devActPinSection?.classList.remove("hidden");
+    devActOtpSection?.classList.add("hidden");
+  } else {
+    if (tabDevActOtp) { tabDevActOtp.style.background = "#2563eb"; tabDevActOtp.style.color = "#fff"; }
+    if (tabDevActPin) { tabDevActPin.style.background = "transparent"; tabDevActPin.style.color = "#94a3b8"; }
+    devActOtpSection?.classList.remove("hidden");
+    devActPinSection?.classList.add("hidden");
+  }
+}
+
+tabDevActPin?.addEventListener("click", () => switchDevActTab("pin"));
+tabDevActOtp?.addEventListener("click", () => switchDevActTab("otp"));
+
+function stopPinPolling() {
+  if (agentPinPollTimer) {
+    clearInterval(agentPinPollTimer);
+    agentPinPollTimer = null;
+  }
+}
+
+async function requestAndDisplayAgentPin() {
+  stopPinPolling();
+  setButtonLoading(btnDevActRequestPin, true);
+  if (btnDevActRegenPin) btnDevActRegenPin.disabled = true;
+  if (devActPinDisplay) devActPinDisplay.textContent = "⏳ ...";
+  try {
+    let email = devActTargetEmail || currentAuthEmail || (emailInput ? emailInput.value.trim() : "");
+    const cloudUrl = cloudUrlInput ? cloudUrlInput.value.trim() : (devActServerSelect ? devActServerSelect.value : "");
+    const res = await window.electronAPI.requestAgentPin({ cloudUrl, email });
+    setButtonLoading(btnDevActRequestPin, false);
+    if (btnDevActRegenPin) btnDevActRegenPin.disabled = false;
+    if (res && res.success && res.pin) {
+      currentActiveAgentPin = res.pin;
+      if (devActPinDisplay) devActPinDisplay.textContent = res.pin;
+      if (res.deviceId && devActDeviceId) devActDeviceId.textContent = res.deviceId;
+      if (res.deviceName && devActMachineName) devActMachineName.textContent = res.deviceName;
+      devActPinInitial?.classList.add("hidden");
+      devActPinActiveCard?.classList.remove("hidden");
+      startPinPolling(res.pin);
+      showToast(`Agent PIN generated: ${res.pin}. Enter this on Web CRM!`, "success");
+    } else {
+      if (devActPinDisplay) devActPinDisplay.textContent = currentActiveAgentPin || "------";
+      const errMsg = res?.error || "Failed to generate Agent PIN.";
+      showToast(errMsg, "error");
+      if (devActError) {
+        devActError.textContent = errMsg;
+        devActError.classList.remove("hidden");
+      }
+    }
+  } catch (err) {
+    setButtonLoading(btnDevActRequestPin, false);
+    if (btnDevActRegenPin) btnDevActRegenPin.disabled = false;
+    if (devActPinDisplay) devActPinDisplay.textContent = currentActiveAgentPin || "------";
+    showToast(err.message || "Failed to generate PIN.", "error");
+  }
+}
+
+btnDevActRequestPin?.addEventListener("click", () => {
+  currentActiveAgentPin = "";
+  requestAndDisplayAgentPin();
+});
+btnDevActRegenPin?.addEventListener("click", () => {
+  currentActiveAgentPin = "";
+  requestAndDisplayAgentPin();
+});
+
+btnGeneratePinAgent?.addEventListener("click", () => {
+  openDeviceActivationModal({
+    email: currentAuthEmail,
+    licenseKey: licenseKeyInput ? licenseKeyInput.value.trim() : ""
+  });
+  switchDevActTab("pin");
+});
+
+btnCopyAgentPin?.addEventListener("click", () => {
+  if (currentActiveAgentPin) {
+    navigator.clipboard.writeText(currentActiveAgentPin);
+    showToast(`PIN ${currentActiveAgentPin} copied to clipboard!`, "success");
   }
 });
 
-async function checkAndPromptDeviceLicense(userEmail) {
+async function checkPinStatusOnce() {
+  if (!currentActiveAgentPin) return;
+  try {
+    const cloudUrl = cloudUrlInput ? cloudUrlInput.value.trim() : (devActServerSelect ? devActServerSelect.value : "");
+    const res = await window.electronAPI.checkAgentPinStatus({
+      pin: currentActiveAgentPin,
+      cloudUrl
+    });
+
+    if (res && res.success && res.status === "activated" && res.licenseKey) {
+      stopPinPolling();
+      isMachineLocallyAuthorized = true;
+      if (licenseKeyInput) licenseKeyInput.value = res.licenseKey;
+      if (res.companyName && companyNameInput && !isPlaceholderComp(res.companyName) && (!companyNameInput.value || isPlaceholderComp(companyNameInput.value))) {
+        companyNameInput.value = res.companyName;
+      }
+      if (res.companyCode && companyCodeInput && !isPlaceholderComp(res.companyCode) && (!companyCodeInput.value || isPlaceholderComp(companyCodeInput.value))) {
+        companyCodeInput.value = res.companyCode;
+      }
+      if (res.expiresAt) {
+        updateLicenseCountdown(res.expiresAt);
+        updateLicenseStatusUI(true, res.expiresAt);
+      }
+      // Save license and verified status to config
+      await window.electronAPI.saveConfig({
+        licenseKey: res.licenseKey,
+        isLicenseVerified: true,
+        companyName: res.companyName || undefined,
+        companyCode: res.companyCode || undefined
+      }).catch(() => {});
+
+      dismissDeviceActivationModal();
+      showToast(`🎉 Machine authorized from Web CRM! License key ${res.licenseKey} activated!`, "success");
+      await loadAndDisplayConfig();
+      updateSyncButtonRequirementState();
+    }
+  } catch (err) {
+    console.warn("PIN poll check warning:", err);
+  }
+}
+
+function startPinPolling(pin) {
+  stopPinPolling();
+  currentActiveAgentPin = pin;
+  agentPinPollTimer = setInterval(checkPinStatusOnce, 2500);
+}
+
+btnDevActCheckPinNow?.addEventListener("click", async () => {
+  showToast("Checking Web verification status...", "info");
+  await checkPinStatusOnce();
+});
+
+isMachineLocallyAuthorized = false;
+let devActTargetEmail = "";
+let pendingConfigToSave = null;
+
+// Unified OTP Input: listen for typing or pasting 6 digits together
+devActOtpInput?.addEventListener("input", () => {
+  const val = devActOtpInput.value.replace(/\D/g, "").slice(0, 6);
+  devActOtpInput.value = val;
+  if (btnDevActConfirm) {
+    btnDevActConfirm.disabled = val.length !== 6;
+  }
+});
+
+devActOtpInput?.addEventListener("keydown", (e) => {
+  if (e.key === "Enter" && devActOtpInput.value.length === 6) {
+    e.preventDefault();
+    btnDevActConfirm?.click();
+  }
+});
+
+async function openDeviceActivationModal(data) {
+  // CRITICAL: NEVER open license verification modal if user is not logged in!
+  const isDashboardVisible = dashboardView && !dashboardView.classList.contains("hidden");
+  if (!isDashboardVisible) {
+    return;
+  }
+  isMachineLocallyAuthorized = false;
+  let email = (data?.email || currentAuthEmail || (emailInput ? emailInput.value.trim() : "")).trim().toLowerCase();
+  if (!email && window.electronAPI?.getConfig) {
+    try {
+      const cfg = await window.electronAPI.getConfig();
+      if (cfg?.userEmail) email = cfg.userEmail.trim().toLowerCase();
+    } catch {}
+  }
+  if (!email && window.electronAPI?.checkSession) {
+    try {
+      const sess = await window.electronAPI.checkSession();
+      if (sess?.session?.email) email = sess.session.email.trim().toLowerCase();
+    } catch {}
+  }
+  devActTargetEmail = email;
+
+  // Retrieve hardware details directly from main process
+  let deviceId = data?.deviceId || "";
+  let deviceName = data?.deviceName || "";
+  if ((!deviceId || !deviceName) && window.electronAPI?.getDeviceInfo) {
+    try {
+      const info = await window.electronAPI.getDeviceInfo();
+      if (info?.deviceId) deviceId = info.deviceId;
+      if (info?.deviceName) deviceName = info.deviceName;
+    } catch {}
+  }
+
+  const targetLicense = data?.licenseKey || (licenseKeyInput ? licenseKeyInput.value.trim() : "");
+  if (devActEmail) devActEmail.textContent = devActTargetEmail || "Account Email";
+  if (devActMachineName) devActMachineName.textContent = deviceName || "This Computer";
+  if (devActDeviceId) devActDeviceId.textContent = deviceId || "...";
+  if (devActSentToEmail) devActSentToEmail.textContent = devActTargetEmail || "your email";
+  if (devActLicenseKey) devActLicenseKey.textContent = targetLicense || "Account License";
+
+  const activeUrl = cloudUrlInput ? cloudUrlInput.value.trim() : "";
+  if (activeUrl) {
+    updateServerEnvDisplay(activeUrl);
+  }
+
+  // Default to Web PIN tab
+  switchDevActTab("pin");
+
+  // Reset modal sections & input
+  devActSendSection?.classList.remove("hidden");
+  devActVerifySection?.classList.add("hidden");
+  if (devActError) {
+    if (data?.error) {
+      devActError.textContent = sanitizeMessage(data.error);
+      devActError.classList.remove("hidden");
+    } else {
+      devActError.textContent = "";
+      devActError.classList.add("hidden");
+    }
+  }
+  if (devActOtpInput) devActOtpInput.value = "";
+  if (btnDevActConfirm) btnDevActConfirm.disabled = true;
+  deviceActivationModal?.classList.remove("hidden");
+
+  // Auto request PIN and show active card immediately
+  requestAndDisplayAgentPin();
+
+  if (data?.autoSend) {
+    switchDevActTab("otp");
+    setTimeout(() => {
+      btnDevActSendOtp?.click();
+    }, 150);
+  }
+}
+
+async function checkAndPromptDeviceLicense(userEmail, explicitLicenseKey) {
+  const isDashboardVisible = dashboardView && !dashboardView.classList.contains("hidden");
+  if (!isDashboardVisible) return;
   if (!window.electronAPI?.checkDeviceLicense) return;
   try {
     const email = userEmail || currentAuthEmail || (emailInput ? emailInput.value.trim() : "");
     const cloudUrl = cloudUrlInput ? cloudUrlInput.value.trim() : "";
-    const res = await window.electronAPI.checkDeviceLicense({ email, cloudUrl });
+    const licenseKey = explicitLicenseKey || (licenseKeyInput ? licenseKeyInput.value.trim() : "");
+    const res = await window.electronAPI.checkDeviceLicense({ email, cloudUrl, licenseKey });
 
     if (res && res.success) {
-      if (res.isNewDevice || !res.authorized) {
-        // Show device activation modal
-        devActTargetEmail = res.email || email;
-        if (devActEmail) devActEmail.textContent = devActTargetEmail;
-        if (devActMachineName) devActMachineName.textContent = res.deviceName || "This Computer";
-        if (devActDeviceId) devActDeviceId.textContent = res.deviceId || "...";
-        if (devActSentToEmail) devActSentToEmail.textContent = devActTargetEmail;
-
-        // Reset modal sections
-        devActSendSection?.classList.remove("hidden");
-        devActVerifySection?.classList.add("hidden");
-        if (devActError) devActError.classList.add("hidden");
-        deviceActivationModal?.classList.remove("hidden");
-      } else if (res.authorized && res.licenseKey) {
-        // Machine is already authorized!
-        if (licenseKeyInput && !licenseKeyInput.value) {
-          licenseKeyInput.value = res.licenseKey;
+      if (res.authorized && !res.isExpired) {
+        // Machine is authorized!
+        isMachineLocallyAuthorized = true;
+        deviceActivationModal?.classList.add("hidden");
+        if (res.licenseKey) {
+          if (licenseKeyInput) licenseKeyInput.value = res.licenseKey;
+          window.electronAPI.saveConfig({
+            licenseKey: res.licenseKey,
+            isLicenseVerified: true
+          }).catch(() => {});
         }
         if (res.expiresAt) {
           updateLicenseCountdown(res.expiresAt);
+          updateLicenseStatusUI(true, res.expiresAt);
         }
+        updateSyncButtonRequirementState();
+      } else if (res.isNewDevice || !res.authorized || res.requiresVerification) {
+        isMachineLocallyAuthorized = false;
+        updateLicenseStatusUI(false, null);
+        updateSyncButtonRequirementState();
+        openDeviceActivationModal({
+          email: res.email || email,
+          deviceName: res.deviceName,
+          deviceId: res.deviceId,
+          licenseKey: res.licenseKey || licenseKey,
+          error: res.message
+        });
       }
     }
   } catch (err) {
@@ -2560,18 +4137,30 @@ btnDevActSendOtp?.addEventListener("click", async () => {
   if (devActError) devActError.classList.add("hidden");
 
   try {
-    const email = devActTargetEmail || currentAuthEmail || (emailInput ? emailInput.value.trim() : "");
+    let email = devActTargetEmail || currentAuthEmail || (emailInput ? emailInput.value.trim() : "");
+    if (!email && window.electronAPI?.getConfig) {
+      try {
+        const cfg = await window.electronAPI.getConfig();
+        if (cfg?.userEmail) email = cfg.userEmail.trim();
+      } catch {}
+    }
     const cloudUrl = cloudUrlInput ? cloudUrlInput.value.trim() : "";
-    const res = await window.electronAPI.sendDeviceOtp({ email, cloudUrl });
+    const licenseKey = licenseKeyInput ? licenseKeyInput.value.trim() : "";
+    const res = await window.electronAPI.sendDeviceOtp({ email, cloudUrl, licenseKey });
     setButtonLoading(btnDevActSendOtp, false);
 
     if (res && res.success) {
       devActSendSection?.classList.add("hidden");
       devActVerifySection?.classList.remove("hidden");
-      if (devActSentToEmail) devActSentToEmail.textContent = email;
-      devActGridHelper?.clear();
-      devActGridHelper?.focusFirst();
-      showToast(`Verification code sent to ${email}`, "success");
+      const targetDisplay = (res.targetEmails && Array.isArray(res.targetEmails)) ? res.targetEmails.join(", ") : (res.email || email);
+      devActTargetEmail = res.email || email;
+      if (devActSentToEmail) devActSentToEmail.textContent = targetDisplay;
+      if (devActOtpInput) {
+        devActOtpInput.value = "";
+        setTimeout(() => devActOtpInput.focus(), 100);
+      }
+      if (btnDevActConfirm) btnDevActConfirm.disabled = true;
+      showToast(`Verification code sent to ${targetDisplay}`, "success");
     } else {
       const msg = res?.error || "Failed to send verification code.";
       if (devActError) { devActError.textContent = msg; devActError.classList.remove("hidden"); }
@@ -2590,24 +4179,44 @@ btnDevActResend?.addEventListener("click", () => {
   btnDevActSendOtp?.click();
 });
 
+// Back button from verify section to send section
+btnDevActBack?.addEventListener("click", () => {
+  devActVerifySection?.classList.add("hidden");
+  devActSendSection?.classList.remove("hidden");
+  if (devActError) devActError.classList.add("hidden");
+});
+
 // Confirm Device Activation
 btnDevActConfirm?.addEventListener("click", async () => {
-  if (devActOtpCode.length !== 6) return;
+  const otpVal = devActOtpInput ? devActOtpInput.value.trim() : "";
+  if (otpVal.length !== 6) {
+    showToast("Please enter the complete 6-digit code.", "warning");
+    return;
+  }
   setButtonLoading(btnDevActConfirm, true);
   if (devActError) devActError.classList.add("hidden");
 
   try {
-    const email = devActTargetEmail || currentAuthEmail || (emailInput ? emailInput.value.trim() : "");
+    let email = devActTargetEmail || currentAuthEmail || (emailInput ? emailInput.value.trim() : "");
+    if (!email && window.electronAPI?.getConfig) {
+      try {
+        const cfg = await window.electronAPI.getConfig();
+        if (cfg?.userEmail) email = cfg.userEmail.trim();
+      } catch {}
+    }
     const cloudUrl = cloudUrlInput ? cloudUrlInput.value.trim() : "";
+    const licenseKey = licenseKeyInput ? licenseKeyInput.value.trim() : "";
     const res = await window.electronAPI.activateDevice({
       email,
       cloudUrl,
-      otp: devActOtpCode
+      licenseKey,
+      otp: otpVal
     });
     setButtonLoading(btnDevActConfirm, false);
 
     if (res && res.success) {
-      showToast(res.message || "Device activated successfully!", "success");
+      isMachineLocallyAuthorized = true;
+      showToast(res.message || "Machine authorized successfully!", "success");
       if (licenseKeyInput && res.licenseKey) {
         licenseKeyInput.value = res.licenseKey;
       }
@@ -2615,10 +4224,31 @@ btnDevActConfirm?.addEventListener("click", async () => {
         updateLicenseCountdown(res.expiresAt);
       }
       deviceActivationModal?.classList.add("hidden");
-      // Reload dashboard config
-      await loadAndDisplayConfig();
+
+      // If configuration was waiting for email OTP verification, save it now!
+      if (pendingConfigToSave) {
+        pendingConfigToSave.licenseKey = res.licenseKey || pendingConfigToSave.licenseKey;
+        await window.electronAPI.saveConfig(pendingConfigToSave);
+        pendingConfigToSave = null;
+      }
+
+      setFormLocked(true); // Lock form after save
+      saveNotice.textContent = "Configuration saved and license verified!";
+      saveNotice.className = "save-notice";
+      saveNotice.classList.remove("hidden");
+      setTimeout(() => saveNotice.classList.add("hidden"), 4000);
+
+      if (statLastStatus && (statLastStatus.textContent === "Error" || statLastStatus.textContent === "Failed")) {
+        statLastStatus.textContent = "Ready";
+        statLastStatus.style.color = "#10b981";
+      }
+      try {
+        await loadAndDisplayConfig();
+      } catch (reloadErr) {
+        console.warn("Post-activation config display warning:", reloadErr);
+      }
     } else {
-      const msg = res?.error || "Activation failed. Please check the OTP.";
+      const msg = res?.error || "Activation failed. Please check the code.";
       if (devActError) { devActError.textContent = msg; devActError.classList.remove("hidden"); }
       showToast(msg, "error");
     }
@@ -2630,6 +4260,204 @@ btnDevActConfirm?.addEventListener("click", async () => {
   }
 });
 
-btnCloseDevActModal?.addEventListener("click", () => {
+// Dismiss / Close Modal
+const dismissDeviceActivationModal = () => {
+  stopPinPolling();
   deviceActivationModal?.classList.add("hidden");
+};
+btnCloseDevActModal?.addEventListener("click", dismissDeviceActivationModal);
+btnXCloseDevActModal?.addEventListener("click", dismissDeviceActivationModal);
+
+// ---------------------------------------------------------------------------
+// Terms & Conditions Modal Handlers
+// ---------------------------------------------------------------------------
+const termsModal = document.getElementById("termsModal");
+const btnXCloseTermsModal = document.getElementById("btnXCloseTermsModal");
+const btnCloseTermsModal = document.getElementById("btnCloseTermsModal");
+const btnAcceptTermsModal = document.getElementById("btnAcceptTermsModal");
+const openTermsFromLogin = document.getElementById("openTermsFromLogin");
+const openTermsFromSignup = document.getElementById("openTermsFromSignup");
+const openTermsFromSettings = document.getElementById("openTermsFromSettings");
+
+function showTermsModal() {
+  if (termsModal) termsModal.classList.remove("hidden");
+}
+
+function hideTermsModal() {
+  if (termsModal) termsModal.classList.add("hidden");
+}
+
+openTermsFromLogin?.addEventListener("click", (e) => {
+  e.preventDefault();
+  showTermsModal();
 });
+
+openTermsFromSignup?.addEventListener("click", (e) => {
+  e.preventDefault();
+  showTermsModal();
+});
+
+openTermsFromSettings?.addEventListener("click", (e) => {
+  e.preventDefault();
+  showTermsModal();
+});
+
+btnXCloseTermsModal?.addEventListener("click", hideTermsModal);
+btnCloseTermsModal?.addEventListener("click", hideTermsModal);
+
+btnAcceptTermsModal?.addEventListener("click", () => {
+  if (termsConsentCheckbox) {
+    termsConsentCheckbox.checked = true;
+    updateTermsState(true);
+  }
+  const regTermsAccepted = document.getElementById("regTermsAccepted");
+  if (regTermsAccepted) {
+    regTermsAccepted.checked = true;
+  }
+  hideTermsModal();
+  showToast("Terms & Conditions and Data Privacy agreement accepted.", "success");
+});
+
+// ---------------------------------------------------------------------------
+// Resend Verification Code in Step 2 OTP screen
+// ---------------------------------------------------------------------------
+const resendOtpBtn = document.getElementById("resendOtpBtn");
+resendOtpBtn?.addEventListener("click", async (e) => {
+  e.preventDefault();
+  const cloudUrl = cloudUrlInput ? cloudUrlInput.value.trim() : "";
+  const email = currentAuthEmail || (emailInput ? emailInput.value.trim() : "");
+  if (!email) {
+    showToast("Email address missing. Please go back to login.", "error");
+    return;
+  }
+
+  showToast("Sending new verification code...", "info");
+  try {
+    const res = await window.electronAPI.resendOtp({ cloudUrl, email });
+    if (res && res.success) {
+      showToast(res.message || "Verification code resent successfully.", "success");
+    } else {
+      showToast(res?.message || "Failed to resend verification code.", "error");
+    }
+  } catch (err) {
+    showToast(err.message || "Network error while resending verification code.", "error");
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Generate New License Key Feature
+// ---------------------------------------------------------------------------
+const btnGenerateNewLicenseKey = document.getElementById("btnGenerateNewLicenseKey");
+const btnDevActGenerateKey = document.getElementById("btnDevActGenerateKey");
+
+async function handleGenerateNewLicenseKey() {
+  const cloudUrl = cloudUrlInput ? cloudUrlInput.value.trim() : "";
+  const email = currentAuthEmail || (operatorEmailInput ? operatorEmailInput.value.trim() : "") || (emailInput ? emailInput.value.trim() : "");
+
+  const confirmGen = confirm(
+    "Generate a new license key for this workstation?\n\n" +
+    "A brand new 30-day active license key will be generated from the cloud server and bound to this computer."
+  );
+  if (!confirmGen) return;
+
+  showToast("Generating new license key from cloud server...", "info");
+  if (btnGenerateNewLicenseKey) {
+    btnGenerateNewLicenseKey.disabled = true;
+    btnGenerateNewLicenseKey.textContent = "⏳ Generating...";
+  }
+
+  try {
+    const res = await window.electronAPI.generateNewLicenseKey({ cloudUrl, email });
+    if (res && res.success && res.license) {
+      showToast(`New license key generated: ${res.license}`, "success");
+
+      if (licenseKeyInput) {
+        licenseKeyInput.value = res.license;
+      }
+      if (devActLicenseKey) {
+        devActLicenseKey.textContent = res.license;
+      }
+      if (licenseCountdownBadge) {
+        licenseCountdownBadge.classList.remove("hidden");
+        if (licenseCountdownText) licenseCountdownText.textContent = `${res.daysRemaining || 30} Days Left`;
+      }
+      if (operatorStatusBadge) {
+        operatorStatusBadge.textContent = "Authorized";
+        operatorStatusBadge.className = "operator-status-badge authorized";
+      }
+
+      isMachineLocallyAuthorized = true;
+      updateLicenseStatusUI(true, res.expiresAt || new Date(Date.now() + 30 * 86400000).toISOString());
+      updateSyncButtonRequirementState();
+
+      // Close device activation modal if open
+      if (deviceActivationModal && !deviceActivationModal.classList.contains("hidden")) {
+        deviceActivationModal.classList.add("hidden");
+      }
+
+      await loadAndDisplayConfig();
+    } else {
+      const errMsg = res?.error || res?.message || "Could not generate new license key.";
+      showToast(errMsg, "error");
+    }
+  } catch (err) {
+    showToast(err.message || "Failed to generate new license key.", "error");
+  } finally {
+    if (btnGenerateNewLicenseKey) {
+      btnGenerateNewLicenseKey.disabled = false;
+      btnGenerateNewLicenseKey.textContent = "⚡ New Key Gen";
+    }
+  }
+}
+
+btnGenerateNewLicenseKey?.addEventListener("click", handleGenerateNewLicenseKey);
+btnDevActGenerateKey?.addEventListener("click", handleGenerateNewLicenseKey);
+
+// ---------------------------------------------------------------------------
+// Draggable Panel Resizer (Dashboard Grid)
+// ---------------------------------------------------------------------------
+function initDashboardResizer() {
+  const resizer = document.getElementById("dashboardGridResizer");
+  const grid = document.querySelector(".agent-grid");
+  if (!resizer || !grid) return;
+
+  // Restore saved panel width from local storage (default to 40% so logs have ample room)
+  const savedWidth = localStorage.getItem("mabsol_settings_panel_width");
+  if (savedWidth) {
+    document.documentElement.style.setProperty("--settings-panel-width", savedWidth);
+  } else {
+    document.documentElement.style.setProperty("--settings-panel-width", "40%");
+  }
+
+  let isDragging = false;
+
+  resizer.addEventListener("mousedown", (e) => {
+    isDragging = true;
+    resizer.classList.add("dragging");
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+    e.preventDefault();
+  });
+
+  window.addEventListener("mousemove", (e) => {
+    if (!isDragging) return;
+    const gridRect = grid.getBoundingClientRect();
+    const newWidthPx = e.clientX - gridRect.left;
+    const minWidth = 280;
+    const maxWidth = gridRect.width - 280;
+    if (newWidthPx >= minWidth && newWidthPx <= maxWidth) {
+      const pct = ((newWidthPx / gridRect.width) * 100).toFixed(1) + "%";
+      document.documentElement.style.setProperty("--settings-panel-width", pct);
+      localStorage.setItem("mabsol_settings_panel_width", pct);
+    }
+  });
+
+  window.addEventListener("mouseup", () => {
+    if (isDragging) {
+      isDragging = false;
+      resizer.classList.remove("dragging");
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+    }
+  });
+}

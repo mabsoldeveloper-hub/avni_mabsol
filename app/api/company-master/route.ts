@@ -1,12 +1,16 @@
 import { NextResponse } from "next/server";
+import bcrypt from "bcryptjs";
 import connectDB from "@/lib/mongodb";
 import Company from "@/models/Company";
+import User from "@/models/User";
+import Role from "@/models/Role";
 import { getCurrentUser } from "@/lib/auth";
 import { ROLE_TYPE } from "@/lib/constants/roles.constant";
+import { isReservedSuperAdminEmail } from "@/lib/constants/superAdmin.constant";
 
 export const dynamic = "force-dynamic";
 
-export async function GET() {
+export async function GET(req: Request) {
   try {
     await connectDB();
     const user = await getCurrentUser();
@@ -15,48 +19,62 @@ export async function GET() {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
+    const { searchParams } = new URL(req.url);
+    const activeCompanyId =
+      searchParams.get("activeCompanyId") ||
+      searchParams.get("companyId") ||
+      req.headers.get("x-company-id");
+
     const userCompany = user.companyId ? await Company.findById(user.companyId) : null;
     const isSuperAdmin = user.roleType === ROLE_TYPE.SUPER_ADMIN;
 
     // Visibility Rules:
-    // 1. SuperAdmin: can see all companies across all tenants
-    // 2. Head Office (isHeadOffice === true): can see all branches under its tenant
-    // 3. Branch (isHeadOffice === false): can ONLY see itself and any sub-branches created under it
-    //    (Cannot see Head Office, cannot see sibling branches)
+    // 1. SuperAdmin: can see all companies across all tenants (or scoped to active if specified)
+    // 2. Head Office (isHeadOffice === true): can see its own company AND all child branches under it
+    // 3. Child Branch (isHeadOffice === false): can ONLY see itself (cannot see, edit, or delete parent or sibling companies)
     let query: Record<string, any> = {};
 
     if (isSuperAdmin) {
-      query = {};
-    } else if (userCompany?.isHeadOffice) {
-      query = { tenantId: user.tenantId };
-    } else if (userCompany) {
-      // Find all companies in the tenant to resolve child branch hierarchy
-      const allTenantCompanies = await Company.find({ tenantId: user.tenantId }).lean();
-
-      const allowedIds = new Set<string>();
-      allowedIds.add(userCompany._id.toString());
-
-      // Collect all descendants recursively
-      let addedNew = true;
-      while (addedNew) {
-        addedNew = false;
-        for (const comp of allTenantCompanies) {
-          const compIdStr = comp._id.toString();
-          const parentIdStr = comp.parentCompanyId ? comp.parentCompanyId.toString() : null;
-          if (parentIdStr && allowedIds.has(parentIdStr) && !allowedIds.has(compIdStr)) {
-            allowedIds.add(compIdStr);
-            addedNew = true;
-          }
-        }
+      if (activeCompanyId && activeCompanyId !== "ALL") {
+        query = { _id: activeCompanyId };
+      } else {
+        query = {};
       }
-
+    } else if (activeCompanyId && activeCompanyId !== "ALL") {
+      const activeCompany = await Company.findById(activeCompanyId);
+      if (!activeCompany) {
+        return NextResponse.json([]);
+      }
+      if (!activeCompany.isHeadOffice) {
+        // Active company is a child branch: strictly return only itself
+        query = { _id: activeCompany._id };
+      } else {
+        // Active company is Head Office: return Head Office and its child branches
+        query = {
+          $or: [
+            { _id: activeCompany._id },
+            { parentCompanyId: activeCompany._id },
+          ],
+        };
+      }
+    } else if (userCompany?.isHeadOffice) {
       query = {
-        _id: { $in: Array.from(allowedIds) },
+        $or: [
+          { _id: userCompany._id },
+          { parentCompanyId: userCompany._id },
+          { tenantId: user.tenantId },
+        ],
       };
+    } else if (userCompany) {
+      query = { _id: userCompany._id };
     } else if (user.tenantId) {
       query = { tenantId: user.tenantId };
     } else {
       return NextResponse.json([]);
+    }
+
+    if (!isSuperAdmin) {
+      query.isDeleted = { $ne: true };
     }
 
     const companies = await Company.find(query).sort({ createdAt: -1 });
@@ -78,19 +96,95 @@ export async function POST(req: Request) {
 
     const data = await req.json();
 
+    // Check active context: Child branches CANNOT create new companies
+    const { searchParams } = new URL(req.url);
+    const activeCompanyId =
+      req.headers.get("x-company-id") ||
+      searchParams.get("activeCompanyId") ||
+      data.activeCompanyId;
+
+    const userCompany = user.companyId ? await Company.findById(user.companyId) : null;
+    let activeComp = userCompany;
+    if (activeCompanyId) {
+      activeComp = await Company.findById(activeCompanyId);
+    }
+
+    const isSuperAdmin = user.roleType === ROLE_TYPE.SUPER_ADMIN;
+    if (!isSuperAdmin && activeComp && !activeComp.isHeadOffice) {
+      return NextResponse.json(
+        { success: false, error: "Only Head Office administrators can create new companies or branches." },
+        { status: 403 }
+      );
+    }
+
     // Always use the logged-in user's tenantId
     const targetTenantId = user.tenantId || `TENANT_${user._id}`;
-    const userCompany = user.companyId ? await Company.findById(user.companyId) : null;
-    const parentCompanyId = userCompany ? userCompany._id : null;
+    const parentCompanyId = activeComp?.isHeadOffice
+      ? activeComp._id
+      : userCompany?.isHeadOffice
+      ? userCompany._id
+      : null;
 
     // Validate company name
     if (!data.companyName?.trim()) {
       return NextResponse.json({ success: false, error: "Company name is required" }, { status: 400 });
     }
 
+    // Auto-generate unique company CRM code based on Company Name + Random Number (e.g. ABHI724, SUNP512)
+    // Code should be company name and random number, never MAB... or generic
+    let finalCode = (data.companyCode || "").trim().toUpperCase();
+    if (!finalCode || finalCode.startsWith("MAB") || finalCode.startsWith("COM")) {
+      const words = data.companyName.trim().split(/\s+/).filter(Boolean);
+      let prefix = "";
+      if (words.length > 0) {
+        const firstWord = words[0].replace(/[^a-zA-Z0-9]/g, "").toUpperCase();
+        if (firstWord.length >= 3) {
+          prefix = firstWord.slice(0, 5);
+        } else {
+          prefix = words.map((w: string) => w.replace(/[^a-zA-Z0-9]/g, "").toUpperCase()).join("").slice(0, 5);
+        }
+      }
+      if (prefix.length < 3) {
+        prefix = data.companyName.replace(/[^a-zA-Z0-9]/g, "").toUpperCase().slice(0, 4).padEnd(4, "X");
+      }
+
+      const existing = await Company.find({}, { companyCode: 1 }).lean();
+      const existingCodes = new Set(existing.map((c: any) => String(c.companyCode || "").toUpperCase()));
+
+      let attempts = 0;
+      do {
+        const rand = Math.floor(100 + Math.random() * 900);
+        finalCode = `${prefix}${rand}`;
+        attempts++;
+      } while (existingCodes.has(finalCode) && attempts < 100);
+
+      if (existingCodes.has(finalCode)) {
+        finalCode = `${prefix}${Date.now().toString().slice(-4)}`;
+      }
+    }
+
+    // If this is a child branch, inherit status & subscription from parent Head Office
+    let parentCompDoc: any = null;
+    let parentUserDoc: any = null;
+    if (parentCompanyId) {
+      parentCompDoc = await Company.findById(parentCompanyId).lean();
+      parentUserDoc = await User.findOne({
+        companyId: parentCompanyId,
+        isSuperAdmin: { $ne: true },
+      }).lean();
+    }
+
+    const branchStatus = parentCompDoc
+      ? parentCompDoc.status === "Suspended" || parentCompDoc.status === "Inactive"
+        ? "Suspended"
+        : parentCompDoc.status === "Rejected"
+        ? "Rejected"
+        : "Active"
+      : data.status || "Active";
+
     const company = await Company.create({
       tenantId: targetTenantId,
-      companyCode: data.companyCode,
+      companyCode: finalCode,
       companyName: data.companyName.trim(),
       ownerName: data.ownerName || user.name || "",
       email: data.email?.toLowerCase?.().trim() || user.email || "",
@@ -106,16 +200,97 @@ export async function POST(req: Request) {
       invoicePrefix: data.invoicePrefix || null,
       purchasePrefix: data.purchasePrefix || null,
       currency: data.currency || null,
-      logo: data.logo || "",
-      enabledModules: Array.isArray(data.enabledModules) ? data.enabledModules : [],
-      status: data.status || "Active",
+      enabledModules: Array.isArray(data.enabledModules) && data.enabledModules.length > 0
+        ? data.enabledModules
+        : (parentCompDoc?.enabledModules && Array.isArray(parentCompDoc.enabledModules) && parentCompDoc.enabledModules.length > 0
+            ? parentCompDoc.enabledModules
+            : [
+                "dashboard", "sales", "purchases", "purchase", "inventory", "customer", "master", "area", "compare", "leads", "custom-forms", "financial-year", "reports", "mabsolcrmsync", "users", "settings", "company", "billing", "fieldforce", "financial_years", "custom_forms"
+              ]),
       isDefault: false,
       isHeadOffice: false,
       parentCompanyId: parentCompanyId,
       createdBy: user._id || null,
     });
 
-    return NextResponse.json({ success: true, company });
+    // Create or link Administrator User for this company so they can log in directly
+    // Inherit approval and subscription validity from Head Office
+    if (data.email) {
+      const cleanEmail = String(data.email).toLowerCase().trim();
+
+      if (isReservedSuperAdminEmail(cleanEmail)) {
+        return NextResponse.json({
+          success: false,
+          error: "This email address is reserved for the Super Administrator and cannot be used for a company/branch.",
+        }, { status: 403 });
+      }
+
+      let companyUser = await User.findOne({ email: cleanEmail });
+      const hashedPassword = data.password ? await bcrypt.hash(data.password, 10) : "";
+
+      const inheritsApproval = parentUserDoc ? Boolean(parentUserDoc.isApproved) : true;
+      const inheritsStatus = parentUserDoc ? parentUserDoc.status : branchStatus;
+      const inheritsDurationDays = parentUserDoc?.accessDurationDays || 30;
+      const inheritsValidUntil = parentUserDoc?.accessValidUntil || new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+      const inheritsUnlimited = parentUserDoc ? Boolean(parentUserDoc.isUnlimitedAccess) : false;
+      const inheritsTimeout = parentUserDoc?.sessionTimeoutHours || 24;
+
+      if (companyUser) {
+        companyUser.companyId = company._id;
+        if (hashedPassword) companyUser.password = hashedPassword;
+        companyUser.status = inheritsStatus;
+        companyUser.isApproved = inheritsApproval;
+        companyUser.isUnlimitedAccess = inheritsUnlimited;
+        companyUser.accessDurationDays = inheritsDurationDays;
+        companyUser.accessValidUntil = inheritsValidUntil;
+        companyUser.sessionTimeoutHours = inheritsTimeout;
+        await companyUser.save();
+      } else {
+        let adminRole = await Role.findOne({
+          $or: [
+            { tenantId: targetTenantId, roleName: ROLE_TYPE.ADMIN },
+            { roleName: ROLE_TYPE.ADMIN },
+          ],
+        });
+        if (!adminRole) {
+          try {
+            adminRole = await Role.create({
+              tenantId: targetTenantId,
+              roleName: ROLE_TYPE.ADMIN,
+              description: "Company Administrator",
+              status: "Active",
+            });
+          } catch {
+            adminRole = await Role.findOne({ roleName: ROLE_TYPE.ADMIN });
+          }
+        }
+
+        const employeeCode = `EMP_${Math.floor(1000 + Math.random() * 9000)}`;
+        await User.create({
+          tenantId: targetTenantId,
+          companyId: company._id,
+          roleId: adminRole?._id,
+          roleName: ROLE_TYPE.ADMIN,
+          roleType: ROLE_TYPE.ADMIN,
+          role: ROLE_TYPE.ADMIN,
+          dashboardType: "admin",
+          employeeCode,
+          name: data.ownerName?.trim() || data.companyName.trim(),
+          email: cleanEmail,
+          mobile: data.mobile?.replace(/\D/g, "") || "",
+          password: hashedPassword || (await bcrypt.hash("Admin@123", 10)),
+          designation: "Company Administrator",
+          status: inheritsStatus,
+          isApproved: inheritsApproval,
+          isUnlimitedAccess: inheritsUnlimited,
+          accessDurationDays: inheritsDurationDays,
+          accessValidUntil: inheritsValidUntil,
+          sessionTimeoutHours: inheritsTimeout,
+        });
+      }
+    }
+
+    return NextResponse.json({ success: true, company, companyCode: finalCode });
   } catch (error: any) {
     console.error("Company Create Error =>", error);
     return NextResponse.json({ success: false, error: error.message }, { status: 500 });

@@ -14,7 +14,14 @@ export interface DataMapperResult {
  * Transforms raw MARG DBF collections (e.g. vfp_new_folder_order, vfp_new_folder_pro, vfp_new_folder_pend)
  * into structured CRM Collections used by MabsolCrm.
  */
-export async function runMargDataMapper(email?: string): Promise<DataMapperResult> {
+export async function runMargDataMapper(
+  email?: string,
+  options?: {
+    companyCode?: string;
+    companyId?: string;
+    companyName?: string;
+  }
+): Promise<DataMapperResult> {
   await dbConnect();
   const db = mongoose.connection.db;
 
@@ -31,6 +38,15 @@ export async function runMargDataMapper(email?: string): Promise<DataMapperResul
     return result;
   }
 
+  const companyCode = options?.companyCode || "";
+  const companyId = options?.companyId || "";
+  const companyName = options?.companyName || "";
+
+  const docFilter: any = {};
+  if (companyCode) {
+    docFilter.$or = [{ companyCode }, { COMPANY: companyCode }];
+  }
+
   try {
     // 1. Map Raw Customer / Ledger DBF -> `orders` (Customer Master collection in CRM)
     const rawCustomerCollections = ["vfp_new_folder_order", "vfp_new_folder_ledger", "vfp_new_folder_party"];
@@ -41,7 +57,7 @@ export async function runMargDataMapper(email?: string): Promise<DataMapperResul
       const rawCol = db.collection(colName);
       const targetCol = db.collection("orders"); // Customer master collection in CRM
 
-      const rawDocs = await rawCol.find({}).limit(5000).toArray();
+      const rawDocs = await rawCol.find(docFilter).limit(5000).toArray();
       const bulkOps: any[] = [];
 
       for (const doc of rawDocs) {
@@ -49,10 +65,11 @@ export async function runMargDataMapper(email?: string): Promise<DataMapperResul
         const name = String(doc.PARNAM || doc.NAME || doc.PARTY || doc.FULLNAME || "").trim();
         if (!ordNo && !name) continue;
 
-        const customerDoc = {
+        const customerDoc: any = {
           ORDNO: ordNo || `CUST_${Date.now()}`,
           PARNAM: name || "Unknown Customer",
-          MAILNAM: String(doc.MAILNAM || doc.EMAIL || "").trim(),
+          MAILNAM: String(doc.MAILNAM || "").trim(),
+          EMAIL: String(doc.EMAIL || "").trim(),
           CITY: String(doc.CITY || doc.TOWN || "").trim(),
           AREA: String(doc.AREA || "").trim(),
           ROUT: String(doc.ROUT || doc.ROUTE || "").trim(),
@@ -69,9 +86,25 @@ export async function runMargDataMapper(email?: string): Promise<DataMapperResul
           _vfpSyncedAt: new Date(),
         };
 
+        if (companyCode) {
+          customerDoc.companyCode = companyCode;
+          customerDoc.COMPANY = companyCode;
+        }
+        if (companyId) {
+          customerDoc.companyId = companyId;
+        }
+        if (companyName) {
+          customerDoc.companyName = companyName;
+        }
+
+        const filter: any = { ORDNO: customerDoc.ORDNO };
+        if (companyCode) {
+          filter.companyCode = companyCode;
+        }
+
         bulkOps.push({
           updateOne: {
-            filter: { ORDNO: customerDoc.ORDNO },
+            filter,
             update: { $set: customerDoc },
             upsert: true,
           },
@@ -93,7 +126,7 @@ export async function runMargDataMapper(email?: string): Promise<DataMapperResul
       const rawCol = db.collection(colName);
       const targetCol = db.collection("products");
 
-      const rawDocs = await rawCol.find({}).limit(5000).toArray();
+      const rawDocs = await rawCol.find(docFilter).limit(5000).toArray();
       const bulkOps: any[] = [];
 
       for (const doc of rawDocs) {
@@ -101,11 +134,11 @@ export async function runMargDataMapper(email?: string): Promise<DataMapperResul
         const itemName = String(doc.PNAME || doc.ITEMNAME || doc.NAME || "").trim();
         if (!itemCode && !itemName) continue;
 
-        const productDoc = {
+        const productDoc: any = {
           PCODE: itemCode || `PROD_${Date.now()}`,
           PNAME: itemName || "Unnamed Product",
           PACK: String(doc.PACK || doc.PACKING || "").trim(),
-          COMPANY: String(doc.COMPANY || doc.MFG || "").trim(),
+          COMPANY: String(doc.COMPANY || doc.MFG || companyCode || "").trim(),
           CATEGORY: String(doc.CATEGORY || doc.CATG || "").trim(),
           DIVISION: String(doc.DIVISION || doc.DIV || "").trim(),
           MRP: Number(doc.MRP || doc.RRP || 0),
@@ -119,9 +152,24 @@ export async function runMargDataMapper(email?: string): Promise<DataMapperResul
           _vfpSyncedAt: new Date(),
         };
 
+        if (companyCode) {
+          productDoc.companyCode = companyCode;
+        }
+        if (companyId) {
+          productDoc.companyId = companyId;
+        }
+        if (companyName) {
+          productDoc.companyName = companyName;
+        }
+
+        const filter: any = { PCODE: productDoc.PCODE };
+        if (companyCode) {
+          filter.companyCode = companyCode;
+        }
+
         bulkOps.push({
           updateOne: {
-            filter: { PCODE: productDoc.PCODE },
+            filter,
             update: { $set: productDoc },
             upsert: true,
           },
@@ -143,7 +191,7 @@ export async function runMargDataMapper(email?: string): Promise<DataMapperResul
       const rawCol = db.collection(colName);
       const targetCol = db.collection("pends");
 
-      const rawDocs = await rawCol.find({}).limit(5000).toArray();
+      const rawDocs = await rawCol.find(docFilter).limit(5000).toArray();
       const bulkOps: any[] = [];
 
       for (const doc of rawDocs) {
@@ -151,7 +199,7 @@ export async function runMargDataMapper(email?: string): Promise<DataMapperResul
         const voucher = Number(doc.VOUCHER || doc.BILLNO || doc.VCN || 0);
         if (!ord && !voucher) continue;
 
-        const pendDoc = {
+        const pendDoc: any = {
           ORD: ord,
           VOUCHER: voucher,
           SVOUCHER: Number(doc.SVOUCHER || voucher),
@@ -172,9 +220,25 @@ export async function runMargDataMapper(email?: string): Promise<DataMapperResul
           _vfpSyncedAt: new Date(),
         };
 
+        if (companyCode) {
+          pendDoc.companyCode = companyCode;
+          pendDoc.COMPANY = companyCode;
+        }
+        if (companyId) {
+          pendDoc.companyId = companyId;
+        }
+        if (companyName) {
+          pendDoc.companyName = companyName;
+        }
+
+        const filter: any = { ORD: pendDoc.ORD, VOUCHER: pendDoc.VOUCHER };
+        if (companyCode) {
+          filter.companyCode = companyCode;
+        }
+
         bulkOps.push({
           updateOne: {
-            filter: { ORD: pendDoc.ORD, VOUCHER: pendDoc.VOUCHER },
+            filter,
             update: { $set: pendDoc },
             upsert: true,
           },

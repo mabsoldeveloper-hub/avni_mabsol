@@ -413,36 +413,111 @@
 }
 
 /* ------ OTP BOXES ------ */
+.cw-otp-boxes,
 .cw-otp-row {
   display: flex;
   align-items: center;
   gap: 8px;
+  margin: 8px 0 12px;
 }
+
+.cw-otp-box,
 .cw-otp-input {
-  width: 42px;
+  box-sizing: border-box;
+  width: 40px;
   height: 44px;
   text-align: center;
   font-size: 18px;
   font-weight: 700;
   border-radius: 10px;
-  border: 1.5px solid var(--cw-border);
-  background: #f8faff;
+  border: 1.5px solid #cbd5e1;
+  background: #ffffff;
+  color: #0f172a;
   outline: none;
-  transition: all 0.15s;
-  color: var(--cw-navy);
-  font-family: 'IBM Plex Mono', monospace;
+  font-family: var(--font-mono, monospace), monospace;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+  transition: all 0.15s ease-in-out;
+  padding: 0 !important;
+  margin: 0;
+  line-height: 1;
 }
+
+.cw-otp-box:hover,
+.cw-otp-input:hover {
+  border-color: #3b82f6;
+  background: #fbfdff;
+  transform: translateY(-1px);
+}
+
+.cw-otp-box:focus,
 .cw-otp-input:focus {
-  border-color: var(--cw-blue-mid);
-  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
-  background: white;
+  border-color: #2563eb;
+  background: #ffffff;
+  transform: translateY(-2px);
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.18), 0 3px 8px rgba(37, 99, 235, 0.12);
 }
+
+.cw-otp-box.filled,
+.cw-otp-input.filled {
+  border-color: #2563eb;
+  background: #eff6ff;
+  color: #1d4ed8;
+}
+
+.cw-otp-box.verified,
 .cw-otp-input.verified {
-  border-color: var(--cw-emerald);
-  background: rgba(16,185,129,0.05);
-  color: var(--cw-emerald);
+  border-color: #10b981;
+  background: #ecfdf5;
+  color: #065f46;
+}
+
+.cw-otp-box:disabled,
+.cw-otp-input:disabled {
+  background: #f1f5f9;
+  color: #94a3b8 !important;
+  cursor: not-allowed;
+  opacity: 0.8;
+}
+
+@media (max-width: 500px) {
+  .cw-otp-boxes,
+  .cw-otp-row {
+    gap: 6px;
+  }
+  .cw-otp-box,
+  .cw-otp-input {
+    width: 36px;
+    height: 40px;
+    font-size: 16px;
+    border-radius: 8px;
+  }
 }
 .cw-otp-sep { font-size: 18px; color: var(--cw-border); font-weight: 300; }
+
+/* ------ PASSWORD TOGGLE ICON BUTTON ------ */
+.cw-pwd-toggle {
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  padding: 0 10px;
+  color: #64748b;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  outline: none;
+  transition: color 0.15s ease, transform 0.15s ease;
+}
+.cw-pwd-toggle:hover {
+  color: #1d4ed8;
+  transform: scale(1.12);
+}
+.cw-pwd-toggle:focus-visible {
+  color: #1d4ed8;
+  outline: 2px solid #93c5fd;
+  border-radius: 6px;
+}
+
 
 /* ------ MODULE GRID ------ */
 .cw-module-grid {
@@ -718,11 +793,52 @@
   to { opacity: 1; transform: translateX(0) scale(1); }
 }
 
-/* ------ RESPONSIVE ------ */
-@media (max-width: 720px) {
-  .cw-wizard-card { padding: 18px 16px; border-radius: 16px; }
-  .cw-step-label { display: none; }
-  .cw-brand-name { font-size: 15px; }
-  .cw-heading-box h1 { font-size: 18px; }
-  .cw-module-grid { grid-template-columns: 1fr; }
+/* ------ SUCCESS MODAL ------ */
+.cw-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(10, 22, 40, 0.65);
+  backdrop-filter: blur(8px);
+  z-index: 10000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+.cw-modal-box {
+  background: #ffffff;
+  border-radius: 20px;
+  max-width: 500px;
+  width: 100%;
+  padding: 32px 28px;
+  box-shadow: 0 25px 60px -15px rgba(0,0,0,0.3);
+  text-align: center;
+  border: 1px solid rgba(226, 232, 240, 0.9);
+}
+.cw-modal-icon-badge {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background: #ecfdf5;
+  color: #10b981;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 26px;
+  margin-bottom: 16px;
+  border: 2px solid #a7f3d0;
+}
+.cw-modal-code-card {
+  margin: 18px 0;
+  padding: 16px;
+  background: #f8faff;
+  border: 1.5px dashed #2563eb;
+  border-radius: 12px;
+}
+.cw-modal-code-text {
+  font-family: var(--font-mono, monospace);
+  font-size: 24px;
+  font-weight: 800;
+  color: #1d4ed8;
+  letter-spacing: 0.1em;
 }

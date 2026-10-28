@@ -6,6 +6,7 @@ import Company from "@/models/Company";
 import FinancialYear from "@/models/FinancialYear";
 import Role from "@/models/Role";
 import Otp from "@/models/Otp";
+import VfpConfig from "@/models/VfpConfig";
 import { extractPanFromGstin, extractStateCodeFromGstin } from "@/lib/gstHelper";
 import {
   validateName,
@@ -14,7 +15,11 @@ import {
   validatePassword,
 } from "@/lib/constants/validation.constant";
 import { ROLE_TYPE } from "@/lib/constants/roles.constant";
-import { USER_APPROVAL_STATUS, DEFAULT_ACCESS_DAYS } from "@/lib/constants/superAdmin.constant";
+import {
+  USER_APPROVAL_STATUS,
+  DEFAULT_ACCESS_DAYS,
+  isReservedSuperAdminEmail,
+} from "@/lib/constants/superAdmin.constant";
 
 /**
  * Generate a unique tenant ID for multi-tenant data isolation.
@@ -104,6 +109,14 @@ export async function POST(req: Request) {
 
     const cleanEmail = email.toLowerCase().trim();
 
+    // ── Super Admin Email Protection ─────────────────────────────────────────
+    if (isReservedSuperAdminEmail(cleanEmail)) {
+      return NextResponse.json({
+        success: false,
+        message: "This email address is reserved for the Super Administrator and cannot be used to register an account.",
+      }, { status: 403 });
+    }
+
     // ── Duplicate Checks for Head Office ──────────────────────────────────────
     const emailExists = await User.findOne({ email: cleanEmail });
     if (emailExists) {
@@ -145,6 +158,14 @@ export async function POST(req: Request) {
             success: false,
             message: `Please enter a valid email address for Branch #${i + 1}.`,
           }, { status: 400 });
+        }
+
+        // Must not be Super Admin reserved email
+        if (isReservedSuperAdminEmail(brEmail)) {
+          return NextResponse.json({
+            success: false,
+            message: `Branch #${i + 1} email (${brEmail}) is reserved for the Super Administrator and cannot be used.`,
+          }, { status: 403 });
         }
 
         // Must not match Head Office email
@@ -255,6 +276,31 @@ export async function POST(req: Request) {
           }))
       : [];
 
+    // Default modules granted to newly registered companies
+    const DEFAULT_COMPANY_MODULES = [
+      "dashboard",
+      "sales",
+      "purchases",
+      "purchase",
+      "inventory",
+      "customer",
+      "master",
+      "area",
+      "compare",
+      "leads",
+      "custom-forms",
+      "financial-year",
+      "reports",
+      "mabsolcrmsync",
+      "users",
+      "settings",
+      "company",
+      "billing",
+      "fieldforce",
+      "financial_years",
+      "custom_forms",
+    ];
+
     // ── Create Primary Head Office Company ────────────────────────────────────
     const newCompany = await Company.create({
       tenantId,
@@ -272,7 +318,7 @@ export async function POST(req: Request) {
       pincode: pincode || "",
       businessType: businessType || "",
       additionalGstins: formattedAdditionalGstins,
-      enabledModules: [],
+      enabledModules: DEFAULT_COMPANY_MODULES,
       status: "Active",
       isDefault: true,
       isHeadOffice: true,
@@ -362,6 +408,27 @@ export async function POST(req: Request) {
     newCompany.createdBy = user._id;
     await newCompany.save();
 
+    // Auto-create VfpConfig linking the discovered Marg company code and FY preferences
+    if (body.companyCode || body.shortCode || body.financialYearsToUpload) {
+      try {
+        await VfpConfig.findOneAndUpdate(
+          { email: cleanEmail },
+          {
+            $set: {
+              key: `vfp_sync_config_${cleanEmail}`,
+              email: cleanEmail,
+              companyCode: String(body.companyCode || finalCompanyCode).trim().toUpperCase(),
+              autoSyncInterval: 10,
+              useVfpEngine: true,
+            },
+          },
+          { upsert: true, new: true }
+        );
+      } catch (vfpErr) {
+        console.warn("[register] VfpConfig initialization notice:", vfpErr);
+      }
+    }
+
     // ── Create Separate Company Documents for Each Branch ──────────────────────
     for (let i = 0; i < formattedAdditionalGstins.length; i++) {
       const branch = formattedAdditionalGstins[i];
@@ -385,6 +452,7 @@ export async function POST(req: Request) {
         state: branchState,
         pincode: branch.pincode || "",
         businessType: businessType || "",
+        enabledModules: DEFAULT_COMPANY_MODULES,
         status: "Active",
         isDefault: false,
         isHeadOffice: false,

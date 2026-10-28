@@ -47,6 +47,18 @@ export async function getBackupSettings(): Promise<BackupSettings | null> {
       _id: "main",
     });
 
+  if (settings && settings.receiverEmail?.toLowerCase().includes("abhishek.mabsolinfotech")) {
+    settings.receiverEmail = "";
+    try {
+      await db.collection<BackupSettings>("backup_settings").updateOne(
+        { _id: "main" },
+        { $set: { receiverEmail: "" } }
+      );
+    } catch (e) {
+      console.warn("Failed to clean default test email in backup_settings:", e);
+    }
+  }
+
   return settings;
 }
 
@@ -62,7 +74,7 @@ export async function saveBackupSettings(data: {
 }): Promise<BackupSettings | null> {
   const db = await getDatabase();
 
-  const nextBackupAt = data.enabled
+  const nextBackupAt = (data.enabled && data.receiverEmail?.trim())
     ? getNextBackupDate(data.frequency)
     : null;
 

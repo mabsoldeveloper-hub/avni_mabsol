@@ -24,8 +24,14 @@ export async function GET(
     }
 
     const { id } = await context.params;
-    const user = await User.findById(id)
-      .populate("companyId")
+    const user: any = await User.findById(id)
+      .populate({
+        path: "companyId",
+        populate: {
+          path: "parentCompanyId",
+          select: "companyName companyCode isHeadOffice city state gstNo",
+        },
+      })
       .populate("approvedBy", "name email")
       .lean();
 
@@ -34,6 +40,64 @@ export async function GET(
         { success: false, message: "User not found" },
         { status: 404 }
       );
+    }
+
+    // Auto-resolve and persist state from GSTIN if state is missing
+    if (user.companyId) {
+      if (!user.companyId.state && user.companyId.gstNo && user.companyId.gstNo.length >= 2) {
+        const { GST_STATE_CODE } = await import("@/lib/constants/gstStateCodes");
+        const resolvedState = GST_STATE_CODE[user.companyId.gstNo.slice(0, 2)];
+        if (resolvedState) {
+          user.companyId.state = resolvedState;
+          const Company = (await import("@/models/Company")).default;
+          await Company.findByIdAndUpdate(user.companyId._id, { $set: { state: resolvedState } });
+        }
+      }
+      if (!user.state && user.companyId.state) {
+        user.state = user.companyId.state;
+        await User.findByIdAndUpdate(user._id, { $set: { state: user.companyId.state } });
+      }
+    }
+
+    // If company exists, retrieve any attached child branches with full details & branch admin users
+    if (user.companyId?._id) {
+      const Company = (await import("@/models/Company")).default;
+      const childBranches = await Company.find({
+        parentCompanyId: user.companyId._id,
+      })
+        .select("companyName companyCode gstNo panNo drugLicenseNo city state address pincode status email mobile enabledModules isHeadOffice createdAt")
+        .lean();
+
+      if (childBranches && childBranches.length > 0) {
+        const branchIds = childBranches.map((b: any) => b._id);
+        const branchUsers = await User.find({
+          companyId: { $in: branchIds },
+          isDeleted: { $ne: true },
+        })
+          .select("name email mobile roleType roleName status isApproved companyId employeeCode enabledModules lastLoginAt createdAt")
+          .lean();
+
+        const branchUserMap = new Map<string, any>();
+        branchUsers.forEach((bu: any) => {
+          branchUserMap.set(String(bu.companyId), bu);
+        });
+
+        childBranches.forEach((b: any) => {
+          b.adminUser = branchUserMap.get(String(b._id)) || null;
+        });
+      }
+
+      user.childBranches = childBranches || [];
+      user.branchCount = childBranches ? childBranches.length : 0;
+    }
+
+    // Only fallback to company if user.enabledModules is undefined/null
+    if (!Array.isArray(user.enabledModules)) {
+      if (Array.isArray(user.companyId?.enabledModules)) {
+        user.enabledModules = user.companyId.enabledModules;
+      } else {
+        user.enabledModules = [];
+      }
     }
 
     return NextResponse.json({ success: true, user });
@@ -130,8 +194,53 @@ export async function PATCH(
       case "reject": {
         targetUser.isApproved = false;
         targetUser.status = USER_APPROVAL_STATUS.REJECTED;
+        if (approvalNotes || body.reason) targetUser.approvalNotes = approvalNotes || body.reason;
+        break;
+      }
+
+      case "delete": {
+        if (isSuperAdminUser(targetUser)) {
+          return NextResponse.json(
+            { success: false, message: "Cannot delete the Super Administrator account." },
+            { status: 400 }
+          );
+        }
+        targetUser.isDeleted = true;
+        targetUser.deletedAt = now;
+        targetUser.deletedBy = currentUser._id;
+        targetUser.status = USER_APPROVAL_STATUS.DELETED;
+        targetUser.isApproved = false;
+        targetUser.deletedReason = approvalNotes || body.reason || "Account deleted by Super Administrator";
+        break;
+      }
+
+      case "restore": {
+        targetUser.isDeleted = false;
+        targetUser.deletedAt = null;
+        targetUser.deletedBy = null;
+        targetUser.deletedReason = "";
+        targetUser.status = USER_APPROVAL_STATUS.ACTIVE;
+        targetUser.isApproved = true;
         if (approvalNotes) targetUser.approvalNotes = approvalNotes;
         break;
+      }
+
+      case "permanent_delete": {
+        if (isSuperAdminUser(targetUser)) {
+          return NextResponse.json(
+            { success: false, message: "Cannot delete the Super Administrator account." },
+            { status: 400 }
+          );
+        }
+        await User.findByIdAndDelete(id);
+        if (targetUser.companyId) {
+          const Company = (await import("@/models/Company")).default;
+          await Company.findByIdAndDelete(targetUser.companyId);
+        }
+        return NextResponse.json({
+          success: true,
+          message: `User account ${targetUser.name} (${targetUser.email}) and related enterprise data permanently purged.`,
+        });
       }
 
       case "deactivate":
@@ -175,9 +284,61 @@ export async function PATCH(
         break;
       }
 
+      case "update_profile":
+      case "update_user_info": {
+        // Superadmin can change: name, company name, and address only (same as branches)
+        if (body.name && typeof body.name === "string") {
+          targetUser.name = body.name.trim();
+        }
+
+        if (body.address !== undefined && typeof body.address === "string") {
+          targetUser.address = body.address.trim();
+        }
+        if (body.city !== undefined && typeof body.city === "string") {
+          targetUser.city = body.city.trim();
+        }
+        if (body.state !== undefined && typeof body.state === "string") {
+          targetUser.state = body.state.trim();
+        }
+        if (body.pincode !== undefined && typeof body.pincode === "string") {
+          targetUser.pincode = body.pincode.trim();
+        }
+
+        // Update company name and commercial address if company exists
+        if (targetUser.companyId) {
+          const Company = (await import("@/models/Company")).default;
+          const compUpdates: any = {};
+          if (body.companyName && typeof body.companyName === "string") {
+            compUpdates.companyName = body.companyName.trim();
+          }
+          if (body.address !== undefined && typeof body.address === "string") {
+            compUpdates.address = body.address.trim();
+          }
+          if (body.city !== undefined && typeof body.city === "string") {
+            compUpdates.city = body.city.trim();
+          }
+          if (body.state !== undefined && typeof body.state === "string") {
+            compUpdates.state = body.state.trim();
+          }
+          if (body.pincode !== undefined && typeof body.pincode === "string") {
+            compUpdates.pincode = body.pincode.trim();
+          }
+          if (Object.keys(compUpdates).length > 0) {
+            await Company.findByIdAndUpdate(targetUser.companyId, { $set: compUpdates });
+          }
+        }
+        break;
+      }
+
       case "update":
       case "update_settings":
+      case "update_modules":
+      case "manage_modules":
       case "setSessionTimeout": {
+
+        if (Array.isArray(body.enabledModules)) {
+          targetUser.enabledModules = body.enabledModules;
+        }
         if (sessionTimeoutHours !== undefined && !isNaN(Number(sessionTimeoutHours))) {
           targetUser.sessionTimeoutHours = Number(sessionTimeoutHours);
         }
@@ -194,21 +355,219 @@ export async function PATCH(
         );
     }
 
+    if (Array.isArray(body.enabledModules)) {
+      targetUser.enabledModules = body.enabledModules;
+    }
+
     if (sessionTimeoutHours !== undefined && !isNaN(Number(sessionTimeoutHours))) {
       targetUser.sessionTimeoutHours = Number(sessionTimeoutHours);
     }
 
     await targetUser.save();
 
+    // Synchronize changes to Company record & Cascade to all Child Branches
+    if (targetUser.companyId) {
+      const Company = (await import("@/models/Company")).default;
+      const companyUpdates: any = {};
+
+      if (Array.isArray(body.enabledModules)) {
+        companyUpdates.enabledModules = body.enabledModules;
+      }
+
+      if (action === "approve" || action === "activate") {
+        companyUpdates.status = "Active";
+        companyUpdates.isDeleted = false;
+      } else if (action === "suspend" || action === "deactivate") {
+        companyUpdates.status = "Suspended";
+      } else if (action === "reject") {
+        companyUpdates.status = "Rejected";
+      } else if (action === "delete") {
+        companyUpdates.status = "Deleted";
+        companyUpdates.isDeleted = true;
+        companyUpdates.deletedAt = now;
+        companyUpdates.deletedBy = currentUser._id;
+      } else if (action === "restore") {
+        companyUpdates.status = "Active";
+        companyUpdates.isDeleted = false;
+        companyUpdates.deletedAt = null;
+        companyUpdates.deletedBy = null;
+      }
+
+      if (Object.keys(companyUpdates).length > 0) {
+        await Company.findByIdAndUpdate(targetUser.companyId, { $set: companyUpdates });
+      }
+
+      // Synchronize enabledModules to ALL user accounts in this company
+      if (Array.isArray(body.enabledModules)) {
+        await User.updateMany(
+          { companyId: targetUser.companyId, isSuperAdmin: { $ne: true } },
+          { $set: { enabledModules: body.enabledModules } }
+        );
+      }
+
+      // ── CASCADE TO ALL CHILD BRANCHES & BRANCH USERS ──
+      const childCompanies = await Company.find({
+        parentCompanyId: targetUser.companyId,
+      }).select("_id").lean();
+      const childCompIds = childCompanies.map((c) => c._id);
+
+      if (childCompIds.length > 0) {
+        // Cascade enabledModules permissions to all child branch companies & users
+        if (Array.isArray(body.enabledModules)) {
+          await Company.updateMany(
+            { _id: { $in: childCompIds } },
+            { $set: { enabledModules: body.enabledModules } }
+          );
+          await User.updateMany(
+            { companyId: { $in: childCompIds }, isSuperAdmin: { $ne: true } },
+            { $set: { enabledModules: body.enabledModules } }
+          );
+        }
+
+        if (action === "approve" || action === "activate") {
+          await Company.updateMany(
+            { _id: { $in: childCompIds } },
+            { $set: { status: "Active", isDeleted: false } }
+          );
+          await User.updateMany(
+            { companyId: { $in: childCompIds }, isSuperAdmin: { $ne: true } },
+            {
+              $set: {
+                status: USER_APPROVAL_STATUS.ACTIVE,
+                isApproved: true,
+                approvedAt: now,
+                approvedBy: currentUser._id,
+                accessDurationDays: targetUser.accessDurationDays,
+                accessValidUntil: targetUser.accessValidUntil,
+                isUnlimitedAccess: Boolean(targetUser.isUnlimitedAccess),
+                sessionTimeoutHours: targetUser.sessionTimeoutHours,
+              },
+            }
+          );
+        } else if (
+          action === "adjust_days" ||
+          action === "extend" ||
+          action === "set_validity" ||
+          action === "setDuration"
+        ) {
+          await User.updateMany(
+            { companyId: { $in: childCompIds }, isSuperAdmin: { $ne: true } },
+            {
+              $set: {
+                status: USER_APPROVAL_STATUS.ACTIVE,
+                isApproved: true,
+                accessDurationDays: targetUser.accessDurationDays,
+                accessValidUntil: targetUser.accessValidUntil,
+                isUnlimitedAccess: Boolean(targetUser.isUnlimitedAccess),
+                sessionTimeoutHours: targetUser.sessionTimeoutHours,
+              },
+            }
+          );
+        } else if (action === "suspend" || action === "deactivate") {
+          await Company.updateMany(
+            { _id: { $in: childCompIds } },
+            { $set: { status: "Suspended" } }
+          );
+          await User.updateMany(
+            { companyId: { $in: childCompIds }, isSuperAdmin: { $ne: true } },
+            {
+              $set: {
+                status: USER_APPROVAL_STATUS.SUSPENDED,
+                isApproved: false,
+              },
+            }
+          );
+        } else if (action === "reject") {
+          await Company.updateMany(
+            { _id: { $in: childCompIds } },
+            { $set: { status: "Rejected" } }
+          );
+          await User.updateMany(
+            { companyId: { $in: childCompIds }, isSuperAdmin: { $ne: true } },
+            {
+              $set: {
+                status: USER_APPROVAL_STATUS.REJECTED,
+                isApproved: false,
+              },
+            }
+          );
+        } else if (action === "delete") {
+          await Company.updateMany(
+            { _id: { $in: childCompIds } },
+            {
+              $set: {
+                status: "Deleted",
+                isDeleted: true,
+                deletedAt: now,
+                deletedBy: currentUser._id,
+              },
+            }
+          );
+          await User.updateMany(
+            { companyId: { $in: childCompIds }, isSuperAdmin: { $ne: true } },
+            {
+              $set: {
+                status: USER_APPROVAL_STATUS.DELETED,
+                isDeleted: true,
+                isApproved: false,
+                deletedAt: now,
+                deletedBy: currentUser._id,
+                deletedReason: targetUser.deletedReason,
+              },
+            }
+          );
+        } else if (action === "restore") {
+          await Company.updateMany(
+            { _id: { $in: childCompIds } },
+            {
+              $set: {
+                status: "Active",
+                isDeleted: false,
+                deletedAt: null,
+                deletedBy: null,
+              },
+            }
+          );
+          await User.updateMany(
+            { companyId: { $in: childCompIds }, isSuperAdmin: { $ne: true } },
+            {
+              $set: {
+                status: USER_APPROVAL_STATUS.ACTIVE,
+                isDeleted: false,
+                isApproved: true,
+                deletedAt: null,
+                deletedBy: null,
+                deletedReason: "",
+              },
+            }
+          );
+        }
+      }
+    }
+
     return NextResponse.json({
       success: true,
-      message: `User ${targetUser.name} updated successfully (${action}).`,
+      message:
+        action === "delete"
+          ? `User ${targetUser.name} moved to Deleted Accounts.`
+          : action === "restore"
+          ? `User ${targetUser.name} restored successfully.`
+          : action === "reject"
+          ? `User application ${targetUser.name} rejected.`
+          : `User ${targetUser.name} updated successfully (${action}).`,
       user: {
         _id: targetUser._id,
         name: targetUser.name,
         email: targetUser.email,
+        mobile: targetUser.mobile,
+        employeeCode: targetUser.employeeCode,
+        designation: targetUser.designation,
+        roleType: targetUser.roleType,
+        roleName: targetUser.roleName,
         status: targetUser.status,
         isApproved: targetUser.isApproved,
+        isDeleted: targetUser.isDeleted,
+        deletedAt: targetUser.deletedAt,
         accessValidUntil: targetUser.accessValidUntil,
         accessDurationDays: targetUser.accessDurationDays,
         isUnlimitedAccess: targetUser.isUnlimitedAccess,
@@ -240,6 +599,10 @@ export async function DELETE(
     }
 
     const { id } = await context.params;
+    const { searchParams } = new URL(req.url);
+    const isPermanent = searchParams.get("permanent") === "true";
+    const reason = searchParams.get("reason") || "Deleted by Super Administrator";
+
     const targetUser = await User.findById(id);
     if (!targetUser) {
       return NextResponse.json(
@@ -256,11 +619,80 @@ export async function DELETE(
       );
     }
 
-    await User.findByIdAndDelete(id);
+    const Company = (await import("@/models/Company")).default;
+
+    if (isPermanent) {
+      await User.findByIdAndDelete(id);
+      if (targetUser.companyId) {
+        // Find and purge all child branches
+        const childCompanies = await Company.find({ parentCompanyId: targetUser.companyId }).select("_id").lean();
+        const childCompIds = childCompanies.map((c) => c._id);
+        if (childCompIds.length > 0) {
+          await User.deleteMany({ companyId: { $in: childCompIds } });
+          await Company.deleteMany({ _id: { $in: childCompIds } });
+        }
+        await Company.findByIdAndDelete(targetUser.companyId);
+      }
+      return NextResponse.json({
+        success: true,
+        message: `User account ${targetUser.name} (${targetUser.email}) and its branch network permanently deleted.`,
+      });
+    }
+
+    // Soft delete so details remain inspectable exclusively by Super Admin
+    const now = new Date();
+    targetUser.isDeleted = true;
+    targetUser.deletedAt = now;
+    targetUser.deletedBy = currentUser._id;
+    targetUser.deletedReason = reason;
+    targetUser.status = USER_APPROVAL_STATUS.DELETED;
+    targetUser.isApproved = false;
+    await targetUser.save();
+
+    if (targetUser.companyId) {
+      await Company.findByIdAndUpdate(targetUser.companyId, {
+        $set: {
+          status: "Deleted",
+          isDeleted: true,
+          deletedAt: now,
+          deletedBy: currentUser._id,
+        },
+      });
+
+      // Cascade soft delete to all child branches and their users
+      const childCompanies = await Company.find({ parentCompanyId: targetUser.companyId }).select("_id").lean();
+      const childCompIds = childCompanies.map((c) => c._id);
+      if (childCompIds.length > 0) {
+        await Company.updateMany(
+          { _id: { $in: childCompIds } },
+          {
+            $set: {
+              status: "Deleted",
+              isDeleted: true,
+              deletedAt: now,
+              deletedBy: currentUser._id,
+            },
+          }
+        );
+        await User.updateMany(
+          { companyId: { $in: childCompIds }, isSuperAdmin: { $ne: true } },
+          {
+            $set: {
+              status: USER_APPROVAL_STATUS.DELETED,
+              isDeleted: true,
+              isApproved: false,
+              deletedAt: now,
+              deletedBy: currentUser._id,
+              deletedReason: reason,
+            },
+          }
+        );
+      }
+    }
 
     return NextResponse.json({
       success: true,
-      message: `User account ${targetUser.name} (${targetUser.email}) permanently deleted.`,
+      message: `User account ${targetUser.name} (${targetUser.email}) moved to Deleted Accounts.`,
     });
   } catch (err: any) {
     console.error("[SUPER ADMIN DELETE ERROR]:", err);

@@ -161,7 +161,7 @@ export default function AiNotificationsPage() {
         }
       }
     } catch (err) {
-      console.error("Failed to load notifications:", err);
+      // console.error("Failed to load notifications:", err);
     } finally {
       setInitialLoading(false);
       setRefreshing(false);

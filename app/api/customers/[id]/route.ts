@@ -1,71 +1,32 @@
-// import { NextResponse } from "next/server";
-// import connectDB from "@/lib/mongodb";
-// import Customer from "@/models/Customer";
-// import AccountGroup from "@/models/AccountGroup";
-
-// export async function GET(
-//   req: Request,
-//   { params }: { params: Promise<{ id: string }> }
-// ) {
-//   try {
-//     await connectDB();
-//     const { id } = await params;
-
-//     const customerDoc = await Customer.findById(id).lean();
-//     if (!customerDoc) {
-//       return NextResponse.json(null, { status: 404 });
-//     }
-
-//     const scode = String((customerDoc as any).SCODE || "").trim();
-//     let groupInfo: any = {};
-//     if (scode) {
-//       const groupDoc = await AccountGroup.findOne(
-//         { ORDNO: scode },
-//         { PARNAM: 1, GROUP: 1, GCODE: 1 }
-//       ).lean();
-
-//       if (groupDoc) {
-//         groupInfo = {
-//           GROUPNAME: groupDoc.PARNAM || "",
-//           MAINGROUP: groupDoc.GROUP || "",
-//           PARENTGROUP: groupDoc.GCODE || "",
-//         };
-//       }
-//     }
-
-//     const enriched = {
-//       ...customerDoc,
-//       ...groupInfo,
-//     };
-
-//     return NextResponse.json(enriched);
-//   } catch (error: any) {
-//     return NextResponse.json(
-//       { error: error.message || "Failed to fetch customer" },
-//       { status: 500 }
-//     );
-//   }
-// }
 import { NextResponse } from "next/server";
 import connectDB from "@/lib/mongodb";
 import Customer from "@/models/Customer";
 import AccountGroup from "@/models/AccountGroup";
 import Order from "@/models/Order";
 import SaleType from "@/models/SaleType";
+import Support from "@/models/Support";
+import Pendings from "@/models/Pendings";
+import Notification from "@/models/Notification";
 import mongoose from "mongoose";
 import { getMrTerritoryRestriction } from "@/lib/mrTerritoryHelper";
 
 export const dynamic = "force-dynamic";
 
+/* ============================================================
+   HELPERS
+============================================================ */
+
 function clean(value: any): string {
   if (value === null || value === undefined) return "";
-  return String(value).replace(/\u0000/g, "").trim();
+  return String(value)
+    .replace(/\u0000/g, "")
+    .trim();
 }
 
 function firstValue(...values: any[]): string {
   for (const value of values) {
-    const v = clean(value);
-    if (v) return v;
+    const cleaned = clean(value);
+    if (cleaned) return cleaned;
   }
   return "";
 }
@@ -81,17 +42,21 @@ function resolveSaleTypeName(
   return firstValue(saleTypeMap.get(key)?.SNAME);
 }
 
-/* ---------------------------------------------------------- */
-/* GET - Customer View                                        */
-/* ---------------------------------------------------------- */
+/* ============================================================
+   GET CUSTOMER
+============================================================ */
+
 export async function GET(
-  req: Request,
+  request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     await connectDB();
     const { id } = await params;
 
+    /* --------------------------------------------------------
+       Validate ID
+    -------------------------------------------------------- */
     if (!mongoose.Types.ObjectId.isValid(id)) {
       return NextResponse.json(
         { success: false, message: "Invalid customer id" },
@@ -99,17 +64,14 @@ export async function GET(
       );
     }
 
-    /* ------------------------------------------------------ */
-    /* Hierarchy access control                                */
-    /* ------------------------------------------------------ */
+    /* --------------------------------------------------------
+       Territory / hierarchy restriction
+    -------------------------------------------------------- */
     const restriction = await getMrTerritoryRestriction();
 
-    /*
-     * Do the authorization check before returning ANY customer data.
-     * For restricted users, an inaccessible customer is intentionally
-     * returned as 404 instead of 403 so the API does not reveal that the
-     * customer exists outside the user's hierarchy.
-     */
+    /* --------------------------------------------------------
+       CUSTOMER
+    -------------------------------------------------------- */
     const customerDoc: any = await Customer.findById(id).lean();
 
     if (!customerDoc) {
@@ -119,36 +81,51 @@ export async function GET(
       );
     }
 
-    if (restriction.isMrRestricted && !restriction.isPartyAllowed(customerDoc)) {
-      return NextResponse.json(
-        { success: false, message: "Customer not found" },
-        { status: 404 }
-      );
+    if (restriction?.isMrRestricted) {
+      const partyAllowed = restriction.isPartyAllowed(customerDoc);
+      if (!partyAllowed) {
+        return NextResponse.json(
+          { success: false, message: "Customer not found" },
+          { status: 404 }
+        );
+      }
     }
 
-    /* Account Group */
+    /* --------------------------------------------------------
+       ACCOUNT GROUP
+    -------------------------------------------------------- */
     const scode = clean(customerDoc.SCODE);
     let groupInfo: any = { GROUPCODE: scode };
 
-    if (scode) {
-      const groupDoc: any = await AccountGroup.findOne(
-        { ORDNO: scode },
-        { PARNAM: 1, GROUP: 1, GCODE: 1 }
-      ).lean();
+    const groupCode = firstValue(
+      customerDoc?.SCODE,
+      customerDoc?.GROUPCODE,
+      customerDoc?.ACGROUP
+    );
+
+    if (groupCode) {
+      const groupDoc: any = await AccountGroup.findOne({
+        $or: [
+          { ORDNO: groupCode },
+          { code: groupCode },
+          { groupCode: groupCode },
+          { SCODE: groupCode },
+        ],
+      }).lean();
 
       if (groupDoc) {
         groupInfo = {
-          GROUPCODE: scode,
-          GROUPNAME: groupDoc.PARNAM || "",
+          GROUPCODE: scode || groupCode,
+          GROUPNAME: groupDoc.PARNAM || groupDoc.groupName || groupDoc.name || "",
           MAINGROUP: groupDoc.GROUP || "",
           PARENTGROUP: groupDoc.GCODE || "",
         };
       }
     }
 
-    /* ------------------------------------------------------ */
-    /* CUSTOMER -> ORDER_K19                                   */
-    /* ------------------------------------------------------ */
+    /* --------------------------------------------------------
+       CUSTOMER ORDER CODE & LOOKUP
+    -------------------------------------------------------- */
     const customerOrdno = clean(customerDoc.ORDNO);
     const customerCodep = clean(customerDoc.CODEP);
     const orderKeys = Array.from(
@@ -206,7 +183,94 @@ export async function GET(
       order = orderMap.get(customerOrdno) || orderMap.get(customerCodep) || null;
     }
 
-    /* ORDER codes */
+    /* --------------------------------------------------------
+       MARG CUSTOMER EMAIL LOOKUP
+       ORDER.ORDNO / CODEP / SCODE matches SUPPORT.LCODE and SUPPORT.SNO = 2
+       Email is stored in SUPPORT.REMARK.
+    -------------------------------------------------------- */
+    let customerEmail = "";
+    const possibleCodes = Array.from(
+      new Set(
+        [
+          customerOrdno,
+          customerCodep,
+          clean(customerDoc.SCODE),
+          clean(order?.ORDNO),
+          clean(order?.CODEP),
+        ]
+          .map((c) => c.toUpperCase())
+          .filter(Boolean)
+      )
+    );
+
+    if (possibleCodes.length > 0) {
+      try {
+        const supportCollection = mongoose.connection.collection("vfp_new_folder_support");
+        const regexList = possibleCodes.map(
+          (c) => new RegExp(`^\\s*${c.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\s*$`, "i")
+        );
+
+        const supportRows: any[] = await supportCollection
+          .find({
+            $or: [
+              { LCODE: { $in: possibleCodes } },
+              { LCODE: { $in: possibleCodes.map((c) => c.toLowerCase()) } },
+              { LCODE: { $in: regexList } },
+            ],
+            SNO: { $in: [2, "2"] },
+            _vfpDeleted: { $ne: true },
+          })
+          .toArray();
+
+        for (const row of supportRows) {
+          const remark = clean(row?.REMARK);
+          if (remark) {
+            const emailMatch = remark.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i);
+            if (emailMatch?.[0]) {
+              customerEmail = emailMatch[0].trim().toUpperCase();
+              break;
+            } else if (remark.includes("@")) {
+              customerEmail = remark.trim().toUpperCase();
+              break;
+            }
+          }
+        }
+
+        // Fallback: If not found in SNO=2, check any row with @ for these LCODEs
+        if (!customerEmail) {
+          const anySupportRow: any = await supportCollection.findOne({
+            $or: [
+              { LCODE: { $in: possibleCodes } },
+              { LCODE: { $in: regexList } },
+            ],
+            REMARK: { $regex: /@/ },
+            _vfpDeleted: { $ne: true },
+          });
+          if (anySupportRow?.REMARK) {
+            const emailMatch = clean(anySupportRow.REMARK).match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i);
+            if (emailMatch?.[0]) {
+              customerEmail = emailMatch[0].trim().toUpperCase();
+            }
+          }
+        }
+      } catch (err) {
+        console.warn("Support email lookup error:", err);
+      }
+    }
+
+    // Fallback: Only use Customer.EMAIL if not an admin/support email or MAILNAM
+    const adminEmailPattern = /admin\.mabsolinfotech|support@mabsolinfotech/i;
+    if (!customerEmail && clean(customerDoc?.EMAIL).includes("@")) {
+      const candidate = clean(customerDoc?.EMAIL).toUpperCase();
+      const mailName = clean(customerDoc?.MAILNAM).toUpperCase();
+      if (!adminEmailPattern.test(candidate) && candidate !== mailName) {
+        customerEmail = candidate;
+      }
+    }
+
+    /* --------------------------------------------------------
+       ORDER TERRITORY CODES & SALETYPE
+    -------------------------------------------------------- */
     const orderState1 = clean(order?.STATE1);
     const orderState2 = clean(order?.STATE2);
     const orderZone = clean(order?.ZONE);
@@ -215,19 +279,20 @@ export async function GET(
     const orderStation = clean(order?.STATION);
     const orderRoute = firstValue(order?.ROUTE, order?.ROUT);
 
-    /* ------------------------------------------------------ */
-    /* ORDER CODE -> SALETYPE SCODE -> SNAME                    */
-    /* ------------------------------------------------------ */
     const territoryCodes = Array.from(
-      new Set([
-        orderState1,
-        orderState2,
-        orderZone,
-        orderCity,
-        orderArea,
-        orderStation,
-        orderRoute,
-      ].map(v => clean(v).toUpperCase()).filter(Boolean))
+      new Set(
+        [
+          orderState1,
+          orderState2,
+          orderZone,
+          orderCity,
+          orderArea,
+          orderStation,
+          orderRoute,
+        ]
+          .map((v) => clean(v).toUpperCase())
+          .filter(Boolean)
+      )
     );
 
     const saleTypeQuery: any = {
@@ -245,7 +310,6 @@ export async function GET(
       { SCODE: 1, SGCODE: 1, SNAME: 1, TGCODE: 1 }
     ).lean();
 
-    /* IMPORTANT: SGCODE + SCODE is the key. SCODE alone is unsafe. */
     const saleTypeMap = new Map<string, any>();
     for (const saleType of saleTypes) {
       const code = clean(saleType.SCODE).toUpperCase();
@@ -253,7 +317,6 @@ export async function GET(
       if (code && sgcode) saleTypeMap.set(`${sgcode}:${code}`, saleType);
     }
 
-    /* GST first two digits -> SALETYPE STATE1 TGCODE */
     const gstStateMap = new Map<string, string>();
     for (const saleType of saleTypes) {
       const sgcode = clean(saleType.SGCODE).toUpperCase();
@@ -310,8 +373,121 @@ export async function GET(
     const status =
       customerDoc.STATUS === "N" || customerDoc.SALDR === "N" ? "N" : "Y";
 
+    /* ------------------------------------------------------ */
+    /* Financial Health: Credit Limit, Days Remaining, Bill Limit Alerts */
+    /* ------------------------------------------------------ */
+    const creditLimit = Number(customerDoc.CREDIT ?? 0);
+    const outstandingBalance = Number(customerDoc.BALANCE ?? customerDoc.FINAL ?? 0);
+    const dueDaysLimit = Number(customerDoc.DUEDAYS ?? customerDoc.DAYS ?? 0);
+    const billLimit = Number(
+      customerDoc.BILL_LIMIT ?? customerDoc.BILLLIMIT ?? customerDoc.MAXBILLS ?? 0
+    );
+
+    // 1. Credit Limit Exceeded Check
+    const isCreditLimitExceeded = creditLimit > 0 && outstandingBalance > creditLimit;
+    const excessCreditAmount = isCreditLimitExceeded ? Math.round(outstandingBalance - creditLimit) : 0;
+    const creditUtilization = creditLimit > 0 ? Math.round((outstandingBalance / creditLimit) * 100) : 0;
+
+    let totalPendingBills = 0;
+    let overdueBillsCount = 0;
+    let maxOverdueDays = 0;
+    let overdueAmount = 0;
+    let minDaysRemaining = 999;
+    let oldestPendingBillNo = "";
+    let oldestBillDate = "";
+
+    try {
+      if (orderKeys.length) {
+        const pendingInvoices: any[] = await Pendings.find({
+          ORD: { $in: orderKeys },
+        }).sort({ DDATE: 1 }).lean();
+
+        const todayMs = Date.now();
+        for (const inv of pendingInvoices) {
+          const bal = Math.abs(Number(inv.BALANCE ?? 0));
+          if (bal > 0) {
+            totalPendingBills++;
+            if (!oldestPendingBillNo) {
+              oldestPendingBillNo = String(inv.VCN || inv.VOUCHER || "");
+              oldestBillDate = String(inv.DDATE || "");
+            }
+
+            let billOverdueDays = 0;
+            if (inv.DDATE) {
+              const billMs = new Date(inv.DDATE).getTime();
+              const diffDays = Math.floor((todayMs - billMs) / (1000 * 60 * 60 * 24));
+              const allowedDays = dueDaysLimit > 0 ? dueDaysLimit : (Number(inv.DUEDAYS) || 0);
+
+              const remaining = allowedDays - diffDays;
+              if (remaining < minDaysRemaining) {
+                minDaysRemaining = remaining;
+              }
+
+              if (diffDays > allowedDays) {
+                billOverdueDays = diffDays - allowedDays;
+              }
+            }
+
+            if (billOverdueDays > 0 || Number(inv.DUEDAYS || 0) > 0) {
+              overdueBillsCount++;
+              overdueAmount += bal;
+              if (billOverdueDays > maxOverdueDays) {
+                maxOverdueDays = billOverdueDays;
+              }
+            }
+          }
+        }
+      }
+    } catch (pendingsErr) {
+      console.warn("Error calculating pendings overdue:", pendingsErr);
+    }
+
+    if (minDaysRemaining === 999) {
+      minDaysRemaining = dueDaysLimit;
+    }
+
+    // 2. Days Kam Bache / Days Expiring Soon Check
+    const isDaysKamBache = dueDaysLimit > 0 && minDaysRemaining <= 3 && minDaysRemaining >= 0 && totalPendingBills > 0;
+    const isDaysExpired = maxOverdueDays > 0;
+    const isDayLimitExceeded = isDaysKamBache || isDaysExpired;
+
+    // 3. Bill Limit / Number of Bills Exceeded Check
+    const isBillLimitExceeded = billLimit > 0 && totalPendingBills > billLimit;
+    const excessBillsCount = isBillLimitExceeded ? totalPendingBills - billLimit : 0;
+
+    const financialAlerts = {
+      // Credit Limit
+      creditLimit,
+      outstandingBalance,
+      isCreditLimitExceeded,
+      excessCreditAmount,
+      creditUtilization,
+
+      // Days Limit
+      dueDaysLimit,
+      minDaysRemaining: minDaysRemaining === 999 ? 0 : minDaysRemaining,
+      isDaysKamBache,
+      isDaysExpired,
+      isDayLimitExceeded,
+      maxOverdueDays,
+      overdueBillsCount,
+      overdueAmount,
+      oldestPendingBillNo,
+      oldestBillDate,
+
+      // Bill Limit
+      billLimit,
+      totalPendingBills,
+      isBillLimitExceeded,
+      excessBillsCount,
+    };
+
+   
+
     return NextResponse.json({
       ...customerDoc,
+      EMAIL: customerEmail,
+      MAILNAM: clean(customerDoc?.MAILNAM),
       ...groupInfo,
       STATUS: status,
       state1,
@@ -321,6 +497,23 @@ export async function GET(
       Area: area,
       station,
       route,
+
+      /* Financial alerts */
+      financialAlerts,
+      isCreditLimitExceeded,
+      excessCreditAmount,
+      creditUtilization,
+      isDayLimitExceeded,
+      isDaysKamBache,
+      isDaysExpired,
+      minDaysRemaining: minDaysRemaining === 999 ? 0 : minDaysRemaining,
+      maxOverdueDays,
+      overdueAmount,
+      overdueBillsCount,
+      billLimit,
+      totalPendingBills,
+      isBillLimitExceeded,
+      excessBillsCount,
 
       /* Original ORDER_K19 source codes retained for software logic/debugging. */
       _orderTerritory: order
@@ -349,7 +542,7 @@ export async function GET(
 }
 
 /* ---------------------------------------------------------- */
-/* PATCH - Save manual customer territory                      */
+/* PATCH - Update customer details, credit limit, terms, etc. */
 /* ---------------------------------------------------------- */
 export async function PATCH(
   request: Request,
@@ -366,9 +559,6 @@ export async function PATCH(
       );
     }
 
-    /* ------------------------------------------------------ */
-    /* Hierarchy access control                                */
-    /* ------------------------------------------------------ */
     const restriction = await getMrTerritoryRestriction();
     const existingCustomer: any = await Customer.findById(id).lean();
 
@@ -387,29 +577,154 @@ export async function PATCH(
     }
 
     const body = await request.json();
-    const allowedFields = [
-      "state1", "country", "ZONE", "CITY", "Area", "station", "route",
+
+    const numericFields = [
+      "CREDIT",
+      "DUEDAYS",
+      "DAYS",
+      "BILL_LIMIT",
+      "BILLLIMIT",
+      "MAXBILLS",
+      "BALANCE",
+      "DISCOUNT",
+      "OPNING",
+      "OPENING",
+      "CLBAL",
+      "DEBIT",
+      "FINAL",
     ] as const;
 
-    const updates: Record<string, string> = {};
-    for (const field of allowedFields) {
+    const stringFields = [
+      "PARNAM",
+      "REF",
+      "PHONE1",
+      "PHONE2",
+      "MAILNAM",
+      "EMAIL",
+      "STATUS",
+      "PRICE",
+      "PARADD",
+      "PARADD2",
+      "PARADD3",
+      "CITY",
+      "STATE",
+      "state1",
+      "country",
+      "PINCODE",
+      "PIN",
+      "Area",
+      "AREA",
+      "station",
+      "route",
+      "ROUT",
+      "ZONE",
+      "GSTNO",
+      "DLNO",
+      "DLNO2",
+      "PANNO",
+      "FSSAINO",
+      "DSM",
+      "SALESMAN",
+      "ASM",
+      "RSM",
+      "COMPANY",
+      "TINNO",
+      "STAXNO",
+      "CSTNO",
+      "GCODE",
+      "SCODE",
+    ] as const;
+
+    const updates: Record<string, any> = {};
+
+    // String fields
+    for (const field of stringFields) {
       if (Object.prototype.hasOwnProperty.call(body, field)) {
         updates[field] = clean(body[field]);
       }
     }
 
+    // Numeric fields
+    for (const field of numericFields) {
+      if (Object.prototype.hasOwnProperty.call(body, field)) {
+        const val = body[field];
+        if (val === "" || val === null || val === undefined) {
+          updates[field] = 0;
+        } else {
+          const num = Number(val);
+          updates[field] = isNaN(num) ? 0 : num;
+        }
+      }
+    }
+
+    // Field normalizations & synchronizations
     if (Object.prototype.hasOwnProperty.call(body, "country") && !updates.country) {
       updates.country = "India";
     }
 
+    if (Object.prototype.hasOwnProperty.call(body, "DUEDAYS")) {
+      updates.DAYS = updates.DUEDAYS;
+    } else if (Object.prototype.hasOwnProperty.call(body, "DAYS")) {
+      updates.DUEDAYS = updates.DAYS;
+    }
+
+    if (Object.prototype.hasOwnProperty.call(body, "BILL_LIMIT")) {
+      updates.BILLLIMIT = updates.BILL_LIMIT;
+      updates.MAXBILLS = updates.BILL_LIMIT;
+    } else if (Object.prototype.hasOwnProperty.call(body, "BILLLIMIT")) {
+      updates.BILL_LIMIT = updates.BILLLIMIT;
+      updates.MAXBILLS = updates.BILLLIMIT;
+    }
+
+    if (Object.prototype.hasOwnProperty.call(body, "state1")) {
+      updates.STATE = updates.state1;
+    } else if (Object.prototype.hasOwnProperty.call(body, "STATE")) {
+      updates.state1 = updates.STATE;
+    }
+
+    if (Object.prototype.hasOwnProperty.call(body, "Area")) {
+      updates.AREA = updates.Area;
+    } else if (Object.prototype.hasOwnProperty.call(body, "AREA")) {
+      updates.Area = updates.AREA;
+    }
+
+    if (Object.prototype.hasOwnProperty.call(body, "route")) {
+      updates.ROUT = updates.route;
+    } else if (Object.prototype.hasOwnProperty.call(body, "ROUT")) {
+      updates.route = updates.ROUT;
+    }
+
+    if (Object.prototype.hasOwnProperty.call(body, "STATUS")) {
+      const st = String(body.STATUS || "").trim().toUpperCase();
+      updates.STATUS = (st === "Y" || st === "ACTIVE" || st === "YES") ? "Y" : "N";
+    }
+
+    if (Object.prototype.hasOwnProperty.call(body, "OPNING")) {
+      updates.OPENING = updates.OPNING;
+    } else if (Object.prototype.hasOwnProperty.call(body, "OPENING")) {
+      updates.OPNING = updates.OPENING;
+    }
+
+    // Save incoming EMAIL explicitly to Customer.EMAIL and Marg support collection
+    let incomingEmail: string | undefined = undefined;
+    if (Object.prototype.hasOwnProperty.call(body, "EMAIL")) {
+      incomingEmail = clean(body.EMAIL).toUpperCase();
+      updates.EMAIL = incomingEmail;
+    }
+
+    // Never overwrite or corrupt MAILNAM with an email address
+    if (updates.MAILNAM && updates.MAILNAM.includes("@")) {
+      delete updates.MAILNAM;
+    }
+
     if (!Object.keys(updates).length) {
       return NextResponse.json(
-        { success: false, message: "No fields received to update" },
+        { success: false, message: "No valid fields received to update" },
         { status: 400 }
       );
     }
 
-    const updatedCustomer = await Customer.findByIdAndUpdate(
+    const updatedCustomer: any = await Customer.findByIdAndUpdate(
       id,
       { $set: updates },
       { new: true, runValidators: true, strict: false }
@@ -422,10 +737,99 @@ export async function PATCH(
       );
     }
 
+    // Also update peer financial year records if ORDNO/GSTNO matches
+    if (existingCustomer.ORDNO || existingCustomer.GSTNO) {
+      const peerFilter: any = { _id: { $ne: id } };
+      const orList: any[] = [];
+      if (clean(existingCustomer.ORDNO)) {
+        orList.push({ ORDNO: clean(existingCustomer.ORDNO), PARNAM: clean(existingCustomer.PARNAM) });
+      }
+      if (clean(existingCustomer.GSTNO) && clean(existingCustomer.GSTNO).length >= 10) {
+        orList.push({ GSTNO: clean(existingCustomer.GSTNO) });
+      }
+      if (orList.length > 0) {
+        peerFilter.$or = orList;
+        const { BALANCE, FINAL, ...peerUpdates } = updates;
+        if (Object.keys(peerUpdates).length > 0) {
+          await Customer.updateMany(peerFilter, { $set: peerUpdates }).catch((err) =>
+            console.error("Peer customer update error:", err)
+          );
+        }
+      }
+    }
+
+    // Also update Marg ERP support table (vfp_new_folder_support) for SNO = 2
+    const targetSupportCodes = Array.from(
+      new Set(
+        [
+          clean(existingCustomer.ORDNO),
+          clean(existingCustomer.CODEP),
+          clean(existingCustomer.SCODE),
+        ]
+          .map((c) => c.toUpperCase())
+          .filter(Boolean)
+      )
+    );
+
+    if (targetSupportCodes.length > 0 && incomingEmail && incomingEmail.includes("@")) {
+      try {
+        const supportCollection = mongoose.connection.collection("vfp_new_folder_support");
+        for (const code of targetSupportCodes) {
+          await supportCollection.updateOne(
+            {
+              LCODE: code,
+              SNO: { $in: [2, "2"] },
+            },
+            {
+              $set: {
+                LCODE: code,
+                SNO: 2,
+                REMARK: incomingEmail,
+                _vfpDeleted: false,
+              },
+            },
+            { upsert: true }
+          );
+        }
+      } catch (supportErr: any) {
+        console.warn("Failed to update support collection email:", supportErr.message);
+      }
+    }
+
+    // Check if updated values breach credit limit and record Notification
+    const currentBal = Number(updatedCustomer.BALANCE ?? updatedCustomer.FINAL ?? 0);
+    const currentCredit = Number(updatedCustomer.CREDIT ?? 0);
+    const isCreditLimitExceeded = currentCredit > 0 && currentBal > currentCredit;
+
+    if (isCreditLimitExceeded) {
+      try {
+        await Notification.create({
+          title: `⚠️ Credit Limit Exceeded: ${updatedCustomer.PARNAM}`,
+          message: `Customer ${updatedCustomer.PARNAM} has exceeded credit limit! Balance: ₹${currentBal.toLocaleString("en-IN")}, Limit: ₹${currentCredit.toLocaleString("en-IN")}.`,
+          type: "CREDIT_LIMIT_EXCEEDED",
+          category: "FINANCIAL",
+          severity: "warning",
+          targetRole: "All",
+          entityId: String(id),
+          actionUrl: `/dashboard/customers/view/${id}`,
+          metadata: {
+            customerId: id,
+            customerName: updatedCustomer.PARNAM,
+            balance: currentBal,
+            creditLimit: currentCredit,
+            dueDays: updatedCustomer.DUEDAYS,
+          },
+        });
+      } catch (notifErr) {
+        console.warn("Failed to create credit limit notification:", notifErr);
+      }
+    }
+
     return NextResponse.json({
       success: true,
-      message: "Customer ledger details saved successfully",
+      message: "Customer details and limits updated successfully",
       data: updatedCustomer,
+      isCreditLimitExceeded,
     });
   } catch (error: any) {
     console.error("PATCH /api/customers/[id] error:", error);

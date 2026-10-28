@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import connectDB from "@/lib/mongodb";
 import User from "@/models/User";
+import { isReservedSuperAdminEmail } from "@/lib/constants/superAdmin.constant";
 
 export const dynamic = "force-dynamic";
 
@@ -11,6 +12,15 @@ export async function POST(req: Request) {
 
     if (email) {
       const cleanEmail = String(email).toLowerCase().trim();
+
+      if (isReservedSuperAdminEmail(cleanEmail)) {
+        return NextResponse.json({
+          exists: true,
+          field: "email",
+          message: "This email address is reserved for the Super Administrator and cannot be used for registration.",
+        });
+      }
+
       const existingUser = await User.findOne({ email: cleanEmail });
       if (existingUser) {
         return NextResponse.json({

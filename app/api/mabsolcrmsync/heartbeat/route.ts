@@ -34,10 +34,20 @@ export async function POST(request: NextRequest) {
     const user = await getCurrentUser();
     const targetEmail = (email || user?.email || "").toLowerCase().trim();
 
-    // If account is suspended or deactivated, immediately reject heartbeat with 403
+    // If account or EXE sync is suspended, immediately reject heartbeat with 403
     if (targetEmail) {
       const dbUser = await User.findOne({ email: targetEmail });
       if (dbUser) {
+        if (dbUser.exeAccessSuspended) {
+          return NextResponse.json(
+            {
+              success: false,
+              exeSuspended: true,
+              error: `Desktop Agent (.EXE) sync access has been suspended for ${dbUser.name || dbUser.email} by Super Administrator.${dbUser.exeSuspendedReason ? ` Reason: ${dbUser.exeSuspendedReason}` : ""}`,
+            },
+            { status: 403 }
+          );
+        }
         const accessCheck = await validateUserLoginAccess(dbUser);
         if (!accessCheck.allowed) {
           return NextResponse.json(
@@ -77,15 +87,46 @@ export async function POST(request: NextRequest) {
         );
       }
       if (deviceId) {
-        if (!config.boundDeviceId) {
+        const cleanDevId = deviceId.trim().toLowerCase();
+        const authorizedDevices: any[] = Array.isArray(config.authorizedDevices) ? config.authorizedDevices : [];
+        const matchedDev = authorizedDevices.find((d: any) => (d.deviceId || "").trim().toLowerCase() === cleanDevId);
+
+        // Check if device is suspended by Super Admin
+        if (matchedDev && matchedDev.status === "suspended") {
+          return NextResponse.json(
+            {
+              success: false,
+              deviceSuspended: true,
+              error: `Workstation machine "${matchedDev.deviceName || deviceId}" has been suspended by Super Administrator.${matchedDev.suspendedReason ? ` Reason: ${matchedDev.suspendedReason}` : ""}`,
+            },
+            { status: 403 }
+          );
+        }
+
+        const isDeviceAuthorized =
+          Boolean(matchedDev && matchedDev.status === "active") ||
+          (config.boundDeviceId || "").trim().toLowerCase() === cleanDevId;
+
+        if (!config.boundDeviceId && authorizedDevices.length === 0) {
           await VfpConfig.updateOne(
             { _id: config._id },
             { $set: { boundDeviceId: deviceId, boundDeviceName: deviceName || "Operator Machine", boundAt: new Date() } }
           );
-        } else if (config.boundDeviceId !== deviceId) {
+        } else if (!isDeviceAuthorized) {
           return NextResponse.json(
-            { success: false, deviceMismatch: true, error: `License key already bound to machine: ${config.boundDeviceName || "First Device"}` },
+            {
+              success: false,
+              deviceMismatch: true,
+              requiresVerification: true,
+              error: `Machine "${deviceName || deviceId}" is not authorized. Please verify with email OTP.`,
+            },
             { status: 403 }
+          );
+        } else if (matchedDev) {
+          // Update lastSeenAt on active device
+          await VfpConfig.updateOne(
+            { _id: config._id, "authorizedDevices.deviceId": matchedDev.deviceId },
+            { $set: { "authorizedDevices.$.lastSeenAt": new Date(), "authorizedDevices.$.deviceName": deviceName || matchedDev.deviceName } }
           );
         }
       }

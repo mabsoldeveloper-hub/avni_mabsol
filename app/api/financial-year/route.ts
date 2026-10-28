@@ -30,9 +30,12 @@ export async function POST(req: Request) {
   try {
     await connectDB();
     const user = await getCurrentUser();
+    if (!user) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
     const data = await req.json();
 
-    if (user?.tenantId && !data.tenantId) {
+    if (user.tenantId && !data.tenantId) {
       data.tenantId = user.tenantId;
     }
 

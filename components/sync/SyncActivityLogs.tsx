@@ -13,6 +13,7 @@ export interface LogItem {
   status?: string;
   message?: string;
   error?: string;
+  importedCount?: number;
   createdAt?: string | Date;
 }
 
@@ -485,15 +486,25 @@ export default function SyncActivityLogs({
 
       {/* Short & Clean Logs List (Max-height reduced to 280px for a clean compact view) */}
       <div className="max-h-[280px] overflow-y-auto w-full box-border divide-y divide-slate-100" id="log-list">
-        {logs.length === 0 ? (
-          <div
-            className="text-center py-8 px-4 text-xs text-slate-400 bg-slate-50/30 m-3 border border-dashed border-slate-200 font-medium"
-            style={{ borderRadius: "12px" }}
-          >
-            No sync activity logs found.
-          </div>
-        ) : (
-          logs.map((log) => {
+        {(() => {
+          const displayableLogs = logs.filter((log) => {
+            if (log.status === "success" && log.importedCount === 0) return false;
+            if (log.message && /0 rows/i.test(log.message)) return false;
+            return true;
+          });
+
+          if (displayableLogs.length === 0) {
+            return (
+              <div
+                className="text-center py-8 px-4 text-xs text-slate-400 bg-slate-50/30 m-3 border border-dashed border-slate-200 font-medium"
+                style={{ borderRadius: "12px" }}
+              >
+                No sync activity logs found.
+              </div>
+            );
+          }
+
+          return displayableLogs.map((log) => {
             const logStatus = (log.status || "unknown").toLowerCase();
             const isSuccess = logStatus === "success";
             const isRunning = logStatus === "running";
@@ -559,8 +570,8 @@ export default function SyncActivityLogs({
                 </div>
               </div>
             );
-          })
-        )}
+          });
+        })()}
       </div>
 
       {/* OTP MODAL */}

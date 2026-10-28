@@ -9,6 +9,7 @@ import SalesDis from "@/models/SalesDis";
 import { consumeNextVoucherNumber, peekNextVoucherNumber } from "@/lib/voucherSeriesHelper";
 import { getCurrentUser } from "@/lib/auth";
 import { applyStockMovement } from "@/lib/stockService";
+import { escapeRegex } from "@/app/api/_utils/sanitize";
 
 export const dynamic = "force-dynamic";
 
@@ -109,7 +110,7 @@ export async function GET(req: NextRequest) {
     let query: any = {};
 
     if (search) {
-      const regex = new RegExp(search, "i");
+      const regex = new RegExp(escapeRegex(search), "i");
       query.$or = [
         { vcn: regex },
         { vendorName: regex },

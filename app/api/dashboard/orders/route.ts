@@ -120,6 +120,7 @@ function buildFilter(params: FilterParams, fields: FieldMap) {
 }
 
 import { getCompanyVfpFilter, combineFilters } from "@/lib/companyVfpHelper";
+import { getFYDateRange, buildFYDateQuery } from "@/lib/financialYearHelper";
 
 export async function GET(request: Request) {
     try {
@@ -127,6 +128,10 @@ export async function GET(request: Request) {
 
         const { searchParams } = new URL(request.url);
         const companyVfpMatch = await getCompanyVfpFilter(searchParams);
+        const fyRange = await getFYDateRange(searchParams);
+        const { startDate, endDate } = fyRange;
+        const fyDateMatch = buildFYDateQuery("DATE", startDate, endDate);
+        const fyPendMatch = buildFYDateQuery("DDATE", startDate, endDate);
         const restriction = await getMrTerritoryRestriction();
 
         let mrMdisMatch: any = {};
@@ -176,7 +181,7 @@ export async function GET(request: Request) {
         };
 
         // Per-table filter objects (field names differ table to table)
-        const mdisFilter = combineFilters(
+        let mdisFilter = combineFilters(
             buildFilter(filters, {
                 customer: "CODEP",
                 invoice: "VCN",
@@ -190,9 +195,9 @@ export async function GET(request: Request) {
         );
 
         // "Real order" version of mdisFilter — excludes TYPE:"V" void rows.
-        const mdisRealOrderFilter = combineFilters(mdisFilter, REAL_ORDER_FILTER, companyVfpMatch);
+        let mdisRealOrderFilter = combineFilters(mdisFilter, REAL_ORDER_FILTER, companyVfpMatch);
 
-        const disFilter = combineFilters(
+        let disFilter = combineFilters(
             buildFilter(filters, {
                 customer: "CODEP",
                 invoice: "VCN",
@@ -205,7 +210,7 @@ export async function GET(request: Request) {
             companyVfpMatch
         );
 
-        const subdisFilter = combineFilters(
+        let subdisFilter = combineFilters(
             buildFilter(filters, {
                 customer: "CODEP",
                 invoice: "VCN",
@@ -218,7 +223,7 @@ export async function GET(request: Request) {
             companyVfpMatch
         );
 
-        const gledgerFilter = combineFilters(
+        let gledgerFilter = combineFilters(
             buildFilter(filters, {
                 customer: "CODE", // GLEDGER uses CODE, not CODEP
                 date: "DATE",
@@ -228,7 +233,7 @@ export async function GET(request: Request) {
             companyVfpMatch
         );
 
-        const pendFilter = combineFilters(
+        let pendFilter = combineFilters(
             buildFilter(filters, {
                 customer: "ORD", // PEND uses ORD, not CODEP
                 invoice: "VCN",
@@ -240,6 +245,15 @@ export async function GET(request: Request) {
             mrPendMatch,
             companyVfpMatch
         );
+
+        if (!filters.dateFrom && !filters.dateTo) {
+            mdisFilter = combineFilters(mdisFilter, fyDateMatch);
+            mdisRealOrderFilter = combineFilters(mdisRealOrderFilter, fyDateMatch);
+            disFilter = combineFilters(disFilter, fyDateMatch);
+            subdisFilter = combineFilters(subdisFilter, fyDateMatch);
+            gledgerFilter = combineFilters(gledgerFilter, fyDateMatch);
+            pendFilter = combineFilters(pendFilter, fyPendMatch);
+        }
 
         const orderFilter = combineFilters(
             buildFilter(filters, {
@@ -262,6 +276,22 @@ export async function GET(request: Request) {
         const today = now.toISOString().slice(0, 10);
         const { start: monthStart, end: monthEnd } = monthBounds(now);
         const { start: yearStart, end: yearEnd } = yearBounds(now);
+
+        const isTodayInsideFY = !startDate || !endDate || (today >= startDate && today <= endDate);
+        const todayQuery = isTodayInsideFY ? { DATE: today } : { _id: { $exists: false } };
+
+        let monthQuery: Record<string, any>;
+        if (startDate && endDate) {
+            const mStart = monthStart > startDate ? monthStart : startDate;
+            const mEnd = today < endDate ? today : endDate;
+            monthQuery = mStart <= mEnd ? { DATE: { $gte: mStart, $lte: mEnd } } : { _id: { $exists: false } };
+        } else {
+            monthQuery = { DATE: { $gte: monthStart, $lte: monthEnd } };
+        }
+
+        const yearQuery = startDate && endDate
+            ? { DATE: { $gte: startDate, $lte: endDate } }
+            : { DATE: { $gte: yearStart, $lte: yearEnd } };
 
         // Non-date filters only (customer/invoice/area/route/dsm), so they can
         // be combined with the fixed today/month/year windows below.
@@ -314,17 +344,11 @@ export async function GET(request: Request) {
             // Total Orders — excludes TYPE:"V" void/unposted vouchers now.
             SalesMdis.countDocuments(mdisRealOrderFilter),
 
-            SalesMdis.countDocuments({ ...mdisNonDateRealOrderFilter, DATE: today }),
+            SalesMdis.countDocuments(combineFilters(mdisNonDateRealOrderFilter, todayQuery, companyVfpMatch)),
 
-            SalesMdis.countDocuments({
-                ...mdisNonDateRealOrderFilter,
-                DATE: { $gte: monthStart, $lte: monthEnd },
-            }),
+            SalesMdis.countDocuments(combineFilters(mdisNonDateRealOrderFilter, monthQuery, companyVfpMatch)),
 
-            SalesMdis.countDocuments({
-                ...mdisNonDateRealOrderFilter,
-                DATE: { $gte: yearStart, $lte: yearEnd },
-            }),
+            SalesMdis.countDocuments(combineFilters(mdisNonDateRealOrderFilter, yearQuery, companyVfpMatch)),
 
             SalesMdis.aggregate([
                 { $match: mdisRealOrderFilter },

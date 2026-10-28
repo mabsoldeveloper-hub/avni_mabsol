@@ -6,5 +6,19 @@ export async function register() {
     } catch (err: any) {
       console.error("[Instrumentation Error - AutoSync Scheduler]:", err.message);
     }
+
+    try {
+      const { startCustomerAlertScheduler } = await import("@/lib/services/customerAlertScheduler");
+      await startCustomerAlertScheduler();
+    } catch (err: any) {
+      console.error("[Instrumentation Error - CustomerAlert Scheduler]:", err.message);
+    }
+
+    try {
+      const { startBackupScheduler } = await import("@/lib/services/backupScheduler.service");
+      startBackupScheduler();
+    } catch (err: any) {
+      console.error("[Instrumentation Error - Backup Scheduler]:", err.message);
+    }
   }
 }

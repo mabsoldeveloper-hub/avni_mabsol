@@ -3,12 +3,18 @@ import connectDB from "@/lib/mongodb";
 import MrTerritory from "@/models/MrTerritory";
 import User from "@/models/User";
 
+import { getCurrentUser } from "@/lib/auth";
+
 // ==============================
 // GET - All MRs Summary (Territory Coverage Overview)
 // ==============================
 export async function GET(req: NextRequest) {
   try {
     await connectDB();
+    const currentUser = await getCurrentUser();
+    if (!currentUser) {
+      return NextResponse.json({ success: false, message: "Unauthorized" }, { status: 401 });
+    }
 
     const { searchParams } = new URL(req.url);
     const companyCode = searchParams.get("companyCode") || "";

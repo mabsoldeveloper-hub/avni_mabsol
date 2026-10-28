@@ -83,4 +83,8 @@ export interface ICompanyListItem {
   city?: string;
   state?: string;
   status?: string;
+  isHeadOffice?: boolean;
+  parentCompanyId?: string | null;
+  enabledModules?: string[];
+  branches?: ICompanyListItem[];
 }

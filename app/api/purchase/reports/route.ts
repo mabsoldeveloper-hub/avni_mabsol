@@ -7,7 +7,8 @@ import PurchasePayment from "@/models/PurchasePayment";
 import SalesMdis from "@/models/SalesMdis";
 import Pendings from "@/models/Pendings";
 import Customer from "@/models/Customer";
-import { getFYDateRange } from "@/lib/financialYearHelper";
+import { getFYDateRange, buildFYDateQuery } from "@/lib/financialYearHelper";
+import { getCompanyVfpFilter, combineFilters } from "@/lib/companyVfpHelper";
 
 export const dynamic = "force-dynamic";
 
@@ -24,6 +25,8 @@ export async function GET(req: Request) {
     const eDate = endDate || fyRange.endDate || "";
     const vendorName = searchParams.get("vendorName") || "";
     const status = searchParams.get("status") || "ALL";
+
+    const companyVfpMatch = await getCompanyVfpFilter(searchParams);
 
     // 1. Build Base Date Filter
     let dateFilter: any = {};
@@ -55,10 +58,14 @@ export async function GET(req: Request) {
       if (key) seenBillNos.add(key);
     });
 
-    // Fetch legacy VFP bills from SalesMdis
-    const vfpBillQuery: any = { TYPE: { $in: ["P", "PURCHASE"] } };
-    if (vendorRegex) vfpBillQuery.NAME = vendorRegex;
-    if (Object.keys(dateFilter).length > 0) vfpBillQuery.DATE = dateFilter;
+    // Fetch legacy VFP bills from SalesMdis strictly matching active FY & company
+    const vfpDateMatch = buildFYDateQuery("DATE", sDate, eDate);
+    const vfpBillQuery = combineFilters(
+      { TYPE: { $in: ["P", "PURCHASE"] } },
+      vendorRegex ? { NAME: vendorRegex } : {},
+      vfpDateMatch,
+      companyVfpMatch
+    );
 
     const vfpBills = await SalesMdis.find(vfpBillQuery).sort({ DATE: -1 }).limit(200).lean();
 

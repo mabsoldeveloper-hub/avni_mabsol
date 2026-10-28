@@ -31,7 +31,7 @@ function AuditLogsContent() {
           className="p-2.5 rounded-xl bg-white border border-slate-200/80 text-slate-600 hover:text-slate-900 hover:border-slate-300 shadow-2xs transition-all cursor-pointer disabled:opacity-50 self-start sm:self-auto"
           title="Refresh audit logs"
         >
-          <FaSync className={`text-xs ${loading ? "animate-spin text-blue-600" : ""}`} />
+          <FaSync className={`text-xs ${loading ? "animate-spin text-indigo-600" : ""}`} />
         </button>
       </div>
 
@@ -121,7 +121,7 @@ export default function AuditLogsPage() {
       fallback={
         <div className="min-h-screen bg-[#f8fafc] flex items-center justify-center">
           <div className="flex items-center gap-2 text-slate-500 text-sm font-semibold">
-            <FaSync className="animate-spin text-blue-600" />
+            <FaSync className="animate-spin text-indigo-600" />
             Loading audit logs...
           </div>
         </div>

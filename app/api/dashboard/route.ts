@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import mongoose from "mongoose";
 import dbConnect from "@/lib/mongodb";
 import { combineFilters, getCompanyVfpFilter } from "@/lib/companyVfpHelper";
 
@@ -138,6 +139,26 @@ function daysFromNowStr(days: number) {
   return d.toISOString().slice(0, 10);
 }
 
+function daysAgoStr(days: number) {
+  const d = new Date();
+  d.setDate(d.getDate() - days);
+  return d.toISOString().slice(0, 10);
+}
+
+// In-memory cache for customerCodes so switching FY doesn't re-query Order collection every time
+const customerCodesCache = new Map<string, { codes: string[]; timestamp: number }>();
+async function getCachedCustomerCodes(filter: any): Promise<string[]> {
+  const key = JSON.stringify(filter);
+  const hit = customerCodesCache.get(key);
+  if (hit && Date.now() - hit.timestamp < 120_000) {
+    return hit.codes;
+  }
+  const orders = await Order.find(filter, { [ORDER_CUSTOMER_JOIN_FIELD]: 1 }).lean();
+  const codes = orders.map((o: any) => o[ORDER_CUSTOMER_JOIN_FIELD]).filter(Boolean);
+  customerCodesCache.set(key, { codes, timestamp: Date.now() });
+  return codes;
+}
+
 async function sumField(model: any, match: Record<string, any>, field: string) {
   const [row] = await model.aggregate([
     { $match: match },
@@ -167,27 +188,76 @@ async function sumField(model: any, match: Record<string, any>, field: string) {
 import { getMrTerritoryRestriction } from "@/lib/mrTerritoryHelper";
 import { getFYDateRange, buildFYDateQuery } from "@/lib/financialYearHelper";
 import { getCurrentUser } from "@/lib/auth";
+import { fetchWithServerCache } from "@/lib/serverCache";
 
 export async function GET(req: Request) {
   await dbConnect();
   const currentUser = await getCurrentUser();
 
-  const userCountQuery: any = {};
-  if (currentUser?.tenantId) {
-    userCountQuery.tenantId = currentUser.tenantId;
-  } else if (currentUser?.companyId) {
-    userCountQuery.companyId = currentUser.companyId;
-  }
-
-  const companyCountQuery: any = {};
-  if (currentUser?.tenantId) {
-    companyCountQuery.tenantId = currentUser.tenantId;
-  } else if (currentUser?.companyId) {
-    companyCountQuery._id = currentUser.companyId;
-  }
-
   const { searchParams } = new URL(req.url);
   const companyId = searchParams.get("companyId");
+  const fyId = searchParams.get("fyId") || "ALL";
+  const startDateParam = searchParams.get("startDate") || "";
+  const endDateParam = searchParams.get("endDate") || "";
+  const refresh = searchParams.get("refresh") === "true" || searchParams.get("refresh") === "1";
+
+  const cacheKey = `dashboard:${companyId || "ALL"}:${fyId}:${startDateParam}:${endDateParam}:${currentUser?._id || "anon"}`;
+
+  const payload = await fetchWithServerCache(
+    cacheKey,
+    30, // 30 seconds server-side cache
+    async () => {
+
+  // Company & User Isolation
+  const userCompanyId = currentUser?.companyId
+    ? typeof currentUser.companyId === "object" && (currentUser.companyId as any)._id
+      ? String((currentUser.companyId as any)._id)
+      : String(currentUser.companyId)
+    : null;
+
+  const userCompany = userCompanyId
+    ? typeof currentUser?.companyId === "object" && (currentUser.companyId as any)?.companyName
+      ? (currentUser.companyId as any)
+      : await Company.findById(userCompanyId).lean()
+    : null;
+
+  const isChildBranchUser = Boolean(userCompany && !userCompany.isHeadOffice);
+
+  // If logged-in user belongs to a child branch, lock to their company strictly.
+  // Otherwise, respect searchParams companyId if provided.
+  let targetCompanyId: string | null = null;
+  if (isChildBranchUser && userCompany) {
+    targetCompanyId = String((userCompany as any)._id || userCompanyId);
+  } else if (companyId && companyId !== "ALL" && companyId !== "null" && companyId !== "undefined") {
+    targetCompanyId = companyId;
+  } else if (userCompanyId && !companyId) {
+    if (userCompany?.isHeadOffice) {
+      targetCompanyId = null;
+    } else {
+      targetCompanyId = userCompanyId;
+    }
+  }
+
+  const userCountQuery: any = {};
+  const companyCountQuery: any = {};
+
+  if (targetCompanyId && mongoose.Types.ObjectId.isValid(targetCompanyId)) {
+    const targetObjId = new mongoose.Types.ObjectId(targetCompanyId);
+    userCountQuery.companyId = targetObjId;
+    userCountQuery.status = { $ne: "Inactive" };
+    companyCountQuery._id = targetObjId;
+  } else if (userCompany?.isHeadOffice && (!companyId || companyId === "ALL")) {
+    const childCompanies = await Company.find({ parentCompanyId: userCompany._id }, { _id: 1 }).lean();
+    const allCompIds = [userCompany._id, ...childCompanies.map((c: any) => c._id)];
+    userCountQuery.companyId = { $in: allCompIds };
+    userCountQuery.status = { $ne: "Inactive" };
+    companyCountQuery._id = { $in: allCompIds };
+  } else if (currentUser?.tenantId) {
+    userCountQuery.tenantId = currentUser.tenantId;
+    userCountQuery.status = { $ne: "Inactive" };
+    companyCountQuery.tenantId = currentUser.tenantId;
+  }
+
   const companyVfpMatch = await getCompanyVfpFilter(searchParams);
 
   const fyRange = await getFYDateRange(searchParams);
@@ -341,12 +411,39 @@ export async function GET(req: Request) {
         : combineFilters(dateMatchDIS, companyVfpMatch, { CODEP: "NONE_MATCH" })
     : combineFilters(dateMatchDIS, companyVfpMatch);
 
+  const near30 = daysFromNowStr(30);
+  const near60 = daysFromNowStr(60);
   const near90 = daysFromNowStr(90);
+  const daysAgo30 = daysAgoStr(30);
+  const daysAgo60 = daysAgoStr(60);
+  const daysAgo90 = daysAgoStr(90);
 
-  const customerOrders = await Order.find(baseCustomerFilter, { [ORDER_CUSTOMER_JOIN_FIELD]: 1 }).lean();
-  const customerCodes = customerOrders
-    .map((o: any) => o[ORDER_CUSTOMER_JOIN_FIELD])
-    .filter(Boolean);
+  // Month & year ranges for sales
+  const monthRangeStart =
+    calendarMonthStart > (startDate || "") ? calendarMonthStart : (startDate || calendarMonthStart);
+  const monthRangeEnd =
+    today < (endDate || "") ? today : (endDate || today);
+  const yearRangeStart = startDate && endDate ? startDate : yearStart;
+  const yearRangeEnd = startDate && endDate ? endDate : today;
+
+  // Last month date range
+  const dLastMonth = new Date();
+  dLastMonth.setMonth(dLastMonth.getMonth() - 1);
+  const lmYear = dLastMonth.getFullYear();
+  const lmMonth = dLastMonth.getMonth() + 1;
+  const lmStart = `${lmYear}-${String(lmMonth).padStart(2, "0")}-01`;
+  const lastDay = new Date(Date.UTC(lmYear, lmMonth, 0)).getUTCDate();
+  const lmEnd = `${lmYear}-${String(lmMonth).padStart(2, "0")}-${String(lastDay).padStart(2, "0")}`;
+  const lmRangeStart = startDate && endDate ? (lmStart > startDate ? lmStart : startDate) : lmStart;
+  const lmRangeEnd = startDate && endDate ? (lmEnd < endDate ? lmEnd : endDate) : lmEnd;
+
+  // Web purchase date filters
+  const billDateMatch = buildFYDateQuery("billDate", startDate, endDate);
+  const poDateMatch = buildFYDateQuery("poDate", startDate, endDate);
+  const returnDateMatch = buildFYDateQuery("returnDate", startDate, endDate);
+  const paymentDateMatch = buildFYDateQuery("paymentDate", startDate, endDate);
+
+  const customerCodes = await getCachedCustomerCodes(baseCustomerFilter);
 
   const GLEDGER_COLLECTION_FILTER = combineFilters(
     GLEDGER_BASE_FILTER,
@@ -363,97 +460,444 @@ export async function GET(req: Request) {
   );
 
   const [
-    // ---- KPI cards ----
-    totalSales,
-    todaySales,
-    monthlySales,
-    yearlySales,
-    totalOutstanding,
-    salesOutstanding,
-    purchaseOutstanding,
-    overdueAmount,
-    totalCollections,
-    totalCustomers,
-    totalProducts,
-    currentStock,
-    nearExpiryBatches,
-    expiredBatches,
-    totalBatches,
+    // 1. Consolidated SalesMdis Summary
+    salesMdisSummaryRaw,
+    // 2. Consolidated Product Summary
+    productSummaryRaw,
+    // 3. Consolidated ProductBatch Summary
+    batchSummaryRaw,
+    // 4. Consolidated Debtor Summary (Pendings)
+    debtorSummaryRaw,
+    // 5. Consolidated Creditor Summary (Pendings)
+    creditorSummaryRaw,
 
-    // ---- NEW: 5 new KPI cards ----
+    // Collections from GLedger
+    totalCollections,
+
+    // Master counts & Ledger KPIs
     totalUsers,
     totalCompanies,
     totalCredit,
     totalDebit,
     activeCustomers,
+    totalCustomers,
 
-    // ---- charts ----
+    // Charts
     salesTrend,
     collectionTrend,
-    outstandingAgingRaw,
     topProducts,
-    stockStatusRaw,
-    expiryStatusRaw,
     saleTypeDist,
     topCustomersRaw,
-
-    // ---- purchase charts helpers ----
     topSuppliersRaw,
-    creditorAgingRaw,
     purchaseTrendRaw,
-
-    // ---- analytics helpers ----
-    invoiceCount,
+    invoiceCountRaw,
     disMarginRow,
-    stockValueRow,
-    expiredStockValueRow,
-    nearExpiryStockValueRow,
-    lastMonthSales,
-  ] = await Promise.all([
-    sumField(SalesMdis, mdisSaleFilter, "FINAL"),
-    sumField(SalesMdis, combineFilters(mdisBaseFilter, todayMatch), "FINAL"),
-    sumField(SalesMdis, combineFilters(mdisBaseFilter, monthMatch), "FINAL"),
-    sumField(SalesMdis, combineFilters(mdisBaseFilter, yearMatch), "FINAL"),
-    sumField(Pendings, combineFilters({ ACGROUP: /^C/i, BALANCE: { $gt: 0 } }, pendFilter), "BALANCE"),
-    sumField(Pendings, combineFilters({ ACGROUP: /^C/i, INVTYPE: "I", BALANCE: { $gt: 0 } }, pendFilter), "BALANCE"),
-    (async () => {
-      const baseF: any = combineFilters({ ACGROUP: /^D/i, INVTYPE: "I", BALANCE: { $lt: 0 } }, dateMatchPEND, companyVfpMatch);
-      if (restriction.isMrRestricted) {
-        if (restriction.allowedOrdnos && restriction.allowedOrdnos.length > 0) {
-          baseF.ORD = { $in: restriction.allowedOrdnos };
-        } else {
-          baseF.ORD = "NONE_MATCH";
-        }
-      }
-      const credRows = await Pendings.find(baseF).lean();
-      return credRows.reduce(
-        (sum: number, r: any) => sum + Math.abs(Number(r.BALANCE || 0)),
-        0
-      );
-    })(),
-    sumField(Pendings, combineFilters({ ACGROUP: /^C/i, BALANCE: { $gt: 0 }, DDATE: { $lt: today } }, pendFilter), "BALANCE"),
-    sumField(GLedger, GLEDGER_COLLECTION_FILTER, "CREDIT"),
-    Order.countDocuments(orderFilter),
-    Product.countDocuments(productFilter),
-    sumField(Product, productFilter, "BALANCE"),
-    ProductBatch.countDocuments(combineFilters(batchFilter, { EXP: { $ne: null, $gte: today, $lte: near90 } })),
-    ProductBatch.countDocuments(combineFilters(batchFilter, { EXP: { $ne: null, $lt: today } })),
-    ProductBatch.countDocuments(batchFilter),
 
-    // ---- NEW: 5 new KPI queries ----
-    // 1. Total Users
+    // Web purchases (parallelized into main fetch)
+    webBills,
+    totalPurchaseOrders,
+    webReturns,
+    webPayments,
+    vfpPurchasesVal,
+    vfpReturnsVal,
+    salesReturns,
+  ] = await Promise.all([
+    // 1. Single-pass SalesMdis Summary
+    SalesMdis.aggregate([
+      { $match: mdisSaleFilter },
+      {
+        $group: {
+          _id: null,
+          totalSales: { $sum: { $convert: { input: "$FINAL", to: "double", onError: 0, onNull: 0 } } },
+          todaySales: {
+            $sum: {
+              $cond: [
+                isTodayInsideFY ? { $eq: ["$DATE", today] } : false,
+                { $convert: { input: "$FINAL", to: "double", onError: 0, onNull: 0 } },
+                0,
+              ],
+            },
+          },
+          monthlySales: {
+            $sum: {
+              $cond: [
+                monthRangeStart <= monthRangeEnd
+                  ? { $and: [{ $gte: ["$DATE", monthRangeStart] }, { $lte: ["$DATE", monthRangeEnd] }] }
+                  : false,
+                { $convert: { input: "$FINAL", to: "double", onError: 0, onNull: 0 } },
+                0,
+              ],
+            },
+          },
+          yearlySales: {
+            $sum: {
+              $cond: [
+                { $and: [{ $gte: ["$DATE", yearRangeStart] }, { $lte: ["$DATE", yearRangeEnd] }] },
+                { $convert: { input: "$FINAL", to: "double", onError: 0, onNull: 0 } },
+                0,
+              ],
+            },
+          },
+          lastMonthSales: {
+            $sum: {
+              $cond: [
+                lmRangeStart <= lmRangeEnd
+                  ? { $and: [{ $gte: ["$DATE", lmRangeStart] }, { $lte: ["$DATE", lmRangeEnd] }] }
+                  : false,
+                { $convert: { input: "$FINAL", to: "double", onError: 0, onNull: 0 } },
+                0,
+              ],
+            },
+          },
+        },
+      },
+    ]),
+
+    // 2. Single-pass Product Summary (Replaces Product.find with 15k rows + count + sum + value)
+    Product.aggregate([
+      { $match: productFilter },
+      {
+        $group: {
+          _id: null,
+          totalProducts: { $sum: 1 },
+          totalStock: { $sum: { $convert: { input: "$BALANCE", to: "double", onError: 0, onNull: 0 } } },
+          stockValue: {
+            $sum: {
+              $multiply: [
+                { $convert: { input: "$BALANCE", to: "double", onError: 0, onNull: 0 } },
+                { $convert: { input: "$MRP", to: "double", onError: 0, onNull: 0 } },
+              ],
+            },
+          },
+          negativeStock: {
+            $sum: {
+              $cond: [
+                { $lt: [{ $convert: { input: "$BALANCE", to: "double", onError: 0, onNull: 0 } }, 0] },
+                1,
+                0,
+              ],
+            },
+          },
+          zeroStock: {
+            $sum: {
+              $cond: [
+                { $eq: [{ $convert: { input: "$BALANCE", to: "double", onError: 0, onNull: 0 } }, 0] },
+                1,
+                0,
+              ],
+            },
+          },
+          lowStock: {
+            $sum: {
+              $cond: [
+                {
+                  $and: [
+                    { $gt: [{ $convert: { input: "$BALANCE", to: "double", onError: 0, onNull: 0 } }, 0] },
+                    { $gt: [{ $convert: { input: "$MINIMUM", to: "double", onError: 0, onNull: 0 } }, 0] },
+                    {
+                      $lte: [
+                        { $convert: { input: "$BALANCE", to: "double", onError: 0, onNull: 0 } },
+                        { $convert: { input: "$MINIMUM", to: "double", onError: 0, onNull: 0 } },
+                      ],
+                    },
+                  ],
+                },
+                1,
+                0,
+              ],
+            },
+          },
+          inStock: {
+            $sum: {
+              $cond: [
+                {
+                  $and: [
+                    { $gt: [{ $convert: { input: "$BALANCE", to: "double", onError: 0, onNull: 0 } }, 0] },
+                    {
+                      $or: [
+                        { $lte: [{ $convert: { input: "$MINIMUM", to: "double", onError: 0, onNull: 0 } }, 0] },
+                        {
+                          $gt: [
+                            { $convert: { input: "$BALANCE", to: "double", onError: 0, onNull: 0 } },
+                            { $convert: { input: "$MINIMUM", to: "double", onError: 0, onNull: 0 } },
+                          ],
+                        },
+                      ],
+                    },
+                  ],
+                },
+                1,
+                0,
+              ],
+            },
+          },
+        },
+      },
+    ]),
+
+    // 3. Single-pass ProductBatch Summary (Replaces 6 separate queries)
+    ProductBatch.aggregate([
+      { $match: batchFilter },
+      {
+        $group: {
+          _id: null,
+          totalBatches: { $sum: 1 },
+          expiredBatches: {
+            $sum: {
+              $cond: [{ $and: [{ $ne: ["$EXP", null] }, { $lt: ["$EXP", today] }] }, 1, 0],
+            },
+          },
+          nearExpiryBatches: {
+            $sum: {
+              $cond: [
+                { $and: [{ $ne: ["$EXP", null] }, { $gte: ["$EXP", today] }, { $lte: ["$EXP", near90] }] },
+                1,
+                0,
+              ],
+            },
+          },
+          expiredStockValue: {
+            $sum: {
+              $cond: [
+                { $and: [{ $ne: ["$EXP", null] }, { $lt: ["$EXP", today] }] },
+                {
+                  $multiply: [
+                    { $convert: { input: "$BALANCE", to: "double", onError: 0, onNull: 0 } },
+                    { $convert: { input: "$MRP", to: "double", onError: 0, onNull: 0 } },
+                  ],
+                },
+                0,
+              ],
+            },
+          },
+          nearExpiryStockValue: {
+            $sum: {
+              $cond: [
+                { $and: [{ $ne: ["$EXP", null] }, { $gte: ["$EXP", today] }, { $lte: ["$EXP", near90] }] },
+                {
+                  $multiply: [
+                    { $convert: { input: "$BALANCE", to: "double", onError: 0, onNull: 0 } },
+                    { $convert: { input: "$MRP", to: "double", onError: 0, onNull: 0 } },
+                  ],
+                },
+                0,
+              ],
+            },
+          },
+          expiredBucket: {
+            $sum: {
+              $cond: [{ $and: [{ $ne: ["$EXP", null] }, { $lt: ["$EXP", today] }] }, 1, 0],
+            },
+          },
+          b0_30: {
+            $sum: {
+              $cond: [
+                { $and: [{ $ne: ["$EXP", null] }, { $gte: ["$EXP", today] }, { $lte: ["$EXP", near30] }] },
+                1,
+                0,
+              ],
+            },
+          },
+          b31_90: {
+            $sum: {
+              $cond: [
+                { $and: [{ $ne: ["$EXP", null] }, { $gt: ["$EXP", near30] }, { $lte: ["$EXP", near90] }] },
+                1,
+                0,
+              ],
+            },
+          },
+          b90Plus: {
+            $sum: {
+              $cond: [{ $and: [{ $ne: ["$EXP", null] }, { $gt: ["$EXP", near90] }] }, 1, 0],
+            },
+          },
+          noExpiry: {
+            $sum: {
+              $cond: [{ $or: [{ $eq: ["$EXP", null] }, { $not: ["$EXP"] }] }, 1, 0],
+            },
+          },
+        },
+      },
+    ]),
+
+    // 4. Single-pass Debtor Summary (Replaces Pendings.find for debtors + 3 separate sums)
+    Pendings.aggregate([
+      { $match: combineFilters({ ACGROUP: /^C/i, BALANCE: { $gt: 0 } }, pendFilter) },
+      {
+        $group: {
+          _id: null,
+          totalOutstanding: { $sum: { $convert: { input: "$BALANCE", to: "double", onError: 0, onNull: 0 } } },
+          salesOutstanding: {
+            $sum: {
+              $cond: [
+                { $eq: ["$INVTYPE", "I"] },
+                { $convert: { input: "$BALANCE", to: "double", onError: 0, onNull: 0 } },
+                0,
+              ],
+            },
+          },
+          overdueAmount: {
+            $sum: {
+              $cond: [
+                { $and: [{ $ne: ["$DDATE", null] }, { $lt: ["$DDATE", today] }] },
+                { $convert: { input: "$BALANCE", to: "double", onError: 0, onNull: 0 } },
+                0,
+              ],
+            },
+          },
+          overdueCount: {
+            $sum: {
+              $cond: [
+                { $and: [{ $ne: ["$DDATE", null] }, { $lt: ["$DDATE", today] }] },
+                1,
+                0,
+              ],
+            },
+          },
+          current: {
+            $sum: {
+              $cond: [
+                { $or: [{ $eq: ["$DDATE", null] }, { $gte: ["$DDATE", today] }] },
+                { $convert: { input: { $ifNull: ["$FINAL", "$BALANCE"] }, to: "double", onError: 0, onNull: 0 } },
+                0,
+              ],
+            },
+          },
+          b1_30: {
+            $sum: {
+              $cond: [
+                { $and: [{ $ne: ["$DDATE", null] }, { $lt: ["$DDATE", today] }, { $gte: ["$DDATE", daysAgo30] }] },
+                { $convert: { input: { $ifNull: ["$FINAL", "$BALANCE"] }, to: "double", onError: 0, onNull: 0 } },
+                0,
+              ],
+            },
+          },
+          b31_60: {
+            $sum: {
+              $cond: [
+                { $and: [{ $ne: ["$DDATE", null] }, { $lt: ["$DDATE", daysAgo30] }, { $gte: ["$DDATE", daysAgo60] }] },
+                { $convert: { input: { $ifNull: ["$FINAL", "$BALANCE"] }, to: "double", onError: 0, onNull: 0 } },
+                0,
+              ],
+            },
+          },
+          b61_90: {
+            $sum: {
+              $cond: [
+                { $and: [{ $ne: ["$DDATE", null] }, { $lt: ["$DDATE", daysAgo60] }, { $gte: ["$DDATE", daysAgo90] }] },
+                { $convert: { input: { $ifNull: ["$FINAL", "$BALANCE"] }, to: "double", onError: 0, onNull: 0 } },
+                0,
+              ],
+            },
+          },
+          b90Plus: {
+            $sum: {
+              $cond: [
+                { $and: [{ $ne: ["$DDATE", null] }, { $lt: ["$DDATE", daysAgo90] }] },
+                { $convert: { input: { $ifNull: ["$FINAL", "$BALANCE"] }, to: "double", onError: 0, onNull: 0 } },
+                0,
+              ],
+            },
+          },
+        },
+      },
+    ]),
+
+    // 5. Single-pass Creditor Summary (Replaces Pendings.find for creditors + purchaseOutstanding)
+    Pendings.aggregate([
+      { $match: combineFilters({ ACGROUP: /^D/i, BALANCE: { $ne: 0 } }, pendFilter) },
+      {
+        $group: {
+          _id: null,
+          purchaseOutstanding: {
+            $sum: {
+              $cond: [
+                { $and: [{ $eq: ["$INVTYPE", "I"] }, { $lt: ["$BALANCE", 0] }] },
+                { $abs: { $convert: { input: "$BALANCE", to: "double", onError: 0, onNull: 0 } } },
+                0,
+              ],
+            },
+          },
+          current: {
+            $sum: {
+              $cond: [
+                { $or: [{ $eq: ["$DDATE", null] }, { $gte: ["$DDATE", today] }] },
+                { $abs: { $convert: { input: { $ifNull: ["$BALANCE", "$FINAL"] }, to: "double", onError: 0, onNull: 0 } } },
+                0,
+              ],
+            },
+          },
+          b1_30: {
+            $sum: {
+              $cond: [
+                { $and: [{ $ne: ["$DDATE", null] }, { $lt: ["$DDATE", today] }, { $gte: ["$DDATE", daysAgo30] }] },
+                { $abs: { $convert: { input: { $ifNull: ["$BALANCE", "$FINAL"] }, to: "double", onError: 0, onNull: 0 } } },
+                0,
+              ],
+            },
+          },
+          b31_60: {
+            $sum: {
+              $cond: [
+                { $and: [{ $ne: ["$DDATE", null] }, { $lt: ["$DDATE", daysAgo30] }, { $gte: ["$DDATE", daysAgo60] }] },
+                { $abs: { $convert: { input: { $ifNull: ["$BALANCE", "$FINAL"] }, to: "double", onError: 0, onNull: 0 } } },
+                0,
+              ],
+            },
+          },
+          b61_90: {
+            $sum: {
+              $cond: [
+                { $and: [{ $ne: ["$DDATE", null] }, { $lt: ["$DDATE", daysAgo60] }, { $gte: ["$DDATE", daysAgo90] }] },
+                { $abs: { $convert: { input: { $ifNull: ["$BALANCE", "$FINAL"] }, to: "double", onError: 0, onNull: 0 } } },
+                0,
+              ],
+            },
+          },
+          b90Plus: {
+            $sum: {
+              $cond: [
+                { $and: [{ $ne: ["$DDATE", null] }, { $lt: ["$DDATE", daysAgo90] }] },
+                { $abs: { $convert: { input: { $ifNull: ["$BALANCE", "$FINAL"] }, to: "double", onError: 0, onNull: 0 } } },
+                0,
+              ],
+            },
+          },
+        },
+      },
+    ]),
+
+    // Collections from GLedger
+    sumField(GLedger, GLEDGER_COLLECTION_FILTER, "CREDIT"),
+
+    // Master counts & Ledger KPIs
     User.countDocuments(userCountQuery),
-    // 2. Total Companies
     Company.countDocuments(companyCountQuery),
-    // 3. Credit — SUM(CREDIT) for customer transactions only
     sumField(GLedger, GLEDGER_CUSTOMER_TXN_FILTER, "CREDIT"),
-    // 4. Debit — SUM(DEBIT) for Payment Book (BOOK: "P", CD: "D") matching Marg ERP Payment Book
     (async () => {
-      const pDocs = await GLedger.find(combineFilters({ BOOK: "P", CD: "D" }, dateMatchGLEDGER, companyVfpMatch)).lean();
-      return pDocs.reduce((sum: number, r: any) => sum + Number(r.DEBIT || r.AMOUNT || 0), 0);
+      const match = combineFilters({ BOOK: "P", CD: "D" }, dateMatchGLEDGER, companyVfpMatch);
+      const [row] = await GLedger.aggregate([
+        { $match: match },
+        {
+          $group: {
+            _id: null,
+            total: {
+              $sum: {
+                $cond: [
+                  { $gt: [{ $convert: { input: "$DEBIT", to: "double", onError: 0, onNull: 0 } }, 0] },
+                  { $convert: { input: "$DEBIT", to: "double", onError: 0, onNull: 0 } },
+                  { $convert: { input: "$AMOUNT", to: "double", onError: 0, onNull: 0 } },
+                ],
+              },
+            },
+          },
+        },
+      ]);
+      return row?.total ?? 0;
     })(),
-    // 5. Active Customers — ORDER.SALDR === "Y" (see ACTIVE_CUSTOMER_FILTER note above)
     Order.countDocuments(activeCustomerFilter),
+    Order.countDocuments(orderFilter),
 
     // Sales Trend — last 12 months
     SalesMdis.aggregate([
@@ -471,10 +915,7 @@ export async function GET(req: Request) {
       { $limit: 12 },
     ]),
 
-    // Outstanding Aging — raw rows, bucketed in JS below (DUEDAYS varies per voucher)
-    Pendings.find(combineFilters({ ACGROUP: /^C/i, BALANCE: { $gt: 0 } }, pendFilter), { FINAL: 1, BALANCE: 1, DDATE: 1 }).lean(),
-
-    // Top 10 Products — DIS joined to PRO by CODE
+    // Top 10 Products
     SalesDis.aggregate([
       { $match: salesDisFilter },
       { $group: { _id: "$CODE", qty: { $sum: "$QTY" }, amount: { $sum: "$AMMMOUNT" } } },
@@ -499,12 +940,7 @@ export async function GET(req: Request) {
       },
     ]),
 
-    // Stock Status — raw BALANCE/MINIMUM, bucketed in JS
-    Product.find(productFilter, { BALANCE: 1, MINIMUM: 1 }).lean(),
-
-    // Expiry Status — raw EXP/BALANCE, bucketed in JS
-    ProductBatch.find(batchFilter, { EXP: 1, BALANCE: 1 }).lean(),
-
+    // Sale Type Distribution
     SalesMdis.aggregate([
       { $match: combineFilters(mdisSaleFilter, { TYPE: { $ne: null } }) },
       { $group: { _id: "$TYPE", amount: { $sum: "$FINAL" } } },
@@ -513,7 +949,7 @@ export async function GET(req: Request) {
       { $limit: 8 },
     ]),
 
-    // Top 10 Customers — MDIS.CODEP joins to ORDER.ORDNO
+    // Top 10 Customers
     SalesMdis.aggregate([
       { $match: combineFilters(mdisSaleFilter, { [MDIS_CUSTOMER_FIELD]: { $ne: null } }) },
       { $group: { _id: `$${MDIS_CUSTOMER_FIELD}`, amount: { $sum: "$FINAL" } } },
@@ -559,9 +995,6 @@ export async function GET(req: Request) {
       },
     ]),
 
-    // Creditor Aging Raw
-    Pendings.find(combineFilters({ ACGROUP: /^D/i, BALANCE: { $ne: 0 } }, pendFilter), { FINAL: 1, BALANCE: 1, DDATE: 1 }).lean(),
-
     // Purchase Trend Raw
     SalesMdis.aggregate([
       { $match: mdisPurchaseFilter },
@@ -570,14 +1003,14 @@ export async function GET(req: Request) {
       { $limit: 12 },
     ]),
 
-    // Distinct invoice count for Avg Invoice Value
+    // Distinct invoice count
     SalesMdis.aggregate([
       { $match: mdisSaleFilter },
       { $group: { _id: "$VOUCHER" } },
       { $count: "count" },
     ]),
 
-    // Gross margin approx: DIS.AMMMOUNT (sale value) - QTY*LPRATE (cost)
+    // Gross margin approx
     SalesDis.aggregate([
       { $match: salesDisFilter },
       {
@@ -598,148 +1031,88 @@ export async function GET(req: Request) {
       },
     ]),
 
-    // Stock Value = BALANCE * MRP
-    Product.aggregate([
-      { $match: productFilter },
-      {
-        $group: {
-          _id: null,
-          value: {
-            $sum: {
-              $multiply: [
-                { $convert: { input: "$BALANCE", to: "double", onError: 0, onNull: 0 } },
-                { $convert: { input: "$MRP", to: "double", onError: 0, onNull: 0 } },
-              ],
-            },
-          },
-        },
-      },
-    ]),
-
-    // Expired Stock Value (MRP)
-    ProductBatch.aggregate([
-      { $match: combineFilters(batchFilter, { EXP: { $ne: null, $lt: today } }) },
-      {
-        $group: {
-          _id: null,
-          value: {
-            $sum: {
-              $multiply: [
-                { $convert: { input: "$BALANCE", to: "double", onError: 0, onNull: 0 } },
-                { $convert: { input: "$MRP", to: "double", onError: 0, onNull: 0 } },
-              ],
-            },
-          },
-        },
-      },
-    ]),
-
-    // Near Expiry Stock Value (MRP)
-    ProductBatch.aggregate([
-      { $match: combineFilters(batchFilter, { EXP: { $ne: null, $gte: today, $lte: near90 } }) },
-      {
-        $group: {
-          _id: null,
-          value: {
-            $sum: {
-              $multiply: [
-                { $convert: { input: "$BALANCE", to: "double", onError: 0, onNull: 0 } },
-                { $convert: { input: "$MRP", to: "double", onError: 0, onNull: 0 } },
-              ],
-            },
-          },
-        },
-      },
-    ]),
-
-    // Last month sales, for Monthly Growth %.
-    // Also keep this inside the selected FY so growth cannot compare the
-    // current FY with a different FY by accident.
-    (async () => {
-      const d = new Date();
-      d.setMonth(d.getMonth() - 1);
-
-      const lmYear = d.getFullYear();
-      const lmMonth = d.getMonth() + 1;
-      const lmStart = `${lmYear}-${String(lmMonth).padStart(2, "0")}-01`;
-      const lastDay = new Date(Date.UTC(lmYear, lmMonth, 0)).getUTCDate();
-      const lmEnd = `${lmYear}-${String(lmMonth).padStart(2, "0")}-${String(lastDay).padStart(2, "0")}`;
-
-      if (startDate && endDate) {
-        const rangeStart = lmStart > startDate ? lmStart : startDate;
-        const rangeEnd = lmEnd < endDate ? lmEnd : endDate;
-
-        if (rangeStart > rangeEnd) return 0;
-
-        return sumField(
-          SalesMdis,
-          combineFilters(
-            mdisSaleFilter,
-            buildFYDateQuery("DATE", rangeStart, rangeEnd)
-          ),
-          "FINAL"
-        );
-      }
-
-      return sumField(
-        SalesMdis,
-        combineFilters(
-          mdisSaleFilter,
-          buildFYDateQuery("DATE", lmStart, lmEnd)
-        ),
-        "FINAL"
-      );
-    })(),
+    // Web purchase models (project only needed fields)
+    PurchaseBill.find(combineFilters(companyId ? { companyId } : {}, billDateMatch), { netAmount: 1, vendorName: 1 }).lean().catch(() => []),
+    PurchaseOrder.countDocuments(combineFilters(companyId ? { companyId } : {}, poDateMatch)).catch(() => 0),
+    PurchaseReturn.find(combineFilters(companyId ? { companyId } : {}, returnDateMatch), { netAmount: 1 }).lean().catch(() => []),
+    PurchasePayment.find(combineFilters(companyId ? { companyId } : {}, paymentDateMatch), { amount: 1 }).lean().catch(() => []),
+    sumField(SalesMdis, combineFilters({ TYPE: { $in: ["P", "PURCHASE"] } }, dateMatchMDIS, companyVfpMatch), "FINAL"),
+    sumField(SalesMdis, combineFilters({ TYPE: { $in: ["D", "PR", "DEBIT"] } }, dateMatchMDIS, companyVfpMatch), "FINAL"),
+    sumField(SalesMdis, combineFilters({ TYPE: { $in: ["R", "SR", "CREDIT"] } }, dateMatchMDIS, companyVfpMatch), "FINAL"),
   ]);
 
-  // ---- Outstanding Aging buckets ----
-  const agingBuckets = { current: 0, "1-30": 0, "31-60": 0, "61-90": 0, "90+": 0 };
-  for (const row of outstandingAgingRaw as any[]) {
-    if (!row.DDATE) continue;
-    const diffDays = Math.floor(
-      (new Date(today).getTime() - new Date(row.DDATE).getTime()) / 86400000
-    );
-    const amt = row.FINAL ?? 0;
-    if (diffDays <= 0) agingBuckets.current += amt;
-    else if (diffDays <= 30) agingBuckets["1-30"] += amt;
-    else if (diffDays <= 60) agingBuckets["31-60"] += amt;
-    else if (diffDays <= 90) agingBuckets["61-90"] += amt;
-    else agingBuckets["90+"] += amt;
-  }
+  // Extract consolidated SalesMdis numbers
+  const smRow = salesMdisSummaryRaw[0] || {};
+  const totalSales = smRow.totalSales || 0;
+  const todaySales = smRow.todaySales || 0;
+  const monthlySales = smRow.monthlySales || 0;
+  const yearlySales = smRow.yearlySales || 0;
+  const lastMonthSales = smRow.lastMonthSales || 0;
 
-  // ---- Stock Status buckets ----
-  const stockBuckets = { inStock: 0, lowStock: 0, zeroStock: 0, negativeStock: 0 };
-  for (const row of stockStatusRaw as any[]) {
-    const bal = row.BALANCE ?? 0;
-    const min = row.MINIMUM ?? 0;
-    if (bal < 0) stockBuckets.negativeStock++;
-    else if (bal === 0) stockBuckets.zeroStock++;
-    else if (min > 0 && bal <= min) stockBuckets.lowStock++;
-    else stockBuckets.inStock++;
-  }
+  // Extract consolidated Product numbers
+  const prodRow = productSummaryRaw[0] || {};
+  const totalProducts = prodRow.totalProducts || 0;
+  const currentStock = prodRow.totalStock || 0;
+  const stockValue = prodRow.stockValue || 0;
+  const stockBuckets = {
+    inStock: prodRow.inStock || 0,
+    lowStock: prodRow.lowStock || 0,
+    zeroStock: prodRow.zeroStock || 0,
+    negativeStock: prodRow.negativeStock || 0,
+  };
 
-  // ---- Expiry Status buckets ----
-  const expiryBuckets = { expired: 0, "0-30": 0, "31-90": 0, "90+": 0, noExpiry: 0 };
-  for (const row of expiryStatusRaw as any[]) {
-    if (!row.EXP) {
-      expiryBuckets.noExpiry++;
-      continue;
-    }
-    const diffDays = Math.floor(
-      (new Date(row.EXP).getTime() - new Date(today).getTime()) / 86400000
-    );
-    if (diffDays < 0) expiryBuckets.expired++;
-    else if (diffDays <= 30) expiryBuckets["0-30"]++;
-    else if (diffDays <= 90) expiryBuckets["31-90"]++;
-    else expiryBuckets["90+"]++;
-  }
+  // Extract consolidated ProductBatch numbers
+  const batchRow = batchSummaryRaw[0] || {};
+  const totalBatches = batchRow.totalBatches || 0;
+  const expiredBatches = batchRow.expiredBatches || 0;
+  const nearExpiryBatches = batchRow.nearExpiryBatches || 0;
+  const expiredStockValue = batchRow.expiredStockValue || 0;
+  const nearExpiryStockValue = batchRow.nearExpiryStockValue || 0;
+  const expiryBuckets = {
+    expired: batchRow.expiredBucket || 0,
+    "0-30": batchRow.b0_30 || 0,
+    "31-90": batchRow.b31_90 || 0,
+    "90+": batchRow.b90Plus || 0,
+    noExpiry: batchRow.noExpiry || 0,
+  };
+
+  // Extract consolidated Debtor numbers
+  const debtorRow = debtorSummaryRaw[0] || {};
+  const totalOutstanding = debtorRow.totalOutstanding || 0;
+  const salesOutstanding = debtorRow.salesOutstanding || 0;
+  const overdueAmount = debtorRow.overdueAmount || 0;
+  const overdueCount = debtorRow.overdueCount || 0;
+  const agingBuckets = {
+    current: debtorRow.current || 0,
+    "1-30": debtorRow.b1_30 || 0,
+    "31-60": debtorRow.b31_60 || 0,
+    "61-90": debtorRow.b61_90 || 0,
+    "90+": debtorRow.b90Plus || 0,
+  };
+  const riskBuckets = {
+    "Low Risk (0-30d)": (debtorRow.current || 0) + (debtorRow.b1_30 || 0),
+    "Moderate (31-60d)": debtorRow.b31_60 || 0,
+    "High Risk (61-90d)": debtorRow.b61_90 || 0,
+    "Critical Risk (90+d)": debtorRow.b90Plus || 0,
+  };
+  const creditRiskDist = Object.entries(riskBuckets).map(([name, amount]) => ({ name, amount }));
+
+  // Extract consolidated Creditor numbers
+  const creditorRow = creditorSummaryRaw[0] || {};
+  const purchaseOutstanding = creditorRow.purchaseOutstanding || 0;
+  const creditorAgingBuckets = {
+    current: creditorRow.current || 0,
+    "1-30": creditorRow.b1_30 || 0,
+    "31-60": creditorRow.b31_60 || 0,
+    "61-90": creditorRow.b61_90 || 0,
+    "90+": creditorRow.b90Plus || 0,
+  };
+  const creditorAging = Object.entries(creditorAgingBuckets).map(([bucket, total]) => ({ bucket, total }));
 
   // ---- Analytics ----
-  const invCount = invoiceCount[0]?.count || 1;
+  const invCount = invoiceCountRaw[0]?.count || 0;
   const avgInvoiceValue = totalSales / invCount;
   const dayOfMonth = new Date().getDate();
-  // If monthlySales is 0 (e.g. no data for current month / VFP data from previous FY),
-  // fall back to yearlySales / 365 so the daily benchmark is meaningful.
   const avgDailySales = monthlySales > 0
     ? monthlySales / dayOfMonth
     : yearlySales > 0
@@ -748,43 +1121,18 @@ export async function GET(req: Request) {
         ? totalSales / 365
         : 0;
   const avgCustomerSale = totalCustomers ? totalSales / totalCustomers : 0;
-  const stockValue = stockValueRow[0]?.value ?? 0;
-  const expiredStockValue = expiredStockValueRow[0]?.value ?? 0;
-  const nearExpiryStockValue = nearExpiryStockValueRow[0]?.value ?? 0;
   const grossMargin = disMarginRow[0] ? disMarginRow[0].revenue - disMarginRow[0].cost : 0;
   const collectionEfficiency = totalSales ? (totalCollections / totalSales) * 100 : 0;
   const monthlyGrowth = lastMonthSales
     ? ((monthlySales - lastMonthSales) / lastMonthSales) * 100
     : 0;
 
-// ---- Purchase & Sales Extra Metrics ----
-  // Build FY date-range filters for each web purchase model (all use String
-  // YYYY-MM-DD date fields so buildFYDateQuery works directly). When FY is
-  // "ALL" (startDate/endDate null) these resolve to {} -> all data.
-  const billDateMatch = buildFYDateQuery("billDate", startDate, endDate);
-  const poDateMatch = buildFYDateQuery("poDate", startDate, endDate);
-  const returnDateMatch = buildFYDateQuery("returnDate", startDate, endDate);
-  const paymentDateMatch = buildFYDateQuery("paymentDate", startDate, endDate);
-
-  const webBills = await PurchaseBill.find(combineFilters(companyId ? { companyId } : {}, billDateMatch)).lean().catch(() => []);
-  const webOrders = await PurchaseOrder.find(combineFilters(companyId ? { companyId } : {}, poDateMatch)).lean().catch(() => []);
-  const webReturns = await PurchaseReturn.find(combineFilters(companyId ? { companyId } : {}, returnDateMatch)).lean().catch(() => []);
-  const webPayments = await PurchasePayment.find(combineFilters(companyId ? { companyId } : {}, paymentDateMatch)).lean().catch(() => []);
-
   const webPurchasesVal = (webBills || []).reduce((s: number, b: any) => s + Number(b.netAmount || 0), 0);
-  const vfpPurchasesVal = await sumField(SalesMdis, combineFilters({ TYPE: { $in: ["P", "PURCHASE"] } }, dateMatchMDIS, companyVfpMatch), "FINAL");
   const totalPurchases = webPurchasesVal + vfpPurchasesVal;
-
-  const totalPurchaseOrders = (webOrders || []).length;
-
   const webReturnsVal = (webReturns || []).reduce((s: number, r: any) => s + Number(r.netAmount || 0), 0);
-  const vfpReturnsVal = await sumField(SalesMdis, combineFilters({ TYPE: { $in: ["D", "PR", "DEBIT"] } }, dateMatchMDIS, companyVfpMatch), "FINAL");
   const purchaseReturns = webReturnsVal + vfpReturnsVal;
-
   const webPaymentsVal = (webPayments || []).reduce((s: number, p: any) => s + Number(p.amount || 0), 0);
   const totalSupplierPayments = webPaymentsVal;
-
-  const salesReturns = await sumField(SalesMdis, combineFilters({ TYPE: { $in: ["R", "SR", "CREDIT"] } }, dateMatchMDIS, companyVfpMatch), "FINAL");
 
   // Dedicated Purchase Charts Data
   const topSuppliersMap = new Map<string, number>();
@@ -811,18 +1159,7 @@ export async function GET(req: Request) {
     ];
   }
 
-  const creditorAgingBuckets = { current: 0, "1-30": 0, "31-60": 0, "61-90": 0, "90+": 0 };
-  for (const row of (creditorAgingRaw || []) as any[]) {
-    if (!row.DDATE) continue;
-    const diffDays = Math.floor((new Date(today).getTime() - new Date(row.DDATE).getTime()) / 86400000);
-    const amt = Math.abs(Number(row.BALANCE ?? row.FINAL ?? 0));
-    if (diffDays <= 0) creditorAgingBuckets.current += amt;
-    else if (diffDays <= 30) creditorAgingBuckets["1-30"] += amt;
-    else if (diffDays <= 60) creditorAgingBuckets["31-60"] += amt;
-    else if (diffDays <= 90) creditorAgingBuckets["61-90"] += amt;
-    else creditorAgingBuckets["90+"] += amt;
-  }
-  const creditorAging = Object.entries(creditorAgingBuckets).map(([bucket, total]) => ({ bucket, total }));
+
 
   const purchaseStatusDist = [
     { name: "Paid Supplier Payments", amount: totalSupplierPayments || Math.round(totalPurchases * 0.65) },
@@ -853,17 +1190,7 @@ export async function GET(req: Request) {
     return { month, dso, sales: salesVal, collections: collVal };
   });
 
-  const riskBuckets = { "Low Risk (0-30d)": 0, "Moderate (31-60d)": 0, "High Risk (61-90d)": 0, "Critical Risk (90+d)": 0 };
-  for (const row of (outstandingAgingRaw || []) as any[]) {
-    if (!row.DDATE) continue;
-    const diffDays = Math.floor((new Date(today).getTime() - new Date(row.DDATE).getTime()) / 86400000);
-    const amt = Number(row.BALANCE ?? row.FINAL ?? 0);
-    if (diffDays <= 30) riskBuckets["Low Risk (0-30d)"] += amt;
-    else if (diffDays <= 60) riskBuckets["Moderate (31-60d)"] += amt;
-    else if (diffDays <= 90) riskBuckets["High Risk (61-90d)"] += amt;
-    else riskBuckets["Critical Risk (90+d)"] += amt;
-  }
-  const creditRiskDist = Object.entries(riskBuckets).map(([name, amount]) => ({ name, amount }));
+
 
   const realizationStacked = salesTrend.map((s: any) => {
     const month = s._id;
@@ -962,7 +1289,7 @@ export async function GET(req: Request) {
     };
   });
 
-  return NextResponse.json({
+  return {
     kpis: {
       totalSales,
       todaySales,
@@ -994,6 +1321,23 @@ export async function GET(req: Request) {
       purchaseReturns,
       totalSupplierPayments,
       salesReturns,
+      totalInvoices: invCount,
+      overdueCount,
+
+      // Nested convenience aliases for components that expect nested paths:
+      sales: {
+        totalSales,
+        todaySales,
+        monthlySales,
+        yearlySales,
+        totalInvoices: invCount,
+      },
+      credit: {
+        totalOverdue: overdueAmount,
+        overdueCount,
+        totalOutstanding,
+        salesOutstanding,
+      },
     },
     charts: {
       salesTrend: salesTrend.map((r: any) => ({ month: r._id, total: r.total })),
@@ -1059,6 +1403,17 @@ export async function GET(req: Request) {
       nearExpiryStockValue,
       grossMargin,
       collectionEfficiency,
+    },
+  };
+    },
+    refresh
+  );
+
+  return NextResponse.json(payload, {
+    headers: {
+      "Cache-Control": refresh
+        ? "no-store, no-cache, must-revalidate"
+        : "public, s-maxage=30, stale-while-revalidate=60",
     },
   });
 }

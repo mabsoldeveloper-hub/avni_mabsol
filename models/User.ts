@@ -23,6 +23,7 @@ const UserSchema = new mongoose.Schema(
     password: {
       type: String,
       required: true,
+      select: false,
     },
 
     companyId: {
@@ -54,6 +55,13 @@ const UserSchema = new mongoose.Schema(
       type: Boolean,
       default: false,
     },
+
+    // Super Admin controlled sidebar modules for this user
+    enabledModules: [
+      {
+        type: String,
+      },
+    ],
 
     // Original Customer record for MR / Field Staff mapping
     mrCustomerId: {
@@ -179,6 +187,49 @@ const UserSchema = new mongoose.Schema(
     termsAccepted: {
       type: Boolean,
       default: false,
+    },
+
+    // Soft deletion fields (manageable exclusively by Super Admin)
+    isDeleted: {
+      type: Boolean,
+      default: false,
+      index: true,
+    },
+
+    deletedAt: {
+      type: Date,
+      default: null,
+    },
+
+    deletedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      default: null,
+    },
+
+    deletedReason: {
+      type: String,
+      default: "",
+    },
+
+    // Desktop Agent (.EXE) access suspension by Super Admin
+    exeAccessSuspended: {
+      type: Boolean,
+      default: false,
+      index: true,
+    },
+    exeSuspendedAt: {
+      type: Date,
+      default: null,
+    },
+    exeSuspendedReason: {
+      type: String,
+      default: "",
+    },
+    exeSuspendedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      default: null,
     },
   },
   {
